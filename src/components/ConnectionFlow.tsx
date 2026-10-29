@@ -76,7 +76,7 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
     const timeout = !cameraReady ? setTimeout(() => {
       acceptedScan.current = true;
       setStep('pair');
-      setLocalError('The camera is unavailable. Paste a pairing link instead. Simulators require the paste option.');
+      setLocalError('The camera is unavailable. Paste a pairing link instead.');
     }, 7_000) : null;
     return () => { back.remove(); appState.remove(); if (timeout) clearTimeout(timeout); };
   }, [step, cameraReady]);
@@ -89,13 +89,13 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
     clearError(); setCameraBlocked(false); setStep(next);
   }
 
-  function submit(candidates: Connection[]) {
+  function submit(candidates: Connection[], returnStep: Step = 'home') {
     if (connecting || submitting.current || !candidates.length) return;
     submitting.current = true;
     acceptedScan.current = true;
     Keyboard.dismiss();
     clearError();
-    setStep('home');
+    setStep(returnStep);
     setSubmission(candidates);
   }
 
@@ -161,11 +161,15 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
   }
 
   function connectManual() {
-    try { submit([normalizeConnection({ ...form, id: form.id || undefined })]); }
+    try { submit([normalizeConnection({ ...form, id: form.id || undefined })], 'password'); }
     catch (cause) { setLocalError(errorMessage(cause)); }
   }
 
   const back = step !== 'home' && !submission ? <Button title="‹ Back" compact variant="ghost" disabled={busy} onPress={() => go(step === 'password' ? 'address' : 'home')} /> : null;
+  const savedServers = !!connections.length && <View style={styles.saved}>
+    <Row style={{ justifyContent: 'space-between' }}><Label muted style={styles.instruction}>Your servers</Label><Button title={managing ? 'Done' : 'Manage'} compact variant="ghost" disabled={busy} onPress={() => setManaging(value => !value)} /></Row>
+    {connections.map(connection => <View key={connection.id} style={styles.savedItem}><Pressable accessibilityRole="button" accessibilityLabel={`Connect to ${connection.name}${activeID === connection.id ? ', current server' : ''}`} disabled={busy} onPress={() => submit([connection])} style={({ pressed }) => [styles.server, pressed && { backgroundColor: colors.raised }]}><ShellIcon name="server" color={colors.muted} size={20} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{connection.name}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.small}>{connection.url}</Label></View>{activeID === connection.id ? <Label muted style={styles.small}>Current</Label> : <ShellIcon name="chevron" color={colors.faint} size={16} />}</Pressable>{managing && <Row style={styles.manage}><Button title="Edit" compact disabled={busy} onPress={() => { clearError(); onChangeForm({ ...connection, token: connection.token || '' }); setStep('password'); }} /><Button title="Remove" compact variant="ghost" disabled={busy} onPress={() => { void onRemove(connection); }} /></Row>}</View>)}
+  </View>;
 
   return <View style={styles.container}>
     {back && <View style={styles.back}>{back}</View>}
@@ -206,14 +210,12 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
         <Label muted style={styles.small}>Leave this blank if your server does not require a password.</Label>
         <Disclosure title="Connection details"><Field label="Name" value={form.name} onChangeText={name => onChangeForm({ ...form, name })} /><Field label="Username" placeholder="opencode" value={form.username ?? 'opencode'} onChangeText={username => onChangeForm({ ...form, username })} /></Disclosure>
       </> : <>
-        <View style={styles.intro}><PairingIcon color={colors.muted} /><Heading>Connect to OpenCode</Heading><Label muted style={styles.center}>Your computer does the work. Pick up the conversation here.</Label></View>
+        {activeID && savedServers}
+        <View style={styles.intro}><PairingIcon color={colors.muted} /><Heading>{activeID ? 'Add a server' : 'Connect to OpenCode'}</Heading><Label muted style={styles.center}>Your computer does the work. Pick up the conversation here.</Label></View>
         <View style={styles.actions}><Button title="Scan QR code" variant="primary" busy={reading} onPress={() => { void scan(); }} /><Button title="Paste pairing link" disabled={busy} onPress={() => { void pastePairing(); }} /></View>
         <Card><Label style={styles.instruction}>On your computer</Label><Label muted>Run the command below, then scan the QR code or copy its connection link.</Label><Label selectable style={styles.command}>opencode pair</Label></Card>
         <Button title="Connect with a server address" variant="ghost" disabled={busy} onPress={() => { onChangeForm(blankForm); go('address'); }} />
-        {!!connections.length && <View style={styles.saved}>
-          <Row style={{ justifyContent: 'space-between' }}><Label muted style={styles.instruction}>Your servers</Label><Button title={managing ? 'Done' : 'Manage'} compact variant="ghost" disabled={busy} onPress={() => setManaging(value => !value)} /></Row>
-          {connections.map(connection => <View key={connection.id} style={styles.savedItem}><Pressable accessibilityRole="button" accessibilityLabel={`Connect to ${connection.name}${activeID === connection.id ? ', current server' : ''}`} disabled={busy} onPress={() => submit([connection])} style={({ pressed }) => [styles.server, pressed && { backgroundColor: colors.raised }]}><ShellIcon name="server" color={colors.muted} size={20} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{connection.name}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.small}>{connection.url}</Label></View>{activeID === connection.id ? <Label muted style={styles.small}>Current</Label> : <ShellIcon name="chevron" color={colors.faint} size={16} />}</Pressable>{managing && <Row style={styles.manage}><Button title="Edit" compact disabled={busy} onPress={() => { clearError(); onChangeForm({ ...connection, token: connection.token || '' }); setStep('password'); }} /><Button title="Remove" compact variant="ghost" disabled={busy} onPress={() => { void onRemove(connection); }} /></Row>}</View>)}
-        </View>}
+        {!activeID && savedServers}
       </>}
     {step !== 'scan' && <Label muted style={styles.privacy}>{Platform.OS === 'web' ? 'Connections stay in this tab. Your server must allow this browser origin with --cors.' : 'Your server credentials stay in secure storage on this device.'}</Label>}
   </View>;

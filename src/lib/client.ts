@@ -10,7 +10,11 @@ export type Connection = {
 
 export type Client = ReturnType<typeof OpenCode.make>;
 const invalidServerMessage = 'This address did not return an OpenCode 2 API. The server address or OpenCode version is incorrect.';
-let redeemedPairing: { code: string; token: string; urls: string[] } | undefined;
+let redeemedPairing: { code: string; token: string; urls: string[]; expiresAt: number } | undefined;
+
+export function clearPairingRetry(): void {
+  redeemedPairing = undefined;
+}
 
 export function normalizeConnection(input: Omit<Connection, 'id'> & { id?: string }): Connection {
   let url: URL;
@@ -61,7 +65,7 @@ function pairingAddress(connection: Connection) {
 }
 
 function pairingFailure(error: unknown): unknown {
-  if (!(error instanceof AggregateError)) return error;
+  if (!error || typeof error !== 'object' || !('errors' in error) || !Array.isArray(error.errors)) return error;
   return error.errors.find(isUnauthorizedError) ?? error.errors[0] ?? new Error('The server is unreachable. Check your network and try again.');
 }
 
@@ -83,6 +87,7 @@ export async function connect(connection: Connection, fetchOverride: typeof glob
     throw new Error('These pairing addresses do not share one code. Scan the OpenCode QR code again.');
   }
   const urls = [...new Set(candidates.flatMap(candidate => candidate ? [candidate.url] : []))];
+  if (redeemedPairing && redeemedPairing.expiresAt <= Date.now()) clearPairingRetry();
   let cached = redeemedPairing?.code === pairing.code ? redeemedPairing : undefined;
   const cachedUrls = cached?.urls;
   const knownAliases = cachedUrls ? urls.filter(url => cachedUrls.includes(url)) : [];
@@ -94,7 +99,7 @@ export async function connect(connection: Connection, fetchOverride: typeof glob
           { code: pairing.code }, { headers: { Accept: 'application/json' }, signal },
         );
         if (!paired || typeof paired.token !== 'string' || !paired.token) throw new Error(invalidServerMessage);
-        const session = { code: pairing.code, token: paired.token, urls };
+        const session = { code: pairing.code, token: paired.token, urls, expiresAt: Date.now() + 5 * 60_000 };
         redeemedPairing = session;
         return session;
       }));

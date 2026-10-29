@@ -7,7 +7,7 @@ import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-co
 import { useFonts } from 'expo-font';
 import { isLocationNotFoundError, type Project, type ServerInfo } from '@opencode/client';
 import { Button, Busy, confirmAction, ErrorNotice, Heading, Label, sans, Sheet } from './src/components/ui';
-import { connect, connectionErrorMessage, createClient, errorMessage, normalizeConnection, type Connection } from './src/lib/client';
+import { clearPairingRetry, connect, connectionErrorMessage, createClient, errorMessage, normalizeConnection, type Connection } from './src/lib/client';
 import { loadActiveConnectionId, loadConnections, loadWorkspace, saveActiveConnectionId, saveConnections, saveWorkspace } from './src/lib/storage';
 import { ChatScreen } from './src/screens/ChatScreen';
 import { SessionsScreen } from './src/screens/SessionsScreen';
@@ -88,7 +88,7 @@ function MobileApp() {
   activeRef.current = active;
   const client = useMemo(() => active ? createClient(active) : null, [active]);
 
-  const selectServer = useCallback(async (connection: Connection, existing?: Connection[], alternatives?: Connection[]) => {
+  const selectServer = useCallback(async (connection: Connection, existing?: Connection[], alternatives?: Connection[], explicitName = false) => {
     if (connectingRef.current) return;
     if (!(await confirmNavigation())) return;
     if (connectingRef.current) return;
@@ -98,8 +98,13 @@ function MobileApp() {
     setConnectionError(null);
     try {
       const result = await connect(connection, undefined, alternatives);
-      const nextClient = createClient(result.connection);
-      const workspace = await loadWorkspace(result.connection.id);
+      const current = existing ?? connections;
+      const matching = !explicitName && !current.some(item => item.id === connection.id)
+        ? current.find(item => item.url === result.connection.url && (item.username || 'opencode') === (result.connection.username || 'opencode'))
+        : undefined;
+      const connected = matching ? { ...result.connection, id: matching.id, name: matching.name } : result.connection;
+      const nextClient = createClient(connected);
+      const workspace = await loadWorkspace(connected.id);
       let restoredSessionID = workspace?.sessionID;
       const location = await nextClient.location.get(
         workspace?.directory ? { location: { directory: workspace.directory } } : undefined,
@@ -110,13 +115,14 @@ function MobileApp() {
         return nextClient.location.get(undefined, { signal: AbortSignal.timeout(15_000) });
       });
       if (request !== epoch.current) return;
-      const current = existing ?? connections;
-      const next = [...current.filter(item => item.id !== result.connection.id), result.connection];
+      const next = [...current.filter(item => item.id !== connected.id), connected];
       await saveConnections(next);
-      await saveActiveConnectionId(result.connection.id);
+      await saveWorkspace(connected.id, { directory: location.directory, sessionID: restoredSessionID });
+      await saveActiveConnectionId(connected.id);
       if (request !== epoch.current) return;
+      clearPairingRetry();
       setConnections(next);
-      setActive(result.connection);
+      setActive(connected);
       setConnectionRevision(value => value + 1);
       setInfo(result.info);
       setDirectory(location.directory);
@@ -372,7 +378,7 @@ function MobileApp() {
     }
   }
 
-  const serverForm = <ConnectionFlow key={flowRevision} form={form} connections={connections} activeID={active?.id} connecting={connecting} error={connectionError ?? (!active ? error : null)} pairingLink={pairingLink} onPairingLinkConsumed={() => setPairingLink(null)} onChangeForm={setForm} onClearError={() => setConnectionError(null)} onConnect={(connection, alternatives) => selectServer(connection, undefined, alternatives)} onRemove={removeConnection} />;
+  const serverForm = <ConnectionFlow key={flowRevision} form={form} connections={connections} activeID={active?.id} connecting={connecting} error={connectionError ?? (!active ? error : null)} pairingLink={pairingLink} onPairingLinkConsumed={() => setPairingLink(null)} onChangeForm={setForm} onClearError={() => setConnectionError(null)} onConnect={(connection, alternatives) => selectServer(connection, undefined, alternatives, !!form.name.trim())} onRemove={removeConnection} />;
 
   const projectLabel = directory.split('/').filter(Boolean).pop() || 'Project';
   const showConversation = tab === 'sessions' && !!sessionID;

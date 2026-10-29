@@ -26,7 +26,7 @@ export function Button({ title, onPress, variant = 'secondary', disabled, busy, 
   const styles = useThemedStyles(createStyles);
   return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? title} accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy, selected }} aria-pressed={selected} disabled={disabled || busy} onPress={onPress}
     style={[styles.buttonTarget, (disabled || busy) && { opacity: 0.55 }]}>
-    {({ pressed }) => <PressFeedback pressed={pressed} disabled={disabled || busy} style={[styles.button, compact && styles.compact, variant === 'primary' && styles.primary, variant === 'ghost' && styles.ghost, variant === 'danger' && styles.danger, pressed && (variant === 'ghost' ? styles.ghostPressed : styles.pressed)]}>{busy ? <ActivityIndicator size="small" color={variant === 'primary' ? colors.primaryText : colors.muted} /> : <Text style={[styles.buttonText, variant === 'primary' && { color: colors.primaryText }, variant === 'danger' && { color: colors.danger }]}>{title}</Text>}</PressFeedback>}
+    {({ pressed }) => <PressFeedback pressed={pressed} disabled={disabled || busy} style={[styles.button, compact && styles.compact, variant === 'primary' && styles.primary, variant === 'ghost' && styles.ghost, variant === 'danger' && styles.danger, selected && styles.selectedButton, pressed && (variant === 'ghost' ? styles.ghostPressed : styles.pressed)]}>{busy ? <ActivityIndicator size="small" color={selected ? colors.text : variant === 'primary' ? colors.primaryText : colors.muted} /> : <Text style={[styles.buttonText, variant === 'primary' && { color: colors.primaryText }, variant === 'danger' && { color: colors.danger }, selected && { color: colors.text }]}>{selected ? `✓ ${title}` : title}</Text>}</PressFeedback>}
   </Pressable>;
 }
 export function Field({ label, style, containerStyle, ...props }: TextInputProps & { label?: string; containerStyle?: StyleProp<ViewStyle> }) {
@@ -57,6 +57,7 @@ export function Busy() { const { colors } = useTheme(); return <ActivityIndicato
 export function Sheet({ visible, title, children, onClose, onDismiss, scroll = true }: { visible: boolean; title: string; children: React.ReactNode; onClose: () => void; onDismiss?: () => void; scroll?: boolean }) {
   const styles = useThemedStyles(createStyles);
   const reduced = useMotionPreference();
+  const SafeAreaRoot = Platform.OS === 'web' ? React.Fragment : SafeAreaProvider;
   const requested = useRef(visible);
   requested.current = visible;
   const previousVisible = useRef(visible);
@@ -82,7 +83,7 @@ export function Sheet({ visible, title, children, onClose, onDismiss, scroll = t
     return () => cancelAnimationFrame(frame);
   }, [visible, notifyDismissed]);
   return <Modal visible={visible} animationType={reduced ? 'fade' : 'slide'} presentationStyle="pageSheet" supportedOrientations={['portrait', 'landscape-left', 'landscape-right']} onRequestClose={onClose} onDismiss={notifyDismissed}>
-    <SafeAreaProvider>
+    <SafeAreaRoot>
     <SafeAreaView style={styles.sheet}>
       <KeyboardAvoidingView style={styles.sheetLayout} behavior="padding" automaticOffset>
         <View style={styles.sheetInner}>
@@ -91,7 +92,7 @@ export function Sheet({ visible, title, children, onClose, onDismiss, scroll = t
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
-    </SafeAreaProvider>
+    </SafeAreaRoot>
   </Modal>;
 }
 export async function confirmAction(title: string, message: string, options: { confirmLabel?: string; destructive?: boolean } = {}): Promise<boolean> {
@@ -114,6 +115,7 @@ function createStyles(colors: ThemeColors) {
   buttonTarget: { minHeight: touchTarget, minWidth: touchTarget, justifyContent: 'center', alignItems: 'stretch' },
   button: { borderRadius: 6, minHeight: 36, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: colors.raised, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, boxShadow: [{ offsetX: 0, offsetY: 1, blurRadius: 1, color: '#00000035' }] },
   compact: { minHeight: 32, paddingVertical: 5, paddingHorizontal: 10 }, primary: { backgroundColor: colors.primary }, ghost: { backgroundColor: 'transparent', borderColor: 'transparent', borderTopColor: 'transparent', boxShadow: [] }, danger: { backgroundColor: colors.raised },
+  selectedButton: { backgroundColor: colors.selected, borderColor: colors.faint, borderTopColor: colors.faint },
   pressed: { borderTopColor: colors.border, boxShadow: inset ? [{ offsetX: 0, offsetY: 1, blurRadius: 1, color: '#00000030', inset: true }] : [] }, ghostPressed: { backgroundColor: colors.raised },
   buttonText: { color: colors.text, fontFamily: sans, fontWeight: '500', fontSize: 13, lineHeight: 20, letterSpacing: -0.04, fontVariant: ['tabular-nums'] }, input: { color: colors.text, fontFamily: sans, backgroundColor: colors.input, borderWidth: 1, borderColor: colors.border, borderBottomColor: colors.controlTopEdge, borderRadius: 8, padding: 12, fontSize: 16, minHeight: touchTarget, boxShadow: inset ? [{ offsetX: 0, offsetY: 1, blurRadius: 2, color: '#00000020', inset: true }] : [] }, fieldLabel: { fontSize: 13, fontWeight: '500', letterSpacing: 0 },
   card: { backgroundColor: colors.panel, borderRadius: 8, padding: 14, gap: 10, borderWidth: 1, borderColor: colors.border }, row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }, empty: { padding: 28, gap: 8, alignItems: 'center', justifyContent: 'center', flex: 1 },

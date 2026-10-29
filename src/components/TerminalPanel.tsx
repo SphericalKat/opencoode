@@ -14,6 +14,7 @@ import { useUnsavedChanges, useUnsavedGuard } from '../lib/unsaved';
 
 type Props = { client: Client; connection: Connection; directory: string; sessionID?: string };
 type Mode = 'desktop' | 'workspace';
+const ModalSafeAreaRoot = Platform.OS === 'web' ? React.Fragment : SafeAreaProvider;
 
 export function TerminalPanel(props: Props) {
   return <Terminals key={`${props.connection.id}:${props.directory}`} {...props} />;
@@ -553,7 +554,7 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
       {([['Enter', '\r'], ['Esc', '\u001b'], ['Tab', '\t'], ['Ctrl C', '\u0003'], ['Ctrl D', '\u0004'], ['↑', '\u001b[A'], ['↓', '\u001b[B'], ['←', '\u001b[D'], ['→', '\u001b[C'], ['Ctrl L', '\u000c'], ['Ctrl Z', '\u001a'], ['Ctrl R', '\u0012'], ['Home', '\u001b[H'], ['End', '\u001b[F'], ['Delete', '\u001b[3~']] as const).map(([title, data]) => <Button key={title} title={title} accessibilityLabel={`Send ${title} to terminal`} compact disabled={!canSend} onPress={() => { send(data, false, true); focusInput(); }} />)}
     </ScrollView>
   </View>;
-  return <View style={styles.session}>{!fullscreen && content}<Modal visible={fullscreen} animationType={reducedMotion ? 'fade' : 'slide'} presentationStyle="fullScreen" supportedOrientations={['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right']} onRequestClose={() => changeFullscreen(false)}><SafeAreaProvider><SafeAreaView style={styles.fullscreen} edges={['top', 'bottom', 'left', 'right']}><KeyboardAvoidingView style={styles.session} behavior="padding" automaticOffset>{fullscreen && content}</KeyboardAvoidingView></SafeAreaView></SafeAreaProvider></Modal></View>;
+  return <View style={styles.session}>{!fullscreen && content}<Modal visible={fullscreen} animationType={reducedMotion ? 'fade' : 'slide'} presentationStyle="fullScreen" supportedOrientations={['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right']} onRequestClose={() => changeFullscreen(false)}><ModalSafeAreaRoot><SafeAreaView style={styles.fullscreen} edges={['top', 'bottom', 'left', 'right']}><KeyboardAvoidingView style={styles.session} behavior="padding" automaticOffset>{fullscreen && content}</KeyboardAvoidingView></SafeAreaView></ModalSafeAreaRoot></Modal></View>;
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
