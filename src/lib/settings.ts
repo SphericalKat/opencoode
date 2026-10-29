@@ -20,11 +20,26 @@ type ConfigFileClient = {
   experimental: { file: Pick<Client['experimental']['file'], 'write'> };
 };
 
-export async function saveConfigFile(client: ConfigFileClient, directory: string, path: string, original: string | null, text: string): Promise<void> {
+export async function withSettingsRequest<T>(action: (signal: AbortSignal) => Promise<T>, parentSignal?: AbortSignal): Promise<T> {
+  const signal = parentSignal ?? AbortSignal.timeout(15_000);
+  try {
+    signal.throwIfAborted();
+    const result = await action(signal);
+    signal.throwIfAborted();
+    return result;
+  } catch (error) {
+    if (signal.aborted) throw new Error('The request timed out. Check your connection, then refresh before you retry.');
+    throw error;
+  }
+}
+
+export async function saveConfigFile(client: ConfigFileClient, directory: string, path: string, original: string | null, text: string, signal?: AbortSignal): Promise<void> {
   validateConfig(text);
   let current: string | null;
-  try { current = new TextDecoder().decode(await client.file.read({ location: { directory }, path })); }
+  try { current = new TextDecoder().decode(await client.file.read({ location: { directory }, path }, { signal })); }
   catch (error) { if (original === null && isFileNotFoundError(error)) current = null; else throw error; }
   if (current !== original) throw new Error('This file changed on the server. Close the editor and reopen the file before you save.');
-  await client.experimental.file.write({ location: { directory }, path, payload: new TextEncoder().encode(text) });
+  signal?.throwIfAborted();
+  await client.experimental.file.write({ location: { directory }, path, payload: new TextEncoder().encode(text) }, { signal });
+  signal?.throwIfAborted();
 }

@@ -3,7 +3,7 @@ import { BackHandler, Linking, Pressable, ScrollView, StyleSheet, Text, useWindo
 import type { CredentialEntry, IntegrationAttempt, IntegrationCommandAttempt, IntegrationInfo, IntegrationMethod, ModelInfo, PermissionSavedInfo } from '@opencode/client';
 import { isFileNotFoundError } from '@opencode/client';
 import { type Client, errorMessage } from '../lib/client';
-import { externalURL, saveConfigFile } from '../lib/settings';
+import { externalURL, saveConfigFile, withSettingsRequest } from '../lib/settings';
 import { Button, Busy, Card, confirmAction, Disclosure, Empty, ErrorNotice, Field, Heading, JsonView, Label, mono, sans, Row, Sheet } from '../components/ui';
 import { DynamicFields } from '../components/SessionForms';
 import { initialFormValues, prepareFormAnswer, type FormValues } from '../lib/forms';
@@ -84,7 +84,7 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
   </View>;
 }
 
-function useResource<T>(load: () => Promise<T>) {
+function useResource<T>(load: (signal: AbortSignal) => Promise<T>) {
   const [data, setData] = useState<T>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,11 +92,11 @@ function useResource<T>(load: () => Promise<T>) {
   const latest = useRef(load);
   latest.current = load;
   const sequence = useRef(0);
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (signal?: AbortSignal) => {
     const current = ++sequence.current;
     setLoading(true);
     setError(null);
-    try { const result = await latest.current(); if (active.current && current === sequence.current) setData(result); }
+    try { const result = await withSettingsRequest(requestSignal => latest.current(requestSignal), signal); if (active.current && current === sequence.current) setData(result); }
     catch (e) { if (active.current && current === sequence.current) setError(errorMessage(e)); }
     finally { if (active.current && current === sequence.current) setLoading(false); }
   }, []);
@@ -108,8 +108,8 @@ function Page({ children, error, loading, refresh }: { children: React.ReactNode
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
-    <Row style={{ justifyContent: 'flex-end' }}>{refresh && <Button title="Refresh" compact variant="ghost" onPress={refresh} />}</Row>
-    <ErrorNotice error={error} onRetry={refresh} />{loading && <Busy />}{children}
+    <Row style={{ justifyContent: 'flex-end' }}>{refresh && <Button title="Refresh" compact variant="ghost" onPress={() => refresh()} />}</Row>
+    <ErrorNotice error={error} onRetry={refresh ? () => refresh() : undefined} />{loading && <Busy />}{children}
   </ScrollView>;
 }
 
@@ -130,8 +130,8 @@ function AppearanceSettings() {
 function Accounts({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async () => {
-    const [integrations, credentials] = await Promise.all([client.integration.list({ location: { directory } }), client.credential.list()]);
+  const { data, error, loading, refresh } = useResource(async signal => {
+    const [integrations, credentials] = await Promise.all([client.integration.list({ location: { directory } }, { signal }), client.credential.list({ signal })]);
     return { integrations: integrations.data, credentials };
   });
   const [query, setQuery] = useState('');
@@ -142,9 +142,9 @@ function Accounts({ client, directory }: { client: Client; directory: string }) 
   const [label, setLabel] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async (action: (signal: AbortSignal) => Promise<unknown>) => {
     setBusy(true); setActionError(null);
-    try { await action(); await refresh(); } catch (e) { setActionError(errorMessage(e)); } finally { setBusy(false); }
+    try { await withSettingsRequest(async signal => { await action(signal); await refresh(signal); }); } catch (e) { setActionError(errorMessage(e)); } finally { setBusy(false); }
   };
   const search = query.trim().toLowerCase();
   const integrations = data?.integrations.filter(item => `${item.name} ${item.id}`.toLowerCase().includes(search)) ?? [];
@@ -163,9 +163,9 @@ function Accounts({ client, directory }: { client: Client; directory: string }) 
     {data && !data.integrations.length && <Empty title="No integrations" detail="Your server did not publish any account integrations for this project." />}
     <Sheet visible={!!credential} title="Manage account" onClose={() => { if (!busy) setCredential(undefined); }}>
       <ErrorNotice error={actionError} /><Label muted>{credential?.integrationID}</Label><Field label="Account name" value={label} editable={!busy} onChangeText={setLabel} />
-      <Button title="Save name" busy={busy} onPress={() => void run(async () => { if (!credential) return; await client.credential.update({ credentialID: credential.id, label: label.trim() }); setCredential(undefined); })} />
-      {!credential?.active && <Button title="Use this account" variant="primary" busy={busy} onPress={() => void run(async () => { if (!credential) return; await client.credential.activate({ credentialID: credential.id }); setCredential(undefined); })} />}
-      <Button title="Remove account" variant="danger" busy={busy} onPress={() => void run(async () => { if (!credential || !await confirmAction('Remove account?', 'This removes the saved credential from your OpenCode server.')) return; await client.credential.remove({ credentialID: credential.id }); setCredential(undefined); })} />
+      <Button title="Save name" busy={busy} onPress={() => void run(async signal => { if (!credential) return; await client.credential.update({ credentialID: credential.id, label: label.trim() }, { signal }); signal.throwIfAborted(); setCredential(undefined); })} />
+      {!credential?.active && <Button title="Use this account" variant="primary" busy={busy} onPress={() => void run(async signal => { if (!credential) return; await client.credential.activate({ credentialID: credential.id }, { signal }); signal.throwIfAborted(); setCredential(undefined); })} />}
+      <Button title="Remove account" variant="danger" busy={busy} onPress={() => { if (!credential) return; const credentialID = credential.id; void confirmAction('Remove account?', 'This removes the saved credential from your OpenCode server.').then(confirmed => { if (confirmed) void run(async signal => { await client.credential.remove({ credentialID }, { signal }); signal.throwIfAborted(); setCredential(undefined); }); }); }} />
     </Sheet>
     {selected && <ConnectIntegration key={selected.id} client={client} directory={directory} integration={selected} onClose={() => { setSelected(undefined); void refresh(); }} />}
   </Page>;
@@ -250,8 +250,8 @@ function ConnectIntegration({ client, directory, integration, onClose }: { clien
 function Models({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async () => {
-    const [models, providers] = await Promise.all([client.model.list({ location: { directory }, types: ['chat', 'image', 'decision'] }), client.provider.list({ location: { directory } })]);
+  const { data, error, loading, refresh } = useResource(async signal => {
+    const [models, providers] = await Promise.all([client.model.list({ location: { directory }, types: ['chat', 'image', 'decision'] }, { signal }), client.provider.list({ location: { directory } }, { signal })]);
     return { models: models.data, providers: providers.data };
   });
   const [query, setQuery] = useState('');
@@ -276,7 +276,7 @@ function Models({ client, directory }: { client: Client; directory: string }) {
 function Mcp({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async () => (await client.mcp.list({ location: { directory } })).data);
+  const { data, error, loading, refresh } = useResource(async signal => (await client.mcp.list({ location: { directory } }, { signal })).data);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'remote' | 'local'>('remote');
@@ -285,15 +285,15 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
   const [resources, setResources] = useState<unknown>();
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const run = async (action: () => Promise<void>) => { setBusy(true); setErrorAction(null); try { await action(); await refresh(); } catch (e) { setErrorAction(errorMessage(e)); } finally { setBusy(false); } };
+  const run = async (action: (signal: AbortSignal) => Promise<void>) => { setBusy(true); setErrorAction(null); try { await withSettingsRequest(async signal => { await action(signal); await refresh(signal); }); } catch (e) { setErrorAction(errorMessage(e)); } finally { setBusy(false); } };
   return <Page error={error} loading={loading} refresh={refresh}>
     <GlobalForms client={client} directory={directory} />
-    <Row><Button title="Add MCP server" variant="primary" disabled={busy} onPress={() => { setAdding(true); setErrorAction(null); }} /><Button title="Resources" disabled={busy} onPress={() => void run(async () => setResources((await client.mcp.resource.catalog({ location: { directory } })).data))} /></Row>
+    <Row><Button title="Add MCP server" variant="primary" disabled={busy} onPress={() => { setAdding(true); setErrorAction(null); }} /><Button title="Resources" disabled={busy} onPress={() => void run(async signal => { const result = await client.mcp.resource.catalog({ location: { directory } }, { signal }); signal.throwIfAborted(); setResources(result.data); })} /></Row>
     <ErrorNotice error={errorAction} />
-    {data?.map(item => <Card key={item.name}><Row style={{ justifyContent: 'space-between' }}><View style={{ flex: 1 }}><Label style={styles.name}>{item.title || item.name}</Label><Label muted>{item.name} · {item.status.status.replace('_', ' ')}</Label></View><Button title={item.status.status === 'connected' ? 'Disconnect' : 'Connect'} busy={busy} compact onPress={() => void run(async () => { const input = { server: item.name, location: { directory } }; if (item.status.status === 'connected') await client.experimental.mcp.disconnect(input); else await client.experimental.mcp.connect(input); })} /></Row>
+    {data?.map(item => <Card key={item.name}><Row style={{ justifyContent: 'space-between' }}><View style={{ flex: 1 }}><Label style={styles.name}>{item.title || item.name}</Label><Label muted>{item.name} · {item.status.status.replace('_', ' ')}</Label></View><Button title={item.status.status === 'connected' ? 'Disconnect' : 'Connect'} busy={busy} compact onPress={() => void run(async signal => { const input = { server: item.name, location: { directory } }; if (item.status.status === 'connected') await client.experimental.mcp.disconnect(input, { signal }); else await client.experimental.mcp.connect(input, { signal }); })} /></Row>
       {'error' in item.status && <Label style={{ color: colors.danger }}>{item.status.error}</Label>}
       {item.status.status === 'needs_auth' && <Label muted>Connect its account in the Accounts tab. The integration name is {item.integrationID || item.name}.</Label>}
-      <Button title="Remove" variant="danger" compact busy={busy} onPress={() => void run(async () => { if (await confirmAction('Remove MCP server?', `This removes ${item.name} from the project configuration.`)) await client.experimental.mcp.remove({ server: item.name, location: { directory } }); })} />
+      <Button title="Remove" variant="danger" compact busy={busy} onPress={() => { void confirmAction('Remove MCP server?', `This removes ${item.name} from the project configuration.`).then(confirmed => { if (confirmed) void run(async signal => { await client.experimental.mcp.remove({ server: item.name, location: { directory } }, { signal }); }); }); }} />
     </Card>)}
     {data && !data.length && <Empty title="No MCP servers" detail="Connect tools and resources from your own servers." />}
     <Sheet visible={resources !== undefined} title="MCP resources" onClose={() => setResources(undefined)}><JsonView value={resources} /></Sheet>
@@ -301,10 +301,11 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
       <ErrorNotice error={errorAction} /><Field label="Server name" value={name} editable={!busy} onChangeText={setName} placeholder="my-tools" />
       <Row><Button title="Remote URL" disabled={busy} variant={kind === 'remote' ? 'primary' : 'secondary'} onPress={() => setKind('remote')} /><Button title="Server command" disabled={busy} variant={kind === 'local' ? 'primary' : 'secondary'} onPress={() => setKind('local')} /></Row>
       {kind === 'remote' ? <Field label="MCP URL" keyboardType="url" value={url} editable={!busy} onChangeText={setUrl} placeholder="https://example.com/mcp" /> : <><Field label="Command arguments (JSON array)" multiline value={command} editable={!busy} onChangeText={setCommand} placeholder={'["npx", "-y", "your-mcp-server"]'} /><Label muted>The command runs on the OpenCode server.</Label></>}
-      <Button title="Add server" variant="primary" busy={busy} disabled={!name.trim()} onPress={() => void run(async () => {
+      <Button title="Add server" variant="primary" busy={busy} disabled={!name.trim()} onPress={() => void run(async signal => {
         const server = name.trim();
-        if (kind === 'remote') await client.experimental.mcp.add({ server, location: { directory }, config: { type: 'remote', url: externalURL(url.trim()) } });
-        else { const args: unknown = JSON.parse(command); if (!Array.isArray(args) || !args.length || !args.every(arg => typeof arg === 'string' && arg.length)) throw new Error('Enter a JSON array of command arguments'); await client.experimental.mcp.add({ server, location: { directory }, config: { type: 'local', command: args } }); }
+        if (kind === 'remote') await client.experimental.mcp.add({ server, location: { directory }, config: { type: 'remote', url: externalURL(url.trim()) } }, { signal });
+        else { const args: unknown = JSON.parse(command); if (!Array.isArray(args) || !args.length || !args.every(arg => typeof arg === 'string' && arg.length)) throw new Error('Enter a JSON array of command arguments'); await client.experimental.mcp.add({ server, location: { directory }, config: { type: 'local', command: args } }, { signal }); }
+        signal.throwIfAborted();
         setAdding(false); setName(''); setUrl(''); setCommand('');
       })} />
     </Sheet>
@@ -314,8 +315,8 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
 function Configuration({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async () => {
-    const [entries, shells] = await Promise.all([client.config.get({ location: { directory } }), client.config.shells()]);
+  const { data, error, loading, refresh } = useResource(async signal => {
+    const [entries, shells] = await Promise.all([client.config.get({ location: { directory } }, { signal }), client.config.shells({ signal })]);
     return { entries, shells };
   });
   const [editing, setEditing] = useState<{ path: string; original: string | null }>();
@@ -324,23 +325,23 @@ function Configuration({ client, directory }: { client: Client; directory: strin
   const [notice, setNotice] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const run = async (action: () => Promise<void>) => { setBusy(true); setErrorAction(null); setNotice(null); try { await action(); } catch (e) { setErrorAction(errorMessage(e)); } finally { setBusy(false); } };
+  const run = async (action: (signal: AbortSignal) => Promise<void>) => { setBusy(true); setErrorAction(null); setNotice(null); try { await withSettingsRequest(action); } catch (e) { setErrorAction(errorMessage(e)); } finally { setBusy(false); } };
   return <Page error={error} loading={loading} refresh={refresh}>
     <Label muted>These files define agents, models, providers, permissions, tools, and other server options.</Label>
     <ErrorNotice error={errorAction} />{notice && <Label style={{ color: colors.success }}>{notice}</Label>}
-    <Button title="Reload server configuration" busy={busy} onPress={() => void run(async () => { await client.location.reload(); await refresh(); setNotice('I reloaded the server configuration.'); })} />
-    <Button title="Open project configuration" busy={busy} onPress={() => void run(async () => {
+    <Button title="Reload server configuration" busy={busy} onPress={() => void run(async signal => { await client.location.reload({ signal }); await refresh(signal); signal.throwIfAborted(); setNotice('I reloaded the server configuration.'); })} />
+    <Button title="Open project configuration" busy={busy} onPress={() => void run(async signal => {
       const path = `${directory.replace(/[\\/]+$/, '')}/opencode.jsonc`;
-      try { const source = new TextDecoder().decode(await client.file.read({ location: { directory }, path })); setEditing({ path, original: source }); setText(source); }
-      catch (e) { if (!isFileNotFoundError(e)) throw e; setEditing({ path, original: null }); setText('{\n  "$schema": "https://opencode.ai/config.json"\n}\n'); }
+      try { const source = new TextDecoder().decode(await client.file.read({ location: { directory }, path }, { signal })); signal.throwIfAborted(); setEditing({ path, original: source }); setText(source); }
+      catch (e) { if (!isFileNotFoundError(e)) throw e; signal.throwIfAborted(); setEditing({ path, original: null }); setText('{\n  "$schema": "https://opencode.ai/config.json"\n}\n'); }
     })} />
     {data?.entries.map((entry, index) => <Card key={index}><Label style={{ fontFamily: mono, fontSize: 12 }}>{entry.path || 'Runtime configuration'}</Label><Label muted>{entry.type === 'directory' ? 'Configuration directory' : 'Configuration document'}</Label>
-      {entry.type === 'document' && <><Disclosure title="Read effective values"><JsonView value={entry.info} /></Disclosure>{entry.path && <Button title="Edit source file" compact busy={busy} onPress={() => void run(async () => { if (!entry.path) return; const source = new TextDecoder().decode(await client.file.read({ location: { directory }, path: entry.path })); setEditing({ path: entry.path, original: source }); setText(source); })} />}</>}
+      {entry.type === 'document' && <><Disclosure title="Read effective values"><JsonView value={entry.info} /></Disclosure>{entry.path && <Button title="Edit source file" compact busy={busy} onPress={() => void run(async signal => { if (!entry.path) return; const source = new TextDecoder().decode(await client.file.read({ location: { directory }, path: entry.path }, { signal })); signal.throwIfAborted(); setEditing({ path: entry.path, original: source }); setText(source); })} />}</>}
     </Card>)}
-    <Disclosure title="Default shell"><Label muted>This sets the shell for commands on your OpenCode server.</Label><Button title="Use system default" busy={busy} onPress={() => void run(async () => { await client.experimental.config.update({ shell: null }); await refresh(); setNotice('I set the shell to the system default.'); })} />{data?.shells.map(shell => <Button key={shell.path} title={`${shell.name} · ${shell.path}`} disabled={!shell.acceptable} busy={busy} onPress={() => void run(async () => { await client.experimental.config.update({ shell: shell.path }); await refresh(); setNotice(`I selected ${shell.name}.`); })} />)}</Disclosure>
+    <Disclosure title="Default shell"><Label muted>This sets the shell for commands on your OpenCode server.</Label><Button title="Use system default" busy={busy} onPress={() => void run(async signal => { await client.experimental.config.update({ shell: null }, { signal }); await refresh(signal); signal.throwIfAborted(); setNotice('I set the shell to the system default.'); })} />{data?.shells.map(shell => <Button key={shell.path} title={`${shell.name} · ${shell.path}`} disabled={!shell.acceptable} busy={busy} onPress={() => void run(async signal => { await client.experimental.config.update({ shell: shell.path }, { signal }); await refresh(signal); signal.throwIfAborted(); setNotice(`I selected ${shell.name}.`); })} />)}</Disclosure>
     <Sheet visible={!!editing} title="Edit configuration" onClose={() => { if (busy) return; if (text === editing?.original) setEditing(undefined); else void confirmAction('Discard changes?', 'Your unsaved changes will be lost.').then(ok => { if (ok) setEditing(undefined); }); }}>
       <Label style={{ fontFamily: mono, fontSize: 12 }}>{editing?.path}</Label><ErrorNotice error={errorAction} /><Field label="JSON or JSONC" multiline editable={!busy} value={text} onChangeText={setText} style={{ minHeight: 360, fontFamily: mono, fontSize: 12, lineHeight: 20 }} />
-      <Button title="Save and reload" busy={busy} variant="primary" disabled={text === editing?.original} onPress={() => void run(async () => { if (!editing) return; await saveConfigFile(client, directory, editing.path, editing.original, text); setEditing({ ...editing, original: text }); await client.location.reload(); await refresh(); setEditing(undefined); setNotice('I saved and reloaded the configuration.'); })} />
+      <Button title="Save and reload" busy={busy} variant="primary" disabled={text === editing?.original} onPress={() => void run(async signal => { if (!editing) return; await saveConfigFile(client, directory, editing.path, editing.original, text, signal); setEditing({ ...editing, original: text }); await client.location.reload({ signal }); await refresh(signal); signal.throwIfAborted(); setEditing(undefined); setNotice('I saved and reloaded the configuration.'); })} />
     </Sheet>
   </Page>;
 }
@@ -348,8 +349,8 @@ function Configuration({ client, directory }: { client: Client; directory: strin
 function Skills({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async () => {
-    const [skills, commands] = await Promise.all([client.skill.list({ location: { directory } }), client.command.list({ location: { directory } })]); return { skills: skills.data, commands: commands.data };
+  const { data, error, loading, refresh } = useResource(async signal => {
+    const [skills, commands] = await Promise.all([client.skill.list({ location: { directory } }, { signal }), client.command.list({ location: { directory } }, { signal })]); return { skills: skills.data, commands: commands.data };
   });
   const [query, setQuery] = useState('');
   const search = query.trim().toLowerCase();
@@ -368,7 +369,7 @@ function Skills({ client, directory }: { client: Client; directory: string }) {
 function Plugins({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async () => (await client.plugin.list({ location: { directory } })).data);
+  const { data, error, loading, refresh } = useResource(async signal => (await client.plugin.list({ location: { directory } }, { signal })).data);
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -387,18 +388,18 @@ function Plugins({ client, directory }: { client: Client; directory: string }) {
 function Permissions({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async () => { const location = await client.location.get({ location: { directory } }); return client.permission.saved.list({ projectID: location.project.id }); });
+  const { data, error, loading, refresh } = useResource(async signal => { const location = await client.location.get({ location: { directory } }, { signal }); return client.permission.saved.list({ projectID: location.project.id }, { signal }); });
   const [selected, setSelected] = useState<PermissionSavedInfo>();
   const [action, setAction] = useState('');
   const [resource, setResource] = useState('');
   const [busy, setBusy] = useState(false);
   const [errorAction, setErrorAction] = useState<string | null>(null);
-  const run = async (task: () => Promise<void>) => { setBusy(true); setErrorAction(null); try { await task(); await refresh(); } catch (e) { setErrorAction(errorMessage(e)); } finally { setBusy(false); } };
+  const run = async (task: (signal: AbortSignal) => Promise<void>) => { setBusy(true); setErrorAction(null); try { await withSettingsRequest(async signal => { await task(signal); await refresh(signal); }); } catch (e) { setErrorAction(errorMessage(e)); } finally { setBusy(false); } };
   return <Page error={error} loading={loading} refresh={refresh}>
     <Label muted>These are the approvals that you saved with “Always allow” in this project.</Label><ErrorNotice error={errorAction} />
-    {data?.map(item => <Card key={item.id}><Label style={styles.name}>{item.action}</Label><Label style={{ fontFamily: mono }}>{item.resource}</Label><Row><Button title="Edit" compact disabled={busy} onPress={() => { setSelected(item); setAction(item.action); setResource(item.resource); setErrorAction(null); }} /><Button title="Revoke" variant="danger" compact busy={busy} onPress={() => void run(async () => { if (await confirmAction('Revoke saved approval?', 'OpenCode will ask again when this action requires permission.')) await client.permission.saved.remove({ id: item.id }); })} /></Row></Card>)}
+    {data?.map(item => <Card key={item.id}><Label style={styles.name}>{item.action}</Label><Label style={{ fontFamily: mono }}>{item.resource}</Label><Row><Button title="Edit" compact disabled={busy} onPress={() => { setSelected(item); setAction(item.action); setResource(item.resource); setErrorAction(null); }} /><Button title="Revoke" variant="danger" compact busy={busy} onPress={() => { void confirmAction('Revoke saved approval?', 'OpenCode will ask again when this action requires permission.').then(confirmed => { if (confirmed) void run(async signal => { await client.permission.saved.remove({ id: item.id }, { signal }); }); }); }} /></Row></Card>)}
     {data && !data.length && <Empty title="No saved approvals" detail="OpenCode will ask you before protected actions." />}
-    <Sheet visible={!!selected} title="Edit saved approval" onClose={() => { if (!busy) setSelected(undefined); }}><ErrorNotice error={errorAction} /><Field label="Action" value={action} editable={!busy} onChangeText={setAction} /><Field label="Resource pattern" value={resource} editable={!busy} onChangeText={setResource} /><Button title="Save approval" variant="primary" busy={busy} disabled={!action.trim() || !resource.trim()} onPress={() => void run(async () => { if (!selected) return; await client.permission.saved.update({ id: selected.id, action: action.trim(), resource: resource.trim() }); setSelected(undefined); })} /></Sheet>
+    <Sheet visible={!!selected} title="Edit saved approval" onClose={() => { if (!busy) setSelected(undefined); }}><ErrorNotice error={errorAction} /><Field label="Action" value={action} editable={!busy} onChangeText={setAction} /><Field label="Resource pattern" value={resource} editable={!busy} onChangeText={setResource} /><Button title="Save approval" variant="primary" busy={busy} disabled={!action.trim() || !resource.trim()} onPress={() => void run(async signal => { if (!selected) return; await client.permission.saved.update({ id: selected.id, action: action.trim(), resource: resource.trim() }, { signal }); signal.throwIfAborted(); setSelected(undefined); })} /></Sheet>
   </Page>;
 }
 
