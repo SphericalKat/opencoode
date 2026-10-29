@@ -207,3 +207,26 @@ I observed an older transcript position with the Jump to latest button visible a
 I stopped native control and left the single iOS simulator open for manual use.
 I did not confirm Jump to latest or repeat the software keyboard check after the transcript performance changes.
 I ran no automated tests, type checks, builds, or doctor checks in this round.
+
+
+## Final connection and selection evidence boundaries
+
+The final source adds one-action native QR scan and official JSON payloads with multiple server URLs.
+It retains a redeemed token in memory for five minutes for a retry and stores successful credentials through the existing platform storage.
+The source also preserves an existing workspace and avoids duplicate server profiles.
+No physical camera scan forms part of the native record.
+
+The lead agent entered fresh SDK `server.pair` JSON through the browser wizard address field and observed a successful connection.
+The existing Local development workspace remained selected.
+This browser result does not establish native camera, permission, or QR recognition behavior.
+No pairing code or token appears in this record.
+
+A long press now opens contextual message actions in the top bar instead of a persistent menu below each message.
+The lead agent verified browser right-click selection at a 390-pixel width.
+The user supplied the native gesture observation. The agent did not repeat it.
+[Phone selection toolbar](screenshots/selection-toolbar-phone.png)
+
+The final sheet repair keeps modal-local safe-area providers on native platforms.
+Web sheets inherit the root provider to avoid an invalid inset from the modal slide transform.
+The earlier native keyboard, picker, terminal, and streaming observations retain their stated scope.
+I ran no further tests, type checks, builds, or UI actions for this documentation update after the user prohibited those checks.

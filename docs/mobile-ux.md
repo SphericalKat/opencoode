@@ -187,3 +187,34 @@ October 29 browser verdict: **Pass with the remaining boundaries above**.
 The October 30 follow-up records source changes and the lead agent’s narrower browser observations.
 The [native record](native-verification.md) covers secure restoration, native sessions, files, terminal input, and exact remaining device limits.
 The [motion record](motion-audit.md) distinguishes delivered effects from the initial proposal.
+
+
+## Final connection and selection pass
+
+I reviewed the final connection, message selection, and motion source on October 30.
+The connection flow offers a native camera scan from one action, with permission and unavailable-camera recovery.
+It accepts the official JSON payload with a code and multiple server URLs.
+It retains a redeemed token in memory for five minutes for a retry.
+Saved profiles preserve the existing workspace and avoid duplicate server entries.
+These source paths do not establish a physical camera scan result.
+
+The lead agent entered fresh SDK `server.pair` JSON in the wizard address field and observed a successful connection.
+The existing Local development workspace remained selected.
+This record contains no pairing codes, tokens, or server credentials.
+
+A long press now selects a message and replaces the normal top bar with contextual actions.
+This replaces the earlier persistent menus below messages.
+The lead agent verified browser right-click selection and the contextual header at a 390-pixel width.
+Native gesture evidence came from the user, rather than an automated agent action.
+[Phone selection toolbar](screenshots/selection-toolbar-phone.png)
+
+The selection header fades over 120 ms, or 80 ms with reduced motion.
+Explicit wizard navigation uses a 180 ms directional cue, or a 100 ms fade with reduced motion.
+Typing, automatic connection changes, and scan mode do not receive that directional cue.
+
+The lead agent diagnosed a browser sheet failure after the local safe-area provider measured the slide transform as a full-window inset.
+I made web sheets inherit the root provider and retained modal-local providers on native platforms.
+This preserves the native status-bar repair without a second web inset measurement inside the slide transition.
+
+The earlier streaming evidence remains valid within its stated scope.
+I ran no tests, type checks, builds, or UI actions for this documentation update after the user prohibited those checks.

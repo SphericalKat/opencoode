@@ -29,15 +29,25 @@ Metro uses at most two workers. Run one simulator or emulator at a time on a com
 
 ## Connect a server
 
+1. Run `opencode pair` on your computer.
+2. Select **Scan QR code** in the mobile app.
+3. Scan the code from OpenCode.
+
+If the camera is unavailable, select **Paste pairing link**.
+For a saved server, select its name to reconnect.
+
+For manual setup:
+
 1. Start OpenCode 2 on your computer.
 
    ```sh
    opencode serve --hostname 0.0.0.0 --port 4096
    ```
 
-2. Enter the computer’s LAN or private VPN address in the client.
-3. Enter the server password, or paste an OpenCode pairing link.
-4. Select a project directory on the server.
+2. Select **Connect with a server address**.
+3. Enter the computer’s LAN or private VPN address.
+4. Enter the server password.
+5. Select a project directory on the server.
 
 If you use the browser preview, allow its origin on the server.
 
@@ -113,3 +123,17 @@ Native credentials use SecureStore. Native drafts use the app cache and can disa
 Browser credentials and drafts last for the current browser session.
 
 This project is an independent client. OpenCode assets and font licenses appear in [assets/NOTICE.md](assets/NOTICE.md).
+
+
+## Final connection and message controls
+
+The connection flow offers native QR scan, a pairing link, official JSON with multiple server URLs, and manual address entry.
+The client retains a redeemed pairing token in memory for five minutes for a retry.
+Saved profiles preserve an existing workspace and avoid duplicate server entries.
+Native credentials use secure storage. Browser credentials use the current tab session.
+Physical camera scan remains unverified.
+
+A long press selects a message and exposes its actions in the top bar.
+This replaces the earlier persistent menu below each message.
+The lead agent verified the browser context menu at a 390-pixel width.
+The [UX record](docs/mobile-ux.md) separates that observation from native gesture coverage.

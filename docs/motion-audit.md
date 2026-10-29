@@ -71,3 +71,21 @@ The current FlashList changes await their separate native runtime record.
 I ran no additional tests for this documentation update.
 
 Sources: [Emil’s opportunity skill](https://github.com/emilkowalski/skills/tree/main/skills/find-animation-opportunities), [Expo motion skill](https://github.com/emilkowalski/skills/tree/main/skills/animate-expo).
+
+
+## Final contextual motion
+
+The final message selection header uses a 120 ms opacity change without displacement.
+Reduced motion shortens that change to 80 ms and narrows its opacity range.
+Explicit wizard navigation uses a 180 ms cue with 12 pixels of horizontal travel.
+Reduced motion uses a 100 ms opacity change with no travel.
+Typing, automatic transitions, and scan mode do not trigger the directional cue.
+
+The lead agent verified browser right-click selection and the contextual header at a 390-pixel width.
+The user supplied the native gesture observation. The agent did not repeat that gesture.
+[Phone selection toolbar](screenshots/selection-toolbar-phone.png)
+
+Web sheets inherit the root safe-area provider because the modal slide transform corrupts a new local provider's initial measurement.
+Native sheets retain their local provider for the native modal frame.
+The earlier streaming and frame-rate evidence retains its original limits.
+I ran no further tests, type checks, builds, or UI actions for this update after the user prohibited those checks.
