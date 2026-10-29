@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Platform, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Animated, { cancelAnimation, cubicBezier, Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -6,6 +6,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 const easePress = cubicBezier(0.23, 1, 0.32, 1);
 const easeDrawer = Easing.bezier(0.32, 0.72, 0, 1);
+const easeContent = Easing.bezier(0.23, 1, 0.32, 1);
 
 export function useMotionPreference() {
   const initial = useReducedMotion();
@@ -30,6 +31,33 @@ export function PressFeedback({ pressed, disabled, children, style }: { pressed:
     transitionDuration: 120,
     transitionTimingFunction: easePress,
   }]}>{children}</Animated.View>;
+}
+
+export function MotionContent({ transitionKey, variant, direction = 1, enabled = true, children, style }: {
+  transitionKey: string | number | boolean;
+  variant: 'context' | 'connection';
+  direction?: -1 | 0 | 1;
+  enabled?: boolean;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const reduced = useMotionPreference();
+  const progress = useSharedValue(1);
+  const previous = useRef(transitionKey);
+  useLayoutEffect(() => {
+    const changed = previous.current !== transitionKey;
+    previous.current = transitionKey;
+    cancelAnimation(progress);
+    if (!changed || !enabled || (variant === 'connection' && direction === 0)) { progress.set(1); return; }
+    progress.set(0);
+    progress.set(withTiming(1, { duration: variant === 'context' ? reduced ? 80 : 120 : reduced ? 100 : 180, easing: easeContent, reduceMotion: ReduceMotion.Never }));
+  }, [transitionKey, variant, direction, enabled, reduced, progress]);
+  useEffect(() => () => cancelAnimation(progress), [progress]);
+  const entry = useAnimatedStyle(() => ({
+    opacity: reduced ? 0.9 + progress.get() * 0.1 : variant === 'context' ? 0.75 + progress.get() * 0.25 : 0.8 + progress.get() * 0.2,
+    transform: [{ translateX: variant === 'connection' && !reduced ? direction * 12 * (1 - progress.get()) : 0 }],
+  }), [variant, direction, reduced]);
+  return <Animated.View style={[style, entry]}>{children}</Animated.View>;
 }
 
 export function WorkingIndicator({ active, color, size = 16 }: { active: boolean; color: string; size?: number }) {

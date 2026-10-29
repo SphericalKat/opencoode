@@ -19,7 +19,7 @@ import { loadDraft, saveDraft } from '../lib/drafts';
 import { useUnsavedChanges } from '../lib/unsaved';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { ShellIcon } from '../components/ShellIcon';
-import { PressFeedback, WorkingIndicator } from '../components/motion';
+import { MotionContent, PressFeedback, WorkingIndicator } from '../components/motion';
 import { createStreamBatch } from '../lib/streamBatch';
 import { BackgroundCommands } from '../components/BackgroundCommands';
 import { ChildSessions } from '../components/ChildSessions';
@@ -689,11 +689,11 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
 
   if (!session) return <View style={styles.container}><View style={styles.header}>{onOpenNavigation && <ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} />}<View style={styles.headerTitle}><Label numberOfLines={1} style={styles.sessionTitle}>{loading ? 'Loading session' : 'Session unavailable'}</Label><Label numberOfLines={1} muted style={styles.projectLabel}>{projectLabel || 'OpenCode'}</Label></View></View>{loading ? <Busy /> : <View style={{ padding: 16 }}><ErrorNotice error={error || fetchError || 'The session is unavailable'} onRetry={() => { void refresh(); }} /></View>}</View>;
   return <View style={styles.frame}><KeyboardAvoidingView style={styles.container} behavior="padding" automaticOffset enabled={visible && !panel}>
-    {actionMessage ? <View style={[styles.header, styles.selectionHeader]}><ChatIconButton name="close" label="Close message selection" onPress={() => setSelectedMessageID(null)} /><Label accessibilityRole="header" style={styles.selectionCount}>1 selected</Label><Button title="Copy" compact variant="ghost" disabled={!canCopySelected} onPress={copySelected} />{actionMessage.type === 'user' ? <Button title="Edit" compact variant="ghost" disabled={!draftLoaded || pending} onPress={() => { void editMessage(actionMessage); }} /> : <Button title="Fork" compact variant="ghost" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }); }} />}<ChatIconButton name="more" label="Selected message actions" onPress={() => setPanel('message')} /></View> : <View style={styles.header}>
+    <MotionContent variant="context" transitionKey={!!actionMessage} style={[styles.header, !!actionMessage && styles.selectionHeader]}>{actionMessage ? <><ChatIconButton name="close" label="Close message selection" onPress={() => setSelectedMessageID(null)} /><Label accessibilityRole="header" style={styles.selectionCount}>1 selected</Label><Button title="Copy" compact variant="ghost" disabled={!canCopySelected} onPress={copySelected} />{actionMessage.type === 'user' ? <Button title="Edit" compact variant="ghost" disabled={!draftLoaded || pending} onPress={() => { void editMessage(actionMessage); }} /> : <Button title="Fork" compact variant="ghost" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }); }} />}<ChatIconButton name="more" label="Selected message actions" onPress={() => setPanel('message')} /></> : <>
       {onOpenNavigation && <ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} />}
       <View style={styles.headerTitle}><Label numberOfLines={1} accessibilityLabel={session.title || 'New session'} style={styles.sessionTitle}>{session.title || 'New session'}</Label><Label numberOfLines={1} muted style={styles.projectLabel}>{projectLabel || session.location.directory.split('/').filter(Boolean).pop() || session.location.directory}</Label></View>
       <ChatIconButton name="more" label="Session actions" onPress={() => setPanel('actions')} />
-    </View>}
+    </>}</MotionContent>
     {error && <View style={styles.errorBanner}><ErrorNotice error={error} /><Button title="Dismiss" compact variant="ghost" onPress={() => setError(null)} /></View>}
     {(fetchError || catalogError || Object.values(syncErrors)[0]) && <View style={styles.errorBanner}><ErrorNotice error={fetchError || catalogError || Object.values(syncErrors)[0]} onRetry={() => { setCatalogRevision(value => value + 1); void refresh(); }} /></View>}
     {streamStatus !== 'Live' && !fetchError && <Label muted style={styles.connectionStatus}>{streamStatus}…</Label>}

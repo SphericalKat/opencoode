@@ -8,6 +8,7 @@ import { parsePairingPayload } from '../lib/pairing';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { Button, Busy, Card, Disclosure, ErrorNotice, Field, Heading, Label, mono, Row, touchTarget } from './ui';
 import { ShellIcon } from './ShellIcon';
+import { MotionContent } from './motion';
 
 export type ConnectionForm = { id: string; name: string; url: string; token: string; username?: string };
 type Step = 'home' | 'pair' | 'address' | 'password' | 'scan';
@@ -30,7 +31,8 @@ const blankForm: ConnectionForm = { id: '', name: '', url: '', token: '' };
 export function ConnectionFlow({ form, connections, activeID, connecting, error, pairingLink, onPairingLinkConsumed, onChangeForm, onClearError, onConnect, onRemove }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const [step, setStep] = useState<Step>(() => form.id ? 'password' : form.url ? /\/auth\/connect\/[^/]+\/?$/.test(form.url) ? 'pair' : 'address' : 'home');
+  const [navigation, setNavigation] = useState(() => ({ step: (form.id ? 'password' : form.url ? /\/auth\/connect\/[^/]+\/?$/.test(form.url) ? 'pair' : 'address' : 'home') as Step, direction: 0 as -1 | 0 | 1, revision: 0 }));
+  const { step } = navigation;
   const [pairingText, setPairingText] = useState(form.id ? '' : form.url);
   const [localError, setLocalError] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
@@ -83,10 +85,14 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
 
   function clearError() { setLocalError(null); onClearError(); }
 
-  function go(next: Step) {
+  function setStep(next: Step, direction: -1 | 0 | 1 = 0) {
+    setNavigation(current => current.step === next ? current.direction === direction ? current : { ...current, direction } : { step: next, direction, revision: current.revision + 1 });
+  }
+
+  function go(next: Step, direction: -1 | 1 = 1) {
     if (busy) return;
     Keyboard.dismiss();
-    clearError(); setCameraBlocked(false); setStep(next);
+    clearError(); setCameraBlocked(false); setStep(next, direction);
   }
 
   function submit(candidates: Connection[], returnStep: Step = 'home') {
@@ -149,14 +155,14 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
     }
   }
 
-  function nextAddress() {
+  function nextAddress(animate = false) {
     if (busy) return;
     try {
       const url = form.url.trim();
       if (url.startsWith('{') || /\/auth\/connect\/[^/]+\/?$/.test(url)) { acceptPairing(url); return; }
       const normalized = normalizeConnection({ ...form, url, id: form.id || undefined });
       onChangeForm({ ...form, url: normalized.url });
-      clearError(); setStep('password');
+      clearError(); setStep('password', animate ? 1 : 0);
     } catch (cause) { setLocalError(errorMessage(cause)); }
   }
 
@@ -165,13 +171,13 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
     catch (cause) { setLocalError(errorMessage(cause)); }
   }
 
-  const back = step !== 'home' && !submission ? <Button title="‹ Back" compact variant="ghost" disabled={busy} onPress={() => go(step === 'password' ? 'address' : 'home')} /> : null;
+  const back = step !== 'home' && !submission ? <Button title="‹ Back" compact variant="ghost" disabled={busy} onPress={() => go(step === 'password' ? 'address' : 'home', -1)} /> : null;
   const savedServers = !!connections.length && <View style={styles.saved}>
     <Row style={{ justifyContent: 'space-between' }}><Label muted style={styles.instruction}>Your servers</Label><Button title={managing ? 'Done' : 'Manage'} compact variant="ghost" disabled={busy} onPress={() => setManaging(value => !value)} /></Row>
     {connections.map(connection => <View key={connection.id} style={styles.savedItem}><Pressable accessibilityRole="button" accessibilityLabel={`Connect to ${connection.name}${activeID === connection.id ? ', current server' : ''}`} disabled={busy} onPress={() => submit([connection])} style={({ pressed }) => [styles.server, pressed && { backgroundColor: colors.raised }]}><ShellIcon name="server" color={colors.muted} size={20} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{connection.name}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.small}>{connection.url}</Label></View>{activeID === connection.id ? <Label muted style={styles.small}>Current</Label> : <ShellIcon name="chevron" color={colors.faint} size={16} />}</Pressable>{managing && <Row style={styles.manage}><Button title="Edit" compact disabled={busy} onPress={() => { clearError(); onChangeForm({ ...connection, token: connection.token || '' }); setStep('password'); }} /><Button title="Remove" compact variant="ghost" disabled={busy} onPress={() => { void onRemove(connection); }} /></Row>}</View>)}
   </View>;
 
-  return <View style={styles.container}>
+  return <MotionContent variant="connection" transitionKey={navigation.revision} direction={navigation.direction} enabled={!busy && step !== 'scan'} style={styles.container}>
     {back && <View style={styles.back}>{back}</View>}
     <ErrorNotice error={localError || error} />
     {cameraBlocked && <Button title="Open camera settings" onPress={() => { void Linking.openSettings().catch(() => setLocalError('Open your device settings and enable camera access for Opencoode.')); }} />}
@@ -198,8 +204,8 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
       </> : step === 'address' ? <>
         <Heading>Enter the server address</Heading>
         <Label muted>Use your computer’s LAN or private VPN address.</Label>
-        <Field label="Server address" placeholder="http://192.168.1.20:4096" value={form.url} editable={!busy} onChangeText={url => { clearError(); onChangeForm({ ...form, url, token: '' }); }} keyboardType="url" autoComplete="off" autoFocus returnKeyType="next" onSubmitEditing={nextAddress} />
-        <Button title="Continue" variant="primary" disabled={!form.url.trim() || busy} onPress={nextAddress} />
+        <Field label="Server address" placeholder="http://192.168.1.20:4096" value={form.url} editable={!busy} onChangeText={url => { clearError(); onChangeForm({ ...form, url, token: '' }); }} keyboardType="url" autoComplete="off" autoFocus returnKeyType="next" onSubmitEditing={() => nextAddress()} />
+        <Button title="Continue" variant="primary" disabled={!form.url.trim() || busy} onPress={() => nextAddress(true)} />
         <Label muted style={styles.small}>On a phone, localhost refers to the phone. Use HTTPS outside a trusted network.</Label>
         <Disclosure title="Start a server"><Label selectable style={styles.command}>opencode serve --hostname 0.0.0.0 --port 4096</Label></Disclosure>
       </> : step === 'password' ? <>
@@ -218,7 +224,7 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
         {!activeID && savedServers}
       </>}
     {step !== 'scan' && <Label muted style={styles.privacy}>{Platform.OS === 'web' ? 'Connections stay in this tab. Your server must allow this browser origin with --cors.' : 'Your server credentials stay in secure storage on this device.'}</Label>}
-  </View>;
+  </MotionContent>;
 }
 
 function serverName(value: string) { try { return new URL(value).hostname; } catch { return 'OpenCode'; } }
