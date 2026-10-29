@@ -231,7 +231,7 @@ function Files({ client, directory, onAttachFile }: Pick<Props, 'client' | 'dire
           {file.bytes && <Button title={Platform.OS === 'web' ? 'Download file' : 'Save or share'} compact busy={sharing} disabled={fileBusy} onPress={() => { void shareFile(); }} />}
         </Row>{file.original && selection.end > selection.start && <Label muted style={{ fontSize: 11 }}>Selected text: {selection.end - selection.start} characters</Label>}</>}
         <ErrorNotice error={file.error || saveError} />
-        {fileBusy && !file.bytes ? <Busy /> : file.preview ? <View style={styles.mediaPreview}><Image accessibilityLabel={fileName(file.path)} source={{ uri: file.preview }} resizeMode="contain" style={{ width: '100%', height: '100%' }} onError={() => setSaveError('This image cannot be displayed on this device. Save or share the file to open it elsewhere.')} /></View> : file.original ? <Field accessibilityLabel={`Edit ${file.path}`} multiline scrollEnabled value={file.text} onSelectionChange={event => setSelection(event.nativeEvent.selection)} onChangeText={text => { setFile(current => current && { ...current, text }); setSaved(false); setCopied(false); setSelection({ start: 0, end: 0 }); }} editable={!fileBusy && !sharing} containerStyle={{ flex: 1, minHeight: 0 }} style={{ flex: 1, fontFamily: mono, fontSize: 13, lineHeight: 20, minHeight: 0 }} /> : file.bytes && <View style={styles.mediaPreview}><Label>{file.mime} · {(file.bytes.length / 1024).toFixed(1)} KiB</Label><Label muted>{imageMime(file.bytes) ? 'This image exceeds the 8 MiB preview limit.' : file.notice || 'Save or share this file to open it in a compatible app.'}</Label><Button title={Platform.OS === 'web' ? 'Download file' : 'Save or share'} busy={sharing} onPress={() => { void shareFile(); }} /></View>}
+        {fileBusy && !file.bytes ? <Busy /> : file.preview ? <View style={styles.mediaPreview}><Image accessibilityLabel={fileName(file.path)} source={{ uri: file.preview }} resizeMode="contain" style={{ width: '100%', height: '100%' }} onError={() => setFile(current => current?.path === file.path ? { ...current, preview: undefined, notice: 'This device cannot display this image. Save or share the file to open it in another app.' } : current)} /></View> : file.original ? <Field accessibilityLabel={`Edit ${file.path}`} multiline scrollEnabled value={file.text} onSelectionChange={event => setSelection(event.nativeEvent.selection)} onChangeText={text => { setFile(current => current && { ...current, text }); setSaved(false); setCopied(false); setSelection({ start: 0, end: 0 }); }} editable={!fileBusy && !sharing} containerStyle={{ flex: 1, minHeight: 0 }} style={{ flex: 1, fontFamily: mono, fontSize: 13, lineHeight: 20, minHeight: 0 }} /> : file.bytes && <View style={styles.mediaPreview}><Label>{file.mime} · {(file.bytes.length / 1024).toFixed(1)} KiB</Label><Label muted>{file.notice || (imageMime(file.bytes) ? 'This image exceeds the 8 MiB preview limit.' : 'Save or share this file to open it in a compatible app.')}</Label><Button title={Platform.OS === 'web' ? 'Download file' : 'Save or share'} busy={sharing} onPress={() => { void shareFile(); }} /></View>}
         {file.original && <Label muted style={{ fontSize: 11 }}>If the server file changes, copy your edits before you reload the file.</Label>}
       </View>}
     </Sheet>
@@ -253,6 +253,7 @@ function Changes({ client, directory, onAttachFile }: Pick<Props, 'client' | 'di
   const [branchesVisible, setBranchesVisible] = useState(false);
   const [revision, setRevision] = useState(0);
   const [review, setReview] = useState<FileDiffInfo | null>(null);
+  const [reviewVisible, setReviewVisible] = useState(false);
   const [reviewComment, setReviewComment] = useState('');
   const [addingReview, setAddingReview] = useState(false);
   useUnsavedChanges(`workspace-review:${directory}`, 'Review comment', !!review && !!reviewComment.trim() && !addingReview);
@@ -289,14 +290,21 @@ function Changes({ client, directory, onAttachFile }: Pick<Props, 'client' | 'di
   async function closeDiff() {
     if (addingReview) return;
     if (reviewComment.trim() && !await confirmAction('Discard review comment?', 'Your comment has not been added to a prompt.')) return;
-    setReview(null); setReviewComment(''); setDiff(null);
+    setReview(null); setReviewVisible(false); setReviewComment(''); setDiff(null);
+  }
+  async function openReview(file: FileDiffInfo) {
+    if (review?.file !== file.file) {
+      if (reviewComment.trim() && !await confirmAction('Discard review comment?', 'Your comment has not been added to a prompt.')) return;
+      setReviewComment('');
+    }
+    setReview(file); setReviewVisible(true); setError(null);
   }
   async function addReview() {
     if (!review || !onAttachFile || !reviewComment.trim()) return;
     setAddingReview(true); setError(null);
     try {
       const context = `Review feedback for ${serverFilePath(directory, review.file)}:\n\n${reviewComment.trim()}\n\n${quotedText(review.patch, 'diff')}${review.more ? '\n\nThe server truncated this diff.' : ''}`;
-      if (await onAttachFile(serverFilePath(directory, review.file), context) !== false) { setReview(null); setReviewComment(''); setDiff(null); }
+      if (await onAttachFile(serverFilePath(directory, review.file), context) !== false) { setReview(null); setReviewVisible(false); setReviewComment(''); setDiff(null); }
       else setError('The review was not added. Check the connection and retry.');
     } catch (failure) { setError(errorMessage(failure)); }
     finally { setAddingReview(false); }
@@ -311,7 +319,7 @@ function Changes({ client, directory, onAttachFile }: Pick<Props, 'client' | 'di
     </View>
     {loading ? <Busy /> : <FlatList data={files} keyExtractor={file => file.file} contentContainerStyle={styles.list} ListEmptyComponent={<Empty title={error ? 'Changes unavailable' : 'No changes'} detail={error ? 'Retry the request or check your repository.' : 'Your working tree has no changed files.'} />}
       renderItem={({ item }) => <Pressable accessibilityRole="button" accessibilityLabel={`View diff for ${item.file}`} style={styles.fileRow} onPress={() => { void loadDiff(item.file); }}><View style={{ flex: 1, minWidth: 0 }}><Label numberOfLines={2} ellipsizeMode="middle">{item.file}</Label><Label muted style={{ fontSize: 11 }}>{item.status}</Label></View><Label style={{ color: colors.success }}>+{item.additions}</Label><Label style={{ color: colors.danger }}>−{item.deletions}</Label></Pressable>} />}
-    <Sheet visible={diff !== null} title={review ? 'Review comment' : 'Changes'} onClose={() => { void closeDiff(); }}>{review ? <><Label selectable style={{ fontFamily: mono }}>{review.file}</Label><Field label="Comment for OpenCode" multiline value={reviewComment} onChangeText={setReviewComment} editable={!addingReview} /><ErrorNotice error={error} /><Button title="Add review to prompt" variant="primary" busy={addingReview} disabled={!reviewComment.trim()} onPress={() => { void addReview(); }} /><Button title="Back to diff" disabled={addingReview} onPress={() => { if (!reviewComment.trim()) setReview(null); else void confirmAction('Discard review comment?', 'Your comment has not been added to a prompt.').then(yes => { if (yes) { setReviewComment(''); setReview(null); } }); }} /></> : <>{diff?.length === 0 && <Empty title="No diff" detail="The selected comparison has no changes." />}{diff?.map(file => <Card key={file.file}><Label selectable style={{ fontFamily: mono }}>{file.file}</Label><Label muted>+{file.additions}  −{file.deletions} · {file.status}</Label><ScrollView horizontal><Text selectable style={styles.code}>{file.patch}</Text></ScrollView>{file.more && <Label muted>The server truncated this diff.</Label>}{onAttachFile && <Button title="Add review comment" compact onPress={() => { setReview(file); setReviewComment(''); setError(null); }} />}</Card>)}</>}</Sheet>
+    <Sheet visible={diff !== null} title={reviewVisible ? 'Review comment' : 'Changes'} onClose={() => { void closeDiff(); }}>{reviewVisible && review ? <><Label selectable style={{ fontFamily: mono }}>{review.file}</Label><Field label="Comment for OpenCode" multiline value={reviewComment} onChangeText={setReviewComment} editable={!addingReview} /><ErrorNotice error={error} /><Button title="Add review to prompt" variant="primary" busy={addingReview} disabled={!reviewComment.trim()} onPress={() => { void addReview(); }} /><Button title="Back to diff" disabled={addingReview} onPress={() => setReviewVisible(false)} /></> : <>{diff?.length === 0 && <Empty title="No diff" detail="The selected comparison has no changes." />}{diff?.map(file => <Card key={file.file}><Label selectable style={{ fontFamily: mono }}>{file.file}</Label><Label muted>+{file.additions}  −{file.deletions} · {file.status}</Label><ScrollView horizontal><Text selectable style={styles.code}>{file.patch}</Text></ScrollView>{file.more && <Label muted>The server truncated this diff.</Label>}{onAttachFile && <Button title={review?.file === file.file && reviewComment.trim() ? 'Continue review comment' : 'Add review comment'} compact onPress={() => { void openReview(file); }} />}</Card>)}</>}</Sheet>
     <Sheet visible={branchesVisible} title="Branches" onClose={() => setBranchesVisible(false)}><Label muted>Select a branch as the comparison base.</Label>{branches.map(branch => <Button key={branch} title={branch} onPress={() => { setBase(branch); setMode('branch'); setBranchesVisible(false); }} />)}</Sheet>
   </View>;
 }

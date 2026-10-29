@@ -27,6 +27,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   const [archived, setArchived] = useState(false);
   const [nextCursor, setNextCursor] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [listUnavailable, setListUnavailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [statusError, setStatusError] = useState<string>();
@@ -69,6 +70,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       ]);
       if (!mounted.current || request !== generation.current || signal?.aborted) return;
       if (page.status === 'rejected') throw page.reason;
+      setListUnavailable(false);
       setSessions(previous => {
         const next = cursor ? Array.from(new Map([...previous, ...page.value.data].map(item => [item.id, item])).values()) : page.value.data;
         loadedCount.current = Math.max(40, next.length);
@@ -83,7 +85,10 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
         setStatusError(`Active status unavailable: ${errorMessage(running.reason)}`);
       }
     } catch (cause) {
-      if (mounted.current && request === generation.current && !signal?.aborted) setError(errorMessage(cause));
+      if (mounted.current && request === generation.current && !signal?.aborted) {
+        setListUnavailable(true);
+        setError(errorMessage(cause));
+      }
     } finally {
       if (mounted.current && request === generation.current) setLoading(false);
       paging.current = false;
@@ -147,6 +152,11 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     return () => { controller.abort(); clearTimeout(refreshTimer); clearTimeout(retryTimer); releaseRetry?.(); };
   }, [client, foreground]);
 
+  const openConversation = (id: string) => {
+    Keyboard.dismiss();
+    onOpenSession(id);
+  };
+
   const run = async (operation: () => Promise<void>, inSheet = false) => {
     if (operationPending.current) return;
     operationPending.current = true;
@@ -176,7 +186,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       setActions(null);
       setTitle('');
       if (archived) setArchived(false);
-      onOpenSession(created.id);
+      openConversation(created.id);
       if (!archived) await refresh();
     } finally { if (mounted.current) setCreating(false); }
   }, named);
@@ -229,7 +239,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     const imported = await client.experimental.session.import({ info: transcript.info, messages: transcript.messages, location: { directory } });
     if (scope.current.client !== owner.client || scope.current.directory !== owner.directory || !mounted.current) return;
     await refresh();
-    onOpenSession(imported.id);
+    openConversation(imported.id);
   });
 
   const queueImport = () => {
@@ -283,15 +293,18 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       initialNumToRender={12}
       maxToRenderPerBatch={12}
       windowSize={7}
-      ListEmptyComponent={loading ? <Busy /> : <Empty title={search.trim() ? 'No matching sessions' : archived ? 'No archived sessions' : 'Start your first session'} detail={search.trim() ? 'Try another title or clear the search.' : archived ? 'Sessions appear here after you archive them.' : 'Create a session to work with OpenCode in this directory.'} />}
+      ListEmptyComponent={loading ? <Busy /> : <Empty title={listUnavailable ? 'Could not load sessions' : search.trim() ? 'No matching sessions' : archived ? 'No archived sessions' : 'Start your first session'} detail={listUnavailable ? 'Use Retry to load your history.' : search.trim() ? 'Try another title or clear the search.' : archived ? 'Sessions appear here after you archive them.' : 'Create a session to work with OpenCode in this directory.'} />}
       ListFooterComponent={sessions.length ? loading ? <Busy /> : nextCursor ? <Button title="Load more" variant="ghost" onPress={loadMore} /> : undefined : undefined}
-      renderItem={({ item }) => <View style={[styles.session, selectedSessionID === item.id && styles.selected]}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title || 'Untitled session'}`} accessibilityHint={`Updated ${new Date(item.time.updated).toLocaleString()}`} onPress={() => onOpenSession(item.id)} style={styles.sessionMain}>
-          <Row style={{ flexWrap: 'nowrap', gap: 7 }}>{active.has(item.id) && <View accessibilityLabel="Running" style={styles.dot} />}<Label numberOfLines={2} style={styles.sessionTitle}>{item.title || 'Untitled session'}</Label></Row>
-          <Label muted numberOfLines={1} style={styles.metadata}>{active.has(item.id) ? 'Running' : item.outcome || 'Ready'}{item.time.idle && (!item.time.viewed || item.time.viewed < item.time.idle) ? ' · Unread' : ''} · {updatedLabel(item.time.updated)}{item.parentID ? ' · Child session' : ''}</Label>
-        </Pressable>
-        <View style={{ paddingRight: 4 }}><Button title="•••" accessibilityLabel={`Manage ${item.title || 'session'}`} compact variant="ghost" onPress={() => { setSelected(item); setEditTitle(item.title || ''); setMoveDirectory(item.location.directory); setSheetError(undefined); }} /></View>
-      </View>}
+      renderItem={({ item }) => {
+        const status = sessionStatus(item, active.has(item.id));
+        return <View style={[styles.session, selectedSessionID === item.id && styles.selected]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title || 'Untitled session'}`} accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`} onPress={() => openConversation(item.id)} style={styles.sessionMain}>
+            <Row style={{ flexWrap: 'nowrap', gap: 7 }}>{active.has(item.id) && <View accessibilityLabel="Working" style={styles.dot} />}<Label numberOfLines={2} style={styles.sessionTitle}>{item.title || 'Untitled session'}</Label></Row>
+            <Label muted numberOfLines={1} style={styles.metadata}>{status}{item.time.idle && (!item.time.viewed || item.time.viewed < item.time.idle) ? ' · Unread' : ''} · {updatedLabel(item.time.updated)}{item.parentID ? ' · Child session' : ''}</Label>
+          </Pressable>
+          <View style={{ paddingRight: 4 }}><Button title="•••" accessibilityLabel={`Manage ${item.title || 'session'}`} compact variant="ghost" onPress={() => { setSelected(item); setEditTitle(item.title || ''); setMoveDirectory(item.location.directory); setSheetError(undefined); }} /></View>
+        </View>;
+      }}
     />
     <Sheet visible={actions !== null} title={displayedActions === 'create' ? 'Name a new session' : displayedActions === 'filter' ? 'Session history' : 'Session list actions'} onClose={() => { if (!creating) setActions(null); }} onDismiss={finishActionsDismissal}>
       {displayedActions === 'create' ? <>
@@ -316,7 +329,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       {selected && <Label muted>Updated {new Date(selected.time.updated).toLocaleString()}</Label>}
       <Field label="Session title" value={editTitle} onChangeText={setEditTitle} />
       <Button title="Save title" busy={busy} disabled={!editTitle.trim()} onPress={() => changeSession(item => client.session.update({ sessionID: item.id, title: editTitle.trim() }))} />
-      <Row><Button title={selected?.time.archived ? 'Restore session' : 'Archive session'} disabled={busy} onPress={() => changeSession(item => client.session.update({ sessionID: item.id, archived: !item.time.archived }))} /><Button title="Fork session" disabled={busy} onPress={() => changeSession(async item => { const fork = await client.session.fork({ sessionID: item.id }); if (scope.current.client === client && mounted.current) onOpenSession(fork.id); })} /></Row>
+      <Row><Button title={selected?.time.archived ? 'Restore session' : 'Archive session'} disabled={busy} onPress={() => changeSession(item => client.session.update({ sessionID: item.id, archived: !item.time.archived }))} /><Button title="Fork session" disabled={busy} onPress={() => changeSession(async item => { const fork = await client.session.fork({ sessionID: item.id }); if (scope.current.client === client && mounted.current) openConversation(fork.id); })} /></Row>
       <Field label="Move to remote directory" value={moveDirectory} onChangeText={setMoveDirectory} />
       <Button title="Move session" disabled={busy || !moveDirectory.trim() || moveDirectory.trim() === selected?.location.directory} onPress={() => changeSession(item => client.session.move({ sessionID: item.id, directory: moveDirectory.trim(), delivery: 'queue' }))} />
       <Label muted>A move during active work takes effect at a safe server boundary.</Label>
@@ -366,4 +379,12 @@ function updatedLabel(time: number): string {
   return date.toDateString() === today.toDateString()
     ? date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
     : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+}
+
+function sessionStatus(session: SessionInfo, working: boolean): string {
+  if (working) return 'Working';
+  if (session.outcome === 'succeeded') return 'Completed';
+  if (session.outcome === 'failed') return 'Needs attention';
+  if (session.outcome === 'interrupted') return 'Stopped';
+  return 'Ready';
 }
