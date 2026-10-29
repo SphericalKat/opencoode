@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { createContext, memo, useContext, useMemo, useState } from 'react';
 import { Linking, Platform, ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import MarkdownIt, { type Token } from 'markdown-it';
@@ -6,6 +6,7 @@ import { Button, mono, sans } from './ui';
 import { type ThemeColors, useThemedStyles } from '../lib/theme';
 
 const parser = new MarkdownIt({ html: false, linkify: true, breaks: true, maxNesting: 40 });
+const SelectionContext = createContext(true);
 
 type Node = { token: Token; children: Node[] };
 
@@ -52,30 +53,32 @@ function safeUrl(value: string | number | null): string | undefined {
 
 const Inline = memo(function Inline({ nodes }: { nodes: Node[] }) {
   const styles = useThemedStyles(createStyles);
+  const selectable = useContext(SelectionContext);
   return nodes.map(({ token, children }, index) => {
     const content = children.length ? <Inline nodes={children} /> : token.content;
     if (token.type === 'softbreak' || token.type === 'hardbreak') return '\n';
     if (token.type === 'link_open' || token.type === 'image') {
       const uri = safeUrl(token.attrGet(token.type === 'image' ? 'src' : 'href'));
       const label = token.type === 'image' ? <>Image: {content || 'Open image'}</> : content;
-      return <Text key={index} accessibilityRole={uri ? 'link' : undefined} accessibilityHint={uri ? `Open ${uri}` : undefined} style={uri && styles.link}
+      return <Text key={index} selectable={selectable} accessibilityRole={uri ? 'link' : undefined} accessibilityHint={uri ? `Open ${uri}` : undefined} style={uri && styles.link}
         onPress={uri ? () => { void Linking.openURL(uri).catch(() => {}); } : undefined}>{label}</Text>;
     }
     const style = token.type === 'strong_open' ? styles.bold : token.type === 'em_open' ? styles.italic : token.type === 's_open' ? styles.strike : token.type === 'code_inline' ? styles.inlineCode : undefined;
-    return <Text key={index} style={style}>{content}</Text>;
+    return <Text key={index} selectable={selectable} style={style}>{content}</Text>;
   });
 }, (previous, next) => sameNodes(previous.nodes, next.nodes));
 
 const Code = memo(function Code({ code, language }: { code: string; language: string }) {
   const styles = useThemedStyles(createStyles);
+  const selectable = useContext(SelectionContext);
   const [feedback, setFeedback] = useState<{ code: string; failed: boolean }>();
   const currentFeedback = feedback?.code === code ? feedback : undefined;
   return <View style={styles.code}>
-    <View style={styles.codeHeader}><Text style={styles.language}>{language || 'TEXT'}</Text><Button title={currentFeedback?.failed ? 'Retry copy' : currentFeedback ? 'Copied' : 'Copy'} compact variant="ghost" accessibilityLabel="Copy code" onPress={() => {
+    <View style={styles.codeHeader}><Text selectable={selectable} style={styles.language}>{language || 'TEXT'}</Text><Button title={currentFeedback?.failed ? 'Retry copy' : currentFeedback ? 'Copied' : 'Copy'} compact variant="ghost" accessibilityLabel="Copy code" onPress={() => {
       void Clipboard.setStringAsync(code).then(() => setFeedback({ code, failed: false })).catch(() => setFeedback({ code, failed: true }));
     }} /></View>
-    {currentFeedback?.failed && <Text accessibilityRole="alert" style={styles.copyError}>Copy failed. Select the text or try again.</Text>}
-    <ScrollView horizontal contentContainerStyle={styles.codeContent}><Text selectable style={styles.codeText}>{code}</Text></ScrollView>
+    {currentFeedback?.failed && <Text selectable={selectable} accessibilityRole="alert" style={styles.copyError}>Copy failed. {selectable ? 'Select the text or try again.' : 'Try again.'}</Text>}
+    <ScrollView horizontal contentContainerStyle={styles.codeContent}><Text selectable={selectable} style={styles.codeText}>{code}</Text></ScrollView>
   </View>;
 });
 
@@ -85,24 +88,26 @@ function Blocks({ nodes, muted }: { nodes: Node[]; muted?: boolean }) {
 
 const ListItem = memo(function ListItem({ node, marker, muted }: { node: Node; marker: string; muted?: boolean }) {
   const styles = useThemedStyles(createStyles);
+  const selectable = useContext(SelectionContext);
   return <View style={styles.listItem}>
-    <Text selectable style={[styles.text, muted && styles.muted, styles.marker]}>{marker}</Text>
+    <Text selectable={selectable} style={[styles.text, muted && styles.muted, styles.marker]}>{marker}</Text>
     <View style={styles.listContent}><Blocks nodes={node.children} muted={muted} /></View>
   </View>;
 }, (previous, next) => previous.marker === next.marker && previous.muted === next.muted && sameNode(previous.node, next.node));
 
 const Block = memo(function Block({ node, muted }: { node: Node; muted?: boolean }) {
     const styles = useThemedStyles(createStyles);
+    const selectable = useContext(SelectionContext);
     const { token, children } = node;
     const prose = [styles.text, muted && styles.muted];
     switch (token.type) {
       case 'inline':
-        return <Text selectable style={prose}><Inline nodes={children} /></Text>;
+        return <Text selectable={selectable} style={prose}><Inline nodes={children} /></Text>;
       case 'paragraph_open':
         return <View style={styles.paragraph}><Blocks nodes={children} muted={muted} /></View>;
       case 'heading_open': {
         const level = Number(token.tag.slice(1));
-        return <Text selectable accessibilityRole="header" style={[prose, styles.heading, { fontSize: 25 - level * 2, lineHeight: 32 - level }]}><Inline nodes={children.flatMap(node => node.children)} /></Text>;
+        return <Text selectable={selectable} accessibilityRole="header" style={[prose, styles.heading, { fontSize: 25 - level * 2, lineHeight: 32 - level }]}><Inline nodes={children.flatMap(node => node.children)} /></Text>;
       }
       case 'fence':
       case 'code_block':
@@ -127,19 +132,19 @@ const Block = memo(function Block({ node, muted }: { node: Node; muted?: boolean
       case 'td_open': {
         const alignment = token.attrGet('style');
         const textAlign = alignment === 'text-align:right' ? 'right' : alignment === 'text-align:center' ? 'center' : 'left';
-        return <View style={[styles.cell, token.type === 'th_open' && styles.tableHeader]}><Text selectable style={[prose, { textAlign }, token.type === 'th_open' && styles.bold]}><Inline nodes={children.flatMap(node => node.children)} /></Text></View>;
+        return <View style={[styles.cell, token.type === 'th_open' && styles.tableHeader]}><Text selectable={selectable} style={[prose, { textAlign }, token.type === 'th_open' && styles.bold]}><Inline nodes={children.flatMap(node => node.children)} /></Text></View>;
       }
       default:
-        return children.length ? <View style={styles.group}><Blocks nodes={children} muted={muted} /></View> : token.content ? <Text selectable style={prose}>{token.content}</Text> : null;
+        return children.length ? <View style={styles.group}><Blocks nodes={children} muted={muted} /></View> : token.content ? <Text selectable={selectable} style={prose}>{token.content}</Text> : null;
     }
 }, (previous, next) => previous.muted === next.muted && sameNode(previous.node, next.node));
 
-export const Markdown = memo(function Markdown({ text, muted }: { text: string; muted?: boolean }) {
+export const Markdown = memo(function Markdown({ text, muted, selectable = true }: { text: string; muted?: boolean; selectable?: boolean }) {
   const styles = useThemedStyles(createStyles);
   const nodes = useMemo(() => {
     try { return tree(parser.parse(text, {})); } catch { return null; }
   }, [text]);
-  return <View style={styles.root}>{nodes ? <Blocks nodes={nodes} muted={muted} /> : <Text selectable style={[styles.text, muted && styles.muted]}>{text}</Text>}</View>;
+  return <SelectionContext.Provider value={selectable}><View style={styles.root}>{nodes ? <Blocks nodes={nodes} muted={muted} /> : <Text selectable={selectable} style={[styles.text, muted && styles.muted]}>{text}</Text>}</View></SelectionContext.Provider>;
 });
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({

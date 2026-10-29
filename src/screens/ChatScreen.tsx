@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, Image, Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, FlatList, Image, Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { KeyboardAvoidingView, KeyboardEvents } from 'react-native-keyboard-controller';
 import Svg, { Path } from 'react-native-svg';
@@ -44,7 +44,7 @@ type Props = {
   serverID?: string;
 };
 type Attachment = NonNullable<SessionPromptInput['files']>[number];
-type Panel = 'actions' | 'models' | 'agents' | 'commands' | 'mentions' | 'tools' | 'message' | 'diff' | 'context' | 'instructions' | 'schedules' | 'background' | 'children' | 'stats' | 'btw' | 'resources' | null;
+type Panel = 'actions' | 'models' | 'agents' | 'commands' | 'mentions' | 'tools' | 'message' | 'selectText' | 'diff' | 'context' | 'instructions' | 'schedules' | 'background' | 'children' | 'stats' | 'btw' | 'resources' | null;
 type SyncScope = 'metadata' | 'history' | 'inbox' | 'requests';
 const messageKey = (message: SessionMessageInfo) => message.id;
 const messageType = (message: SessionMessageInfo) => message.type;
@@ -132,6 +132,18 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; requestVersion.current++; }; }, []);
   const showError = useCallback((reason: unknown) => { if (alive.current) setError(errorMessage(reason)); }, []);
+  const selectMessage = useCallback((id: string) => { Keyboard.dismiss(); setSelectedMessageID(id); }, []);
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !visible || !selectedMessageID) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => { setSelectedMessageID(null); return true; });
+    return () => subscription.remove();
+  }, [visible, selectedMessageID]);
+  useEffect(() => {
+    if (selectedMessageID && !messages.some(message => message.id === selectedMessageID)) {
+      setSelectedMessageID(null);
+      setPanel(current => current === 'message' || current === 'selectText' ? null : current);
+    }
+  }, [messages, selectedMessageID]);
   const setFollowing = useCallback((follow: boolean) => {
     followingLatestRef.current = follow;
     setFollowingLatest(current => current === follow ? current : follow);
@@ -169,11 +181,26 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     };
     const touch = () => { wheelDirection.current = 0; beginUserScroll(); };
     const end = () => { if (userScrolling.current) { userScrolling.current = false; setFollowing(nearEnd.current); } };
+    const selectedRow = (target: EventTarget | null) => target instanceof Element ? target.closest<HTMLElement>('[id^="chat-message-"]') : null;
+    const context = (event: MouseEvent) => {
+      const row = selectedRow(event.target);
+      if (!row) return;
+      event.preventDefault();
+      selectMessage(row.id.slice('chat-message-'.length));
+    };
+    const keyboard = (event: KeyboardEvent) => {
+      const row = selectedRow(event.target);
+      if (!row || event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10') && !(event.target === row && (event.key === 'Enter' || event.key === ' '))) return;
+      event.preventDefault();
+      selectMessage(row.id.slice('chat-message-'.length));
+    };
     node.addEventListener('wheel', wheel, { passive: true });
     node.addEventListener('touchmove', touch, { passive: true });
     node.addEventListener('scrollend', end);
-    webScrollCleanup.current = () => { node.removeEventListener('wheel', wheel); node.removeEventListener('touchmove', touch); node.removeEventListener('scrollend', end); };
-  }, [beginUserScroll, setFollowing]);
+    node.addEventListener('contextmenu', context);
+    node.addEventListener('keydown', keyboard);
+    webScrollCleanup.current = () => { node.removeEventListener('wheel', wheel); node.removeEventListener('touchmove', touch); node.removeEventListener('scrollend', end); node.removeEventListener('contextmenu', context); node.removeEventListener('keydown', keyboard); };
+  }, [beginUserScroll, setFollowing, selectMessage]);
   useEffect(() => () => webScrollCleanup.current(), []);
   const maintainPosition = useMemo(() => ({ startRenderingFromBottom: true, autoscrollToBottomThreshold: followingLatest ? 0.2 : undefined, animateAutoScrollToBottom: false }), [followingLatest]);
   const applyMessageSnapshot = useCallback((snapshot: SessionMessageInfo[], reset = false) => {
@@ -605,6 +632,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     setSelectedSkills(skills.filter(skill => message.skills?.some(selected => selected.id === skill.id)));
     setRestoredSkillIDs((message.skills ?? []).filter(selected => !skills.some(skill => skill.id === selected.id)).map(skill => skill.id));
     setSelectedAgentIDs((message.agents ?? []).map(agent => agent.name));
+    setSelectedMessageID(null);
     setPanel(null);
   };
 
@@ -653,22 +681,24 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     await client.session.switchModel({ sessionID, model: { id: model.id, providerID: model.providerID, ...(variant === undefined ? {} : { variant }) } });
     await modelPreferences.recordRecent(model.providerID, model.id);
   });
-  const openMessageActions = useCallback((id: string) => { setSelectedMessageID(id); setPanel('message'); }, []);
   const messageDirectory = session?.location.directory || '';
-  const renderMessage = useCallback(({ item }: { item: SessionMessageInfo }) => <MessageRow key={item.id} message={item} onOpenActions={openMessageActions} client={client} directory={messageDirectory} />, [openMessageActions, client, messageDirectory]);
+  const transcriptMessages = useMemo(() => messages.filter(message => message.type !== 'idle' || !!message.error), [messages]);
+  const renderMessage = useCallback(({ item }: { item: SessionMessageInfo }) => <MessageRow key={item.id} message={item} onSelect={selectMessage} selected={item.id === selectedMessageID} selectionActive={!!selectedMessageID} client={client} directory={messageDirectory} />, [selectMessage, selectedMessageID, client, messageDirectory]);
+  const canCopySelected = actionMessage?.type === 'assistant' ? actionMessage.content.some(part => part.type === 'text' && !!part.text) : !!actionMessage;
+  const copySelected = () => { if (actionMessage) { const messageID = actionMessage.id; const text = messageText(actionMessage); if (text) void Clipboard.setStringAsync(text).then(() => { if (alive.current) setSelectedMessageID(current => current === messageID ? null : current); }).catch(showError); } };
 
   if (!session) return <View style={styles.container}><View style={styles.header}>{onOpenNavigation && <ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} />}<View style={styles.headerTitle}><Label numberOfLines={1} style={styles.sessionTitle}>{loading ? 'Loading session' : 'Session unavailable'}</Label><Label numberOfLines={1} muted style={styles.projectLabel}>{projectLabel || 'OpenCode'}</Label></View></View>{loading ? <Busy /> : <View style={{ padding: 16 }}><ErrorNotice error={error || fetchError || 'The session is unavailable'} onRetry={() => { void refresh(); }} /></View>}</View>;
   return <View style={styles.frame}><KeyboardAvoidingView style={styles.container} behavior="padding" automaticOffset enabled={visible && !panel}>
-    <View style={styles.header}>
+    {actionMessage ? <View style={[styles.header, styles.selectionHeader]}><ChatIconButton name="close" label="Close message selection" onPress={() => setSelectedMessageID(null)} /><Label accessibilityRole="header" style={styles.selectionCount}>1 selected</Label><Button title="Copy" compact variant="ghost" disabled={!canCopySelected} onPress={copySelected} />{actionMessage.type === 'user' ? <Button title="Edit" compact variant="ghost" disabled={!draftLoaded || pending} onPress={() => { void editMessage(actionMessage); }} /> : <Button title="Fork" compact variant="ghost" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }); }} />}<ChatIconButton name="more" label="Selected message actions" onPress={() => setPanel('message')} /></View> : <View style={styles.header}>
       {onOpenNavigation && <ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} />}
       <View style={styles.headerTitle}><Label numberOfLines={1} accessibilityLabel={session.title || 'New session'} style={styles.sessionTitle}>{session.title || 'New session'}</Label><Label numberOfLines={1} muted style={styles.projectLabel}>{projectLabel || session.location.directory.split('/').filter(Boolean).pop() || session.location.directory}</Label></View>
       <ChatIconButton name="more" label="Session actions" onPress={() => setPanel('actions')} />
-    </View>
+    </View>}
     {error && <View style={styles.errorBanner}><ErrorNotice error={error} /><Button title="Dismiss" compact variant="ghost" onPress={() => setError(null)} /></View>}
     {(fetchError || catalogError || Object.values(syncErrors)[0]) && <View style={styles.errorBanner}><ErrorNotice error={fetchError || catalogError || Object.values(syncErrors)[0]} onRetry={() => { setCatalogRevision(value => value + 1); void refresh(); }} /></View>}
     {streamStatus !== 'Live' && !fetchError && <Label muted style={styles.connectionStatus}>{streamStatus}…</Label>}
     {session.revert && <View style={styles.revert}><Label>A revert is staged</Label><Label muted>Later messages are excluded from the context.</Label><Row><Button title="Restore" compact onPress={() => { void run(() => client.session.revert.clear({ sessionID })); }} /><Button title="Commit revert" compact variant="danger" disabled={pending} onPress={() => { void run(async () => { if (await confirmAction('Commit this revert?', 'This permanently removes messages after the revert point.')) { await client.session.revert.commit({ sessionID }); historyEpoch.current++; liveMessages.current.clear(); } }); }} /></Row></View>}
-    <View style={styles.transcriptFrame}><FlashList ref={list} data={messages} keyExtractor={messageKey} getItemType={messageType} renderItem={renderMessage} ItemSeparatorComponent={MessageSeparator} maintainVisibleContentPosition={maintainPosition}
+    <View style={styles.transcriptFrame}><FlashList ref={list} data={transcriptMessages} keyExtractor={messageKey} getItemType={messageType} renderItem={renderMessage} ItemSeparatorComponent={MessageSeparator} maintainVisibleContentPosition={maintainPosition}
       style={styles.transcript} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" onLoad={listLoaded}
       onScroll={updateScrollPosition} scrollEventThrottle={16} onScrollBeginDrag={beginUserScroll} onScrollEndDrag={finishUserScroll} onMomentumScrollBegin={beginUserScroll} onMomentumScrollEnd={finishUserScroll}
       ListHeaderComponent={cursor ? <Button title="Load earlier messages" variant="ghost" compact busy={loadingOlder} onPress={() => { setFollowing(false); void loadOlder(); }} /> : undefined}
@@ -713,6 +743,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     <Sheet visible={panel === 'agents'} title="Choose agent" onClose={() => setPanel(null)}><ErrorNotice error={error} />{agents.filter(agent => !agent.hidden && agent.mode !== 'subagent').map(agent => <Card key={agent.id}><Label style={{ fontWeight: '600' }}>{agent.name}</Label>{agent.description && <Label muted>{agent.description}</Label>}<Button title={session.agent === agent.id ? 'Selected' : 'Use agent'} selected={session.agent === agent.id} disabled={pending} onPress={() => { void run(() => client.session.switchAgent({ sessionID, agent: agent.id }), true); }} /></Card>)}</Sheet>
     <Sheet visible={panel === 'tools'} title="Message tools" onClose={() => setPanel(null)} onDismiss={toolsDismissed}><Button title="Attach from device" disabled={!draftLoaded} onPress={queueDevicePicker} /><Button title="Files & agents" disabled={!draftLoaded} onPress={() => setPanel('mentions')} /><Button title="MCP resource references" disabled={!draftLoaded} onPress={() => setPanel('resources')} /><Button title="Commands & skills" disabled={!draftLoaded} onPress={() => setPanel('commands')} /><Button title="Ask a side question · /btw" onPress={() => { setSideQuestion(undefined); setPanel('btw'); }} /><Button title={`Agent: ${agents.find(agent => agent.id === session.agent)?.name || session.agent || 'Choose agent'}`} onPress={() => setPanel('agents')} /><Label muted>Message delivery</Label><Row><Button title="Steer current work" selected={delivery === 'steer'} onPress={() => setDelivery('steer')} /><Button title="Queue after current work" selected={delivery === 'queue'} onPress={() => setDelivery('queue')} /></Row><Label muted>Start a message with ! to run a shell command on the server.</Label></Sheet>
     <Sheet visible={panel === 'message'} title="Message" onClose={() => setPanel(null)}><ErrorNotice error={error} />{actionMessage && <>
+      <Button title="Select text" onPress={() => setPanel('selectText')} />
       {'text' in actionMessage && <Button title="Copy message" onPress={() => { void Clipboard.setStringAsync(actionMessage.text).then(() => setPanel(null)).catch(showError); }} />}
       {actionMessage.type === 'assistant' && <Button title="Copy response" onPress={() => { void Clipboard.setStringAsync(actionMessage.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')).then(() => setPanel(null)).catch(showError); }} />}
       {actionMessage.type === 'user' && <Button title="Edit & resend" disabled={!draftLoaded} onPress={() => { void editMessage(actionMessage); }} />}
@@ -726,6 +757,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       <Button title="Fork before this message" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }, true); }} />
       {actionMessage.type === 'user' && <Button title="Undo from this message" disabled={pending || active} onPress={() => { void run(async () => { if (await confirmAction('Undo from this message?', 'The server will stage a revert of later messages and file changes. You can restore the staged changes.')) await client.session.revert.stage({ sessionID, messageID: actionMessage.id, files: true }); }, true); }} />}
     </>}</Sheet>
+    <Sheet visible={panel === 'selectText'} title="Select text" onClose={() => setPanel(null)}>{actionMessage && <MessageRow message={actionMessage} client={client} directory={session.location.directory} />}</Sheet>
     <Sheet visible={panel === 'commands'} title="Commands & skills" onClose={() => setPanel(null)}>
       <Label muted>Commands run on the server. Skills join your next message.</Label>
       <Card><Label style={{ fontFamily: mono }}>/btw</Label><Label muted>Ask about this session without a change to its history.</Label><Button title="Use side question" compact disabled={!draftLoaded} onPress={() => { setDraft('/btw '); setPanel(null); }} /></Card>
@@ -746,35 +778,63 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   </KeyboardAvoidingView></View>;
 }
 
-const MessageRow = memo(function MessageRow({ message, onOpenActions, client, directory }: { message: SessionMessageInfo; onOpenActions?: (id: string) => void; client: Client; directory: string }) {
+function messageText(message: SessionMessageInfo): string {
+  if ('text' in message) return message.text;
+  if (message.type === 'assistant') return message.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n');
+  if (message.type === 'shell') return `$ ${message.command}${message.output?.output ? `\n${message.output.output}` : ''}`;
+  if (message.type === 'compaction') return 'summary' in message ? message.summary : 'error' in message ? message.error.message : 'Context compaction';
+  if (message.type === 'agent-switched') return `Agent: ${message.agent}`;
+  if (message.type === 'model-switched') return `Model: ${message.model.id}`;
+  if (message.type === 'location-switched') return `Directory: ${message.location.directory}`;
+  return message.error?.message || message.outcome;
+}
+
+function messagePreview(message: SessionMessageInfo): string {
+  if (message.type === 'assistant') {
+    const first = message.content.find(part => part.type === 'text');
+    return first?.type === 'text' && first.text ? first.text.slice(0, 240) : 'Assistant message';
+  }
+  return messageText(message).slice(0, 240);
+}
+
+type MessageRowProps = { message: SessionMessageInfo; onSelect?: (id: string) => void; selected?: boolean; selectionActive?: boolean; client: Client; directory: string };
+const MessageRow = memo(function MessageRow({ message, onSelect, selected, selectionActive, client, directory }: MessageRowProps) {
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const actions = onOpenActions && <ChatIconButton name="more" label="Message actions" compactFace onPress={() => onOpenActions(message.id)} />;
+  if (message.type === 'idle' && !message.error) return null;
+  if (!onSelect) return <MessageContent message={message} client={client} directory={directory} selectable />;
+  return <Pressable nativeID={`chat-message-${message.id}`} accessibilityRole="button" accessibilityLabel={messagePreview(message)} accessibilityHint="Long press to select this message. Message actions appear in the header." accessibilityState={{ selected: !!selected }} accessibilityActions={[{ name: 'activate', label: 'Select message' }, { name: 'longpress', label: 'Select message' }]} onAccessibilityAction={() => onSelect(message.id)} focusable onLongPress={() => onSelect(message.id)} onPress={selectionActive ? () => onSelect(message.id) : undefined} style={[styles.selectableMessage, selected && { backgroundColor: colors.selected }]}><MessageContent message={message} client={client} directory={directory} selectable={false} /></Pressable>;
+});
+
+const MessageContent = memo(function MessageContent({ message, client, directory, selectable }: { message: SessionMessageInfo; client: Client; directory: string; selectable: boolean }) {
+  const styles = useThemedStyles(createStyles);
   if (message.type === 'idle') return message.error ? <ErrorNotice error={message.error.message} /> : null;
-  if (message.type === 'assistant') return <View style={styles.assistantGroup}><View style={styles.assistant}>{message.content.map((part, index) => <AssistantPart key={part.type === 'tool' ? part.id : `${part.type}:${index}`} part={part} client={client} directory={directory} />)}{message.retry && <Label muted>Retry {message.retry.attempt}: {message.retry.error.message}</Label>}{message.error && <ErrorNotice error={message.error.message} />}</View>{actions && <View style={styles.assistantActions}>{actions}</View>}</View>;
-  if (message.type === 'user') return <View style={styles.userGroup}><View style={styles.user}><MessageText text={message.text} />{message.files?.map((file, index) => <View key={index} style={{ gap: 8 }}><Label muted style={{ fontFamily: mono, fontSize: 12 }}>↳ {file.name || file.mime}</Label>{file.mime.startsWith('image/') && <Image source={{ uri: `data:${file.mime};base64,${file.data}` }} style={{ height: 180, width: '100%', borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name || 'Attached image'} />}</View>)}{message.skills?.map(skill => <Label key={skill.id} muted>Skill: {skill.name}</Label>)}</View>{actions && <View style={styles.userActions}>{actions}</View>}</View>;
-  if (message.type === 'shell') return <Disclosure title={`$ ${message.command} · ${message.status}`}><CodeBlock code={message.output?.output || 'No output'} />{message.output?.truncated && <Label muted>Output truncated by the server</Label>}{actions}</Disclosure>;
-  if (message.type === 'compaction') return <Disclosure title={`Context compaction · ${message.status}`}>{'summary' in message && <MessageText text={message.summary} />}{'error' in message && <ErrorNotice error={message.error.message} />}</Disclosure>;
+  if (message.type === 'assistant') return <View style={styles.assistant}>{message.content.map((part, index) => <AssistantPart key={part.type === 'tool' ? part.id : `${part.type}:${index}`} part={part} client={client} directory={directory} selectable={selectable} />)}{message.retry && <Label muted>Retry {message.retry.attempt}: {message.retry.error.message}</Label>}{message.error && <ErrorNotice error={message.error.message} />}</View>;
+  if (message.type === 'user') return <View style={styles.userGroup}><View style={styles.user}><MessageText text={message.text} selectable={selectable} />{message.files?.map((file, index) => <View key={index} style={{ gap: 8 }}><Label muted style={{ fontFamily: mono, fontSize: 12 }}>↳ {file.name || file.mime}</Label>{file.mime.startsWith('image/') && <Image source={{ uri: `data:${file.mime};base64,${file.data}` }} style={{ height: 180, width: '100%', borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name || 'Attached image'} />}</View>)}{message.skills?.map(skill => <Label key={skill.id} muted>Skill: {skill.name}</Label>)}</View></View>;
+  if (message.type === 'shell') return <Disclosure title={`$ ${message.command} · ${message.status}`}><CodeBlock code={message.output?.output || 'No output'} selectable={selectable} />{message.output?.truncated && <Label muted>Output truncated by the server</Label>}</Disclosure>;
+  if (message.type === 'compaction') return <Disclosure title={`Context compaction · ${message.status}`}>{'summary' in message && <MessageText text={message.summary} selectable={selectable} />}{'error' in message && <ErrorNotice error={message.error.message} />}</Disclosure>;
   if (message.type === 'agent-switched') return <Label muted style={styles.notice}>Agent → {message.agent}</Label>;
   if (message.type === 'model-switched') return <Label muted style={styles.notice}>Model → {message.model.id}{message.model.variant ? ` · ${message.model.variant}` : ''}</Label>;
   if (message.type === 'location-switched') return <Label muted style={styles.notice}>Directory → {message.location.directory}</Label>;
-  if (message.type === 'skill') return <Disclosure title={`Skill · ${message.name}`}><MessageText text={message.text} /></Disclosure>;
-  return <Disclosure title={message.description || message.type}><MessageText text={message.text} />{actions}</Disclosure>;
+  if (message.type === 'skill') return <Disclosure title={`Skill · ${message.name}`}><MessageText text={message.text} selectable={selectable} /></Disclosure>;
+  return <Disclosure title={message.description || message.type}><MessageText text={message.text} selectable={selectable} /></Disclosure>;
 });
 
-const AssistantPart = memo(function AssistantPart({ part, client, directory }: { part: SessionMessageAssistant['content'][number]; client: Client; directory: string }) {
-  if (part.type === 'text') return <MessageText text={part.text} />;
-  if (part.type === 'reasoning') return <Disclosure title="Reasoning"><MessageText text={part.text} muted /></Disclosure>;
-  return <Disclosure title={`${part.state.status === 'error' ? '×' : part.state.status === 'completed' ? '✓' : '◌'} ${part.name}`}><Label muted>Input</Label>{part.state.status === 'streaming' ? <CodeBlock code={part.state.input} /> : <JsonView value={part.state.input} />}{'content' in part.state && part.state.content?.map((content, index) => content.type === 'text' ? <MessageText key={index} text={content.text} /> : <ArtifactContent key={index} content={content} client={client} directory={directory} />)}{part.state.status === 'error' && <ErrorNotice error={part.state.error.message} />}</Disclosure>;
+const AssistantPart = memo(function AssistantPart({ part, client, directory, selectable }: { part: SessionMessageAssistant['content'][number]; client: Client; directory: string; selectable: boolean }) {
+  const styles = useThemedStyles(createStyles);
+  if (part.type === 'text') return <MessageText text={part.text} selectable={selectable} />;
+  if (part.type === 'reasoning') return <Disclosure title="Reasoning"><MessageText text={part.text} muted selectable={selectable} /></Disclosure>;
+  return <Disclosure title={`${part.state.status === 'error' ? '×' : part.state.status === 'completed' ? '✓' : '◌'} ${part.name}`}><Label muted>Input</Label>{part.state.status === 'streaming' ? <CodeBlock code={part.state.input} selectable={selectable} /> : <Text selectable={selectable} style={styles.jsonText}>{JSON.stringify(part.state.input, null, 2)}</Text>}{'content' in part.state && part.state.content?.map((content, index) => content.type === 'text' ? <MessageText key={index} text={content.text} selectable={selectable} /> : <ArtifactContent key={index} content={content} client={client} directory={directory} />)}{part.state.status === 'error' && <ErrorNotice error={part.state.error.message} />}</Disclosure>;
 });
 
-function MessageText({ text, muted }: { text: string; muted?: boolean }) {
-  return <Markdown text={text} muted={muted} />;
+function MessageText({ text, muted, selectable = true }: { text: string; muted?: boolean; selectable?: boolean }) {
+  return <Markdown text={text} muted={muted} selectable={selectable} />;
 }
-function CodeBlock({ code, language }: { code: string; language?: string }) {
+function CodeBlock({ code, language, selectable = true }: { code: string; language?: string; selectable?: boolean }) {
   const styles = useThemedStyles(createStyles);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  return <View style={styles.code}><Row style={{ justifyContent: 'space-between', paddingHorizontal: 12 }}><Label muted style={{ fontSize: 11 }}>{language || 'TEXT'}</Label><Button title={copied ? 'Copied' : 'Copy'} compact variant="ghost" onPress={() => { void Clipboard.setStringAsync(code).then(() => setCopied(true)).catch(reason => setError(errorMessage(reason))); }} /></Row>{error && <ErrorNotice error={error} />}<ScrollView horizontal><Text selectable style={styles.codeText}>{code}</Text></ScrollView></View>;
+  return <View style={styles.code}><Row style={{ justifyContent: 'space-between', paddingHorizontal: 12 }}><Label muted style={{ fontSize: 11 }}>{language || 'TEXT'}</Label><Button title={copied ? 'Copied' : 'Copy'} compact variant="ghost" onPress={() => { void Clipboard.setStringAsync(code).then(() => setCopied(true)).catch(reason => setError(errorMessage(reason))); }} /></Row>{error && <ErrorNotice error={error} />}<ScrollView horizontal><Text selectable={selectable} style={styles.codeText}>{code}</Text></ScrollView></View>;
 }
 
 function PanelLink({ title, onPress }: { title: string; onPress: () => void }) {
@@ -782,10 +842,10 @@ function PanelLink({ title, onPress }: { title: string; onPress: () => void }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({ pressed }) => ({ minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, opacity: pressed ? 0.6 : 1 })}><Label style={{ flex: 1 }}>{title}</Label><ShellIcon name="chevron" size={16} color={colors.muted} /></Pressable>;
 }
 
-type ChatIconName = 'menu' | 'more' | 'plus' | 'up' | 'down' | 'star' | 'stop';
+type ChatIconName = 'menu' | 'more' | 'plus' | 'up' | 'down' | 'star' | 'stop' | 'close';
 function ChatGlyph({ name, color, size = 20, selected }: { name: ChatIconName; color: string; size?: number; selected?: boolean }) {
   if (name === 'menu') return <ShellIcon name="menu" size={size} color={color} />;
-  const path = { more: 'M5 12h.01M12 12h.01M19 12h.01', plus: 'M12 5v14M5 12h14', up: 'M12 19V5M6 11l6-6 6 6', down: 'M6 9l6 6 6-6', star: 'm12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.3l-5.6 3 1.1-6.3L3 9.6l6.2-.9Z', stop: 'M7 7h10v10H7Z' }[name];
+  const path = { more: 'M5 12h.01M12 12h.01M19 12h.01', plus: 'M12 5v14M5 12h14', up: 'M12 19V5M6 11l6-6 6 6', down: 'M6 9l6 6 6-6', star: 'm12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.3l-5.6 3 1.1-6.3L3 9.6l6.2-.9Z', stop: 'M7 7h10v10H7Z', close: 'M6 6l12 12M18 6 6 18' }[name];
   return <Svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><Path d={path} stroke={color} strokeWidth={name === 'more' ? 3 : 1.6} strokeLinecap="round" strokeLinejoin="round" fill={name === 'stop' || name === 'star' && selected ? color : 'none'} /></Svg>;
 }
 function ChatIconButton({ name, label, onPress, raised, disabled, busy, selected, compactFace }: { name: ChatIconName; label: string; onPress: () => void; raised?: boolean; disabled?: boolean; busy?: boolean; selected?: boolean; compactFace?: boolean }) {
@@ -795,9 +855,9 @@ function ChatIconButton({ name, label, onPress, raised, disabled, busy, selected
 }
 
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
-  frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border },
+  frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border }, selectionHeader: { backgroundColor: colors.panel }, selectionCount: { flex: 1, minWidth: 0, fontSize: 14 }, selectableMessage: { borderRadius: 16 },
   headerTitle: { flex: 1, minWidth: 0, gap: 1, paddingHorizontal: 4 }, sessionTitle: { fontSize: 16, fontWeight: '500', lineHeight: 21 }, projectLabel: { fontSize: 12, lineHeight: 16 }, dot: { width: 5, height: 5, borderRadius: 3 }, transcriptFrame: { flex: 1, minHeight: 0 }, transcript: { flex: 1, minHeight: 0, width: '100%', maxWidth: 760, alignSelf: 'center' }, messages: { padding: 16, paddingBottom: 24, flexGrow: 1 }, latestButton: { position: 'absolute', bottom: 12, left: 0, right: 0, alignItems: 'center' },
-  userGroup: { alignSelf: 'flex-end', maxWidth: '92%', gap: 4 }, user: { alignSelf: 'flex-end', minWidth: 100, padding: 14, borderRadius: 14, backgroundColor: colors.raised, gap: 12 }, userActions: { alignSelf: 'flex-end' }, assistantGroup: { gap: 4 }, assistant: { gap: 14, paddingVertical: 6 }, assistantActions: { alignSelf: 'flex-start' },
+  userGroup: { alignSelf: 'flex-end', maxWidth: '92%' }, user: { alignSelf: 'flex-end', minWidth: 100, padding: 14, borderRadius: 14, backgroundColor: colors.raised, gap: 12 }, assistant: { gap: 14, paddingVertical: 6 }, jsonText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
   eyebrow: { fontFamily: mono, fontSize: 10, color: colors.muted, letterSpacing: 1.2 }, notice: { fontFamily: mono, fontSize: 11 },
   composerDock: { padding: 12, paddingTop: 4, alignItems: 'center' }, composer: { width: '100%', maxWidth: 736, paddingHorizontal: 8, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, borderRadius: 18, backgroundColor: colors.panel }, composerInput: { minHeight: 44, maxHeight: 120, borderWidth: 0, borderRadius: 0, boxShadow: [], backgroundColor: colors.panel, paddingHorizontal: 6, paddingVertical: 6, fontSize: 16, lineHeight: 24 }, composerToolbar: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }, modelTrigger: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8 }, modelTriggerText: { flexShrink: 1, fontSize: 12, color: colors.muted },
   iconTarget: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }, iconFace: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, raisedFace: { backgroundColor: colors.primary, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1, elevation: 2 },
