@@ -36,6 +36,7 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
   const [pairingText, setPairingText] = useState(form.id ? '' : form.url);
   const [localError, setLocalError] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
+  const [removingID, setRemovingID] = useState<string | null>(null);
   const [managing, setManaging] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraBlocked, setCameraBlocked] = useState(false);
@@ -45,9 +46,10 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
   const acceptedScan = useRef(false);
   const requesting = useRef(false);
   const submitting = useRef(false);
+  const removing = useRef<string | null>(null);
   const connectRef = useRef(onConnect);
   connectRef.current = onConnect;
-  const busy = connecting || !!submission || reading;
+  const busy = connecting || !!submission || reading || !!removingID;
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
@@ -96,7 +98,7 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
   }
 
   function submit(candidates: Connection[], returnStep: Step = 'home') {
-    if (connecting || submitting.current || !candidates.length) return;
+    if (connecting || submitting.current || removing.current || !candidates.length) return;
     submitting.current = true;
     acceptedScan.current = true;
     Keyboard.dismiss();
@@ -116,7 +118,7 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
   }
 
   async function pastePairing() {
-    if (busy || requesting.current) return;
+    if (busy || requesting.current || removing.current) return;
     requesting.current = true;
     clearError(); setReading(true);
     setStep('pair');
@@ -134,7 +136,7 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
   }
 
   async function scan() {
-    if (busy || requesting.current) return;
+    if (busy || requesting.current || removing.current) return;
     requesting.current = true;
     Keyboard.dismiss(); clearError(); setReading(true); setCameraBlocked(false);
     try {
@@ -171,16 +173,29 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
     catch (cause) { setLocalError(errorMessage(cause)); }
   }
 
+  async function remove(connection: Connection) {
+    if (busy || submitting.current || requesting.current || removing.current) return;
+    removing.current = connection.id;
+    setRemovingID(connection.id);
+    clearError();
+    try { await onRemove(connection); }
+    catch (cause) { if (mounted.current) setLocalError(errorMessage(cause)); }
+    finally {
+      removing.current = null;
+      if (mounted.current) setRemovingID(null);
+    }
+  }
+
   const back = step !== 'home' && !submission ? <Button title="‹ Back" compact variant="ghost" disabled={busy} onPress={() => go(step === 'password' ? 'address' : 'home', -1)} /> : null;
   const savedServers = !!connections.length && <View style={styles.saved}>
     <Row style={{ justifyContent: 'space-between' }}><Label muted style={styles.instruction}>Your servers</Label><Button title={managing ? 'Done' : 'Manage'} compact variant="ghost" disabled={busy} onPress={() => setManaging(value => !value)} /></Row>
-    {connections.map(connection => <View key={connection.id} style={styles.savedItem}><Pressable accessibilityRole="button" accessibilityLabel={`Connect to ${connection.name}${activeID === connection.id ? ', current server' : ''}`} disabled={busy} onPress={() => submit([connection])} style={({ pressed }) => [styles.server, pressed && { backgroundColor: colors.raised }]}><ShellIcon name="server" color={colors.muted} size={20} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{connection.name}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.small}>{connection.url}</Label></View>{activeID === connection.id ? <Label muted style={styles.small}>Current</Label> : <ShellIcon name="chevron" color={colors.faint} size={16} />}</Pressable>{managing && <Row style={styles.manage}><Button title="Edit" compact disabled={busy} onPress={() => { clearError(); onChangeForm({ ...connection, token: connection.token || '' }); setStep('password'); }} /><Button title="Remove" compact variant="ghost" disabled={busy} onPress={() => { void onRemove(connection); }} /></Row>}</View>)}
+    {connections.map(connection => <View key={connection.id} style={styles.savedItem}><Pressable accessibilityRole="button" accessibilityLabel={`Connect to ${connection.name}${activeID === connection.id ? ', current server' : ''}`} disabled={busy} onPress={() => submit([connection])} style={({ pressed }) => [styles.server, pressed && { backgroundColor: colors.raised }]}><ShellIcon name="server" color={colors.muted} size={20} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{connection.name}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.small}>{connection.url}</Label></View>{activeID === connection.id ? <Label muted style={styles.small}>Current</Label> : <ShellIcon name="chevron" color={colors.faint} size={16} />}</Pressable>{managing && <Row style={styles.manage}><Button title="Edit" compact disabled={busy} onPress={() => { clearError(); onChangeForm({ ...connection, token: connection.token || '' }); setStep('password'); }} /><Button title={removingID === connection.id ? 'Removing server' : 'Remove'} compact variant="ghost" busy={removingID === connection.id} disabled={busy} onPress={() => { void remove(connection); }} /></Row>}</View>)}
   </View>;
 
   return <MotionContent variant="connection" transitionKey={navigation.revision} direction={navigation.direction} enabled={!busy && step !== 'scan'} style={styles.container}>
     {back && <View style={styles.back}>{back}</View>}
     <ErrorNotice error={localError || error} />
-    {cameraBlocked && <Button title="Open camera settings" onPress={() => { void Linking.openSettings().catch(() => setLocalError('Open your device settings and enable camera access for Opencoode.')); }} />}
+    {cameraBlocked && <Button title="Open camera settings" disabled={busy} onPress={() => { void Linking.openSettings().catch(() => setLocalError('Open your device settings and enable camera access for Opencoode.')); }} />}
     {submission || connecting ? <Card><Busy /><Label style={styles.center}>Connecting to {serverName(submission?.[0]?.url || form.url)}</Label><Label muted style={styles.center}>Opening your workspace</Label></Card>
       : step === 'scan' ? <>
         <Heading>Scan the OpenCode QR code</Heading>
@@ -218,7 +233,7 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
       </> : <>
         {activeID && savedServers}
         <View style={styles.intro}><PairingIcon color={colors.muted} /><Heading>{activeID ? 'Add a server' : 'Connect to OpenCode'}</Heading><Label muted style={styles.center}>Your computer does the work. Pick up the conversation here.</Label></View>
-        <View style={styles.actions}><Button title="Scan QR code" variant="primary" busy={reading} onPress={() => { void scan(); }} /><Button title="Paste pairing link" disabled={busy} onPress={() => { void pastePairing(); }} /></View>
+        <View style={styles.actions}><Button title="Scan QR code" variant="primary" busy={reading} disabled={busy} onPress={() => { void scan(); }} /><Button title="Paste pairing link" disabled={busy} onPress={() => { void pastePairing(); }} /></View>
         <Card><Label style={styles.instruction}>On your computer</Label><Label muted>Run the command below, then scan the QR code or copy its connection link.</Label><Label selectable style={styles.command}>opencode pair</Label></Card>
         <Button title="Connect with a server address" variant="ghost" disabled={busy} onPress={() => { onChangeForm(blankForm); go('address'); }} />
         {!activeID && savedServers}

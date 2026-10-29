@@ -336,11 +336,12 @@ function MobileApp() {
   }
 
   async function removeConnection(connection: Connection) {
+    if (activeRef.current?.id === connection.id && !(await confirmNavigation())) return;
     if (!(await confirmAction('Remove server?', `Remove the saved connection to ${connection.name}?`))) return;
     try {
       const next = connections.filter(item => item.id !== connection.id);
       await saveConnections(next);
-      if (active?.id === connection.id) {
+      if (activeRef.current?.id === connection.id) {
         ++epoch.current;
         await saveActiveConnectionId(null);
         selectedSessionRef.current = null; directoryRef.current = '';
@@ -349,7 +350,7 @@ function MobileApp() {
         setPendingLocation(null);
       }
       setConnections(next);
-    } catch (cause) { setError(errorMessage(cause)); }
+    } catch (cause) { setConnectionError(errorMessage(cause)); }
   }
 
   async function attachFile(path: string, contextText?: string): Promise<boolean> {
