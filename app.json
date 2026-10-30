@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Opencoode",
+    "slug": "opencoode",
+    "scheme": "opencoode",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/opencode-icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.opencoode.mobile",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Connect to your OpenCode server on your local network.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
+    },
+    "android": {
+      "package": "dev.opencoode.mobile",
+      "predictiveBackGestureEnabled": true
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-document-picker",
+      "expo-sharing",
+      "expo-font",
+      "expo-system-ui",
+      ["expo-camera", { "cameraPermission": "Scan the connection QR code from OpenCode on your computer.", "microphonePermission": false, "recordAudioAndroid": false }],
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }]
+    ],
+    "web": {
+      "name": "Opencoode"
+    }
+  }
+}

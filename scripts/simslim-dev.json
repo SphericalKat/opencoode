@@ -1,0 +1,5 @@
+{
+  "name": "opencoode-development",
+  "except": ["search", "icloud", "store", "web", "photos", "connectivity"],
+  "keep": []
+}
