@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/SphericalKat/opencoode/compare/v1.3.0...v1.4.0) (2026-10-30)
+
+
+### Features
+
+* use the standalone OpenCode app icon on black ([11ab6c8](https://github.com/SphericalKat/opencoode/commit/11ab6c861e1cd495f3298915fa46f509b09a5a55))
+
+
+### Bug Fixes
+
+* compare Android signing certificates without display labels ([19c448a](https://github.com/SphericalKat/opencoode/commit/19c448a491a62ab331250d99ec13a02260126d3d))
+* queue release artifacts separately for each platform ([39a5a64](https://github.com/SphericalKat/opencoode/commit/39a5a64b9988228d4c04c2fd8abc2b51e2900d2d))
+
 ## [1.3.0](https://github.com/SphericalKat/opencoode/compare/v1.2.0...v1.3.0) (2026-10-30)
 
 
