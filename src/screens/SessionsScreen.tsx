@@ -351,16 +351,20 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     <View style={[styles.header, compactHeader && styles.compactHeader]}>
       <Row style={styles.headingRow}>
         {!compact && onOpenNavigation && <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={({ pressed }) => [styles.navigationButton, pressed && styles.pressed]}><ShellIcon name="menu" color={colors.text} /></Pressable>}
-        <View style={styles.headingText}><Label accessibilityRole="header" numberOfLines={1} style={[styles.title, compactHeader && styles.compactTitle]}>{compact ? 'Your sessions' : 'Sessions'}</Label></View>
+        <View style={styles.headingText}><Label accessibilityRole="header" numberOfLines={1} style={[styles.title, compactHeader && styles.compactTitle, compact && Platform.OS === 'android' && styles.drawerTitle]}>{Platform.OS === 'android' && archived ? 'Archived sessions' : compact ? 'Your sessions' : 'Sessions'}</Label></View>
         <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={() => { void createSession(); }} style={({ pressed }) => [styles.newButton, (pressed || busy) && styles.pressed]}>
           {creating ? <ActivityIndicator size="small" color={colors.text} /> : <ShellIcon name="compose" color={colors.text} size={20} />}
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Session list actions" onPress={() => { setSheetError(undefined); setActions('menu'); }} style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}><ShellIcon name="more" color={colors.muted} size={18} /></Pressable>
       </Row>
-      <Row style={styles.searchRow}>
+      {Platform.OS === 'android' ? <View style={styles.androidSearch}>
+        <ShellIcon name="search" color={colors.faint} size={16} />
+        <Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} containerStyle={styles.searchField} style={styles.androidSearchInput} />
+        {!!search && <Pressable accessibilityRole="button" accessibilityLabel="Clear session search" hitSlop={4} onPress={() => setSearch('')} style={({ pressed }) => [styles.clearSearch, pressed && styles.pressed]}><ShellIcon name="close" color={colors.muted} size={16} /></Pressable>}
+      </View> : <Row style={styles.searchRow}>
         <View style={{ flex: 1, minWidth: 0 }}><Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} clearButtonMode="while-editing" style={styles.search} /></View>
         {search ? <Button title="Clear" accessibilityLabel="Clear session search" compact variant="ghost" onPress={() => setSearch('')} /> : <Pressable accessibilityRole="button" accessibilityLabel={`Session history: ${archived ? 'Archived' : 'Recent'}`} onPress={chooseHistory} style={styles.filter}><Label muted style={styles.filterText}>{archived ? 'Archived' : 'Recent'} ⌄</Label></Pressable>}
-      </Row>
+      </Row>}
       <ErrorNotice error={listError} onRetry={() => { void refresh(); }} />
       <ErrorNotice error={error} />
       {statusError && <Label muted>{statusError}</Label>}
@@ -380,36 +384,43 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       windowSize={7}
       ListEmptyComponent={loading ? <Busy /> : <Empty title={listUnavailable ? 'Could not load sessions' : search.trim() ? 'No matching sessions' : archived ? 'No archived sessions' : 'Start your first session'} detail={listUnavailable ? 'Use Retry to load your history.' : search.trim() ? 'Try another title or clear the search.' : archived ? 'Sessions appear here after you archive them.' : 'Create a session to work with OpenCode in this directory.'} />}
       ListFooterComponent={sessions.length ? loading ? <Busy /> : nextCursor ? <Button title="Load more" variant="ghost" onPress={loadMore} /> : undefined : undefined}
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
         const status = sessionStatus(item, active.has(item.id));
         const unread = item.time.idle && (!item.time.viewed || item.time.viewed < item.time.idle);
         const visibleStatus = status === 'Working' || status === 'Needs attention' || status === 'Stopped' ? status : undefined;
-        return <View style={[styles.session, selectedSessionID === item.id && styles.selected]}>
+        const group = sessionDateGroup(item.time.updated);
+        const startsGroup = Platform.OS === 'android' && !search.trim() && (index === 0 || sessionDateGroup(sessions[index - 1].time.updated) !== group);
+        return <View>
+          {startsGroup && <Label accessibilityRole="header" muted style={[styles.dateGroup, index > 0 && styles.laterDateGroup]}>{group}</Label>}
+          <View style={[styles.session, selectedSessionID === item.id && styles.selected]}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title || 'Untitled session'}`} accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`} onPress={() => openConversation(item.id)} style={({ pressed }) => [styles.sessionMain, pressed && styles.sessionPressed]}>
             <Label numberOfLines={1} style={styles.sessionTitle}>{item.title || 'Untitled session'}</Label>
             <Label muted numberOfLines={1} style={styles.metadata}>{[visibleStatus, unread ? 'Unread' : undefined, updatedLabel(item.time.updated), item.parentID ? 'Child session' : undefined].filter(Boolean).join(' · ')}</Label>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${item.title || 'session'}`} onPress={() => { setSelected(item); setEditTitle(item.title || ''); setMoveDirectory(item.location.directory); setSheetError(undefined); }} style={({ pressed }) => [styles.rowAction, pressed && styles.pressed]}><ShellIcon name="more" color={colors.faint} size={18} /></Pressable>
+          </View>
         </View>;
       }}
     />
-    <Sheet visible={actions !== null} title={displayedActions === 'create' ? 'Name a new session' : displayedActions === 'filter' ? 'Session history' : 'Session list actions'} onClose={() => { if (!creating) setActions(null); }} onDismiss={finishActionsDismissal}>
+    <Sheet visible={actions !== null} fitContent={Platform.OS === 'android'} title={displayedActions === 'create' ? 'Name a new session' : displayedActions === 'filter' ? 'Session history' : 'Session list actions'} onClose={() => { if (!creating) setActions(null); }} onDismiss={finishActionsDismissal}>
       {displayedActions === 'create' ? <>
         <Field label="Session title" placeholder="What do you want to work on?" value={title} onChangeText={setTitle} editable={!creating} />
         <Label muted>You can choose a model and agent in the conversation.</Label>
         <Card><Label muted>Remote directory</Label><Label selectable>{directory}</Label></Card>
         <ErrorNotice error={sheetError} />
         <Button title="Create session" variant="primary" busy={creating} onPress={() => { void createSession(true); }} />
-      </> : <>
+      </> : <View>
         <View accessibilityRole="radiogroup">
           {[{ title: 'Recent sessions', value: false }, { title: 'Archived sessions', value: true }].map(item => <Pressable key={item.title} accessibilityRole="radio" accessibilityState={{ checked: archived === item.value }} aria-checked={archived === item.value} onPress={() => { setArchived(item.value); setActions(null); }} style={styles.menuRow}><Label>{item.title}</Label><Label muted>{archived === item.value ? '✓' : ''}</Label></Pressable>)}
         </View>
         {displayedActions === 'menu' && <>
-          <Button title="Refresh sessions" variant="ghost" disabled={loading} onPress={() => { setActions(null); void refresh(); }} />
-          <Button title="Create a named session" variant="ghost" disabled={busy} onPress={() => { setTitle(''); setSheetError(undefined); setActions('create'); }} />
-          <Button title="Import session JSON" variant="ghost" disabled={busy} onPress={queueImport} />
+          {[
+            { title: 'Refresh sessions', disabled: loading, onPress: () => { setActions(null); void refresh(); } },
+            { title: 'Create a named session', disabled: busy, onPress: () => { setTitle(''); setSheetError(undefined); setActions('create'); } },
+            { title: 'Import session JSON', disabled: busy, onPress: queueImport },
+          ].map(action => <Pressable key={action.title} accessibilityRole="button" accessibilityState={{ disabled: action.disabled }} disabled={action.disabled} onPress={action.onPress} style={({ pressed }) => [styles.menuRow, (pressed || action.disabled) && styles.pressed]}><Label>{action.title}</Label></Pressable>)}
         </>}
-      </>}
+      </View>}
     </Sheet>
     <Sheet visible={!!selected} title="Manage session" onClose={() => setSelected(undefined)}>
       <Label selectable style={{ fontWeight: '500', fontSize: 16 }}>{selected?.title || 'Untitled session'}</Label>
@@ -439,21 +450,28 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: pageInset, paddingTop: 6, paddingBottom: 10, gap: 8 },
   compactHeader: { paddingTop: 8 },
-  headingRow: { flexWrap: 'nowrap', gap: 8 },
+  headingRow: { flexWrap: 'nowrap', gap: Platform.OS === 'android' ? 0 : 8 },
   navigationButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, marginStart: -16, marginEnd: 16, alignItems: 'center', justifyContent: 'center' },
   headingText: { flex: 1, minWidth: 0, gap: 2 },
   title: { fontSize: 17, lineHeight: 22, fontWeight: '600', letterSpacing: -0.2 },
   compactTitle: { fontSize: 18, lineHeight: 23, letterSpacing: -0.2 },
+  drawerTitle: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
   newButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center' },
-  actionButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, marginStart: 16, marginEnd: -16, alignItems: 'center', justifyContent: 'center' },
+  actionButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, marginStart: Platform.OS === 'android' ? 0 : 16, marginEnd: -16, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.55 },
   searchRow: { flexWrap: 'nowrap', gap: 8 },
+  androidSearch: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, backgroundColor: colors.panel, borderRadius: 8 },
+  searchField: { flex: 1, minWidth: 0 },
+  androidSearchInput: { minHeight: 40, paddingHorizontal: 0, paddingVertical: 9, borderWidth: 0, backgroundColor: 'transparent', boxShadow: [], fontSize: 14, lineHeight: 20, includeFontPadding: false, textAlignVertical: 'center' },
+  clearSearch: { width: 40, minHeight: 40, marginEnd: -12, alignItems: 'center', justifyContent: 'center' },
   search: { borderRadius: 8, backgroundColor: colors.panel, minHeight: 40, paddingHorizontal: 15, paddingVertical: 9, fontSize: 14, lineHeight: 20, includeFontPadding: false, textAlignVertical: 'center' },
   filter: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center' },
   filterText: { fontSize: 13, lineHeight: 20 },
   list: { paddingHorizontal: pageInset, paddingBottom: 24, gap: 2, flexGrow: 1 },
-  session: { minHeight: 64, flexDirection: 'row', alignItems: 'center', borderRadius: 10 },
-  sessionMain: { flex: 1, minWidth: 0, gap: 3, paddingVertical: 10, paddingLeft: 16 },
+  dateGroup: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6, fontSize: 12, lineHeight: 18 },
+  laterDateGroup: { paddingTop: 16 },
+  session: { minHeight: Platform.OS === 'android' ? 56 : 64, flexDirection: 'row', alignItems: 'center', borderRadius: 10 },
+  sessionMain: { flex: 1, minWidth: 0, gap: 3, paddingVertical: Platform.OS === 'android' ? 8 : 10, paddingLeft: Platform.OS === 'android' ? 12 : 16 },
   sessionPressed: { opacity: 0.65 },
   sessionTitle: { minWidth: 0, fontWeight: '500', fontSize: 15, lineHeight: 20 },
   metadata: { fontSize: 11, lineHeight: 16 },
@@ -461,6 +479,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   menuRow: { minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   selected: { backgroundColor: colors.selected },
 });
+
+function sessionDateGroup(time: number): string {
+  const date = new Date(time);
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  today.setDate(today.getDate() - 1);
+  return date.toDateString() === today.toDateString() ? 'Yesterday' : 'Older';
+}
 
 function updatedLabel(time: number): string {
   const date = new Date(time);

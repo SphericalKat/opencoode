@@ -508,9 +508,9 @@ function MobileApp() {
   const returnToSessions = () => { void changeTab('sessions'); };
   const openServers = () => { setConnectionError(null); showNavigationSheet('servers'); };
   const navigation = client && active ? <>
-    <View style={styles.navigationBrand}><OpenCodeLogo width={136} />{!wide && <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={() => setNavigationOpen(false)} style={styles.iconButton}><ShellIcon name="close" color={colors.muted} /></Pressable>}</View>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Switch project directory. Current project: ${projectLabel}`} onPress={() => void openProjects()} style={({ pressed }) => [styles.projectChoice, pressed && styles.pressed]}>
-      <NavIcon name="workspace" color={colors.muted} size={18} /><View style={styles.contextText}><Label numberOfLines={1} style={styles.projectName}>{projectLabel}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.contextDetail}>{directory}</Label></View><ShellIcon name="chevron" size={14} color={colors.faint} />
+    <View style={styles.navigationBrand}><OpenCodeLogo width={Platform.OS === 'android' ? 112 : 136} />{!wide && <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={() => setNavigationOpen(false)} style={styles.iconButton}><ShellIcon name="close" color={colors.muted} /></Pressable>}</View>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Switch project directory. Current project: ${projectLabel}`} accessibilityHint={directory} onPress={() => void openProjects()} style={({ pressed }) => [styles.projectChoice, pressed && styles.pressed]}>
+      <NavIcon name="workspace" color={colors.muted} size={18} /><View style={styles.contextText}><Label numberOfLines={1} style={styles.projectName}>{projectLabel}</Label>{Platform.OS !== 'android' && <Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.contextDetail}>{directory}</Label>}</View><ShellIcon name="chevron" size={14} color={colors.faint} />
     </Pressable>
     <View style={styles.navigationSessions}><SessionsScreen compact key={`${active.id}:${connectionRevision}:navigation`} client={client} directory={directory} selectedSessionID={sessionID ?? undefined} revision={revision} onOpenSession={openSession} /></View>
     <View style={styles.navigationFooter}>
@@ -557,8 +557,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   iconButton: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
   body: { flex: 1, flexDirection: 'row', minHeight: 0 }, full: { flex: 1, minWidth: 0, minHeight: 0 },
   sidebar: { width: 288, borderRightWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
-  navigationBrand: { height: 64, paddingHorizontal: pageInset, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  projectChoice: { marginHorizontal: pageInset, paddingHorizontal: 15, paddingVertical: 10, minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border },
+  navigationBrand: { height: Platform.OS === 'android' ? 48 : 64, paddingHorizontal: pageInset, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  projectChoice: { marginHorizontal: pageInset, paddingHorizontal: 15, paddingVertical: 10, minHeight: Platform.OS === 'android' ? 48 : 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border },
   contextText: { flex: 1, minWidth: 0, gap: 1 }, projectName: { fontSize: 13, fontWeight: '500' }, contextDetail: { fontSize: 10, lineHeight: 15 },
   navigationSessions: { flex: 1, minHeight: 0, marginTop: 8 },
   navigationFooter: { borderTopWidth: 1, borderColor: colors.border, paddingHorizontal: pageInset, paddingTop: 8, gap: 4 },

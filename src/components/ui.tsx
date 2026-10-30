@@ -149,7 +149,7 @@ function createStyles(colors: ThemeColors) {
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border },
   recoveryNotice: { color: colors.muted, fontSize: 12, lineHeight: 18, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: colors.raised },
   sheetScroll: { flex: 1, minHeight: 0 }, sheetContent: { padding: 18, gap: 16, paddingBottom: 24 }, sheetBody: { flex: 1, minHeight: 0 },
-  sheetOverlay: { flex: 1, justifyContent: 'flex-end' }, sheetScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: '#00000070' },
-  fitSheet: { flexShrink: 1, maxHeight: '85%', width: '100%', maxWidth: 680, alignSelf: 'center', backgroundColor: colors.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' }, fitInner: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto' }, fitScroll: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto' },
+  sheetOverlay: { flex: 1, justifyContent: 'flex-end' }, sheetScrim: { ...StyleSheet.absoluteFill, backgroundColor: '#00000070' },
+  fitSheet: { flexShrink: 1, maxHeight: '85%', width: '100%', maxWidth: 680, alignSelf: 'center', backgroundColor: colors.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' }, fitInner: { flex: 0, flexShrink: 1 }, fitScroll: { flex: 0, flexShrink: 1 },
   disclosure: { padding: 0, gap: 0 }, disclosureHeader: { minHeight: touchTarget, padding: 14, justifyContent: 'center', borderRadius: 8 }, disclosureBody: { padding: 14, paddingTop: 0, gap: 10 },
 }); }
