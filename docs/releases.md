@@ -13,14 +13,17 @@ This avoids the GitHub restriction on new workflow events from `GITHUB_TOKEN`.
 Native builds run on GitHub runners. They do not use this computer or EAS credits.
 The workflows contain no test jobs and do not submit apps to stores.
 
-Both native jobs use `pnpm/setup@v3.1.2` to install Node.js 24 and the pnpm version from `package.json`.
+Both native jobs use `pnpm/setup@v3.1.2` to install Node.js 26 and the pnpm version from `package.json`.
 The action caches the pnpm store through `pnpm-lock.yaml`.
 The jobs use `pnpm install --frozen-lockfile` and `pnpm exec expo prebuild`.
 Dependency changes require an updated lockfile before the release.
 
 | Asset | Purpose | Requirement |
 | --- | --- | --- |
-| `opencoode-vX.Y.Z.apk` | Install on Android devices | All four Android signing secrets |
+| `opencoode-vX.Y.Z-arm64-v8a.apk` | Install on 64-bit ARM devices | All four Android signing secrets |
+| `opencoode-vX.Y.Z-armeabi-v7a.apk` | Install on 32-bit ARM devices | All four Android signing secrets |
+| `opencoode-vX.Y.Z-x86_64.apk` | Install on 64-bit Intel devices or emulators | All four Android signing secrets |
+| `opencoode-vX.Y.Z-x86.apk` | Install on 32-bit Intel devices or emulators | All four Android signing secrets |
 | `opencoode-vX.Y.Z.aab` | Upload through Google Play Console | All four Android signing secrets |
 | `opencoode-vX.Y.Z-ios-simulator.tar.gz` | Install in iOS Simulator or SimSlim | No Apple credentials |
 | `SHA256SUMS-*.txt` | Verify downloaded files | The related build succeeds |
@@ -30,6 +33,12 @@ Physical iOS distribution requires an Apple Developer account and a signed devic
 The existing EAS `production` profile supports that separate path after account setup.
 
 Android artifacts use the supplied release key. The workflow never publishes the Expo debug key.
+The CI Gradle script creates one APK per ABI and disables the universal APK.
+The workflow checks the signing certificate of each APK before upload.
+All four APKs retain the same app version and signing key for normal updates.
+The AAB retains all four ABIs. Google Play selects the libraries for each device.
+The Expo configuration enables R8 and resource shrinking for release builds.
+The workflow records artifact sizes in its summary. See the [APK size analysis](android-size.md) for the baseline.
 If a signing secret is absent, the workflow skips Android and records the reason in its summary.
 I configured all four Android signing secrets during the initial release setup.
 I created a separate RSA 2048-bit key for Opencoode with 30-year validity.
