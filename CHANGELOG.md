@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.3.0](https://github.com/SphericalKat/opencoode/compare/v1.2.0...v1.3.0) (2026-10-30)
+
+
+### Features
+
+* animate shared thinking and tool disclosures ([295c440](https://github.com/SphericalKat/opencoode/commit/295c4409f63042d829951bee8ed5cc2d64f7e1b2))
+* connect mobile clients to active Pi sessions ([c295a75](https://github.com/SphericalKat/opencoode/commit/c295a757586d51fc7fb2804f814476b51bd293be))
+* match desktop tool activity and output rendering ([02d611d](https://github.com/SphericalKat/opencoode/commit/02d611d5f7fc36f367797f3128e1cca916b59545))
+
+
+### Bug Fixes
+
+* expose Pi model catalog through shared settings ([83d2df5](https://github.com/SphericalKat/opencoode/commit/83d2df5325b8280bc78d51605f32faf1ffd218be))
+* flatten message selection and disclosure press feedback ([827afbd](https://github.com/SphericalKat/opencoode/commit/827afbd389e12a18c59fb5f8368346a42d59183a))
+* keep Android chat composer above the keyboard ([1987b9a](https://github.com/SphericalKat/opencoode/commit/1987b9ad98368f23d43f1e23cd2c39791d20d057))
+* locate Android release signer without ripgrep ([e88a8ac](https://github.com/SphericalKat/opencoode/commit/e88a8ac01c119768053566dbf27039421bc18fe3))
+* match beta response controls and compact Pi model selection ([c7f07e5](https://github.com/SphericalKat/opencoode/commit/c7f07e5b04abb7fac89d79aa3cd7d6f713d47be6))
+* preserve bottom following after keyboard dismissal ([fdf43f8](https://github.com/SphericalKat/opencoode/commit/fdf43f873fb6b1db0e85dfc2698b5b22c455a091))
+* restore grouped settings with native submenu navigation ([f521ba4](https://github.com/SphericalKat/opencoode/commit/f521ba43a32aaf1f055c92ea6d99c371053f2341))
+* restore right-aligned user message bubbles ([5de1c72](https://github.com/SphericalKat/opencoode/commit/5de1c7243faab7328614816a89cf5197f07e2bf6))
+* use supported Xcode for Expo release builds ([ab6bb90](https://github.com/SphericalKat/opencoode/commit/ab6bb90b76ba3447c92585509b34b4541f5f1dd3))
+
 ## [1.2.0](https://github.com/SphericalKat/opencoode/compare/v1.1.0...v1.2.0) (2026-10-30)
 
 
