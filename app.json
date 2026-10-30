@@ -15,11 +15,13 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }
-      }
+      },
+      "buildNumber": "1.1.0"
     },
     "android": {
       "package": "dev.opencoode.mobile",
-      "predictiveBackGestureEnabled": true
+      "predictiveBackGestureEnabled": true,
+      "versionCode": 10100
     },
     "plugins": [
       "expo-secure-store",
