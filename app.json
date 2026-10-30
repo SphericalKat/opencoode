@@ -3,7 +3,7 @@
     "name": "Opencoode",
     "slug": "opencoode",
     "scheme": "opencoode",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "orientation": "default",
     "icon": "./assets/opencode-icon.png",
     "userInterfaceStyle": "automatic",

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.1](https://github.com/SphericalKat/opencoode/compare/v1.4.0...v1.4.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* retain artifact retries for existing universal APK releases ([efd478f](https://github.com/SphericalKat/opencoode/commit/efd478fc3d8147f1f251fa965090c9532896e46d))
+
+
+### Performance Improvements
+
+* reduce Android release size with ABI splits and R8 ([9c9bb26](https://github.com/SphericalKat/opencoode/commit/9c9bb26896c30cd8aee1f137e1689aeacb746220))
+
 ## [1.4.0](https://github.com/SphericalKat/opencoode/compare/v1.3.0...v1.4.0) (2026-10-30)
 
 
