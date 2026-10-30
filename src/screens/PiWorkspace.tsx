@@ -18,6 +18,7 @@ import { ActivityDisclosure } from '../components/AgentActivity';
 import { BetaTabStrip, SheetGrip } from '../components/BetaNavigation';
 import { Markdown } from '../components/Markdown';
 import { UserMessageBubble } from '../components/UserMessageBubble';
+import { ResponseFooter } from '../components/ResponseFooter';
 import { ShellIcon } from '../components/ShellIcon';
 import { WorkingIndicator } from '../components/motion';
 import { Button, Busy, Empty, ErrorNotice, Field, Label, Sheet, confirmAction, mono } from '../components/ui';
@@ -32,6 +33,7 @@ const messageKey = (message: PiMessage) => message.id;
 const messageType = (message: PiMessage) => message.role;
 const separator = () => <View style={{ height: 24 }} />;
 const textOf = (message: PiMessage) => message.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n\n');
+const providerLabel = (provider: string) => provider.replace(/[-_]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()).replace(/Openai/gi, 'OpenAI').replace(/Github/gi, 'GitHub').replace(/Litellm/gi, 'LiteLLM').replace(/Openrouter/gi, 'OpenRouter');
 
 function applyBatches(previous: PiSnapshot, batches: PiEventBatch[]): PiSnapshot {
   const messages = new Map(previous.messages.map(message => [message.id, message]));
@@ -386,7 +388,16 @@ function PiWorkspaceSession({ connection, onManageServers, onConnectionLost, for
     if (!actionMessage) return;
     void Clipboard.setStringAsync(textOf(actionMessage)).then(() => { if (alive.current) setSelected(null); }).catch(reason => setError(errorMessage(reason)));
   };
-  const modelMatches = models.filter(model => `${model.provider} ${model.name} ${model.id}`.toLowerCase().includes(search.toLowerCase()));
+  const modelMatches = useMemo(() => models.filter(model => `${model.provider} ${model.name} ${model.id}`.toLowerCase().includes(search.toLowerCase())), [models, search]);
+  const modelGroups = useMemo(() => {
+    const groups = new Map<string, PiModel[]>();
+    for (const model of modelMatches) {
+      const group = groups.get(model.provider);
+      if (group) group.push(model); else groups.set(model.provider, [model]);
+    }
+    return [...groups];
+  }, [modelMatches]);
+  const providerName = session?.model ? providerLabel(session.model.provider) : undefined;
 
   return <KeyboardAvoidingView style={styles.container} behavior="padding" automaticOffset>
     {actionMessage ? <View style={styles.selectionHeader}><IconButton name="close" label="Close message selection" onPress={() => setSelected(null)} /><Label style={styles.selectionCount}>1 selected</Label><Button title="Copy" variant="ghost" compact disabled={!textOf(actionMessage)} onPress={copy} /><Button title="Fork" variant="ghost" compact disabled={!canManage || actionMessage.role !== 'user'} onPress={() => { void changeSession({ type: 'fork', entryID: actionMessage.id }); }} /></View> : <View style={styles.topbar}><View style={styles.tab}><BetaTabStrip current={session ? { id: session.id, title: session.name || 'New session', directory: session.cwd } : undefined} count={1} busy={!ready} onOpen={() => setPanel('sessions')} /></View><IconButton name="more" label="Session actions" onPress={() => { setName(session?.name ?? ''); setPanel('more'); }} /></View>}
@@ -409,7 +420,7 @@ function PiWorkspaceSession({ connection, onManageServers, onConnectionLost, for
         <Field accessibilityLabel="Message Pi" placeholder="Ask anything…" multiline editable={draftReady && !pending && !attachmentBusy} value={draftReady ? draft.text : ''} onChangeText={text => setDraft(current => ({ ...current, text }))} onFocus={() => setSelected(null)} onContentSizeChange={event => setComposerHeight(Math.max(44, Math.min(132, event.nativeEvent.contentSize.height)))} style={[styles.composerInput, { height: draftReady && draft.text ? composerHeight : 44 }]} />
         <View style={styles.composerToolbar}>
           <Pressable accessibilityRole="button" accessibilityLabel="Attach images" accessibilityState={{ disabled: !draftReady || pending || attachmentBusy }} disabled={!draftReady || pending || attachmentBusy} onPress={() => { void attachImages(); }} style={styles.iconTarget}><Svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden><Path d="M8 3v10M3 8h10" stroke={colors.muted} strokeWidth={1.5} strokeLinecap="round" /></Svg></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${session?.model?.name || 'Pi default'}`} onPress={() => { setSearch(''); setPanel('models'); }} style={styles.modelTrigger}><Label muted numberOfLines={1} style={styles.modelText}>{session?.model?.name || 'Pi default'}</Label><Label muted style={styles.chevron}>⌄</Label></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${providerName ? `${providerName}, ` : ''}${session?.model?.name || 'Pi default'}`} onPress={() => { setSearch(''); setPanel('models'); }} style={styles.modelTrigger}><Label muted numberOfLines={1} style={styles.modelText}>{providerName ? `${providerName} / ` : ''}{session?.model?.name || 'Pi default'}</Label><Label muted style={styles.chevron}>⌄</Label></Pressable>
           {!!session?.model?.thinkingLevels.length && <Pressable accessibilityRole="button" accessibilityLabel={`Thinking level, ${session.thinkingLevel}`} onPress={() => setPanel('thinking')} style={styles.thinkingTrigger}><Label muted numberOfLines={1} style={styles.modelText}>{session.thinkingLevel}</Label><Label muted style={styles.chevron}>⌄</Label></Pressable>}
           {busy && hasPrompt && <Pressable accessibilityRole="button" accessibilityLabel="Message delivery" onPress={() => setPanel('delivery')} style={styles.deliveryTrigger}><Label muted style={styles.modelText}>{draft.delivery === 'steer' ? 'Steer' : 'Queue'}</Label></Pressable>}
           {busy && hasPrompt && <ActionButton kind="stop" label="Stop generation" disabled={!ready || pending || attachmentBusy} onPress={() => { void run({ type: 'abort' }, false); }} />}
@@ -428,12 +439,12 @@ function PiWorkspaceSession({ connection, onManageServers, onConnectionLost, for
       {catalogBusy ? <Busy /> : <>{session && <SessionRow name={session.name || 'New session'} cwd={session.cwd} selected disabled onPress={() => setPanel(null)} />}{sessions.filter(item => item.id !== session?.id).map(item => <SessionRow key={item.id} name={item.name || 'Untitled session'} cwd={item.cwd} disabled={!canManage} onPress={() => { void changeSession({ type: 'switch', sessionID: item.id }); }} />)}</>}
       <View style={styles.divider} /><Button title="Manage servers" variant="ghost" compact onPress={() => { setPanel(null); onManageServers(); }} />
     </Sheet>
-    <Sheet visible={panel === 'models'} title="Model" onClose={() => setPanel(null)}>
+    <Sheet visible={panel === 'models'} title="Select model" onClose={() => setPanel(null)} contentStyle={styles.modelPicker}>
       <ErrorNotice error={error} />
-      <Field accessibilityLabel="Search models" placeholder="Search models" value={search} onChangeText={setSearch} />
+      <Field accessibilityLabel="Search models" placeholder="Search models" value={search} onChangeText={setSearch} style={styles.modelSearch} containerStyle={styles.modelSearchContainer} />
       <ErrorNotice error={catalogError} onRetry={() => setCatalogRevision(value => value + 1)} />
       {busy && <Label muted>Stop the current work before you change models.</Label>}
-      {catalogBusy ? <Busy /> : modelMatches.map(model => <Pressable key={`${model.provider}:${model.id}`} accessibilityRole="radio" accessibilityState={{ checked: session?.model?.id === model.id && session.model.provider === model.provider, disabled: !canManage }} disabled={!canManage} onPress={() => { void run({ type: 'model', provider: model.provider, id: model.id }); }} style={styles.modelRow}><View style={styles.modelDetails}><Label>{model.name}</Label><Label muted style={styles.sheetHint}>{model.provider} · {Math.round(model.contextWindow / 1000)}k context</Label></View>{session?.model?.id === model.id && session.model.provider === model.provider && <Label muted>✓</Label>}</Pressable>)}
+      {catalogBusy ? <Busy /> : modelGroups.map(([provider, items]) => <View key={provider}><Label style={styles.modelHeading}>{providerLabel(provider)}</Label>{items.map(model => <Pressable key={model.id} accessibilityRole="radio" accessibilityState={{ checked: session?.model?.id === model.id && session.model.provider === model.provider, disabled: !canManage }} disabled={!canManage} onPress={() => { void run({ type: 'model', provider: model.provider, id: model.id }); }} style={styles.modelRow}><Label numberOfLines={1} style={styles.modelName}>{model.name}</Label><Label muted style={styles.sheetHint}>{Math.round(model.contextWindow / 1000)}k</Label>{session?.model?.id === model.id && session.model.provider === model.provider && <Label muted>✓</Label>}</Pressable>)}</View>)}
       {!catalogBusy && !catalogError && !modelMatches.length && <Empty title="No models found" />}
     </Sheet>
     <Sheet visible={panel === 'thinking'} title="Thinking level" onClose={() => setPanel(null)} fitContent>
@@ -511,6 +522,7 @@ const PiMessageRow = memo(function PiMessageRow({ message, tools, active, idle, 
   return <Pressable accessible={!screenReader && Platform.OS !== 'web'} accessibilityRole={screenReader ? undefined : 'button'} accessibilityLabel={label} accessibilityHint="Long press to select. Copy and fork actions appear in the header." accessibilityState={{ selected }} accessibilityActions={[{ name: 'longpress', label: 'Select message' }]} onAccessibilityAction={select} onLongPress={select} onPress={selectionActive ? select : undefined} style={[styles.message, selected && { backgroundColor: colors.selected }]}>
     <MessageActionsContext.Provider value={select}>
       {message.role === 'user' ? <UserMessageBubble withAttachments={message.content.some(part => part.type === 'image')}>{content}</UserMessageBubble> : content}
+      {message.role === 'assistant' && !active && !!textOf(message).trim() && <ResponseFooter text={textOf(message)} />}
     </MessageActionsContext.Provider>
     {screenReader && <Button title="Message actions" compact variant="ghost" onPress={select} />}
   </Pressable>;
@@ -555,5 +567,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   activity: { minHeight: 28, width: '100%', maxWidth: 736, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, gap: 8 }, activityLabel: { fontSize: 12, lineHeight: 20, flex: 1 },
   iconTarget: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }, sendFace: { width: 28, height: 28, borderRadius: 6, backgroundColor: colors.text, alignItems: 'center', justifyContent: 'center' }, pressed: { opacity: 0.6 }, disabled: { opacity: 0.4 },
   menu: { padding: 12, paddingTop: 0, gap: 8 }, sheetTitle: { fontSize: 14, lineHeight: 20, fontWeight: '500', paddingHorizontal: 8 }, sheetHint: { fontSize: 12, lineHeight: 18 }, divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: 8 },
-  sessionRow: { minHeight: 64, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8, paddingVertical: 10 }, activeSession: { backgroundColor: colors.selected }, sessionName: { fontSize: 13, lineHeight: 18 }, modelRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8, paddingVertical: 10 }, modelDetails: { flex: 1, minWidth: 0, gap: 4 },
+  sessionRow: { minHeight: 64, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8, paddingVertical: 10 }, activeSession: { backgroundColor: colors.selected }, sessionName: { fontSize: 13, lineHeight: 18 }, modelRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8, paddingVertical: 8 }, modelDetails: { flex: 1, minWidth: 0, gap: 4 },
+  modelPicker: { gap: 0 }, modelSearchContainer: { marginBottom: 8 }, modelSearch: { minHeight: 40, paddingVertical: 8, fontSize: 13 }, modelHeading: { fontSize: 13, lineHeight: 18, fontWeight: '600', paddingHorizontal: 8, paddingTop: 16, paddingBottom: 4 }, modelName: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 18 },
 });

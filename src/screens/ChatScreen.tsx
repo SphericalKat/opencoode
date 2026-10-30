@@ -14,6 +14,7 @@ import { Button, Busy, Card, confirmAction, Disclosure, Empty, ErrorNotice, Fiel
 import { SessionForms } from '../components/SessionForms';
 import { Markdown } from '../components/Markdown';
 import { UserMessageBubble } from '../components/UserMessageBubble';
+import { ResponseFooter } from '../components/ResponseFooter';
 import { Instructions } from '../components/Instructions';
 import { Schedules } from '../components/Schedules';
 import { loadDraft, saveDraft } from '../lib/drafts';
@@ -1014,19 +1015,8 @@ const MessageContent = memo(function MessageContent({ message, live, activityKin
 });
 
 function CompletedAssistantFooter({ message }: { message: SessionMessageAssistant }) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const elapsed = Math.max(0, Math.round(((message.time.completed ?? message.time.created) - message.time.created) / 1000));
-  return <View>
-    <View style={styles.responseFooter}><Pressable accessibilityRole="button" accessibilityLabel={copied ? 'Response copied' : 'Copy response'} onPress={event => {
-      event.stopPropagation();
-      setError(null);
-      void Clipboard.setStringAsync(message.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')).then(() => setCopied(true)).catch(reason => { setCopied(false); setError(errorMessage(reason)); });
-    }} style={({ pressed }) => [styles.responseCopyTarget, pressed && { opacity: 0.6 }]}><ChatGlyph name={copied ? 'check' : 'copy'} color={colors.muted} size={14} /></Pressable><Label muted accessibilityLiveRegion="polite" style={styles.responseElapsed}>{copied ? 'Copied · ' : ''}{elapsed}s</Label></View>
-    {error && <Text accessibilityRole="alert" style={[styles.responseElapsed, { color: colors.danger }]}>{error}</Text>}
-  </View>;
+  return <ResponseFooter text={message.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')} elapsedSeconds={elapsed} />;
 }
 
 const AssistantPart = memo(function AssistantPart({ part, detailsKey, live, activityKind, animate, client, directory, selectable }: { part: SessionMessageAssistant['content'][number]; detailsKey: string; live: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; client: Client; directory: string; selectable: boolean }) {
@@ -1077,7 +1067,6 @@ function createStyles(colors: ThemeColors) { return StyleSheet.create({
   frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border }, headerLeading: { marginStart: pageInset - 24, marginEnd: 24 - pageInset }, headerTrailing: { marginStart: 24 - pageInset, marginEnd: pageInset - 24 }, selectionHeader: { backgroundColor: colors.panel }, selectionCount: { flex: 1, minWidth: 0, fontSize: 14, paddingStart: pageInset - 4 }, selectableMessage: { borderRadius: 16 },
   headerTitle: { flex: 1, minWidth: 0, gap: 1, paddingHorizontal: 4, paddingStart: pageInset - 8 }, headerTitleWithNavigation: { paddingStart: pageInset - 4 }, sessionTitle: { fontSize: 16, fontWeight: '500', lineHeight: 21 }, headerSubtitle: { flexDirection: 'row', alignItems: 'center', gap: 6 }, projectLabel: { fontSize: 12, lineHeight: 16, flexShrink: 1 }, dot: { width: 5, height: 5, borderRadius: 3 }, transcriptFrame: { flex: 1, minHeight: 0, paddingBottom: 8 }, transcript: { flex: 1, minHeight: 0, width: '100%', maxWidth: 760, alignSelf: 'center' }, messages: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 24, flexGrow: 1 },
   assistant: { gap: 6 }, jsonText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
-  responseFooter: { flexDirection: 'row', alignItems: 'center', marginStart: -16 }, responseCopyTarget: { width: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }, responseElapsed: { fontSize: 11, lineHeight: 16 },
   eyebrow: { fontFamily: mono, fontSize: 10, color: colors.muted, letterSpacing: 1.2 }, notice: { fontFamily: mono, fontSize: 11 },
   composerDock: { padding: 12, paddingHorizontal: pageInset, paddingTop: 4, alignItems: 'center' }, composer: { width: '100%', maxWidth: 736, paddingHorizontal: 8, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, borderRadius: 18, backgroundColor: colors.panel }, composerInput: { minHeight: 44, maxHeight: 120, borderWidth: 0, borderRadius: 0, boxShadow: [], backgroundColor: colors.panel, paddingHorizontal: 7, paddingVertical: 6, fontSize: 16, lineHeight: 24 }, composerToolbar: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }, modelTrigger: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8 }, modelTriggerText: { flexShrink: 1, fontSize: 12, color: colors.muted },
   betaLatestOverlay: { position: 'absolute', bottom: 12, right: 16 },
