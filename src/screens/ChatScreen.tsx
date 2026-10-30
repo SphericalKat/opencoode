@@ -1,7 +1,9 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, AppState, BackHandler, FlatList, Image, Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextInputProps } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { KeyboardAvoidingView, KeyboardEvents } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, KeyboardEvents, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
@@ -917,7 +919,7 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
   const copySelected = () => { if (actionMessage) { const messageID = actionMessage.id; const text = messageText(actionMessage); if (text) void Clipboard.setStringAsync(text).then(() => { if (alive.current) setSelectedMessageID(current => current === messageID ? null : current); }).catch(showError); } };
 
   if (!session) return <View style={styles.container}>{!betaLayout && <View style={styles.header}>{onOpenNavigation && <View style={styles.headerLeading}><ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} /></View>}<View style={[styles.headerTitle, onOpenNavigation && styles.headerTitleWithNavigation]}><Label numberOfLines={1} style={styles.sessionTitle}>{loading ? 'Loading session' : 'Session unavailable'}</Label><Label numberOfLines={1} muted style={styles.projectLabel}>{projectLabel || 'OpenCode'}</Label></View></View>}{loading ? <Busy /> : <View style={{ padding: 16 }}><ErrorNotice error={error || fetchError || 'The session is unavailable'} onRetry={() => { void refresh(); }} /></View>}</View>;
-  return <View style={styles.frame}><KeyboardAvoidingView style={styles.container} behavior="padding" automaticOffset enabled={visible && !panel}>
+  return <View style={styles.frame}><ChatKeyboardView enabled={visible && !panel}>
     {(!betaLayout || !!actionMessage) && <MotionContent variant="context" transitionKey={!!actionMessage} style={[styles.header, !!actionMessage && styles.selectionHeader]}>{actionMessage ? <><View style={styles.headerLeading}><ChatIconButton name="close" label="Close message selection" onPress={() => setSelectedMessageID(null)} /></View><Label accessibilityRole="header" style={styles.selectionCount}>1 selected</Label><Button title="Copy" compact variant="ghost" disabled={!canCopySelected} onPress={copySelected} />{actionMessage.type === 'user' ? <Button title="Edit" compact variant="ghost" disabled={!draftLoaded || pending} onPress={() => { void editMessage(actionMessage); }} /> : capabilities.forkMessage && (!backend.canForkMessage || backend.canForkMessage(actionMessage)) ? <Button title="Fork" compact variant="ghost" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }); }} /> : null}<View style={styles.headerTrailing}><ChatIconButton name="more" label="Selected message actions" onPress={() => setPanel('message')} /></View></> : <>
       {onOpenNavigation && <View style={styles.headerLeading}><ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} /></View>}
       <View style={[styles.headerTitle, onOpenNavigation && styles.headerTitleWithNavigation]}><Label numberOfLines={1} accessibilityLabel={session.title || 'New session'} style={styles.sessionTitle}>{session.title || 'New session'}</Label><View style={styles.headerSubtitle}>{showHeaderActivity && <WorkingIndicator active={visible && foreground} color={colors.muted} size={12} />}<Label numberOfLines={1} muted style={styles.projectLabel}>{showHeaderActivity ? activity.label : projectLabel || session.location.directory.split('/').filter(Boolean).pop() || session.location.directory}</Label></View></View>
@@ -1039,7 +1041,16 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
     <Sheet visible={panel === 'stats'} title="Session statistics" onClose={() => setPanel(null)}>{capabilities.statistics && panel === 'stats' && <SessionStats session={session} running={active} />}</Sheet>
     <Sheet visible={panel === 'btw'} title="Side question" onClose={() => setPanel(null)}>{opencodeClient && capabilities.sideQuestion && panel === 'btw' && <SideQuestion client={opencodeClient} sessionID={sessionID} initialQuestion={sideQuestion} onQuestionConsumed={() => setSideQuestion(undefined)} />}</Sheet>
     <Sheet visible={panel === 'resources'} title="MCP resource references" onClose={() => setPanel(null)}>{opencodeClient && capabilities.resources && panel === 'resources' && <McpResources client={opencodeClient} location={{ directory: session.location.directory }} onAttachContext={text => { setDraft(current => current ? `${current}\n\n${text}` : text); setPanel(null); }} />}</Sheet>
-  </KeyboardAvoidingView></View>;
+  </ChatKeyboardView></View>;
+}
+
+function ChatKeyboardView({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
+  const styles = useThemedStyles(createStyles);
+  const { height } = useReanimatedKeyboardAnimation();
+  const { bottom } = useSafeAreaInsets();
+  const keyboardPadding = useAnimatedStyle(() => ({ paddingBottom: enabled ? Math.max(0, -height.value - bottom) : 0 }), [enabled, bottom]);
+  if (Platform.OS === 'android') return <Animated.View style={[styles.container, keyboardPadding]}>{children}</Animated.View>;
+  return <KeyboardAvoidingView style={styles.container} behavior="padding" automaticOffset enabled={enabled}>{children}</KeyboardAvoidingView>;
 }
 
 function messageText(message: SessionMessageInfo): string {

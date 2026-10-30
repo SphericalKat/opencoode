@@ -157,6 +157,7 @@ I sent a prompt through the shared `ChatScreen` and observed its real command ac
 I scrolled through the response, used Jump to latest, and opened the shared long-press selection bar.
 I opened the shared Settings overview and the saved server list.
 I selected Add server and returned to the list with Back.
+I opened Gboard on the shared OpenCode chat screen and confirmed that the input and Send button stayed above the keyboard.
 
 Earlier Android checks covered session creation, session selection, and tool output before the shared screen replaced the Pi screen.
 
