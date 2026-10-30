@@ -45,14 +45,16 @@ type SettingsStackParams = { Index: undefined; Section: { section: Section } };
 const SettingsStack = createNativeStackNavigator<SettingsStackParams>();
 const zeroInsets = { top: 0, bottom: 0, left: 0, right: 0 };
 // The native toolbar supplies its inset before the shared back control applies its own margins.
-const nativeBackInsets = Platform.select<ViewStyle>({ android: { marginStart: -7, marginEnd: 33 }, ios: { minWidth: 44, height: 44, justifyContent: 'flex-start' } });
+const nativeBackInsets = Platform.select<ViewStyle>({ android: { marginStart: -7, marginEnd: 33 }, ios: { minWidth: 44, height: 44, justifyContent: 'center' } });
 
 export function SettingsScreen({ client, directory, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation }: { client: Client; directory: string; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void }) {
   const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const reducedMotion = useMotionPreference();
-  const wide = width >= 920;
+  // A resize must not replace the navigator and discard an open editor.
+  const [nativeStackEnabled] = useState(() => Platform.OS !== 'web' && width < 920);
+  const wide = !nativeStackEnabled && width >= 920;
   const [section, setSection] = useState<Section | null>(null);
   const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
@@ -66,34 +68,36 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
     if (mounted.current) setSection(next);
   }, [section, confirmNavigation]);
   useEffect(() => {
+    if (nativeStackEnabled) return;
     onBackStateChange?.(visible && !wide && section !== null);
     return () => onBackStateChange?.(false);
-  }, [onBackStateChange, visible, wide, section]);
+  }, [nativeStackEnabled, onBackStateChange, visible, wide, section]);
   useEffect(() => {
-    if (!visible || wide || section === null) return;
+    if (nativeStackEnabled || !visible || wide || section === null) return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => { void changeSection(null); return true; });
     return () => subscription.remove();
-  }, [visible, wide, section, changeSection]);
+  }, [nativeStackEnabled, visible, wide, section, changeSection]);
   const updateNativeBackState = useCallback(() => {
+    if (!nativeStackEnabled) return;
     const canGoBack = navigationRef.current?.canGoBack() ?? false;
     onBackStateChange?.(visible && !wide && canGoBack);
-  }, [navigationRef, onBackStateChange, visible, wide]);
+  }, [nativeStackEnabled, navigationRef, onBackStateChange, visible, wide]);
   useEffect(() => {
     updateNativeBackState();
     return () => onBackStateChange?.(false);
   }, [updateNativeBackState, onBackStateChange]);
   useEffect(() => {
-    if (!visible || wide || Platform.OS === 'web') return;
+    if (!nativeStackEnabled || !visible) return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (!navigationRef.current?.canGoBack()) return false;
       navigationRef.current.goBack();
       return true;
     });
     return () => subscription.remove();
-  }, [navigationRef, visible, wide]);
+  }, [nativeStackEnabled, navigationRef, visible]);
 
   const renderIndex = () => <SettingsIndex onSelect={next => {
-    if (wide || Platform.OS === 'web') { void changeSection(next); return; }
+    if (!nativeStackEnabled) { void changeSection(next); return; }
     navigationRef.navigate('Section', { section: next });
   }} selected={selected} wide={wide} />;
   const renderSection = (value: Section) => <SettingsSection client={client} directory={directory} section={value} />;
@@ -104,7 +108,6 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
       headerStyle: { backgroundColor: colors.bg },
       headerTintColor: colors.text,
       headerTitleStyle: { color: colors.text, fontFamily: 'Inter', fontSize: 17, fontWeight: '600' },
-      headerBackTitleStyle: { fontFamily: 'Inter', fontSize: 14 },
       headerShadowVisible: false,
       contentStyle: { backgroundColor: colors.bg },
       animation: reducedMotion ? 'fade' : 'default',
@@ -112,18 +115,18 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
       <SettingsStack.Screen name="Index" options={{
         title: 'Settings',
         headerLeft: onBack ? () => <SettingsBackButton label={backLabel || 'Sessions'} onPress={onBack} /> : undefined,
-        headerRight: onOpenNavigation ? () => <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={{ width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}><ShellIcon name="menu" color={colors.text} /></Pressable> : undefined,
+        headerRight: onOpenNavigation ? () => <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={{ width: 44, height: 44, marginEnd: Platform.OS === 'android' ? -16 : 0, alignItems: 'center', justifyContent: 'center' }}><ShellIcon name="menu" color={colors.text} /></Pressable> : undefined,
       }}>
         {renderIndex}
       </SettingsStack.Screen>
-      <SettingsStack.Screen name="Section" options={({ route, navigation: screenNavigation }) => ({ title: route.params.section, headerBackVisible: false, headerLeft: () => <SettingsBackButton label="Settings" onPress={() => screenNavigation.goBack()} /> })}>
+      <SettingsStack.Screen name="Section" options={({ route, navigation: screenNavigation }) => ({ title: route.params.section, headerBackButtonDisplayMode: 'minimal', ...(Platform.OS === 'android' ? { headerBackVisible: false, headerLeft: () => <SettingsBackButton label="Settings" onPress={() => screenNavigation.goBack()} /> } : {}) })}>
         {({ route, navigation: screenNavigation }) => <NativeSettingsSection client={client} directory={directory} section={route.params.section} navigation={screenNavigation} />}
       </SettingsStack.Screen>
     </SettingsStack.Navigator>
   </BaseNavigationContainer>;
 
   return <View style={[styles.screen, !wide && styles.narrowScreen]}>
-    {wide || Platform.OS === 'web' ? <>
+    {!nativeStackEnabled ? <>
       {!wide && <ScreenHeader title={selected ?? 'Settings'} backLabel={section !== null ? 'Settings' : backLabel} onBack={section !== null ? () => { void changeSection(null); } : onBack} onOpenNavigation={section === null ? onOpenNavigation : undefined} onRefresh={section !== null ? headerRefresh?.refresh : undefined} refreshing={headerRefresh?.loading} />}
       <HeaderRefreshContext.Provider value={wide ? null : setHeaderRefresh}><View style={[styles.content, !wide && styles.narrowContent]}>
         {(wide || section === null) && renderIndex()}
@@ -135,7 +138,8 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
 
 function SettingsBackButton({ label, onPress }: { label: string; onPress: () => void }) {
   const { colors } = useTheme();
-  return <HeaderBackButton displayMode="minimal" accessibilityLabel={`Back to ${label}`} onPress={onPress} tintColor={colors.text} style={nativeBackInsets} backImage={Platform.OS === 'ios' ? ({ tintColor }) => <ShellIcon name="back" color={tintColor} size={24} /> : undefined} />;
+  // The stock iOS image reserves label space even in icon-only mode.
+  return <HeaderBackButton displayMode="minimal" accessibilityLabel={`Back to ${label}`} onPress={onPress} tintColor={colors.text} style={nativeBackInsets} backImage={Platform.OS === 'ios' ? ({ tintColor }) => <ShellIcon name="back" color={tintColor} size={22} /> : undefined} />;
 }
 
 function SettingsIndex({ onSelect, selected, wide }: { onSelect: (section: Section) => void; selected: Section | null; wide: boolean }) {
@@ -186,7 +190,7 @@ function NativeSettingsSection({ client, directory, section, navigation }: { cli
     if (pendingAction) navigation.dispatch(pendingAction);
   }, [navigation, pendingAction]);
   useEffect(() => {
-    navigation.setOptions({ headerRight: headerRefresh?.refresh ? () => <Pressable accessibilityRole="button" accessibilityLabel="Refresh" accessibilityState={{ disabled: headerRefresh.loading, busy: headerRefresh.loading }} disabled={headerRefresh.loading} onPress={() => headerRefresh.refresh?.()} style={{ width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}>{headerRefresh.loading ? <ActivityIndicator size="small" color={colors.muted} /> : <ShellIcon name="refresh" color={colors.text} />}</Pressable> : undefined });
+    navigation.setOptions({ headerRight: headerRefresh?.refresh ? () => <Pressable accessibilityRole="button" accessibilityLabel="Refresh" accessibilityState={{ disabled: headerRefresh.loading, busy: headerRefresh.loading }} disabled={headerRefresh.loading} onPress={() => headerRefresh.refresh?.()} style={{ width: 44, height: 44, marginEnd: Platform.OS === 'android' ? -16 : 0, alignItems: 'center', justifyContent: 'center' }}>{headerRefresh.loading ? <ActivityIndicator size="small" color={colors.muted} /> : <ShellIcon name="refresh" color={colors.text} />}</Pressable> : undefined });
   }, [colors, headerRefresh, navigation]);
   return <HeaderRefreshContext.Provider value={setHeaderRefresh}><SettingsSection client={client} directory={directory} section={section} /></HeaderRefreshContext.Provider>;
 }
