@@ -64,12 +64,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (Platform.OS === 'web') document.documentElement.style.colorScheme = scheme;
   }, [scheme]);
-  const colors = scheme === 'light' ? lightColors : betaLayout ? betaDarkColors : darkColors;
+  const colors = betaLayout ? scheme === 'light' ? betaLightColors : betaDarkColors : scheme === 'light' ? lightColors : darkColors;
   const theme = useMemo(() => ({ colors, appearance, scheme, setAppearance }), [colors, appearance, scheme, setAppearance]);
   return <Context.Provider value={theme}>{children}</Context.Provider>;
 }
 
 const betaDarkColors: ThemeColors = { ...darkColors, bg: '#161616', text: '#fafafa', border: '#ffffff1a' };
+const betaLightColors: ThemeColors = { ...lightColors, bg: '#ffffff', panel: '#fafafa', input: '#fafafa', selected: '#f2f2f2' };
 
 export function useTheme() { return useContext(Context); }
 

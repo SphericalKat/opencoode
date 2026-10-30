@@ -21,11 +21,12 @@ type Props = {
   compact?: boolean;
   onOpenNavigation?: () => void;
   betaLayout?: boolean;
+  projectScope?: { directory: string; revision: number };
   onChooseDirectory?: () => void;
   onNewSession?: (directory: string) => void;
 };
 
-export function SessionsScreen({ client, directory, onOpenSession, revision, selectedSessionID, compact = false, onOpenNavigation, betaLayout = false, onChooseDirectory, onNewSession }: Props) {
+export function SessionsScreen({ client, directory, onOpenSession, revision, selectedSessionID, compact = false, onOpenNavigation, betaLayout = false, projectScope, onChooseDirectory, onNewSession }: Props) {
   const withNativePresentation = useNativePresentation();
   const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -180,6 +181,10 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     void loadProjects(controller.signal);
     return () => controller.abort();
   }, [client, betaHome, loadProjects]);
+
+  useEffect(() => {
+    if (betaHome && projectScope) setProjectDirectory(projectScope.directory);
+  }, [betaHome, projectScope]);
 
   useEffect(() => {
     setSelected(undefined);
@@ -476,7 +481,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
         </View>;
       }}
     />
-    <Sheet visible={projectsOpen} title="Projects" onClose={() => { pendingDirectoryPicker.current = false; pendingListActions.current = false; setProjectsOpen(false); }} onDismiss={() => { if (pendingDirectoryPicker.current) { pendingDirectoryPicker.current = false; onChooseDirectory?.(); } else if (pendingListActions.current) { pendingListActions.current = false; setSheetError(undefined); setActions('menu'); } }}>
+    <Sheet visible={projectsOpen} fitContent={betaHome} contentStyle={betaHome ? styles.projectSheetContent : undefined} title="Projects" onClose={() => { pendingDirectoryPicker.current = false; pendingListActions.current = false; setProjectsOpen(false); }} onDismiss={() => { if (pendingDirectoryPicker.current) { pendingDirectoryPicker.current = false; onChooseDirectory?.(); } else if (pendingListActions.current) { pendingListActions.current = false; setSheetError(undefined); setActions('menu'); } }}>
       <Pressable accessibilityRole="radio" accessibilityState={{ checked: !projectDirectory }} onPress={() => { setProjectDirectory(undefined); setProjectsOpen(false); }} style={styles.menuRow}><Label>All projects</Label><Label muted>{!projectDirectory ? '✓' : ''}</Label></Pressable>
       {projectsLoading && <Busy />}
       <ErrorNotice error={projectsError} onRetry={() => { void loadProjects(); }} />
@@ -535,6 +540,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   projectSelector: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6 },
   projectSelectorLabel: { flex: 1, fontSize: 13, lineHeight: 18 },
   projectChevron: { transform: [{ rotate: '90deg' }], marginHorizontal: 8 },
+  projectSheetContent: { gap: 0 },
   projectOption: { flex: 1, minWidth: 0, gap: 2 },
   betaSearch: { borderRadius: 6, paddingHorizontal: 14 },
   betaSearchInput: { fontSize: 13, lineHeight: 18, paddingVertical: 10 },

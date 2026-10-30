@@ -41,6 +41,7 @@ const sectionGroups: { title: string; items: Section[] }[] = [
 
 type HeaderRefresh = { refresh?: () => void; loading?: boolean } | null;
 const HeaderRefreshContext = createContext<React.Dispatch<React.SetStateAction<HeaderRefresh>> | null>(null);
+const BetaLayoutContext = createContext(false);
 type SettingsStackParams = { Index: undefined; Section: { section: Section } };
 const SettingsStack = createNativeStackNavigator<SettingsStackParams>();
 const zeroInsets = { top: 0, bottom: 0, left: 0, right: 0 };
@@ -127,8 +128,8 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
     </SettingsStack.Navigator>
   </BaseNavigationContainer>;
 
-  if (betaLayout) return <BetaSettingsContent section={section ?? 'Appearance'} onSelect={changeSection} onBack={onBack} onManageServers={onManageServers} serverLabel={serverLabel}>
-    {renderSection(section ?? 'Appearance')}
+  if (betaLayout) return <BetaSettingsContent section={section ?? 'Appearance'} onSelect={changeSection} onBack={onBack} onManageServers={onManageServers} serverLabel={serverLabel} headerRefresh={headerRefresh}>
+    <HeaderRefreshContext.Provider value={setHeaderRefresh}>{renderSection(section ?? 'Appearance')}</HeaderRefreshContext.Provider>
   </BetaSettingsContent>;
 
   return <View style={[styles.screen, !wide && styles.narrowScreen]}>
@@ -142,7 +143,7 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
   </View>;
 }
 
-function BetaSettingsContent({ section, onSelect, onBack, onManageServers, serverLabel, children }: { section: Section; onSelect: (section: Section) => Promise<boolean>; onBack?: () => void; onManageServers?: () => void; serverLabel?: string; children: React.ReactNode }) {
+function BetaSettingsContent({ section, onSelect, onBack, onManageServers, serverLabel, headerRefresh, children }: { section: Section; onSelect: (section: Section) => Promise<boolean>; onBack?: () => void; onManageServers?: () => void; serverLabel?: string; headerRefresh: HeaderRefresh; children: React.ReactNode }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [query, setQuery] = useState('');
@@ -173,10 +174,13 @@ function BetaSettingsContent({ section, onSelect, onBack, onManageServers, serve
       {!sections.some(item => matches(item, query)) && <Empty title="No matching settings" detail="Try a category name or description." />}
     </ScrollView>}
     <View style={[styles.detail, !!query.trim() && styles.betaHidden]}>
-      <View style={styles.betaSectionHeader}><Label accessibilityRole="header" style={styles.betaTitle}>{section}</Label><Label muted style={styles.betaDescription}>{sectionDescriptions[section]}</Label></View>
-      {children}
+      <View style={styles.betaSectionHeader}>
+        <View style={styles.betaSectionHeading}><Label accessibilityRole="header" style={styles.betaTitle}>{section}</Label><Label muted style={styles.betaDescription}>{sectionDescriptions[section]}</Label></View>
+        {headerRefresh?.refresh && <Pressable accessibilityRole="button" accessibilityLabel="Refresh" accessibilityState={{ disabled: headerRefresh.loading, busy: headerRefresh.loading }} disabled={headerRefresh.loading} onPress={() => headerRefresh.refresh?.()} style={styles.betaClear}>{headerRefresh.loading ? <ActivityIndicator size="small" color={colors.muted} /> : <ShellIcon name="refresh" size={18} color={colors.text} />}</Pressable>}
+      </View>
+      <BetaLayoutContext.Provider value>{children}</BetaLayoutContext.Provider>
     </View>
-    <Sheet visible={choosing} title="Settings" fitContent onClose={() => setChoosing(false)} onDismiss={() => {
+    <Sheet visible={choosing} title="Settings" fitContent contentStyle={{ gap: 0 }} onClose={() => setChoosing(false)} onDismiss={() => {
       if (!pendingServer.current) return;
       pendingServer.current = false;
       onManageServers?.();
@@ -292,9 +296,28 @@ function Page({ children, error, loading, refresh }: { children: React.ReactNode
 }
 
 function AppearanceSettings() {
-  const { appearance, scheme, setAppearance } = useTheme();
+  const { appearance, scheme, setAppearance, colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const betaLayout = useContext(BetaLayoutContext);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const choiceLabel = appearance === 'system' ? 'System' : appearance === 'light' ? 'Light' : 'Dark';
+  if (betaLayout) return <Page error={error}>
+    <View style={styles.betaAppearanceCard}>
+      <View style={styles.detail}><Label style={styles.betaSettingTitle}>Color scheme</Label><Label muted style={styles.betaDescription}>Choose the color scheme for the app.</Label></View>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Color scheme: ${choiceLabel}`} accessibilityState={{ disabled: busy, expanded: choosing }} disabled={busy} onPress={() => setChoosing(true)} style={styles.betaChooserTarget}>
+        <View style={styles.betaSettingChooser}>{busy ? <ActivityIndicator size="small" color={colors.muted} /> : <Label style={styles.betaBackLabel}>{choiceLabel}</Label>}<View style={{ transform: [{ rotate: '90deg' }] }}><ShellIcon name="chevron" size={12} color={colors.text} /></View></View>
+      </Pressable>
+    </View>
+    <Sheet visible={choosing} title="Color scheme" fitContent contentStyle={{ gap: 0 }} onClose={() => { if (!busy) setChoosing(false); }}>
+      <ErrorNotice error={error} />
+      {(['system', 'light', 'dark'] as const).map(value => <Pressable key={value} accessibilityRole="button" accessibilityLabel={value === 'system' ? 'System' : value === 'light' ? 'Light' : 'Dark'} accessibilityState={{ selected: appearance === value, disabled: busy }} disabled={busy} style={({ pressed }) => [styles.betaCategoryRow, pressed && { backgroundColor: colors.raised }]} onPress={() => {
+        setBusy(true); setError(null);
+        void setAppearance(value).then(() => setChoosing(false)).catch(e => setError(errorMessage(e))).finally(() => setBusy(false));
+      }}><Label style={[styles.betaBackLabel, styles.detail]}>{value === 'system' ? 'System' : value === 'light' ? 'Light' : 'Dark'}</Label>{appearance === value && <Label accessibilityElementsHidden>✓</Label>}</Pressable>)}
+    </Sheet>
+  </Page>;
   return <Page error={error}>
     <Label muted>Use your device theme or choose a fixed color scheme.</Label>
     {(['system', 'light', 'dark'] as const).map(value => <Button key={value} title={value === 'system' ? 'System' : value === 'light' ? 'Light' : 'Dark'} selected={appearance === value} variant={appearance === value ? 'primary' : 'secondary'} disabled={busy} onPress={() => {
@@ -582,14 +605,17 @@ function Permissions({ client, directory }: { client: Client; directory: string 
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
-  betaScreen: { flex: 1, minHeight: 0, backgroundColor: colors.panel },
+  betaScreen: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
+  betaAppearanceCard: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.panel },
+  betaSettingTitle: { fontFamily: sans, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  betaSettingChooser: { minHeight: 28, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
   betaTopRow: { minHeight: 48, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   betaBack: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 6 }, betaBackLabel: { fontSize: 13, lineHeight: 18 },
   betaChooserTarget: { minHeight: 48, justifyContent: 'center' }, betaChooser: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: 10 },
   betaSearch: { minHeight: 48, marginHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 6 },
   betaSearchInput: { minHeight: 48, borderWidth: 0, backgroundColor: 'transparent', paddingHorizontal: 0, fontSize: 14 }, betaClear: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  betaSectionHeader: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8, gap: 6 }, betaTitle: { fontFamily: sans, fontSize: 14, lineHeight: 20, fontWeight: '500' }, betaDescription: { fontSize: 13, lineHeight: 20 },
-  betaCategoryRow: { minHeight: 48, paddingVertical: 10, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 12 }, betaResults: { paddingHorizontal: 14, paddingBottom: 24 }, betaHidden: { display: 'none' },
+  betaSectionHeader: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }, betaSectionHeading: { flex: 1, gap: 6 }, betaTitle: { fontFamily: sans, fontSize: 14, lineHeight: 20, fontWeight: '500' }, betaDescription: { fontSize: 13, lineHeight: 20 },
+  betaCategoryRow: { minHeight: 48, paddingVertical: 6, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 12 }, betaResults: { paddingHorizontal: 14, paddingBottom: 24 }, betaHidden: { display: 'none' },
   screen: { flex: 1, flexDirection: 'row', minHeight: 0, backgroundColor: colors.bg }, nativeNavigation: { flex: 1, minHeight: 0 },
   narrowScreen: { flexDirection: 'column' }, content: { flex: 1, flexDirection: 'row', minHeight: 0 }, narrowContent: { flexDirection: 'column' },
   sidebar: { width: 220, flexGrow: 0, borderRightWidth: 1, borderRightColor: colors.border },

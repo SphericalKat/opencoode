@@ -6,6 +6,7 @@ import { darkColors, type ThemeColors, useTheme, useThemedStyles } from '../lib/
 import { PressFeedback, useMotionPreference } from './motion';
 import { useSheetCoordinator } from '../lib/sheets';
 import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
+import { useBetaLayout } from '../lib/betaLayout';
 
 export const colors = darkColors;
 export const sans = 'Inter';
@@ -57,6 +58,8 @@ export function ErrorNotice({ error, onRetry }: { error: string | null | undefin
 }
 export function Busy() { const { colors } = useTheme(); return <ActivityIndicator style={{ padding: 30 }} color={colors.muted} />; }
 export function Sheet({ visible, title, children, onClose, onDismiss, scroll = true, allowDuringRecovery = false, fitContent = false, showHeader = true, contentStyle }: { visible: boolean; title: string; children: React.ReactNode; onClose: () => void; onDismiss?: () => void; scroll?: boolean; allowDuringRecovery?: boolean; fitContent?: boolean; showHeader?: boolean; contentStyle?: StyleProp<ViewStyle> }) {
+  const betaLayout = useBetaLayout();
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const reduced = useMotionPreference();
   const { suspended, recoveryPending, presentSheet, dismissSheet } = useSheetCoordinator();
@@ -106,15 +109,15 @@ export function Sheet({ visible, title, children, onClose, onDismiss, scroll = t
     return () => cancelAnimationFrame(frame);
   }, [effectiveVisible, notifyDismissed]);
   const content = <View style={[styles.sheetInner, fitContent && styles.fitInner]}>
-          {showHeader ? <View style={styles.sheetHeader}><Heading>{title}</Heading><Button title="Done" compact onPress={onClose} /></View> : <Label accessibilityRole="header" style={styles.hiddenHeading}>{title}</Label>}
+          {showHeader ? <View style={[styles.sheetHeader, betaLayout && styles.betaSheetHeader]}>{betaLayout ? <Label accessibilityRole="header" style={styles.betaSheetTitle}>{title}</Label> : <Heading>{title}</Heading>}<Button title="Done" compact onPress={onClose} /></View> : <Label accessibilityRole="header" style={styles.hiddenHeading}>{title}</Label>}
           {recoveryPending && !allowDuringRecovery && <Label accessibilityRole="alert" style={styles.recoveryNotice}>Close this panel to open the connection wizard.</Label>}
-          {scroll ? <ScrollView style={[styles.sheetScroll, fitContent && styles.fitScroll]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={[styles.sheetContent, contentStyle]}>{children}</ScrollView> : <View style={[styles.sheetBody, fitContent && styles.fitScroll, contentStyle]}>{children}</View>}
+          {scroll ? <ScrollView style={[styles.sheetScroll, fitContent && styles.fitScroll]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={[styles.sheetContent, betaLayout && styles.betaSheetContent, contentStyle]}>{children}</ScrollView> : <View style={[styles.sheetBody, fitContent && styles.fitScroll, contentStyle]}>{children}</View>}
         </View>;
   return <Modal visible={effectiveVisible} transparent={fitContent} animationType={fitContent || reduced ? 'fade' : 'slide'} presentationStyle={fitContent ? 'overFullScreen' : 'pageSheet'} supportedOrientations={['portrait', 'landscape-left', 'landscape-right']} onRequestClose={onClose} onDismiss={notifyDismissed}>
     <SafeAreaRoot>{fitContent ? <KeyboardAvoidingView style={styles.sheetOverlay} behavior="padding" automaticOffset>
       <Pressable accessibilityRole="button" accessibilityLabel={`Close ${title}`} onPress={onClose} style={styles.sheetScrim} />
-      <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.fitSheet}>{content}</SafeAreaView>
-    </KeyboardAvoidingView> : <SafeAreaView style={styles.sheet}><KeyboardAvoidingView style={styles.sheetLayout} behavior="padding" automaticOffset>{content}</KeyboardAvoidingView></SafeAreaView>}</SafeAreaRoot>
+      <SafeAreaView edges={['bottom', 'left', 'right']} style={[styles.fitSheet, betaLayout && { backgroundColor: colors.bg }]}>{content}</SafeAreaView>
+    </KeyboardAvoidingView> : <SafeAreaView style={[styles.sheet, betaLayout && { backgroundColor: colors.bg }]}><KeyboardAvoidingView style={styles.sheetLayout} behavior="padding" automaticOffset>{content}</KeyboardAvoidingView></SafeAreaView>}</SafeAreaRoot>
   </Modal>;
 }
 export async function confirmAction(title: string, message: string, options: { confirmLabel?: string; destructive?: boolean } = {}): Promise<boolean> {
@@ -147,6 +150,7 @@ function createStyles(colors: ThemeColors) {
   error: { padding: 12, borderRadius: 8, backgroundColor: colors.dangerBackground, flexDirection: 'row', alignItems: 'center', gap: 8 },
   sheet: { flex: 1, backgroundColor: colors.panel }, sheetLayout: { flex: 1, minHeight: 0 }, sheetInner: { flex: 1, minHeight: 0, width: '100%', maxWidth: 680, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border },
+  betaSheetHeader: { paddingHorizontal: 14, paddingVertical: 8 }, betaSheetTitle: { fontSize: 17, lineHeight: 23, fontWeight: '600', flexShrink: 1 }, betaSheetContent: { paddingHorizontal: 14, gap: 12 },
   recoveryNotice: { color: colors.muted, fontSize: 12, lineHeight: 18, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: colors.raised },
   sheetScroll: { flex: 1, minHeight: 0 }, sheetContent: { padding: 18, gap: 16, paddingBottom: 24 }, sheetBody: { flex: 1, minHeight: 0 },
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' }, sheetScrim: { ...StyleSheet.absoluteFill, backgroundColor: '#00000070' },
