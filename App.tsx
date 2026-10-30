@@ -658,17 +658,17 @@ function MobileApp() {
 
   if (booting) return <SafeAreaView style={styles.safe}><View style={styles.boot}><OpenCodeLogo width={160} /><Busy /><Label muted>Restoring your workspace</Label></View></SafeAreaView>;
 
-  return <SafeAreaView style={[styles.safe, betaLayout && { backgroundColor: scheme === 'dark' ? '#080808' : '#fafafa' }]} edges={['top', 'left', 'right', 'bottom']}>
+  return <SafeAreaView style={[styles.safe, betaLayout && tab !== 'settings' && { backgroundColor: scheme === 'dark' ? '#080808' : '#fafafa' }]} edges={['top', 'left', 'right', 'bottom']}>
     {active?.backend === 'pi' ? <PiWorkspace key={`${active.id}:${connectionRevision}`} connection={active} foreground={foreground && !connecting} onManageServers={openServers} onConnectionLost={onPiConnectionLost} /> : !client || !active ? <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" automaticOffset><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.onboarding, betaLayout && styles.betaOnboarding]}>
       {!betaLayout && <View style={{ gap: 16, marginBottom: 20 }}><OpenCodeLogo width={180} /><Label muted>Mobile client</Label></View>}
       {serverForm}
     </ScrollView></KeyboardAvoidingView> : <View style={styles.shell}>
       {wide && <View style={styles.sidebar}>{navigation}</View>}
       <View style={styles.main}>
-      {betaLayout && !showMessageSelection && <BetaTabStrip current={currentOpenTab} count={openTabs.length} busy={creatingSession} onOpen={openNavigation} />}
+      {betaLayout && tab !== 'settings' && !showMessageSelection && <BetaTabStrip current={currentOpenTab} count={openTabs.length} busy={creatingSession} onOpen={openNavigation} />}
       {error && <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><ErrorNotice error={error} /></View>}
       {pendingLocation?.sessionID === sessionID && <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><ErrorNotice error={`This session uses ${pendingLocation.directory}. Update the workspace before you attach files or open its terminal.`} onRetry={() => { void syncSelectedLocation(); }} /></View>}
-      <View style={[styles.body, betaLayout && styles.betaSurface]}>
+      <View style={[styles.body, betaLayout && tab !== 'settings' && styles.betaSurface]}>
         {betaLayout && !betaHome && sessionID && tab !== 'settings' && !showMessageSelection && <BetaSessionNavigation pane={selectedPane} directory={directory} onSelect={openBetaPane} onMore={() => { Keyboard.dismiss(); setBetaMoreOpen(true); }} onProject={() => { void openProjects(); }} />}
         <MotionScreen visible={tab === 'sessions'} style={[styles.full, { flexDirection: 'row' }, tab !== 'sessions' && { display: 'none' }]}>
           {!wide && (betaLayout || !sessionID) && <View style={[styles.full, betaLayout && !betaHome && sessionID && { display: 'none' }]}><SessionsScreen key={`${active.id}:${connectionRevision}`} client={client} directory={directory} betaLayout={betaLayout} projectScope={betaHomeProject} onChooseDirectory={() => { void openProjects(); }} onNewSession={betaLayout ? target => { void createBetaSession(target); } : undefined} selectedSessionID={sessionID ?? undefined} revision={revision} onOpenSession={openSession} onOpenNavigation={openNavigation} /></View>}
