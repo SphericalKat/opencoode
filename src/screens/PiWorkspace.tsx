@@ -13,7 +13,7 @@ import { ChatScreen } from './ChatScreen';
 import { SettingsScreen, type Section } from './SettingsScreen';
 
 type Props = { connection: Connection; onManageServers: () => void; onConnectionLost: (error: unknown) => void; foreground: boolean };
-const settingsSections: Section[] = ['Appearance'];
+const settingsSections: Section[] = ['Appearance', 'Models'];
 
 export function PiWorkspace(props: Props) {
   return <PiWorkspaceSession key={`${props.connection.id}:${props.connection.url}`} {...props} />;
@@ -151,7 +151,7 @@ function PiWorkspaceSession({ connection, foreground, onManageServers, onConnect
       {!settingsOpen && !selected && session && betaLayout && <BetaSessionNavigation pane="Session" directory={session.location.directory} changes={false} onSelect={() => setSettingsOpen(false)} onMore={() => { Keyboard.dismiss(); setMoreOpen(true); }} />}
       {session ? <>
         <View style={[{ flex: 1 }, settingsOpen && { display: 'none' }]}><ChatScreen backend={backend} sessionID={session.id} draftKey={`pi:${connection.id}:${session.id}`} serverID={connection.id} betaLayout={betaLayout} visible={foreground && !settingsOpen} projectLabel={session.location.directory.split(/[\\/]/).filter(Boolean).pop()} onOpenNavigation={() => setNavigationOpen(true)} onSelectionChange={setSelected} onSessionInfo={recordSession} onSessionChanged={() => { void refreshSession().catch(cause => { if (alive.current) setError(errorMessage(cause)); }); }} onOpenSession={openChatSession} onConnectionLost={onConnectionLost} sessionPanelRequest={panelRequest} /></View>
-        {settingsOpen && <SettingsScreen directory={session.location.directory} sections={settingsSections} betaLayout={betaLayout} visible onBack={() => setSettingsOpen(false)} backLabel="Chat" onBackStateChange={onSettingsBackState} onManageServers={onManageServers} serverLabel={connection.name} />}
+        {settingsOpen && <SettingsScreen modelCatalog={backend.core.model} directory={session.location.directory} sections={settingsSections} betaLayout={betaLayout} visible onBack={() => setSettingsOpen(false)} backLabel="Chat" onBackStateChange={onSettingsBackState} onManageServers={onManageServers} serverLabel={connection.name} />}
       </> : <Busy />}
     </SessionSurface>
     <BetaMoreSheet visible={moreOpen} onClose={() => setMoreOpen(false)} onDismiss={onNavigationDismissed} onDetails={() => afterMenu(showDetails)} />

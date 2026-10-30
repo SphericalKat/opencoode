@@ -22,6 +22,7 @@ import { pageInset } from '../lib/layout';
 import { useBetaLayout } from '../lib/betaLayout';
 
 export type Section = 'Accounts' | 'Models' | 'MCP' | 'Config' | 'Skills' | 'Plugins' | 'Permissions' | 'Advanced' | 'Appearance';
+type ModelCatalog = Pick<Client['model'], 'list'>;
 const sectionDescriptions: Record<Section, string> = {
   Accounts: 'Provider connections and credentials',
   Models: 'Available models and capabilities',
@@ -49,7 +50,7 @@ const zeroInsets = { top: 0, bottom: 0, left: 0, right: 0 };
 // The native toolbar supplies its inset before the shared back control applies its own margins.
 const nativeBackInsets = Platform.select<ViewStyle>({ android: { marginStart: -7, marginEnd: 33 }, ios: { minWidth: 44, height: 44, justifyContent: 'center' } });
 
-export function SettingsScreen({ client, directory, sections = allSections, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation, betaLayout = false, onManageServers, serverLabel }: { client?: Client; directory: string; sections?: Section[]; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void; betaLayout?: boolean; onManageServers?: () => void; serverLabel?: string }) {
+export function SettingsScreen({ client, modelCatalog = client?.model, directory, sections = allSections, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation, betaLayout = false, onManageServers, serverLabel }: { client?: Client; modelCatalog?: ModelCatalog; directory: string; sections?: Section[]; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void; betaLayout?: boolean; onManageServers?: () => void; serverLabel?: string }) {
   const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
@@ -62,7 +63,7 @@ export function SettingsScreen({ client, directory, sections = allSections, visi
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
   const mounted = useRef(true);
   const navigationRef = useNavigationContainerRef<SettingsStackParams>();
-  const availableSections = useMemo(() => sections.filter(value => !!client || value === 'Appearance'), [client, sections]);
+  const availableSections = useMemo(() => sections.filter(value => !!client || value === 'Appearance' || value === 'Models' && !!modelCatalog), [client, modelCatalog, sections]);
   const defaultSection = availableSections.includes('Accounts') ? 'Accounts' : availableSections[0] ?? null;
   const selected = section !== null && availableSections.includes(section) ? section : wide ? defaultSection : null;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -107,7 +108,7 @@ export function SettingsScreen({ client, directory, sections = allSections, visi
     if (!nativeStackEnabled) { void changeSection(next); return; }
     navigationRef.navigate('Section', { section: next });
   }} sections={availableSections} selected={selected} wide={wide} onManageServers={onManageServers} serverLabel={serverLabel} />;
-  const renderSection = (value: Section) => <SettingsSection client={client} directory={directory} section={value} />;
+  const renderSection = (value: Section) => <SettingsSection client={client} modelCatalog={modelCatalog} directory={directory} section={value} />;
 
   const navigationTheme = useMemo(() => ({ ...DefaultTheme, dark: scheme === 'dark', colors: { ...DefaultTheme.colors, primary: colors.accent, background: colors.bg, card: colors.panel, text: colors.text, border: colors.border, notification: colors.danger } }), [colors, scheme]);
   const navigation = <BaseNavigationContainer ref={navigationRef} theme={navigationTheme} onReady={updateNativeBackState} onStateChange={updateNativeBackState}>
@@ -127,7 +128,7 @@ export function SettingsScreen({ client, directory, sections = allSections, visi
         {renderIndex}
       </SettingsStack.Screen>
       <SettingsStack.Screen name="Section" options={({ route, navigation: screenNavigation }) => ({ title: route.params.section, headerBackButtonDisplayMode: 'minimal', ...(Platform.OS === 'android' ? { headerBackVisible: false, headerLeft: () => <SettingsBackButton label="Settings" onPress={() => screenNavigation.goBack()} /> } : {}) })}>
-        {({ route, navigation: screenNavigation }) => availableSections.includes(route.params.section) ? <NativeSettingsSection client={client} directory={directory} section={route.params.section} navigation={screenNavigation} /> : null}
+        {({ route, navigation: screenNavigation }) => availableSections.includes(route.params.section) ? <NativeSettingsSection client={client} modelCatalog={modelCatalog} directory={directory} section={route.params.section} navigation={screenNavigation} /> : null}
       </SettingsStack.Screen>
     </SettingsStack.Navigator>
   </BaseNavigationContainer>;
@@ -171,12 +172,12 @@ function SettingsIndex({ onSelect, sections, selected, wide, onManageServers, se
   </ScrollView>;
 }
 
-function SettingsSection({ client, directory, section }: { client?: Client; directory: string; section: Section }) {
+function SettingsSection({ client, modelCatalog, directory, section }: { client?: Client; modelCatalog?: ModelCatalog; directory: string; section: Section }) {
   if (section === 'Appearance') return <View key={`${directory}:${section}`} style={{ flex: 1 }}><AppearanceSettings /></View>;
+  if (section === 'Models') return modelCatalog ? <View key={`${directory}:${section}`} style={{ flex: 1 }}><Models catalog={modelCatalog} client={client} directory={directory} /></View> : null;
   if (!client) return null;
   return <View key={`${directory}:${section}`} style={{ flex: 1 }}>
       {section === 'Accounts' && <Accounts client={client} directory={directory} />}
-      {section === 'Models' && <Models client={client} directory={directory} />}
       {section === 'MCP' && <Mcp client={client} directory={directory} />}
       {section === 'Config' && <Configuration client={client} directory={directory} />}
       {section === 'Skills' && <Skills client={client} directory={directory} />}
@@ -186,7 +187,7 @@ function SettingsSection({ client, directory, section }: { client?: Client; dire
   </View>;
 }
 
-function NativeSettingsSection({ client, directory, section, navigation }: { client?: Client; directory: string; section: Section; navigation: NativeStackScreenProps<SettingsStackParams, 'Section'>['navigation'] }) {
+function NativeSettingsSection({ client, modelCatalog, directory, section, navigation }: { client?: Client; modelCatalog?: ModelCatalog; directory: string; section: Section; navigation: NativeStackScreenProps<SettingsStackParams, 'Section'>['navigation'] }) {
   const { colors } = useTheme();
   const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
@@ -207,11 +208,11 @@ function NativeSettingsSection({ client, directory, section, navigation }: { cli
   useEffect(() => {
     navigation.setOptions({ headerRight: headerRefresh?.refresh ? () => <Pressable accessibilityRole="button" accessibilityLabel="Refresh" accessibilityState={{ disabled: headerRefresh.loading, busy: headerRefresh.loading }} disabled={headerRefresh.loading} onPress={() => headerRefresh.refresh?.()} style={{ width: 44, height: 44, marginEnd: Platform.OS === 'android' ? -16 : 0, alignItems: 'center', justifyContent: 'center' }}>{headerRefresh.loading ? <ActivityIndicator size="small" color={colors.muted} /> : <ShellIcon name="refresh" color={colors.text} />}</Pressable> : undefined });
   }, [colors, headerRefresh, navigation]);
-  return <HeaderRefreshContext.Provider value={setHeaderRefresh}><SettingsSection client={client} directory={directory} section={section} /></HeaderRefreshContext.Provider>;
+  return <HeaderRefreshContext.Provider value={setHeaderRefresh}><SettingsSection client={client} modelCatalog={modelCatalog} directory={directory} section={section} /></HeaderRefreshContext.Provider>;
 }
 
-function useResource<T>(client: Client, directory: string, load: (signal: AbortSignal) => Promise<T>) {
-  const scope = useMemo(() => ({ client, directory }), [client, directory]);
+function useResource<T>(source: object, directory: string, load: (signal: AbortSignal) => Promise<T>) {
+  const scope = useMemo(() => ({ source, directory }), [source, directory]);
   const [data, setData] = useState<T>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -407,12 +408,12 @@ function ConnectIntegration({ client, directory, integration, onClose }: { clien
   </Sheet>;
 }
 
-function Models({ client, directory }: { client: Client; directory: string }) {
+function Models({ catalog, client, directory }: { catalog: ModelCatalog; client?: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(client, directory, async signal => {
-    const [models, providers] = await Promise.all([client.model.list({ location: { directory }, types: ['chat', 'image', 'decision'] }, { signal }), client.provider.list({ location: { directory } }, { signal })]);
-    return { models: models.data, providers: providers.data };
+  const { data, error, loading, refresh } = useResource(client ?? catalog, directory, async signal => {
+    const [models, providers] = await Promise.all([catalog.list({ location: { directory }, types: ['chat', 'image', 'decision'] }, { signal }), client?.provider.list({ location: { directory } }, { signal })]);
+    return { models: models.data, providers: providers?.data };
   });
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<ModelInfo>();
@@ -420,16 +421,17 @@ function Models({ client, directory }: { client: Client; directory: string }) {
   useEffect(() => setLimit(40), [query]);
   const search = query.trim().toLowerCase();
   const models = data?.models.filter(item => `${item.name} ${item.providerID} ${item.id}`.toLowerCase().includes(search)) ?? [];
+  const details = selected && (client ? selected : { id: selected.id, providerID: selected.providerID, name: selected.name, contextWindow: selected.limit.context, thinkingLevels: selected.variants.map(item => item.id) });
   return <Page error={error} loading={loading} refresh={refresh}>
     <Row style={{ flexWrap: 'nowrap', alignItems: 'flex-end' }}><Field label="Find a model" placeholder="Name or provider" value={query} onChangeText={setQuery} containerStyle={{ flex: 1 }} />{!!query && <Button title="Clear" accessibilityLabel="Clear model search" compact variant="ghost" onPress={() => setQuery('')} />}</Row>
-    <Label muted>Select a model inside a chat to use it. Edit configuration to change server defaults or custom providers.</Label>
+    <Label muted>Select a model inside a chat to use it.{client ? ' Edit configuration to change server defaults or custom providers.' : ''}</Label>
     <Label style={styles.sectionLabel}>{models.length} MODELS</Label>
     {models.slice(0, limit).map(item => <Card key={`${item.providerID}/${item.id}`}><Row style={{ justifyContent: 'space-between' }}><View style={{ flex: 1 }}><Label style={styles.name}>{item.name}</Label><Label muted>{item.providerID} · {item.enabled ? 'Available' : 'Not connected'}</Label></View><Button title="Details" compact onPress={() => setSelected(item)} /></Row></Card>)}
     {models.length > limit && <><Label muted>Showing {limit} of {models.length} models.</Label><Button title="Load more models" onPress={() => setLimit(value => value + 40)} /></>}
     {data && !loading && !!data.models.length && !!search && !models.length && <Card><Empty title="No matching models" detail="Try a model name, provider, or model ID, or clear the search to see all models." /><Button title="Clear search" onPress={() => setQuery('')} /></Card>}
     {data && !loading && !data.models.length && <Empty title="No models available" detail="Your server did not publish a model catalog for this project." />}
-    <Disclosure title={`Providers (${data?.providers.length ?? 0})`}>{data?.providers.map(item => <View key={item.id} style={{ gap: 4 }}><Label>{item.name}</Label><Label muted>{item.id} · {item.activation}</Label></View>)}</Disclosure>
-    <Sheet visible={!!selected} title={selected?.name || 'Model'} onClose={() => setSelected(undefined)}>{selected && <><Label muted>{selected.providerID}/{selected.id}</Label><Label>Context: {selected.limit.context.toLocaleString()} tokens · Output: {selected.limit.output.toLocaleString()} tokens</Label><Label>Variants: {selected.variants.map(item => item.id).join(', ') || 'Default'}</Label><Disclosure title="Capabilities"><JsonView value={selected.capabilities} /></Disclosure><Disclosure title="Prices"><JsonView value={selected.cost} /></Disclosure><Disclosure title="Details"><JsonView value={selected} /></Disclosure></>}</Sheet>
+    {client && <Disclosure title={`Providers (${data?.providers?.length ?? 0})`}>{data?.providers?.map(item => <View key={item.id} style={{ gap: 4 }}><Label>{item.name}</Label><Label muted>{item.id} · {item.activation}</Label></View>)}</Disclosure>}
+    <Sheet visible={!!selected} title={selected?.name || 'Model'} onClose={() => setSelected(undefined)}>{selected && <><Label muted>{selected.providerID}/{selected.id}</Label><Label>Context: {selected.limit.context.toLocaleString()} tokens{client ? ` · Output: ${selected.limit.output.toLocaleString()} tokens` : ''}</Label><Label>Variants: {selected.variants.map(item => item.id).join(', ') || (client ? 'Default' : 'Unavailable')}</Label>{client ? <><Disclosure title="Capabilities"><JsonView value={selected.capabilities} /></Disclosure><Disclosure title="Prices"><JsonView value={selected.cost} /></Disclosure></> : <Label muted>Output limits and prices are unavailable from this server.</Label>}<Disclosure title="Details"><JsonView value={details} /></Disclosure></>}</Sheet>
   </Page>;
 }
 

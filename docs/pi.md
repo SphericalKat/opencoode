@@ -51,7 +51,8 @@ Pi does not install dependencies for local packages, so the separate dependency 
 ## Shared mobile interface
 
 OpenCode and Pi use the same `ChatScreen` and conversation components.
-Both connections use the same Appearance editor and Servers navigation.
+Both connections use the same Appearance editor, Models page, and Servers navigation.
+OpenCode-specific settings remain available on OpenCode connections.
 
 The shared screen supplies these controls:
 
