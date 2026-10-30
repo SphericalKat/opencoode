@@ -122,6 +122,7 @@ I sent a prompt from Android, opened its real bash output, and read the response
 I created a session from Android and reopened the original without another pair step.
 I opened the long-press action bar on a message.
 I received a terminal prompt and its live tool status on Android, then used Jump to latest after the response.
+I restored the saved OpenCode connection and stopped the separate Pi review process.
 
 I did not run automated tests, typechecks, linters, or builds.
 I did not verify image uploads or iOS on a device.
