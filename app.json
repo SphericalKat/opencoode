@@ -16,12 +16,12 @@
           "NSAllowsArbitraryLoads": true
         }
       },
-      "buildNumber": "1.1.0"
+      "buildNumber": "1.2.0"
     },
     "android": {
       "package": "dev.opencoode.mobile",
       "predictiveBackGestureEnabled": true,
-      "versionCode": 10100
+      "versionCode": 10200
     },
     "plugins": [
       "expo-secure-store",
