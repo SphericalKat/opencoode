@@ -34,6 +34,49 @@ export function PressFeedback({ pressed, disabled, children, style }: { pressed:
   }]}>{children}</Animated.View>;
 }
 
+export function MotionDisclosureChevron({ open, children, style }: { open: boolean; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const reduced = useMotionPreference();
+  return <Animated.View aria-hidden style={[styles.indicator, style, {
+    transform: [{ rotate: open ? '90deg' : '0deg' }],
+    transitionProperty: reduced ? 'none' : 'transform',
+    transitionDuration: 140,
+    transitionTimingFunction: easePress,
+  }]}>{children}</Animated.View>;
+}
+
+export function MotionDisclosureBody({ open, children, style }: { open: boolean; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const reduced = useMotionPreference();
+  const [presented, setPresented] = useState(open);
+  const progress = useSharedValue(open ? 1 : 0);
+  const initial = useRef(true);
+  const alive = useRef(true);
+  const requested = useRef(open);
+  requested.current = open;
+  const revision = useRef(0);
+  const finishClose = useCallback((request: number) => {
+    if (alive.current && request === revision.current && !requested.current) setPresented(false);
+  }, []);
+  useLayoutEffect(() => {
+    if (initial.current) { initial.current = false; return; }
+    const request = ++revision.current;
+    cancelAnimation(progress);
+    if (open) setPresented(true);
+    progress.set(withTiming(open ? 1 : 0, { duration: reduced ? 80 : open ? 140 : 110, easing: easeContent, reduceMotion: ReduceMotion.Never }, finished => {
+      if (finished && !open) scheduleOnRN(finishClose, request);
+    }));
+  }, [open, reduced, progress, finishClose]);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; revision.current++; cancelAnimation(progress); };
+  }, [progress]);
+  const reveal = useAnimatedStyle(() => ({
+    opacity: progress.get(),
+    transform: [{ translateY: reduced ? 0 : -3 * (1 - progress.get()) }],
+  }), Platform.OS === 'web' ? [reduced] : undefined);
+  if (!presented) return null;
+  return <Animated.View pointerEvents={open ? 'auto' : 'none'} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'} style={[style, reveal]}>{children}</Animated.View>;
+}
+
 export function MotionScreen({ visible, children, style }: { visible: boolean; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   const reduced = useMotionPreference();
   const progress = useSharedValue(0);

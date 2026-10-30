@@ -1,18 +1,22 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, AppState, BackHandler, FlatList, Image, Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextInputProps } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { KeyboardAvoidingView, KeyboardEvents } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, KeyboardEvents, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
 import type { AgentInfo, CommandInfo, FileDiffInfo, FileSystemEntry, FormInfo, ModelInfo, OpenCodeEvent, PermissionRequest, ProviderInfo, SessionInboxInfo, SessionInfo, SessionMessageAssistant, SessionMessageInfo, SessionPromptInput, SessionStatus, SkillInfo } from '@opencode/client';
-import { errorMessage, type Client } from '../lib/client';
+import { errorMessage, isConnectionUnauthorized, type Client } from '../lib/client';
 import { isAssistantProgress, mergeMessages, parseComposer, projectLiveEvents, serverFileUri } from '../lib/chat';
 import { Button, Busy, Card, confirmAction, Disclosure, Empty, ErrorNotice, Field, Heading, JsonView, Label, mono, Row, Sheet } from '../components/ui';
 import { SessionForms } from '../components/SessionForms';
 import { Markdown } from '../components/Markdown';
+import { UserMessageBubble } from '../components/UserMessageBubble';
+import { ResponseFooter } from '../components/ResponseFooter';
 import { Instructions } from '../components/Instructions';
 import { Schedules } from '../components/Schedules';
 import { loadDraft, saveDraft } from '../lib/drafts';
@@ -20,23 +24,25 @@ import { useUnsavedChanges } from '../lib/unsaved';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { ShellIcon } from '../components/ShellIcon';
 import { MotionContent, PressFeedback, WorkingIndicator } from '../components/motion';
-import { ActivityDisclosure, AgentActivityBar } from '../components/AgentActivity';
-import { sessionActivity, toolActivityLabel, type AgentActivity } from '../lib/activity';
+import { AgentActivityBar } from '../components/AgentActivity';
+import { AssistantActivityPart as AssistantPart, AssistantTurn, groupTranscriptMessages, type TranscriptItem } from '../components/AssistantTurn';
+import { sessionActivity, type AgentActivity } from '../lib/activity';
 import { createStreamBatch } from '../lib/streamBatch';
 import { BackgroundCommands } from '../components/BackgroundCommands';
 import { ChildSessions } from '../components/ChildSessions';
 import { SessionStats } from '../components/SessionStats';
 import { SideQuestion } from '../components/SideQuestion';
 import { McpResources } from '../components/McpResources';
-import { ArtifactContent } from '../components/ArtifactContent';
 import { modelPreferenceID, useModelPreferences } from '../lib/modelPreferences';
 import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
 import { useNativePresentation } from '../lib/sheets';
 import { pageInset } from '../lib/layout';
 import { useBetaLayout } from '../lib/betaLayout';
+import type { ChatBackend, ChatBackendSnapshot } from '../lib/chatBackend';
 
 type Props = {
-  client: Client;
+  backend: ChatBackend;
+  onConnectionLost?: (error: unknown) => void;
   sessionID: string;
   onSessionChanged: () => void;
   onOpenSession: (id: string) => void;
@@ -56,15 +62,19 @@ type Props = {
 type Attachment = NonNullable<SessionPromptInput['files']>[number];
 type Panel = 'actions' | 'variants' | 'models' | 'agents' | 'commands' | 'mentions' | 'tools' | 'message' | 'selectText' | 'diff' | 'context' | 'instructions' | 'schedules' | 'background' | 'children' | 'stats' | 'btw' | 'resources' | null;
 type SyncScope = 'metadata' | 'history' | 'inbox' | 'requests';
-const messageKey = (message: SessionMessageInfo) => message.id;
-const messageType = (message: SessionMessageInfo) => message.type;
-const MessageSeparator = ({ leadingItem, trailingItem }: { leadingItem?: SessionMessageInfo; trailingItem?: SessionMessageInfo }) => <View style={{ height: leadingItem?.type === 'assistant' && trailingItem?.type === 'assistant' ? 10 : 24 }} />;
+const providerLabels = new Map([['openai', 'OpenAI'], ['openai-codex', 'OpenAI Codex']]);
+const messageKey = (item: TranscriptItem) => item.id;
+const messageType = (item: TranscriptItem) => item.type === 'message' ? item.message.type : item.type;
+const MessageSeparator = () => <View style={{ height: 24 }} />;
 
 export function ChatScreen(props: Props) {
   return <ChatSession key={props.sessionID} {...props} />;
 }
 
-function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attachmentPath, attachmentContext, onAttachmentConsumed, draftKey = sessionID, visible = true, onOpenNavigation, projectLabel, serverID, betaLayout = false, onSelectionChange, onSessionInfo, sessionPanelRequest }: Props) {
+function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, onOpenSession, attachmentPath, attachmentContext, onAttachmentConsumed, draftKey = sessionID, visible = true, onOpenNavigation, projectLabel, serverID, betaLayout = false, onSelectionChange, onSessionInfo, sessionPanelRequest }: Props) {
+  const client = backend.core;
+  const opencodeClient = backend.opencodeClient;
+  const capabilities = backend.capabilities;
   const { colors } = useTheme();
   const { fontScale } = useWindowDimensions();
   const minimumComposerHeight = Math.max(44, Math.ceil(betaLayout ? 22 * fontScale + 20 : 24 * fontScale + 12));
@@ -108,6 +118,15 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [syncErrors, setSyncErrors] = useState<Partial<Record<SyncScope, string>>>({});
   const [streamStatus, setStreamStatus] = useState('Connecting');
+  const [activityNotice, setActivityNotice] = useState(backend.activityNotice);
+  const [backendWaiting, setBackendWaiting] = useState<{ kind: 'approval' | 'question'; title: string }>();
+  const connectionFailures = useRef(0);
+  const connectionLost = useRef(onConnectionLost);
+  connectionLost.current = onConnectionLost;
+  const reportConnectionFailure = useCallback((reason: unknown) => {
+    connectionFailures.current++;
+    if (isConnectionUnauthorized(reason) || connectionFailures.current >= 2) connectionLost.current?.(reason);
+  }, []);
   const [panel, setPanel] = useState<Panel>(null);
   const [selectedMessageID, setSelectedMessageID] = useState<string | null>(null);
   const [textSelectionMessage, setTextSelectionMessage] = useState<SessionMessageInfo | null>(null);
@@ -127,7 +146,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const [awayFromLatest, setAwayFromLatest] = useState(false);
   const alive = useRef(true);
   const submitting = useRef(false);
-  const list = useRef<FlashListRef<SessionMessageInfo>>(null);
+  const list = useRef<FlashListRef<TranscriptItem>>(null);
+  const previousTranscript = useRef<TranscriptItem[]>([]);
   const nearEnd = useRef(true);
   const scrollMetrics = useRef({ content: 0, viewport: 0, offset: 0 });
   const followingLatestRef = useRef(true);
@@ -164,7 +184,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   useUnsavedChanges(`chat:${draftKey}`, 'Message draft', !!draft || attachments.length > 0 || selectedSkills.length > 0 || restoredSkillIDs.length > 0 || selectedAgentIDs.length > 0);
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; requestVersion.current++; }; }, []);
-  const showError = useCallback((reason: unknown) => { if (alive.current) setError(errorMessage(reason)); }, []);
+  const showError = useCallback((reason: unknown) => { if (!alive.current) return; setError(errorMessage(reason)); if (isConnectionUnauthorized(reason)) connectionLost.current?.(reason); }, []);
   const updateComposerHeight = useCallback<NonNullable<TextInputProps['onContentSizeChange']>>(event => setComposerHeight(Math.max(minimumComposerHeight, Math.min(maximumComposerHeight, event.nativeEvent.contentSize.height))), [minimumComposerHeight, maximumComposerHeight]);
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -202,8 +222,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   useEffect(() => {
     if (!visible || !sessionPanelRequest || sessionPanelRequest.sessionID !== sessionID || handledPanelRequest.current === sessionPanelRequest.id) return;
     handledPanelRequest.current = sessionPanelRequest.id;
-    setPanel(sessionPanelRequest.panel);
-  }, [visible, sessionID, sessionPanelRequest]);
+    if (sessionPanelRequest.panel !== 'stats' || capabilities.statistics) setPanel(sessionPanelRequest.panel);
+  }, [visible, sessionID, sessionPanelRequest, capabilities.statistics]);
   const setFollowing = useCallback((follow: boolean) => {
     followingLatestRef.current = follow;
     if (!follow && followFrame.current !== undefined) { cancelAnimationFrame(followFrame.current); followFrame.current = undefined; }
@@ -212,6 +232,9 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   }, []);
   const disclosures = useMemo(() => ({
     isOpen: (key: string) => expandedParts.current.has(key),
+    setOpen: (key: string, open: boolean) => {
+      if (open) expandedParts.current.add(key); else expandedParts.current.delete(key);
+    },
     toggle: (key: string) => {
       followKeyboard.current = false;
       setFollowing(false);
@@ -269,10 +292,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   }, [measureEndDistance, followContent]);
   const updateScrollPosition = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-    const previousOffset = scrollMetrics.current.offset;
     scrollMetrics.current = { content: contentSize.height, viewport: layoutMeasurement.height, offset: contentOffset.y };
     measureEndDistance();
-    if (Platform.OS !== 'web' && contentOffset.y < previousOffset - 1 && !nearEnd.current) setFollowing(false);
     if (Platform.OS === 'web' && userScrolling.current && nearEnd.current && wheelDirection.current >= 0) setFollowing(true);
   }, [setFollowing, measureEndDistance]);
   const beginUserScroll = useCallback(() => {
@@ -309,13 +330,13 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       const row = selectedRow(event.target);
       if (!row) return;
       event.preventDefault();
-      selectMessage(row.id.slice('chat-message-'.length));
+      selectMessage(decodeURIComponent(row.id.slice('chat-message-'.length).split(':')[0]));
     };
     const keyboard = (event: KeyboardEvent) => {
       const row = selectedRow(event.target);
       if (!row || event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10') && !(event.target === row && (event.key === 'Enter' || event.key === ' '))) return;
       event.preventDefault();
-      selectMessage(row.id.slice('chat-message-'.length));
+      selectMessage(decodeURIComponent(row.id.slice('chat-message-'.length).split(':')[0]));
     };
     node.addEventListener('wheel', wheel, { passive: true });
     node.addEventListener('touchmove', touch, { passive: true });
@@ -353,8 +374,9 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       frame = requestAnimationFrame(() => { if (alive.current && followingLatestRef.current && !userScrolling.current && transcriptVisible.current) jumpToLatest(); });
     });
     const willHide = KeyboardEvents.addListener('keyboardWillHide', () => { followKeyboard.current = false; if (frame !== undefined) cancelAnimationFrame(frame); });
-    return () => { willShow.remove(); didShow.remove(); willHide.remove(); followKeyboard.current = false; if (frame !== undefined) cancelAnimationFrame(frame); };
-  }, [foreground, visible, panel, jumpToLatest]);
+    const didHide = KeyboardEvents.addListener('keyboardDidHide', followContent);
+    return () => { willShow.remove(); didShow.remove(); willHide.remove(); didHide.remove(); followKeyboard.current = false; if (frame !== undefined) cancelAnimationFrame(frame); };
+  }, [foreground, visible, panel, jumpToLatest, followContent]);
 
   useEffect(() => {
     let cancelled = false;
@@ -382,14 +404,14 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     setRestoredSkillIDs(current => current.filter(id => !resolved.some(skill => skill.id === id)));
   }, [skills, restoredSkillIDs]);
   useEffect(() => {
-    if (panel !== 'mentions' || !session) return;
+    if (panel !== 'mentions' || !session || !opencodeClient || !capabilities.files) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setFileSearchBusy(true);
-      void client.file.find({ location: { directory: session.location.directory }, query: fileQuery, type: 'file', limit: 40 }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setFileResults(value.data); }).catch(reason => { if (!controller.signal.aborted) showError(reason); }).finally(() => { if (!controller.signal.aborted) setFileSearchBusy(false); });
+      void opencodeClient.file.find({ location: { directory: session.location.directory }, query: fileQuery, type: 'file', limit: 40 }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setFileResults(value.data); }).catch(reason => { if (!controller.signal.aborted) showError(reason); }).finally(() => { if (!controller.signal.aborted) setFileSearchBusy(false); });
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [panel, client, session?.location.directory, fileQuery, showError]);
+  }, [panel, opencodeClient, capabilities.files, session?.location.directory, fileQuery, showError]);
 
   const refresh = useCallback(async (signal?: AbortSignal): Promise<void> => {
     flushStream.current();
@@ -404,11 +426,11 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     const results = await Promise.allSettled([
       sessionRequest,
       client.message.list({ sessionID, limit: 80, order: 'desc' }, opts),
-      client.session.inbox.list({ sessionID }, opts),
-      client.session.form.list({ sessionID }, opts),
-      client.permission.list({ sessionID }, opts),
+      opencodeClient && capabilities.inbox ? opencodeClient.session.inbox.list({ sessionID }, opts) : undefined,
+      opencodeClient && capabilities.forms ? opencodeClient.session.form.list({ sessionID }, opts) : undefined,
+      opencodeClient && capabilities.permissions ? opencodeClient.permission.list({ sessionID }, opts) : undefined,
       client.session.active(opts),
-      sessionRequest.then(info => client.form.list({ location: { directory: info.location.directory } }, opts)),
+      opencodeClient && capabilities.forms ? sessionRequest.then(info => opencodeClient.form.list({ location: { directory: info.location.directory } }, opts)) : undefined,
     ] as const);
     if (!alive.current || signal?.aborted || version !== requestVersion.current) return;
     const [sessionResult, messageResult, inboxResult, formsResult, permissionsResult, activeResult, globalFormsResult] = results;
@@ -421,9 +443,9 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       applyMessageSnapshot(messageResult.value.data, reset);
       if (reset) { setCursor(messageResult.value.data.length === 80 ? messageResult.value.cursor.next ?? undefined : undefined); appliedHistoryEpoch.current = historyVersion; }
     }
-    if (inboxResult.status === 'fulfilled') setInbox(inboxResult.value);
-    if (formsResult.status === 'fulfilled' || globalFormsResult.status === 'fulfilled') setForms(current => [...(formsResult.status === 'fulfilled' ? formsResult.value : current.filter(form => form.sessionID === sessionID)), ...(globalFormsResult.status === 'fulfilled' ? globalFormsResult.value.data.filter(form => form.sessionID === 'global') : current.filter(form => form.sessionID === 'global'))]);
-    if (permissionsResult.status === 'fulfilled') setPermissions(permissionsResult.value);
+    if (inboxResult.status === 'fulfilled' && inboxResult.value) setInbox(inboxResult.value);
+    if (opencodeClient && capabilities.forms) setForms(current => [...(formsResult.status === 'fulfilled' && formsResult.value ? formsResult.value : current.filter(form => form.sessionID === sessionID)), ...(globalFormsResult.status === 'fulfilled' && globalFormsResult.value ? globalFormsResult.value.data.filter(form => form.sessionID === 'global') : current.filter(form => form.sessionID === 'global'))]);
+    if (permissionsResult.status === 'fulfilled' && permissionsResult.value) setPermissions(permissionsResult.value);
     if (activeResult.status === 'fulfilled' && activityVersion === activityRevision.current) {
       const running = !!activeResult.value[sessionID];
       setActive(running);
@@ -431,6 +453,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     }
     const failed = results.find(result => result.status === 'rejected');
     setFetchError(failed?.status === 'rejected' ? errorMessage(failed.reason) : null);
+    if (sessionResult.status === 'rejected') reportConnectionFailure(sessionResult.reason);
     if (!failed) setSyncErrors({});
     setLoading(false);
     };
@@ -440,7 +463,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       refreshing.current = null;
       if (refreshAgain.current && alive.current) { refreshAgain.current = false; void refresh(signal?.aborted ? undefined : signal); }
     }
-  }, [client, sessionID, applyMessageSnapshot]);
+  }, [client, opencodeClient, capabilities, sessionID, applyMessageSnapshot, reportConnectionFailure]);
   refreshRef.current = () => { void refresh(); };
 
   useEffect(() => {
@@ -471,7 +494,23 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       });
     };
     const stream = createStreamBatch<OpenCodeEvent>(applyEvents, { frame: true });
-    flushStream.current = stream.flush;
+    const snapshots = createStreamBatch<ChatBackendSnapshot>(batch => {
+      const snapshot = batch[batch.length - 1];
+      if (!snapshot || controller.signal.aborted || !alive.current) return;
+      setStreamStatus('Live');
+      liveMessages.current.clear();
+      sessionDirectory.current = snapshot.session.location.directory;
+      setSession(snapshot.session);
+      setMessages(snapshot.messages);
+      setActive(snapshot.active);
+      setSessionStatus(snapshot.status ?? (snapshot.active ? { type: 'busy' } : { type: 'idle' }));
+      setActivityNotice(snapshot.activityNotice ?? backend.activityNotice);
+      setBackendWaiting(snapshot.waiting);
+      setFetchError(null);
+      setLoading(false);
+    }, { frame: true });
+    const flushPending = () => { stream.flush(); snapshots.flush(); };
+    flushStream.current = flushPending;
     const scheduleRefresh = () => {
       if (timer) return;
       timer = setTimeout(() => { timer = undefined; void refresh(controller.signal); }, 300);
@@ -495,20 +534,22 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
           if (!current()) return;
           applyMessageSnapshot(page.data);
         } else if (scope === 'inbox') {
-          const pending = await client.session.inbox.list({ sessionID }, options);
+          if (!opencodeClient || !capabilities.inbox) return;
+          const pending = await opencodeClient.session.inbox.list({ sessionID }, options);
           if (!current()) return;
           setInbox(pending);
         } else {
+          if (!opencodeClient) return;
           const directory = sessionDirectory.current;
           if (!directory) { scheduleRefresh(); return; }
           const [own, permissions, global] = await Promise.allSettled([
-            client.session.form.list({ sessionID }, options),
-            client.permission.list({ sessionID }, options),
-            client.form.list({ location: { directory } }, options),
+            capabilities.forms ? opencodeClient.session.form.list({ sessionID }, options) : undefined,
+            capabilities.permissions ? opencodeClient.permission.list({ sessionID }, options) : undefined,
+            capabilities.forms ? opencodeClient.form.list({ location: { directory } }, options) : undefined,
           ] as const);
           if (!current()) return;
-          if (permissions.status === 'fulfilled') setPermissions(permissions.value);
-          setForms(previous => [...(own.status === 'fulfilled' ? own.value : previous.filter(form => form.sessionID === sessionID)), ...(global.status === 'fulfilled' ? global.value.data.filter(form => form.sessionID === 'global') : previous.filter(form => form.sessionID === 'global'))]);
+          if (permissions.status === 'fulfilled' && permissions.value) setPermissions(permissions.value);
+          if (capabilities.forms) setForms(previous => [...(own.status === 'fulfilled' && own.value ? own.value : previous.filter(form => form.sessionID === sessionID)), ...(global.status === 'fulfilled' && global.value ? global.value.data.filter(form => form.sessionID === 'global') : previous.filter(form => form.sessionID === 'global'))]);
           const failure = [own, permissions, global].find(result => result.status === 'rejected');
           if (failure?.status === 'rejected') throw failure.reason;
         }
@@ -524,9 +565,21 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       while (!controller.signal.aborted) {
         try {
           setStreamStatus(attempts ? 'Reconnecting' : 'Connecting');
+          if (backend.subscribe) {
+            for await (const snapshot of backend.subscribe({ signal: controller.signal })) {
+              if (controller.signal.aborted) break;
+              attempts = 0;
+              connectionFailures.current = 0;
+              snapshots.push(snapshot);
+            }
+            if (!controller.signal.aborted) throw new Error('The live connection closed');
+            break;
+          }
+          if (!client.event) throw new Error('This connection does not provide live updates');
           for await (const event of client.event.subscribe({ signal: controller.signal })) {
             if (controller.signal.aborted) break;
             setStreamStatus('Live');
+            connectionFailures.current = 0;
             attempts = 0;
             if (event.type === 'server.connected') {
               stream.flush();
@@ -600,9 +653,10 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
           }
           if (!controller.signal.aborted) throw new Error('The live connection closed');
         } catch (reason) {
-          stream.flush();
+          flushPending();
           if (controller.signal.aborted) break;
           setStreamStatus('Reconnecting');
+          reportConnectionFailure(reason);
           if (attempts > 1) setFetchError(errorMessage(reason));
           await new Promise<void>(resolve => {
             retryResolve = resolve;
@@ -612,32 +666,32 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         }
       }
     })().catch(showError);
-    return () => { stream.flush(); stream.clear(); if (flushStream.current === stream.flush) flushStream.current = () => {}; controller.abort(); clearTimeout(timer); clearTimeout(retryTimer); for (const pending of scopeTimers.values()) clearTimeout(pending); retryResolve?.(); };
-  }, [client, sessionID, foreground, visible, refresh, showError, applyMessageSnapshot]);
+    return () => { controller.abort(); stream.clear(); snapshots.clear(); if (flushStream.current === flushPending) flushStream.current = () => {}; clearTimeout(timer); clearTimeout(retryTimer); for (const pending of scopeTimers.values()) clearTimeout(pending); retryResolve?.(); };
+  }, [backend, client, opencodeClient, capabilities, sessionID, foreground, visible, refresh, showError, applyMessageSnapshot, reportConnectionFailure]);
 
   useEffect(() => {
     if (!session || !foreground || !visible) return;
     const controller = new AbortController();
     const location = { directory: session.location.directory };
     void Promise.allSettled([
-      betaLayout ? client.provider.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setProviders(value.data); }) : Promise.resolve(),
+      betaLayout && opencodeClient ? opencodeClient.provider.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setProviders(value.data); }) : Promise.resolve(),
       client.model.list({ location, types: ['chat'] }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setModels(value.data); }),
-      client.agent.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setAgents(value.data); }),
-      client.command.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setCommands(value.data); }),
-      client.skill.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setSkills(value.data); }),
+      opencodeClient && capabilities.agents ? opencodeClient.agent.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setAgents(value.data); }) : Promise.resolve(),
+      opencodeClient && capabilities.commands ? opencodeClient.command.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setCommands(value.data); }) : Promise.resolve(),
+      opencodeClient && capabilities.skills ? opencodeClient.skill.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setSkills(value.data); }) : Promise.resolve(),
     ]).then(results => {
       const failed = results.find(result => result.status === 'rejected');
       if (!controller.signal.aborted) setCatalogError(failed?.status === 'rejected' ? errorMessage(failed.reason) : null);
     });
     return () => controller.abort();
-  }, [client, session?.location.directory, sessionID, !!session, foreground, visible, catalogRevision, betaLayout, showError]);
+  }, [client, opencodeClient, capabilities, session?.location.directory, sessionID, !!session, foreground, visible, catalogRevision, betaLayout, showError]);
 
   useEffect(() => {
-    if (!foreground || !visible || !session?.time.idle) return;
+    if (!opencodeClient || !foreground || !visible || !session?.time.idle) return;
     const controller = new AbortController();
-    void client.session.view({ sessionID, idle: session.time.idle }, { signal: controller.signal }).then(() => { if (!controller.signal.aborted) onSessionChangedRef.current(); }).catch(reason => { if (!controller.signal.aborted) showError(reason); });
+    void opencodeClient.session.view({ sessionID, idle: session.time.idle }, { signal: controller.signal }).then(() => { if (!controller.signal.aborted) onSessionChangedRef.current(); }).catch(reason => { if (!controller.signal.aborted) showError(reason); });
     return () => controller.abort();
-  }, [client, sessionID, session?.time.idle, foreground, visible, showError]);
+  }, [opencodeClient, sessionID, session?.time.idle, foreground, visible, showError]);
 
   useEffect(() => {
     if (session?.location.directory) onSessionChangedRef.current();
@@ -678,7 +732,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     if (!draftLoaded) return;
     if (!draft.trim() && !attachments.length && !selectedSkills.length && !restoredSkillIDs.length && !selectedAgentIDs.length) return;
     const btw = /^\/btw(?:\s+([\s\S]*))?$/.exec(draft.trim());
-    if (btw) {
+    if (btw && capabilities.sideQuestion && opencodeClient) {
       if (attachments.length || selectedSkills.length || restoredSkillIDs.length || selectedAgentIDs.length) { showError(new Error('Side questions use the current session context. Remove unsent files, agents, or skills first.')); return; }
       setSideQuestion(btw[1] || '');
       setPanel('btw');
@@ -693,13 +747,17 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     setSending(true);
     try {
     await run(async () => {
-      const submission = parseComposer(sentText, commands.map(command => command.name));
+      const submission = capabilities.shell || capabilities.commands ? parseComposer(sentText, commands.map(command => command.name)) : { type: 'prompt' as const, text: sentText.trim() };
       if (submission.type === 'shell') {
         if (sentAttachments.length || sentSkillIDs.length || sentAgentIDs.length) throw new Error('Shell commands cannot include attachments, agents, or skills');
-        await client.session.shell({ sessionID, command: submission.command });
+        if (!opencodeClient || !capabilities.shell) throw new Error('Shell commands are unavailable for this connection');
+        await opencodeClient.session.shell({ sessionID, command: submission.command });
       } else {
         const common = { sessionID, files: sentAttachments, skills: sentSkillIDs.map(id => ({ id })), agents: sentAgentIDs.map(name => ({ name })), delivery };
-        if (submission.type === 'command') await client.session.command({ ...common, name: submission.name, text: submission.text });
+        if (submission.type === 'command') {
+          if (!opencodeClient || !capabilities.commands) throw new Error('Commands are unavailable for this connection');
+          await opencodeClient.session.command({ ...common, name: submission.name, text: submission.text });
+        }
         else await client.session.prompt({ ...common, text: submission.text });
       }
       if (alive.current) {
@@ -724,10 +782,10 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   useEffect(() => { if (!active) setStopping(false); }, [active]);
 
   const attachDevice = async () => {
-    if (!draftLoaded || !alive.current || devicePickerActive.current) return;
+    if (!capabilities.attachments || !draftLoaded || !alive.current || devicePickerActive.current) return;
     devicePickerActive.current = true;
     try {
-      const result = await withNativePresentation(() => DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true }));
+      const result = await withNativePresentation(() => DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true, ...(backend.kind === 'pi' ? { type: 'image/*' } : {}) }));
       if (result.canceled) return;
       const files: Attachment[] = [];
       for (const asset of result.assets) {
@@ -768,10 +826,10 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   };
 
   const editInbox = (item: SessionInboxInfo) => run(async () => {
-    if (!draftLoaded) return;
+    if (!opencodeClient || !capabilities.inbox || !draftLoaded) return;
     if (item.type !== 'user' && item.type !== 'synthetic') return;
     if ((draft || attachments.length || selectedSkills.length || restoredSkillIDs.length || selectedAgentIDs.length) && !await confirmAction('Replace the message draft?', 'This opens the pending input in the composer and replaces the current draft.')) return;
-    await client.session.inbox.cancel({ sessionID, inboxID: item.id });
+    await opencodeClient.session.inbox.cancel({ sessionID, inboxID: item.id });
     if (!alive.current) return;
     setDraft(item.payload.text);
     setDelivery(item.delivery);
@@ -797,14 +855,15 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   };
 
   const inspect = async (target: 'diff' | 'context') => {
+    if (!opencodeClient || !capabilities[target]) return;
     setPanel(target);
     setPanelLoading(true);
     try {
       if (target === 'diff') {
-        const value = await client.session.diff({ sessionID });
+        const value = await opencodeClient.session.diff({ sessionID });
         if (alive.current) setDiffs(value);
       } else {
-        const value = await client.session.context({ sessionID });
+        const value = await opencodeClient.session.context({ sessionID });
         if (alive.current) setContext(value);
       }
     } catch (reason) { showError(reason); }
@@ -812,7 +871,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   };
 
   const exportSession = () => run(async () => {
-    const value = await client.experimental.session.export({ sessionID });
+    if (!opencodeClient || !capabilities.export) return;
+    const value = await opencodeClient.experimental.session.export({ sessionID });
     const content = JSON.stringify(value, null, 2);
     const filename = `${sessionID.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
     if (Platform.OS === 'web') {
@@ -832,7 +892,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
 
   const currentModel = useMemo(() => models.find(model => model.id === session?.model?.id && model.providerID === session?.model.providerID), [models, session?.model?.id, session?.model?.providerID]);
   const providerID = currentModel?.providerID || session?.model?.providerID;
-  const providerLabel = providers.find(provider => provider.id === providerID)?.name || providerID?.replace(/[-_]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+  const providerLabel = providers.find(provider => provider.id === providerID)?.name || (providerID ? providerLabels.get(providerID) : undefined) || providerID?.replace(/[-_]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
   const actionMessage = selectedMessageID ? messages.find(message => message.id === selectedMessageID) : undefined;
   const enabledModels = useMemo(() => models.filter(model => model.enabled), [models]);
   const preferredIDs = modelFilter === 'favorites' ? modelPreferences.favoriteIDs : modelPreferences.recentIDs;
@@ -845,7 +905,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     const timer = setTimeout(() => setStopReady(true), 400);
     return () => clearTimeout(timer);
   }, [active, hasPrompt]);
-  const activity = useMemo(() => sessionActivity(messages, active, sessionStatus, permissions.filter(permission => permission.sessionID === sessionID).length, forms.filter(form => form.sessionID === sessionID).length), [messages, active, sessionStatus, permissions, forms, sessionID]);
+  const activity = useMemo<AgentActivity>(() => backendWaiting ? { kind: backendWaiting.kind, label: backendWaiting.title } : sessionActivity(messages, active, sessionStatus, permissions.filter(permission => permission.sessionID === sessionID).length, forms.filter(form => form.sessionID === sessionID).length), [messages, active, sessionStatus, permissions, forms, sessionID, backendWaiting]);
   const showActivityBar = streamStatus !== 'Live' || stopping || ['retry', 'approval', 'question', 'error'].includes(activity.kind);
   const showHeaderActivity = active && !showActivityBar && (awayFromLatest || !['thinking', 'tool', 'writing'].includes(activity.kind));
   const showLatestControl = !followingLatest && awayFromLatest && !['approval', 'question'].includes(activity.kind);
@@ -856,29 +916,37 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     await modelPreferences.recordRecent(model.providerID, model.id);
   }, closePanel);
   const messageDirectory = session?.location.directory || '';
-  const transcriptMessages = useMemo(() => messages.filter(message => message.type !== 'idle' || !!message.error), [messages]);
-  const renderMessage = useCallback(({ item }: { item: SessionMessageInfo }) => <MessageRow message={item} live={item.id === liveMessageID} activityKind={item.id === liveMessageID ? activity.kind : undefined} animate={visible && foreground && streamStatus === 'Live'} onSelect={selectMessage} selected={item.id === selectedMessageID} selectionActive={!!selectedMessageID} screenReader={screenReader} client={client} directory={messageDirectory} />, [selectMessage, selectedMessageID, screenReader, client, messageDirectory, liveMessageID, activity.kind, visible, foreground, streamStatus]);
+  const transcriptMessages = useMemo(() => {
+    const grouped = groupTranscriptMessages(messages, previousTranscript.current);
+    previousTranscript.current = grouped;
+    return grouped;
+  }, [messages]);
+  const renderSource = useCallback((message: SessionMessageAssistant, sourceKey: string, content: React.ReactNode) => <MessageRow key={sourceKey} sourceKey={sourceKey} message={message} onSelect={selectMessage} selected={message.id === selectedMessageID} selectionActive={!!selectedMessageID} screenReader={screenReader} client={opencodeClient} directory={messageDirectory}>{content}</MessageRow>, [selectMessage, selectedMessageID, screenReader, opencodeClient, messageDirectory]);
+  const renderMessage = useCallback(({ item }: { item: TranscriptItem }) => item.type === 'assistant-turn'
+    ? <AssistantTurn key={item.id} turn={item} liveMessageID={liveMessageID} activityKind={activity.kind} animate={visible && foreground && streamStatus === 'Live'} client={opencodeClient} directory={messageDirectory} renderSource={renderSource} />
+    : <MessageRow message={item.message} animate={visible && foreground && streamStatus === 'Live'} onSelect={selectMessage} selected={item.id === selectedMessageID} selectionActive={!!selectedMessageID} screenReader={screenReader} client={opencodeClient} directory={messageDirectory} />, [renderSource, selectMessage, selectedMessageID, screenReader, opencodeClient, messageDirectory, liveMessageID, activity.kind, visible, foreground, streamStatus]);
   const canCopySelected = actionMessage?.type === 'assistant' ? actionMessage.content.some(part => part.type === 'text' && !!part.text) : !!actionMessage;
   const copySelected = () => { if (actionMessage) { const messageID = actionMessage.id; const text = messageText(actionMessage); if (text) void Clipboard.setStringAsync(text).then(() => { if (alive.current) setSelectedMessageID(current => current === messageID ? null : current); }).catch(showError); } };
 
   if (!session) return <View style={styles.container}>{!betaLayout && <View style={styles.header}>{onOpenNavigation && <View style={styles.headerLeading}><ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} /></View>}<View style={[styles.headerTitle, onOpenNavigation && styles.headerTitleWithNavigation]}><Label numberOfLines={1} style={styles.sessionTitle}>{loading ? 'Loading session' : 'Session unavailable'}</Label><Label numberOfLines={1} muted style={styles.projectLabel}>{projectLabel || 'OpenCode'}</Label></View></View>}{loading ? <Busy /> : <View style={{ padding: 16 }}><ErrorNotice error={error || fetchError || 'The session is unavailable'} onRetry={() => { void refresh(); }} /></View>}</View>;
-  return <View style={styles.frame}><KeyboardAvoidingView style={styles.container} behavior="padding" automaticOffset enabled={visible && !panel}>
-    {(!betaLayout || !!actionMessage) && <MotionContent variant="context" transitionKey={!!actionMessage} style={[styles.header, !!actionMessage && styles.selectionHeader]}>{actionMessage ? <><View style={styles.headerLeading}><ChatIconButton name="close" label="Close message selection" onPress={() => setSelectedMessageID(null)} /></View><Label accessibilityRole="header" style={styles.selectionCount}>1 selected</Label><Button title="Copy" compact variant="ghost" disabled={!canCopySelected} onPress={copySelected} />{actionMessage.type === 'user' ? <Button title="Edit" compact variant="ghost" disabled={!draftLoaded || pending} onPress={() => { void editMessage(actionMessage); }} /> : <Button title="Fork" compact variant="ghost" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }); }} />}<View style={styles.headerTrailing}><ChatIconButton name="more" label="Selected message actions" onPress={() => setPanel('message')} /></View></> : <>
+  return <View style={styles.frame}><ChatKeyboardView enabled={visible && !panel}>
+    {(!betaLayout || !!actionMessage) && <MotionContent variant="context" transitionKey={!!actionMessage} style={[styles.header, !!actionMessage && styles.selectionHeader]}>{actionMessage ? <><View style={styles.headerLeading}><ChatIconButton name="close" label="Close message selection" onPress={() => setSelectedMessageID(null)} /></View><Label accessibilityRole="header" style={styles.selectionCount}>1 selected</Label><Button title="Copy" compact variant="ghost" disabled={!canCopySelected} onPress={copySelected} />{actionMessage.type === 'user' ? <Button title="Edit" compact variant="ghost" disabled={!draftLoaded || pending} onPress={() => { void editMessage(actionMessage); }} /> : capabilities.forkMessage && (!backend.canForkMessage || backend.canForkMessage(actionMessage)) ? <Button title="Fork" compact variant="ghost" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }); }} /> : null}<View style={styles.headerTrailing}><ChatIconButton name="more" label="Selected message actions" onPress={() => setPanel('message')} /></View></> : <>
       {onOpenNavigation && <View style={styles.headerLeading}><ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} /></View>}
       <View style={[styles.headerTitle, onOpenNavigation && styles.headerTitleWithNavigation]}><Label numberOfLines={1} accessibilityLabel={session.title || 'New session'} style={styles.sessionTitle}>{session.title || 'New session'}</Label><View style={styles.headerSubtitle}>{showHeaderActivity && <WorkingIndicator active={visible && foreground} color={colors.muted} size={12} />}<Label numberOfLines={1} muted style={styles.projectLabel}>{showHeaderActivity ? activity.label : projectLabel || session.location.directory.split('/').filter(Boolean).pop() || session.location.directory}</Label></View></View>
       <View style={styles.headerTrailing}><ChatIconButton name="more" label="Session actions" onPress={() => setPanel('actions')} /></View>
     </>}</MotionContent>}
     {error && <View style={styles.errorBanner}><ErrorNotice error={error} /><Button title="Dismiss" compact variant="ghost" onPress={() => setError(null)} /></View>}
     {(fetchError || catalogError || Object.values(syncErrors)[0]) && <View style={styles.errorBanner}><ErrorNotice error={fetchError || catalogError || Object.values(syncErrors)[0]} onRetry={() => { setCatalogRevision(value => value + 1); void refresh(); }} /></View>}
-    {session.revert && <View style={styles.revert}><Label>A revert is staged</Label><Label muted>Later messages are excluded from the context.</Label><Row><Button title="Restore" compact onPress={() => { void run(() => client.session.revert.clear({ sessionID })); }} /><Button title="Commit revert" compact variant="danger" disabled={pending} onPress={() => { void run(async () => { if (await confirmAction('Commit this revert?', 'This permanently removes messages after the revert point.')) { await client.session.revert.commit({ sessionID }); historyEpoch.current++; liveMessages.current.clear(); } }); }} /></Row></View>}
+    {opencodeClient && session.revert && <View style={styles.revert}><Label>A revert is staged</Label><Label muted>Later messages are excluded from the context.</Label><Row><Button title="Restore" compact onPress={() => { void run(() => opencodeClient.session.revert.clear({ sessionID })); }} /><Button title="Commit revert" compact variant="danger" disabled={pending} onPress={() => { void run(async () => { if (await confirmAction('Commit this revert?', 'This permanently removes messages after the revert point.')) { await opencodeClient.session.revert.commit({ sessionID }); historyEpoch.current++; liveMessages.current.clear(); } }); }} /></Row></View>}
     <MessageDisclosureContext.Provider value={disclosures}><View style={styles.transcriptFrame}><FlashList ref={list} data={transcriptMessages} keyExtractor={messageKey} getItemType={messageType} renderItem={renderMessage} ItemSeparatorComponent={MessageSeparator} maintainVisibleContentPosition={maintainPosition}
       style={styles.transcript} contentContainerStyle={betaLayout ? styles.betaMessages : styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} onLoad={listLoaded} onContentSizeChange={contentSizeChanged} onLayout={transcriptLayoutChanged}
       onScroll={updateScrollPosition} scrollEventThrottle={16} onScrollBeginDrag={beginUserScroll} onScrollEndDrag={finishUserScroll} onMomentumScrollBegin={beginUserScroll} onMomentumScrollEnd={finishUserScroll}
       ListHeaderComponent={cursor ? <Button title="Load earlier messages" variant="ghost" compact busy={loadingOlder} onPress={() => { setFollowing(false); void loadOlder(); }} /> : undefined}
       ListEmptyComponent={<Empty title="Start something good" detail="Ask a question, describe a change, or attach a file from your project." />}
       ListFooterComponent={<View style={{ gap: 12 }}>
-        {inbox.length > 0 && <Card><Label muted style={styles.eyebrow}>PENDING INPUTS · {inbox.length}</Label>{inbox.map(item => <View key={item.id} style={{ gap: 8 }}>{item.type === 'synthetic' ? <Disclosure disclosureKey={item.id} title={item.payload.description || 'Server context'}><MessageText text={item.payload.text} /></Disclosure> : <Label numberOfLines={3}>{item.type === 'user' ? item.payload.text : item.type === 'compaction' ? 'Compact context' : 'Move session'}</Label>}<Row><Label muted>{item.delivery === 'steer' ? 'Steer current work' : 'After current work'}</Label><Button disabled={pending} title={item.delivery === 'steer' ? 'Queue' : 'Steer'} compact onPress={() => { void run(() => client.session.inbox.update({ sessionID, inboxID: item.id, delivery: item.delivery === 'steer' ? 'queue' : 'steer' })); }} />{(item.type === 'user' || item.type === 'synthetic') && <Button title="Edit" compact disabled={!draftLoaded || pending} onPress={() => { void editInbox(item); }} />}<Button title="Cancel" compact variant="ghost" disabled={pending} onPress={() => { void run(() => client.session.inbox.cancel({ sessionID, inboxID: item.id })); }} /></Row></View>)}</Card>}
-        <SessionForms client={client} sessionID={sessionID} forms={forms} permissions={permissions} onChanged={refreshRef.current} onError={showError} locationDirectory={session.location.directory} />
+        {opencodeClient && capabilities.inbox && inbox.length > 0 && <Card><Label muted style={styles.eyebrow}>PENDING INPUTS · {inbox.length}</Label>{inbox.map(item => <View key={item.id} style={{ gap: 8 }}>{item.type === 'synthetic' ? <Disclosure disclosureKey={item.id} title={item.payload.description || 'Server context'}><MessageText text={item.payload.text} /></Disclosure> : <Label numberOfLines={3}>{item.type === 'user' ? item.payload.text : item.type === 'compaction' ? 'Compact context' : 'Move session'}</Label>}<Row><Label muted>{item.delivery === 'steer' ? 'Steer current work' : 'After current work'}</Label><Button disabled={pending} title={item.delivery === 'steer' ? 'Queue' : 'Steer'} compact onPress={() => { void run(() => opencodeClient.session.inbox.update({ sessionID, inboxID: item.id, delivery: item.delivery === 'steer' ? 'queue' : 'steer' })); }} />{(item.type === 'user' || item.type === 'synthetic') && <Button title="Edit" compact disabled={!draftLoaded || pending} onPress={() => { void editInbox(item); }} />}<Button title="Cancel" compact variant="ghost" disabled={pending} onPress={() => { void run(() => opencodeClient.session.inbox.cancel({ sessionID, inboxID: item.id })); }} /></Row></View>)}</Card>}
+        {opencodeClient && (capabilities.forms || capabilities.permissions) && <SessionForms client={opencodeClient} sessionID={sessionID} forms={forms} permissions={permissions} onChanged={refreshRef.current} onError={showError} locationDirectory={session.location.directory} />}
+        {activityNotice && <Card><Label muted>{activityNotice}</Label></Card>}
       </View>}
     />{betaLayout && showLatestControl && <View style={styles.betaLatestOverlay}><ChatIconButton name="down" label="Jump to latest" raised onPress={jumpToLatest} /></View>}</View></MessageDisclosureContext.Provider>
     <View style={[styles.composerDock, betaLayout && styles.betaComposerDock]}><AgentActivityBar activity={activity} connectionStatus={streamStatus} sending={sending} stopping={stopping} animate={visible && foreground} show={showActivityBar} onReview={jumpToLatest} /><View style={[styles.composer, betaLayout && styles.betaComposer]}>
@@ -889,33 +957,62 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         {restoredSkillIDs.map(id => <Button key={id} title={`${id} ×`} compact onPress={() => setRestoredSkillIDs(current => current.filter(value => value !== id))} />)}
         {selectedAgentIDs.map(id => <Button key={id} title={`@${agents.find(agent => agent.id === id)?.name || id} ×`} compact onPress={() => setSelectedAgentIDs(current => current.filter(value => value !== id))} />)}
       </ScrollView>}
-      <Field accessibilityLabel="Message" placeholder={betaLayout ? 'Ask anything, / for commands, @ for context…' : 'Ask OpenCode…'} multiline value={draft} onChangeText={setDraft} onContentSizeChange={updateComposerHeight} onFocus={() => setSelectedMessageID(null)} style={[styles.composerInput, betaLayout && styles.betaComposerInput, { minHeight: minimumComposerHeight, maxHeight: maximumComposerHeight, height: draft ? Math.max(minimumComposerHeight, composerHeight) : minimumComposerHeight }]} />
-      <View style={[styles.composerToolbar, betaLayout && styles.betaComposerToolbar]}><ChatIconButton name="plus" label="Message tools" compactFace={betaLayout} onPress={() => setPanel('tools')} /><Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${betaLayout && providerLabel ? `${providerLabel}, ` : ''}${currentModel?.name || session.model?.id || 'Server default'}`} onPress={() => setPanel('models')} style={({ pressed }) => [styles.modelTrigger, betaLayout && styles.betaModelTrigger, pressed && { opacity: 0.6 }]}>{betaLayout && providerLabel && <><Label numberOfLines={1} style={[styles.betaTriggerText, styles.betaProviderLabel]}>{providerLabel}</Label><Label muted style={styles.betaTriggerText}>/</Label></>}<Label numberOfLines={1} style={[styles.modelTriggerText, betaLayout && styles.betaTriggerText]}>{currentModel?.name || session.model?.id || 'Server default'}</Label><ChatGlyph name="down" size={betaLayout ? 12 : 14} color={colors.muted} /></Pressable>{betaLayout && !!currentModel?.variants.length && <Pressable accessibilityRole="button" accessibilityLabel={`Choose variant, ${session.model?.variant || 'Model default'}`} accessibilityState={{ disabled: pending }} disabled={pending} onPress={() => setPanel('variants')} style={({ pressed }) => [styles.betaVariantTrigger, pressed && { opacity: 0.6 }]}><Label numberOfLines={1} style={styles.betaTriggerText}>{session.model?.variant || 'Default'}</Label><ChatGlyph name="down" size={12} color={colors.muted} /></Pressable>}{betaLayout && active && hasPrompt && <ChatIconButton name="stop" label="Stop generation" compactFace disabled={pending || stopping} onPress={() => { void interrupt(); }} />}{!betaLayout && <>{active && hasPrompt && <Button title={delivery === 'steer' ? 'Steer' : 'Queue'} accessibilityLabel="Message delivery" compact variant="ghost" onPress={() => setDelivery(value => value === 'steer' ? 'queue' : 'steer')} />}{active && hasPrompt ? <ChatIconButton name='stop' label='Stop generation' disabled={pending || stopping} onPress={() => { void interrupt(); }} /> : showLatestControl ? <ChatIconButton name='down' label='Jump to latest' onPress={jumpToLatest} /> : null}</>}<ChatIconButton name={active && !hasPrompt ? 'stop' : 'up'} label={active && !hasPrompt ? 'Stop generation' : active && delivery === 'queue' ? 'Queue message' : 'Send message'} raised compactFace={betaLayout} busy={pending} disabled={active && !hasPrompt ? !stopReady || stopping : !hasPrompt} onPress={() => { if (active && !hasPrompt) void interrupt(); else void send(); }} /></View>
+      <Field accessibilityLabel="Message" placeholder={betaLayout && (capabilities.commands || capabilities.files) ? 'Ask anything, / for commands, @ for context…' : 'Ask anything…'} multiline value={draft} onChangeText={setDraft} onContentSizeChange={updateComposerHeight} onFocus={() => setSelectedMessageID(null)} style={[styles.composerInput, betaLayout && styles.betaComposerInput, { minHeight: minimumComposerHeight, maxHeight: maximumComposerHeight, height: draft ? Math.max(minimumComposerHeight, composerHeight) : minimumComposerHeight }]} />
+      <View style={[styles.composerToolbar, betaLayout && styles.betaComposerToolbar]}><ChatIconButton name="plus" label="Message tools" compactFace={betaLayout} onPress={() => setPanel('tools')} /><Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${betaLayout && providerLabel ? `${providerLabel}, ` : ''}${currentModel?.name || session.model?.id || 'Server default'}`} onPress={() => setPanel('models')} style={({ pressed }) => [styles.modelTrigger, betaLayout && styles.betaModelTrigger, pressed && { opacity: 0.6 }]}>{betaLayout && providerLabel && <><Label numberOfLines={1} style={[styles.betaTriggerText, styles.betaProviderLabel]}>{providerLabel}</Label><Label muted style={styles.betaTriggerText}>/</Label></>}<Label numberOfLines={1} style={[styles.modelTriggerText, betaLayout && styles.betaTriggerText, betaLayout && styles.betaModelName]}>{currentModel?.name || session.model?.id || 'Server default'}</Label><ChatGlyph name="down" size={betaLayout ? 12 : 14} color={colors.muted} /></Pressable>{betaLayout && !!currentModel?.variants.length && <Pressable accessibilityRole="button" accessibilityLabel={`Choose variant, ${session.model?.variant || 'Model default'}`} accessibilityState={{ disabled: pending }} disabled={pending} onPress={() => setPanel('variants')} style={({ pressed }) => [styles.betaVariantTrigger, pressed && { opacity: 0.6 }]}><Label numberOfLines={1} style={styles.betaTriggerText}>{session.model?.variant || 'Default'}</Label><ChatGlyph name="down" size={12} color={colors.muted} /></Pressable>}{betaLayout && active && hasPrompt && <ChatIconButton name="stop" label="Stop generation" compactFace disabled={pending || stopping} onPress={() => { void interrupt(); }} />}{!betaLayout && <>{capabilities.delivery && active && hasPrompt && <Button title={delivery === 'steer' ? 'Steer' : 'Queue'} accessibilityLabel="Message delivery" compact variant="ghost" onPress={() => setDelivery(value => value === 'steer' ? 'queue' : 'steer')} />}{active && hasPrompt ? <ChatIconButton name='stop' label='Stop generation' disabled={pending || stopping} onPress={() => { void interrupt(); }} /> : showLatestControl ? <ChatIconButton name='down' label='Jump to latest' onPress={jumpToLatest} /> : null}</>}<ChatIconButton name={active && !hasPrompt ? 'stop' : 'up'} label={active && !hasPrompt ? 'Stop generation' : active && delivery === 'queue' ? 'Queue message' : 'Send message'} raised compactFace={betaLayout} busy={pending} disabled={active && !hasPrompt ? !stopReady || stopping : !hasPrompt} onPress={() => { if (active && !hasPrompt) void interrupt(); else void send(); }} /></View>
       </>}
     </View></View>
     <Sheet visible={panel === 'actions'} title="Session" onClose={() => setPanel(null)}>
       <Label selectable style={{ fontSize: 18, lineHeight: 25 }}>{session.title || 'New session'}</Label>
       <ErrorNotice error={error} />
-      <Label muted>Tools</Label>
-      <View><PanelLink title="File changes" onPress={() => { void inspect('diff'); }} /><PanelLink title="Background commands" onPress={() => { setBackgroundShellID(undefined); setBackgroundDirectory(undefined); setPanel('background'); }} /><PanelLink title="Child sessions" onPress={() => setPanel('children')} /><PanelLink title="Side question · /btw" onPress={() => { setSideQuestion(undefined); setPanel('btw'); }} /></View>
-      <Label muted>Configure</Label>
-      <View><PanelLink title={`Agent · ${agents.find(agent => agent.id === session.agent)?.name || session.agent || 'Server default'}`} onPress={() => setPanel('agents')} /><PanelLink title="Model" onPress={() => setPanel('models')} /><PanelLink title="Instructions" onPress={() => setPanel('instructions')} /><PanelLink title="Schedules" onPress={() => setPanel('schedules')} /></View>
-      <Label muted>Details</Label>
-      <View><PanelLink title="Session statistics" onPress={() => setPanel('stats')} /><PanelLink title="Agent context" onPress={() => { void inspect('context'); }} /><PanelLink title="Export session" onPress={() => { void exportSession(); }} /></View>
-      <Disclosure title="Manage session"><Field label="Session title" value={title} onChangeText={setTitle} /><Button title="Rename" disabled={!title.trim()} busy={pending} onPress={() => { void run(() => client.session.update({ sessionID, title: title.trim() }), true); }} /><Field label="Move to server directory" placeholder="/path/to/project" value={moveDirectory} onChangeText={setMoveDirectory} /><Button title="Move session" disabled={!moveDirectory.startsWith('/') || pending} onPress={() => { void run(() => client.session.move({ sessionID, directory: moveDirectory, delivery }), true); }} /><Button title="Fork session" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID }); onOpenSession(next.id); }, true); }} /><Button title="Compact context" disabled={pending} onPress={() => { void run(() => client.session.compact({ sessionID, delivery: 'queue' }), true); }} />{active && <Button title="Background blocking tools" disabled={pending} onPress={() => { void run(() => client.session.background({ sessionID }), true); }} />}{(session.parentID || session.fork?.sessionID) && <Button title="Open source session" onPress={() => { setPanel(null); onOpenSession(session.parentID || session.fork!.sessionID); }} />}<Button title={session.time.archived ? 'Unarchive session' : 'Archive session'} disabled={pending} onPress={() => { void run(() => client.session.update({ sessionID, archived: !session.time.archived }), true); }} /><Button title="Delete session" variant="danger" disabled={pending} onPress={() => { void run(async () => { if (await confirmAction('Delete this session?', 'This permanently deletes this session and its messages.')) { await client.session.remove({ sessionID }); onOpenSession(''); } }, true); }} /></Disclosure>
+      {opencodeClient && (capabilities.diff || capabilities.background || capabilities.children || capabilities.sideQuestion) && <><Label muted>Tools</Label><View>
+        {capabilities.diff && <PanelLink title="File changes" onPress={() => { void inspect('diff'); }} />}
+        {capabilities.background && <PanelLink title="Background commands" onPress={() => { setBackgroundShellID(undefined); setBackgroundDirectory(undefined); setPanel('background'); }} />}
+        {capabilities.children && <PanelLink title="Child sessions" onPress={() => setPanel('children')} />}
+        {capabilities.sideQuestion && <PanelLink title="Side question · /btw" onPress={() => { setSideQuestion(undefined); setPanel('btw'); }} />}
+      </View></>}
+      <Label muted>Configure</Label><View>
+        {opencodeClient && capabilities.agents && <PanelLink title={`Agent · ${agents.find(agent => agent.id === session.agent)?.name || session.agent || 'Server default'}`} onPress={() => setPanel('agents')} />}
+        <PanelLink title="Model" onPress={() => setPanel('models')} />
+        {opencodeClient && capabilities.instructions && <PanelLink title="Instructions" onPress={() => setPanel('instructions')} />}
+        {opencodeClient && capabilities.schedules && <PanelLink title="Schedules" onPress={() => setPanel('schedules')} />}
+      </View>
+      {(capabilities.statistics || opencodeClient && (capabilities.context || capabilities.export)) && <><Label muted>Details</Label><View>
+        {capabilities.statistics && <PanelLink title="Session statistics" onPress={() => setPanel('stats')} />}
+        {opencodeClient && capabilities.context && <PanelLink title="Agent context" onPress={() => { void inspect('context'); }} />}
+        {opencodeClient && capabilities.export && <PanelLink title="Export session" onPress={() => { void exportSession(); }} />}
+      </View></>}
+      <Disclosure title="Manage session">
+        {capabilities.rename && <><Field label="Session title" value={title} onChangeText={setTitle} /><Button title="Rename" disabled={!title.trim()} busy={pending} onPress={() => { void run(() => client.session.update({ sessionID, title: title.trim() }), true); }} /></>}
+        {opencodeClient && capabilities.move && <><Field label="Move to server directory" placeholder="/path/to/project" value={moveDirectory} onChangeText={setMoveDirectory} /><Button title="Move session" disabled={!moveDirectory.startsWith('/') || pending} onPress={() => { void run(() => opencodeClient.session.move({ sessionID, directory: moveDirectory, delivery }), true); }} /></>}
+        {capabilities.forkSession && <Button title="Fork session" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID }); onOpenSession(next.id); }, true); }} />}
+        {capabilities.compact && <Button title="Compact context" disabled={pending} onPress={() => { void run(() => client.session.compact({ sessionID, delivery: 'queue' }), true); }} />}
+        {opencodeClient && capabilities.background && active && <Button title="Background blocking tools" disabled={pending} onPress={() => { void run(() => opencodeClient.session.background({ sessionID }), true); }} />}
+        {(session.parentID || session.fork?.sessionID) && <Button title="Open source session" onPress={() => { setPanel(null); onOpenSession(session.parentID || session.fork!.sessionID); }} />}
+        {opencodeClient && capabilities.archive && <Button title={session.time.archived ? 'Unarchive session' : 'Archive session'} disabled={pending} onPress={() => { void run(() => opencodeClient.session.update({ sessionID, archived: !session.time.archived }), true); }} />}
+        {opencodeClient && capabilities.remove && <Button title="Delete session" variant="danger" disabled={pending} onPress={() => { void run(async () => { if (await confirmAction('Delete this session?', 'This permanently deletes this session and its messages.')) { await opencodeClient.session.remove({ sessionID }); onOpenSession(''); } }, true); }} />}
+      </Disclosure>
       <Disclosure title="Raw session details"><JsonView value={session} /></Disclosure>
     </Sheet>
-    <Sheet visible={panel === 'variants'} title="Choose variant" fitContent onClose={() => setPanel(null)}><ErrorNotice error={error} />{currentModel && <><Button title="Model default" selected={!session.model?.variant} disabled={pending} onPress={() => { void chooseModel(currentModel, undefined, true); }} />{currentModel.variants.map(variant => <Button key={variant.id} title={variant.id} selected={session.model?.variant === variant.id} disabled={pending} onPress={() => { void chooseModel(currentModel, variant.id, true); }} />)}</>}</Sheet>
+    <Sheet visible={panel === 'variants'} title="Choose variant" fitContent onClose={() => setPanel(null)}><ErrorNotice error={error} />{currentModel && <>{capabilities.defaultVariant && <Button title="Model default" selected={!session.model?.variant} disabled={pending} onPress={() => { void chooseModel(currentModel, undefined, true); }} />}{currentModel.variants.map(variant => <Button key={variant.id} title={variant.id} selected={session.model?.variant === variant.id} disabled={pending} onPress={() => { void chooseModel(currentModel, variant.id, true); }} />)}</>}</Sheet>
     <Sheet visible={panel === 'models'} title="Choose model" scroll={false} onClose={() => setPanel(null)}>
       {panel === 'models' && <View style={{ flex: 1, minHeight: 0 }}><View style={styles.modelSearch}><Field label="Search models" value={modelSearch} onChangeText={setModelSearch} placeholder="Model or provider" /><Row><Button title="All" compact selected={modelFilter === 'all'} onPress={() => setModelFilter('all')} /><Button title="Favorites" compact selected={modelFilter === 'favorites'} onPress={() => setModelFilter('favorites')} /><Button title="Recent" compact selected={modelFilter === 'recent'} onPress={() => setModelFilter('recent')} /></Row><ErrorNotice error={error || catalogError || modelPreferences.error} onRetry={() => { modelPreferences.reload(); setCatalogRevision(value => value + 1); }} /></View>
       <FlatList data={filteredModels} keyExtractor={model => `${model.providerID}/${model.id}`} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets initialNumToRender={12} maxToRenderPerBatch={12} windowSize={5} contentContainerStyle={styles.modelList}
-        ListHeaderComponent={currentModel?.variants.length ? <View style={styles.variants}><Label muted>Variant · {currentModel.name}</Label><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}><Button title="Model default" compact selected={!session.model?.variant} disabled={pending} onPress={() => { void chooseModel(currentModel); }} />{currentModel.variants.map(variant => <Button key={variant.id} title={variant.id} selected={session.model?.variant === variant.id} compact disabled={pending} onPress={() => { void chooseModel(currentModel, variant.id); }} />)}</ScrollView></View> : undefined}
+        ListHeaderComponent={currentModel?.variants.length ? <View style={styles.variants}><Label muted>Variant · {currentModel.name}</Label><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>{capabilities.defaultVariant && <Button title="Model default" compact selected={!session.model?.variant} disabled={pending} onPress={() => { void chooseModel(currentModel); }} />}{currentModel.variants.map(variant => <Button key={variant.id} title={variant.id} selected={session.model?.variant === variant.id} compact disabled={pending} onPress={() => { void chooseModel(currentModel, variant.id); }} />)}</ScrollView></View> : undefined}
         renderItem={({ item: model }) => { const selected = session.model?.id === model.id && session.model.providerID === model.providerID; const favorite = modelPreferences.favoriteIDs.includes(modelPreferenceID(model.providerID, model.id)); return <Pressable accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: pending }} disabled={pending} onPress={() => { if (!selected) void chooseModel(model); }} style={({ pressed }) => [styles.modelRow, selected && { backgroundColor: colors.selected }, pressed && { opacity: 0.6 }]}><View style={{ flex: 1, minWidth: 0 }}><Label numberOfLines={2} style={{ fontWeight: '500' }}>{model.name}</Label><Label muted numberOfLines={1} style={{ fontSize: 12 }}>{model.providerID} · {model.limit.context.toLocaleString()} context</Label></View><ChatIconButton name="star" label={`${favorite ? 'Remove' : 'Add'} ${model.name} ${favorite ? 'from' : 'to'} favorites`} selected={favorite} disabled={!serverID || modelPreferences.loading || modelPreferences.saving} onPress={() => { void modelPreferences.toggleFavorite(model.providerID, model.id); }} /><View style={styles.radio}>{selected && <View style={styles.radioDot} />}</View></Pressable>; }}
         ListEmptyComponent={<View style={{ padding: 20, gap: 12 }}><Empty title={!enabledModels.length ? 'No connected models' : modelFilter !== 'all' && !scopedModels.length ? modelFilter === 'favorites' ? 'No favorite models' : 'No recent models' : 'No models match'} detail={!enabledModels.length ? 'Connect a provider in Settings, then refresh this list.' : modelFilter === 'favorites' && !scopedModels.length ? 'Tap the star beside a model to save it here.' : modelFilter === 'recent' && !scopedModels.length ? 'Models appear here after you select them.' : 'Try a model name or provider.'} />{enabledModels.length ? <Row>{modelSearch && <Button title="Clear search" onPress={() => setModelSearch('')} />}{modelFilter !== 'all' && <Button title="Show all models" onPress={() => setModelFilter('all')} />}</Row> : <><Button title="Refresh models" onPress={() => setCatalogRevision(value => value + 1)} />{onOpenNavigation && <Button title="Open navigation" onPress={() => { setPanel(null); onOpenNavigation(); }} />}</>}</View>} />
       </View>}
     </Sheet>
-    <Sheet visible={panel === 'agents'} title="Choose agent" onClose={() => setPanel(null)}><ErrorNotice error={error} />{agents.filter(agent => !agent.hidden && agent.mode !== 'subagent').map(agent => <Card key={agent.id}><Label style={{ fontWeight: '600' }}>{agent.name}</Label>{agent.description && <Label muted>{agent.description}</Label>}<Button title={session.agent === agent.id ? 'Selected' : 'Use agent'} selected={session.agent === agent.id} disabled={pending} onPress={() => { void run(() => client.session.switchAgent({ sessionID, agent: agent.id }), true); }} /></Card>)}</Sheet>
-    <Sheet visible={panel === 'tools'} title="Message tools" onClose={() => setPanel(null)} onDismiss={toolsDismissed}><Button title="Attach from device" disabled={!draftLoaded} onPress={queueDevicePicker} /><Button title="Files & agents" disabled={!draftLoaded} onPress={() => setPanel('mentions')} /><Button title="MCP resource references" disabled={!draftLoaded} onPress={() => setPanel('resources')} /><Button title="Commands & skills" disabled={!draftLoaded} onPress={() => setPanel('commands')} /><Button title="Ask a side question · /btw" onPress={() => { setSideQuestion(undefined); setPanel('btw'); }} /><Button title={`Agent: ${agents.find(agent => agent.id === session.agent)?.name || session.agent || 'Choose agent'}`} onPress={() => setPanel('agents')} /><Label muted>Message delivery</Label><Row><Button title="Steer current work" selected={delivery === 'steer'} onPress={() => setDelivery('steer')} /><Button title="Queue after current work" selected={delivery === 'queue'} onPress={() => setDelivery('queue')} /></Row><Label muted>Start a message with ! to run a shell command on the server.</Label></Sheet>
+    <Sheet visible={!!opencodeClient && capabilities.agents && panel === 'agents'} title="Choose agent" onClose={() => setPanel(null)}><ErrorNotice error={error} />{opencodeClient && agents.filter(agent => !agent.hidden && agent.mode !== 'subagent').map(agent => <Card key={agent.id}><Label style={{ fontWeight: '600' }}>{agent.name}</Label>{agent.description && <Label muted>{agent.description}</Label>}<Button title={session.agent === agent.id ? 'Selected' : 'Use agent'} selected={session.agent === agent.id} disabled={pending} onPress={() => { void run(() => opencodeClient.session.switchAgent({ sessionID, agent: agent.id }), true); }} /></Card>)}</Sheet>
+    <Sheet visible={panel === 'tools'} title="Message tools" onClose={() => setPanel(null)} onDismiss={toolsDismissed}>
+      {capabilities.attachments && <Button title="Attach from device" disabled={!draftLoaded} onPress={queueDevicePicker} />}
+      {opencodeClient && capabilities.files && <Button title="Files & agents" disabled={!draftLoaded} onPress={() => setPanel('mentions')} />}
+      {opencodeClient && capabilities.resources && <Button title="MCP resource references" disabled={!draftLoaded} onPress={() => setPanel('resources')} />}
+      {opencodeClient && (capabilities.commands || capabilities.skills) && <Button title="Commands & skills" disabled={!draftLoaded} onPress={() => setPanel('commands')} />}
+      {opencodeClient && capabilities.sideQuestion && <Button title="Ask a side question · /btw" onPress={() => { setSideQuestion(undefined); setPanel('btw'); }} />}
+      {opencodeClient && capabilities.agents && <Button title={`Agent: ${agents.find(agent => agent.id === session.agent)?.name || session.agent || 'Choose agent'}`} onPress={() => setPanel('agents')} />}
+      {capabilities.delivery && <><Label muted>Message delivery</Label><Row><Button title="Steer current work" selected={delivery === 'steer'} onPress={() => setDelivery('steer')} /><Button title="Queue after current work" selected={delivery === 'queue'} onPress={() => setDelivery('queue')} /></Row></>}
+      {capabilities.shell && <Label muted>Start a message with ! to run a shell command on the server.</Label>}
+    </Sheet>
     <Sheet visible={panel === 'message'} title="Message" fitContent onClose={() => { queuedMessagePanel.current = null; setPanel(null); }} onDismiss={() => {
       const target = queuedMessagePanel.current;
       queuedMessagePanel.current = null;
@@ -925,7 +1022,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       {'text' in actionMessage && <Button title="Copy message" onPress={() => { void Clipboard.setStringAsync(actionMessage.text).then(() => setPanel(null)).catch(showError); }} />}
       {actionMessage.type === 'assistant' && <Button title="Copy response" onPress={() => { void Clipboard.setStringAsync(actionMessage.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')).then(() => setPanel(null)).catch(showError); }} />}
       {actionMessage.type === 'user' && <Button title="Edit & resend" disabled={!draftLoaded} onPress={() => { void editMessage(actionMessage); }} />}
-      {actionMessage.type === 'shell' && <Button title="Full command output" onPress={() => {
+      {opencodeClient && capabilities.background && actionMessage.type === 'shell' && <Button title="Full command output" onPress={() => {
         const index = messages.findIndex(message => message.id === actionMessage.id);
         const nextMove = messages.slice(index + 1).find((message): message is Extract<SessionMessageInfo, { type: 'location-switched' }> => message.type === 'location-switched');
         setBackgroundShellID(actionMessage.shellID);
@@ -933,10 +1030,10 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         queuedMessagePanel.current = 'background';
         setPanel(null);
       }} />}
-      <Button title="Fork before this message" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }, true); }} />
-      {actionMessage.type === 'user' && <Button title="Undo from this message" disabled={pending || active} onPress={() => { void run(async () => { if (await confirmAction('Undo from this message?', 'The server will stage a revert of later messages and file changes. You can restore the staged changes.')) await client.session.revert.stage({ sessionID, messageID: actionMessage.id, files: true }); }, true); }} />}
+      {capabilities.forkMessage && (!backend.canForkMessage || backend.canForkMessage(actionMessage)) && <Button title="Fork before this message" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }, true); }} />}
+      {opencodeClient && actionMessage.type === 'user' && <Button title="Undo from this message" disabled={pending || active} onPress={() => { void run(async () => { if (await confirmAction('Undo from this message?', 'The server will stage a revert of later messages and file changes. You can restore the staged changes.')) await opencodeClient.session.revert.stage({ sessionID, messageID: actionMessage.id, files: true }); }, true); }} />}
     </>}</Sheet>
-    <Sheet visible={panel === 'selectText'} title="Select text" onClose={() => { setPanel(null); setTextSelectionMessage(null); }}>{textSelectionMessage && <MessageRow message={textSelectionMessage} client={client} directory={session.location.directory} />}</Sheet>
+    <Sheet visible={panel === 'selectText'} title="Select text" onClose={() => { setPanel(null); setTextSelectionMessage(null); }}>{textSelectionMessage && <MessageRow message={textSelectionMessage} client={opencodeClient} directory={session.location.directory} />}</Sheet>
     <Sheet visible={panel === 'commands'} title="Commands & skills" onClose={() => setPanel(null)}>
       <Label muted>Commands run on the server. Skills join your next message.</Label>
       <Card><Label style={{ fontFamily: mono }}>/btw</Label><Label muted>Ask about this session without a change to its history.</Label><Button title="Use side question" compact disabled={!draftLoaded} onPress={() => { setDraft('/btw '); setPanel(null); }} /></Card>
@@ -946,15 +1043,24 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     </Sheet>
     <Sheet visible={panel === 'mentions'} title="Files & agents" onClose={() => setPanel(null)}><Label muted>Attach files from the server or ask a subagent to help.</Label><Field label="Find a server file" value={fileQuery} onChangeText={setFileQuery} placeholder="Path or filename" />{fileSearchBusy && <Busy />}{fileResults.map(file => <Button key={file.path} title={file.path} onPress={() => { const path = `${session.location.directory.replace(/\/$/, '')}/${file.path}`; const uri = serverFileUri(path); setAttachments(current => current.some(item => item.uri === uri) ? current : [...current, { uri, name: file.path }]); setPanel(null); }} />)}<Heading>Agents</Heading>{agents.filter(agent => !agent.hidden).map(agent => <Card key={agent.id}><Label>{agent.name}</Label>{agent.description && <Label muted>{agent.description}</Label>}<Button title="Mention agent" compact onPress={() => { setSelectedAgentIDs(current => current.includes(agent.id) ? current : [...current, agent.id]); setPanel(null); }} /></Card>)}</Sheet>
     <Sheet visible={panel === 'diff'} title="Session changes" onClose={() => setPanel(null)}>{panelLoading ? <Busy /> : diffs.length ? diffs.map(diff => <Card key={diff.file}><Label style={{ fontFamily: mono }}>{diff.file}</Label><Row><Label style={{ color: colors.success }}>+{diff.additions}</Label><Label style={{ color: colors.danger }}>−{diff.deletions}</Label><Label muted>{diff.status}</Label></Row><CodeBlock code={diff.patch} />{diff.more && <Label muted>The server truncated this diff.</Label>}</Card>) : <Empty title="No file changes" />}</Sheet>
-    <Sheet visible={panel === 'context'} title="Agent context" onClose={() => setPanel(null)}>{panelLoading ? <Busy /> : <><Label muted>{context.length} messages in the current context</Label>{context.map(message => <MessageRow key={message.id} message={message} client={client} directory={session.location.directory} />)}</>}</Sheet>
-    <Sheet visible={panel === 'instructions'} title="Session instructions" onClose={() => setPanel(null)}>{panel === 'instructions' && <Instructions client={client} sessionID={sessionID} />}</Sheet>
-    <Sheet visible={panel === 'schedules'} title="Session schedules" onClose={() => setPanel(null)}>{panel === 'schedules' && <Schedules client={client} sessionID={sessionID} />}</Sheet>
-    <Sheet visible={panel === 'background'} title="Background commands" onClose={() => setPanel(null)}>{panel === 'background' && <BackgroundCommands client={client} sessionID={sessionID} directory={session.location.directory} initialShellID={backgroundShellID} initialDirectory={backgroundDirectory} />}</Sheet>
-    <Sheet visible={panel === 'children'} title="Child sessions" onClose={() => setPanel(null)}>{panel === 'children' && <ChildSessions client={client} sessionID={sessionID} onOpenSession={id => { setPanel(null); onOpenSession(id); }} />}</Sheet>
-    <Sheet visible={panel === 'stats'} title="Session statistics" onClose={() => setPanel(null)}>{panel === 'stats' && <SessionStats session={session} running={active} />}</Sheet>
-    <Sheet visible={panel === 'btw'} title="Side question" onClose={() => setPanel(null)}>{panel === 'btw' && <SideQuestion client={client} sessionID={sessionID} initialQuestion={sideQuestion} onQuestionConsumed={() => setSideQuestion(undefined)} />}</Sheet>
-    <Sheet visible={panel === 'resources'} title="MCP resource references" onClose={() => setPanel(null)}>{panel === 'resources' && <McpResources client={client} location={{ directory: session.location.directory }} onAttachContext={text => { setDraft(current => current ? `${current}\n\n${text}` : text); setPanel(null); }} />}</Sheet>
-  </KeyboardAvoidingView></View>;
+    <Sheet visible={panel === 'context'} title="Agent context" onClose={() => setPanel(null)}>{panelLoading ? <Busy /> : <><Label muted>{context.length} messages in the current context</Label>{context.map(message => <MessageRow key={message.id} message={message} client={opencodeClient} directory={session.location.directory} />)}</>}</Sheet>
+    <Sheet visible={panel === 'instructions'} title="Session instructions" onClose={() => setPanel(null)}>{opencodeClient && capabilities.instructions && panel === 'instructions' && <Instructions client={opencodeClient} sessionID={sessionID} />}</Sheet>
+    <Sheet visible={panel === 'schedules'} title="Session schedules" onClose={() => setPanel(null)}>{opencodeClient && capabilities.schedules && panel === 'schedules' && <Schedules client={opencodeClient} sessionID={sessionID} />}</Sheet>
+    <Sheet visible={panel === 'background'} title="Background commands" onClose={() => setPanel(null)}>{opencodeClient && capabilities.background && panel === 'background' && <BackgroundCommands client={opencodeClient} sessionID={sessionID} directory={session.location.directory} initialShellID={backgroundShellID} initialDirectory={backgroundDirectory} />}</Sheet>
+    <Sheet visible={panel === 'children'} title="Child sessions" onClose={() => setPanel(null)}>{opencodeClient && capabilities.children && panel === 'children' && <ChildSessions client={opencodeClient} sessionID={sessionID} onOpenSession={id => { setPanel(null); onOpenSession(id); }} />}</Sheet>
+    <Sheet visible={panel === 'stats'} title="Session statistics" onClose={() => setPanel(null)}>{capabilities.statistics && panel === 'stats' && <SessionStats session={session} running={active} />}</Sheet>
+    <Sheet visible={panel === 'btw'} title="Side question" onClose={() => setPanel(null)}>{opencodeClient && capabilities.sideQuestion && panel === 'btw' && <SideQuestion client={opencodeClient} sessionID={sessionID} initialQuestion={sideQuestion} onQuestionConsumed={() => setSideQuestion(undefined)} />}</Sheet>
+    <Sheet visible={panel === 'resources'} title="MCP resource references" onClose={() => setPanel(null)}>{opencodeClient && capabilities.resources && panel === 'resources' && <McpResources client={opencodeClient} location={{ directory: session.location.directory }} onAttachContext={text => { setDraft(current => current ? `${current}\n\n${text}` : text); setPanel(null); }} />}</Sheet>
+  </ChatKeyboardView></View>;
+}
+
+function ChatKeyboardView({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
+  const styles = useThemedStyles(createStyles);
+  const { height } = useReanimatedKeyboardAnimation();
+  const { bottom } = useSafeAreaInsets();
+  const keyboardPadding = useAnimatedStyle(() => ({ paddingBottom: enabled ? Math.max(0, -height.value - bottom) : 0 }), [enabled, bottom]);
+  if (Platform.OS === 'android') return <Animated.View style={[styles.container, keyboardPadding]}>{children}</Animated.View>;
+  return <KeyboardAvoidingView style={styles.container} behavior="padding" automaticOffset enabled={enabled}>{children}</KeyboardAvoidingView>;
 }
 
 function messageText(message: SessionMessageInfo): string {
@@ -976,33 +1082,34 @@ function messagePreview(message: SessionMessageInfo): string {
   return messageText(message).slice(0, 240);
 }
 
-type MessageRowProps = { message: SessionMessageInfo; live?: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; onSelect?: (id: string) => void; selected?: boolean; selectionActive?: boolean; screenReader?: boolean; client: Client; directory: string };
-const MessageRow = memo(function MessageRow({ message, live, activityKind, animate, onSelect, selected, selectionActive, screenReader, client, directory }: MessageRowProps) {
+type MessageRowProps = { message: SessionMessageInfo; sourceKey?: string; children?: React.ReactNode; live?: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; onSelect?: (id: string) => void; selected?: boolean; selectionActive?: boolean; screenReader?: boolean; client?: Client; directory: string };
+const MessageRow = memo(function MessageRow({ message, sourceKey, children, live, activityKind, animate, onSelect, selected, selectionActive, screenReader, client, directory }: MessageRowProps) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const select = useCallback(() => onSelect?.(message.id), [onSelect, message.id]);
   const separateContent = screenReader || Platform.OS === 'web';
   if (message.type === 'idle' && !message.error) return null;
-  if (!onSelect) return <MessageContent message={message} client={client} directory={directory} selectable />;
-  return <Pressable nativeID={`chat-message-${message.id}`} accessible={!separateContent}
+  if (!onSelect) return children ?? <MessageContent message={message} client={client} directory={directory} selectable />;
+  return <Pressable nativeID={`chat-message-${encodeURIComponent(message.id)}${sourceKey ? `:${encodeURIComponent(sourceKey)}` : ''}`} accessible={!separateContent}
     accessibilityRole={separateContent ? undefined : 'button'} accessibilityLabel={separateContent ? undefined : messagePreview(message)}
     accessibilityHint={separateContent ? undefined : 'Long press to select this message. Message actions appear in the header.'}
     accessibilityState={separateContent ? undefined : { selected: !!selected }}
     accessibilityActions={separateContent ? undefined : [{ name: 'activate', label: 'Select message' }, { name: 'longpress', label: 'Select message' }]}
     onAccessibilityAction={separateContent ? undefined : () => onSelect(message.id)} focusable={!screenReader}
     onLongPress={() => onSelect(message.id)} onPress={selectionActive ? () => onSelect(message.id) : undefined}
-    style={[styles.selectableMessage, selected && { backgroundColor: colors.selected }]}>
-    <MessageActionsContext.Provider value={select}><MessageContent message={message} live={live} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={false} /></MessageActionsContext.Provider>
+    style={styles.selectableMessage}>
+    {selected && <View pointerEvents="none" aria-hidden style={[styles.selectionMarker, { backgroundColor: colors.muted }]} />}
+    <MessageActionsContext.Provider value={select}>{children ?? <MessageContent message={message} live={live} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={false} />}</MessageActionsContext.Provider>
     {screenReader && <Button title="Message actions" compact variant="ghost" accessibilityLabel={`Message actions: ${messagePreview(message)}`} onPress={() => onSelect(message.id)} />}
   </Pressable>;
 });
 
-const MessageContent = memo(function MessageContent({ message, live, activityKind, animate, client, directory, selectable }: { message: SessionMessageInfo; live?: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; client: Client; directory: string; selectable: boolean }) {
+const MessageContent = memo(function MessageContent({ message, live, activityKind, animate, client, directory, selectable }: { message: SessionMessageInfo; live?: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; client?: Client; directory: string; selectable: boolean }) {
   const styles = useThemedStyles(createStyles);
   const betaLayout = useBetaLayout();
   if (message.type === 'idle') return message.error ? <ErrorNotice error={message.error.message} /> : null;
-  if (message.type === 'assistant') return <View style={styles.assistant}>{message.content.map((part, index) => <AssistantPart key={`${message.id}:${part.type === 'tool' ? part.id : index}`} detailsKey={`${message.id}:${part.type === 'tool' ? part.id : index}`} part={part} live={!!live && (part.type === 'tool' || index === message.content.length - 1)} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={selectable} />)}{message.error && <ErrorNotice error={message.error.message} />}{betaLayout && !live && message.time.completed !== undefined && message.content.some(part => part.type === 'text' && !!part.text.trim()) && <CompletedAssistantFooter key={message.id} message={message} />}</View>;
-  if (message.type === 'user') return <View style={[styles.userGroup, betaLayout && styles.betaUserGroup]}><View style={[styles.user, betaLayout && styles.betaUser]}><MessageText text={message.text} selectable={selectable} />{message.files?.map((file, index) => <View key={index} style={{ gap: 8 }}><Label muted style={{ fontFamily: mono, fontSize: 12 }}>↳ {file.name || file.mime}</Label>{file.mime.startsWith('image/') && <Image source={{ uri: `data:${file.mime};base64,${file.data}` }} style={{ height: 180, width: '100%', borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name || 'Attached image'} />}</View>)}{message.skills?.map(skill => <Label key={skill.id} muted>Skill: {skill.name}</Label>)}</View></View>;
+  if (message.type === 'assistant') return <View style={styles.assistant}>{message.content.map((part, index) => <AssistantPart key={`${message.id}:${part.type === 'tool' ? part.id : index}`} detailsKey={`${message.id}:${part.type === 'tool' ? part.id : index}`} part={part} live={!!live && (part.type === 'tool' || index === message.content.length - 1)} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={selectable} />)}{message.error && <ErrorNotice error={message.error.message} />}{betaLayout && !live && message.content.some(part => part.type === 'text' && !!part.text.trim()) && <CompletedAssistantFooter key={message.id} message={message} />}</View>;
+  if (message.type === 'user') return <UserMessageBubble withAttachments={!!message.files?.length}><MessageText text={message.text} selectable={selectable} />{message.files?.map((file, index) => <View key={index} style={{ gap: 8 }}><Label muted style={{ fontFamily: mono, fontSize: 12 }}>↳ {file.name || file.mime}</Label>{file.mime.startsWith('image/') && <Image source={{ uri: `data:${file.mime};base64,${file.data}` }} style={{ height: 180, width: '100%', borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name || 'Attached image'} />}</View>)}{message.skills?.map(skill => <Label key={skill.id} muted>Skill: {skill.name}</Label>)}</UserMessageBubble>;
   if (message.type === 'shell') return <Disclosure disclosureKey={message.id} title={`$ ${message.command} · ${message.status}`}><CodeBlock code={message.output?.output || 'No output'} selectable={selectable} />{message.output?.truncated && <Label muted>Output truncated by the server</Label>}</Disclosure>;
   if (message.type === 'compaction') return <Disclosure disclosureKey={message.id} title={`Context compaction · ${message.status}`}>{'summary' in message && <MessageText text={message.summary} selectable={selectable} />}{'error' in message && <ErrorNotice error={message.error.message} />}</Disclosure>;
   if (message.type === 'agent-switched') return <Label muted style={styles.notice}>Agent → {message.agent}</Label>;
@@ -1013,37 +1120,10 @@ const MessageContent = memo(function MessageContent({ message, live, activityKin
 });
 
 function CompletedAssistantFooter({ message }: { message: SessionMessageAssistant }) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const elapsed = Math.max(0, Math.round(((message.time.completed ?? message.time.created) - message.time.created) / 1000));
-  return <View>
-    <View style={styles.responseFooter}><Pressable accessibilityRole="button" accessibilityLabel={copied ? 'Response copied' : 'Copy response'} onPress={event => {
-      event.stopPropagation();
-      setError(null);
-      void Clipboard.setStringAsync(message.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')).then(() => setCopied(true)).catch(reason => { setCopied(false); setError(errorMessage(reason)); });
-    }} style={({ pressed }) => [styles.responseCopyTarget, pressed && { opacity: 0.6 }]}><ChatGlyph name={copied ? 'check' : 'copy'} color={colors.muted} size={14} /></Pressable><Label muted accessibilityLiveRegion="polite" style={styles.responseElapsed}>{copied ? 'Copied · ' : ''}{elapsed}s</Label></View>
-    {error && <Text accessibilityRole="alert" style={[styles.responseElapsed, { color: colors.danger }]}>{error}</Text>}
-  </View>;
+  const elapsed = message.time.completed === undefined ? undefined : Math.max(0, Math.round((message.time.completed - message.time.created) / 1000));
+  return <ResponseFooter text={message.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')} elapsedSeconds={elapsed} />;
 }
 
-const AssistantPart = memo(function AssistantPart({ part, detailsKey, live, activityKind, animate, client, directory, selectable }: { part: SessionMessageAssistant['content'][number]; detailsKey: string; live: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; client: Client; directory: string; selectable: boolean }) {
-  const styles = useThemedStyles(createStyles);
-  if (part.type === 'text') return <MessageText text={part.text} selectable={selectable} />;
-  const waiting = activityKind === 'approval' || activityKind === 'question' || activityKind === 'retry';
-  if (part.type === 'reasoning') {
-    const thinking = live && !waiting && part.time?.completed === undefined;
-    const duration = part.time?.completed === undefined ? undefined : Math.max(1, Math.round((part.time.completed - part.time.created) / 1000));
-    return <ActivityDisclosure detailsKey={detailsKey} title={thinking ? 'Thinking' : duration ? `Thought for ${duration}s` : 'Thought process'} busy={thinking} animate={animate} thought><MessageText text={part.text} muted selectable={selectable} /></ActivityDisclosure>;
-  }
-  const pendingTool = part.state.status === 'streaming' || part.state.status === 'running';
-  const busy = live && pendingTool && !waiting;
-  const title = part.state.status === 'error' ? `Failed · ${part.name}` : part.state.status === 'completed' || busy ? toolActivityLabel(part) : live && waiting ? activityKind === 'approval' ? 'Waiting for approval' : activityKind === 'question' ? 'Waiting for your answer' : 'Waiting to retry' : `Unfinished · ${part.name}`;
-  const input = part.state.status === 'streaming' ? undefined : part.state.input;
-  const detail = input && [input.command, input.filePath, input.path, input.pattern, input.url].find(value => typeof value === 'string');
-  return <ActivityDisclosure detailsKey={detailsKey} title={title} detail={typeof detail === 'string' ? detail : undefined} busy={busy} animate={animate} failed={part.state.status === 'error'} complete={part.state.status === 'completed'}><Label muted>Input</Label>{part.state.status === 'streaming' ? <CodeBlock code={part.state.input} selectable={selectable} /> : <Text selectable={selectable} style={styles.jsonText}>{JSON.stringify(part.state.input, null, 2)}</Text>}{'content' in part.state && part.state.content?.map((content, index) => content.type === 'text' ? <MessageText key={index} text={content.text} selectable={selectable} /> : <ArtifactContent key={index} content={content} client={client} directory={directory} />)}{part.state.status === 'error' && <ErrorNotice error={part.state.error.message} />}</ActivityDisclosure>;
-});
 
 function MessageText({ text, muted, selectable = true }: { text: string; muted?: boolean; selectable?: boolean }) {
   return <Markdown text={text} muted={muted} selectable={selectable} />;
@@ -1073,15 +1153,13 @@ function ChatIconButton({ name, label, onPress, raised, disabled, busy, selected
 }
 
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
-  frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border }, headerLeading: { marginStart: pageInset - 24, marginEnd: 24 - pageInset }, headerTrailing: { marginStart: 24 - pageInset, marginEnd: pageInset - 24 }, selectionHeader: { backgroundColor: colors.panel }, selectionCount: { flex: 1, minWidth: 0, fontSize: 14, paddingStart: pageInset - 4 }, selectableMessage: { borderRadius: 16 },
+  frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border }, headerLeading: { marginStart: pageInset - 24, marginEnd: 24 - pageInset }, headerTrailing: { marginStart: 24 - pageInset, marginEnd: pageInset - 24 }, selectionHeader: { backgroundColor: colors.panel }, selectionCount: { flex: 1, minWidth: 0, fontSize: 14, paddingStart: pageInset - 4 }, selectableMessage: { position: 'relative' }, selectionMarker: { position: 'absolute', start: -8, top: 0, bottom: 0, width: 2, borderRadius: 1 },
   headerTitle: { flex: 1, minWidth: 0, gap: 1, paddingHorizontal: 4, paddingStart: pageInset - 8 }, headerTitleWithNavigation: { paddingStart: pageInset - 4 }, sessionTitle: { fontSize: 16, fontWeight: '500', lineHeight: 21 }, headerSubtitle: { flexDirection: 'row', alignItems: 'center', gap: 6 }, projectLabel: { fontSize: 12, lineHeight: 16, flexShrink: 1 }, dot: { width: 5, height: 5, borderRadius: 3 }, transcriptFrame: { flex: 1, minHeight: 0, paddingBottom: 8 }, transcript: { flex: 1, minHeight: 0, width: '100%', maxWidth: 760, alignSelf: 'center' }, messages: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 24, flexGrow: 1 },
-  betaUserGroup: { alignSelf: 'stretch', maxWidth: '100%' }, betaUser: { alignSelf: 'stretch', padding: 0, borderRadius: 0, backgroundColor: 'transparent' },
-  userGroup: { alignSelf: 'flex-end', maxWidth: '92%' }, user: { alignSelf: 'flex-end', padding: 14, borderRadius: 14, backgroundColor: colors.raised, gap: 12 }, assistant: { gap: 6 }, jsonText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
-  responseFooter: { flexDirection: 'row', alignItems: 'center', marginStart: -16 }, responseCopyTarget: { width: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }, responseElapsed: { fontSize: 11, lineHeight: 16 },
+  assistant: { gap: 6 },
   eyebrow: { fontFamily: mono, fontSize: 10, color: colors.muted, letterSpacing: 1.2 }, notice: { fontFamily: mono, fontSize: 11 },
   composerDock: { padding: 12, paddingHorizontal: pageInset, paddingTop: 4, alignItems: 'center' }, composer: { width: '100%', maxWidth: 736, paddingHorizontal: 8, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, borderRadius: 18, backgroundColor: colors.panel }, composerInput: { minHeight: 44, maxHeight: 120, borderWidth: 0, borderRadius: 0, boxShadow: [], backgroundColor: colors.panel, paddingHorizontal: 7, paddingVertical: 6, fontSize: 16, lineHeight: 24 }, composerToolbar: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }, modelTrigger: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8 }, modelTriggerText: { flexShrink: 1, fontSize: 12, color: colors.muted },
   betaLatestOverlay: { position: 'absolute', bottom: 12, right: 16 },
-  betaMessages: { padding: 16, paddingBottom: 24, flexGrow: 1 }, betaComposerDock: { paddingHorizontal: 12, paddingBottom: 10 }, betaComposer: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 12, backgroundColor: colors.panel, borderTopColor: colors.border }, betaComposerInput: { backgroundColor: colors.panel, paddingHorizontal: 11, paddingVertical: 10, fontSize: 13, lineHeight: 22 }, betaComposerToolbar: { gap: 0 }, betaProviderLabel: { maxWidth: 80 }, betaModelTrigger: { minWidth: 48, gap: 3, paddingHorizontal: 4 }, betaVariantTrigger: { minWidth: 48, maxWidth: 72, minHeight: 48, paddingHorizontal: 4, flexDirection: 'row', gap: 3, alignItems: 'center', flexShrink: 1 }, betaTriggerText: { fontSize: 13, color: colors.muted, flexShrink: 1 },
+  betaMessages: { padding: 16, paddingBottom: 24, flexGrow: 1 }, betaComposerDock: { paddingHorizontal: 12, paddingBottom: 10 }, betaComposer: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 12, backgroundColor: colors.panel, borderTopColor: colors.border }, betaComposerInput: { backgroundColor: colors.panel, paddingHorizontal: 11, paddingVertical: 10, fontSize: 13, lineHeight: 22 }, betaComposerToolbar: { gap: 0 }, betaProviderLabel: { maxWidth: 80 }, betaModelName: { flex: 1, minWidth: 0 }, betaModelTrigger: { minWidth: 0, gap: 3, paddingHorizontal: 4 }, betaVariantTrigger: { minWidth: 48, maxWidth: '38%', minHeight: 48, paddingHorizontal: 4, flexDirection: 'row', gap: 3, alignItems: 'center', flexShrink: 0 }, betaTriggerText: { fontSize: 13, color: colors.muted, flexShrink: 1 },
   iconTarget: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }, iconFace: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, raisedFace: { backgroundColor: colors.primary, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1, elevation: 2 },
   betaRaisedFace: { backgroundColor: colors.text, borderColor: colors.text, borderTopColor: colors.text },
   errorBanner: { paddingHorizontal: 12, paddingTop: 8, gap: 4 }, modelSearch: { padding: 16, paddingBottom: 10, gap: 8 }, modelList: { paddingHorizontal: 12, paddingBottom: 24 }, modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 66, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 }, variants: { gap: 8, paddingHorizontal: 4, paddingBottom: 16 }, radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center' }, radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.text },

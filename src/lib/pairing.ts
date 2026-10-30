@@ -1,8 +1,8 @@
 import { normalizeConnection, type Connection } from './client';
 
 const codePattern = /^[A-Za-z0-9_-]+$/;
-const invalidPairing = 'Scan an OpenCode pairing QR code or paste the complete pairing link.';
-const legacyPairing = 'This link uses an older pairing format. Create a new pairing link in OpenCode.';
+const invalidPairing = 'Scan a server pairing QR code or paste the complete pairing link.';
+const legacyPairing = 'This link uses an older pairing format. Create a new pairing link on the server.';
 
 export function parsePairingPayload(input: string): Connection[] {
   const value = input.trim();
@@ -16,7 +16,7 @@ export function parsePairingPayload(input: string): Connection[] {
     const code = payload.code;
     let servers: Connection[];
     try { servers = payload.urls.map(url => normalizeConnection({ name: '', url })); }
-    catch { throw new Error('This pairing QR code contains an invalid server address. Create a new pairing code in OpenCode.'); }
+    catch { throw new Error('This pairing QR code contains an invalid server address. Create a new pairing code on the server.'); }
     return [...new Map(servers.map(server => [server.url, server])).values()].map(server => ({
       ...server, url: `${server.url}/auth/connect/${code}`, token: undefined,
     }));

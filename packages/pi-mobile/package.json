@@ -1,0 +1,13 @@
+{
+  "name": "@opencoode/pi-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "pi": { "extensions": ["./index.ts"] },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=1.4.0 <2",
+    "@earendil-works/pi-ai": ">=1.4.0 <2"
+  },
+  "dependencies": { "qrcode-terminal": "^0.12.0" },
+  "devDependencies": { "@types/qrcode-terminal": "^0.12.2" }
+}

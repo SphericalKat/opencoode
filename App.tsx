@@ -7,7 +7,7 @@ import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-co
 import { useFonts } from 'expo-font';
 import { ClientError, isLocationNotFoundError, isUnauthorizedError, type Project, type ServerInfo, type SessionInfo } from '@opencode/client';
 import { Button, Busy, confirmAction, ErrorNotice, Heading, Label, sans, Sheet } from './src/components/ui';
-import { clearPairingRetry, connect, connectionErrorMessage, createClient, errorMessage, normalizeConnection, withServerDeadline, type Connection } from './src/lib/client';
+import { clearPairingRetry, connect, connectionErrorMessage, createClient, errorMessage, isConnectionUnauthorized, normalizeConnection, withServerDeadline, type Connection } from './src/lib/client';
 import { loadActiveConnectionId, loadConnections, loadWorkspace, saveActiveConnectionId, saveConnections, saveWorkspace } from './src/lib/storage';
 import { ChatScreen } from './src/screens/ChatScreen';
 import { SessionsScreen } from './src/screens/SessionsScreen';
@@ -24,7 +24,9 @@ import { ConnectionFlow, type ConnectionForm } from './src/components/Connection
 import { SheetCoordinatorProvider, useSheetCoordinator } from './src/lib/sheets';
 import { pageInset } from './src/lib/layout';
 import { BetaLayoutContext, useBetaLayout } from './src/lib/betaLayout';
-import { BetaSessionNavigation, BetaTabsSheet, BetaTabStrip, SheetGrip, type OpenSessionTab, type SessionPane } from './src/components/BetaNavigation';
+import { BetaMoreSheet, BetaSessionNavigation, BetaTabsSheet, BetaTabStrip, SessionSurface, type OpenSessionTab, type SessionPane } from './src/components/BetaNavigation';
+import { PiWorkspace } from './src/screens/PiWorkspace';
+import { makeOpenCodeChatBackend } from './src/lib/chatBackend';
 
 type Tab = 'sessions' | 'workspace' | 'settings';
 const destinations: { id: Tab; label: string }[] = [
@@ -115,7 +117,11 @@ function MobileApp() {
   const locationSync = useRef<{ key: string; promise: Promise<string | null> } | null>(null);
   const activeRef = useRef<Connection | null>(null);
   activeRef.current = active;
-  const client = useMemo(() => active ? createClient(active) : null, [active]);
+  const client = useMemo(() => active && active.backend !== 'pi' ? createClient(active) : null, [active]);
+  const chatBackend = useMemo(() => client ? makeOpenCodeChatBackend(client) : null, [client]);
+  const onPiConnectionLost = useCallback((cause: unknown) => {
+    if (active?.backend === 'pi') recoverConnection.current(active, cause);
+  }, [active]);
   const recordSessionInfo = useCallback((session: SessionInfo) => {
     if (session.id !== selectedSessionRef.current) return;
     const next = { id: session.id, title: session.title || 'New session', directory: session.location.directory };
@@ -148,19 +154,20 @@ function MobileApp() {
         ? current.find(item => item.url === result.connection.url && (item.username || 'opencode') === (result.connection.username || 'opencode'))
         : undefined;
       const connected = matching ? { ...result.connection, id: matching.id, name: matching.name } : result.connection;
-      const nextClient = createClient(connected);
       const owner = activeRef.current;
-      const sameServer = owner?.id === connected.id && owner.url === connected.url && (owner.username || 'opencode') === (connected.username || 'opencode');
+      const sameServer = owner?.id === connected.id && owner.url === connected.url && owner.backend === connected.backend && (owner.username || 'opencode') === (connected.username || 'opencode');
       const workspace = sameServer ? { directory: directoryRef.current, sessionID: selectedSessionRef.current ?? undefined } : await loadWorkspace(connected.id);
       let restoredSessionID = workspace?.sessionID;
-      const location = await withServerDeadline(signal => nextClient.location.get(
+      const nextClient = result.backend === 'opencode' ? createClient(connected) : null;
+      const location = result.backend === 'pi' ? { directory: result.info.session.cwd } : await withServerDeadline(signal => nextClient!.location.get(
         workspace?.directory ? { location: { directory: workspace.directory } } : undefined,
         { signal },
       ).catch(cause => {
         if (signal.aborted || !workspace?.directory || !isLocationNotFoundError(cause)) throw cause;
         restoredSessionID = undefined;
-        return nextClient.location.get(undefined, { signal });
+        return nextClient!.location.get(undefined, { signal });
       }));
+      if (result.backend === 'pi') restoredSessionID = result.info.session.id;
       if (request !== epoch.current) return;
       const preserveWorkspace = sameServer && location.directory === directoryRef.current;
       if (preserveWorkspace) restoredSessionID = selectedSessionRef.current ?? undefined;
@@ -176,8 +183,8 @@ function MobileApp() {
       setActive(connected);
       setUnavailableID(null);
       recoveringConnection.current = null;
-      if (!preserveWorkspace) setConnectionRevision(value => value + 1);
-      setInfo(result.info);
+      if (!preserveWorkspace || connected.backend === 'pi') setConnectionRevision(value => value + 1);
+      setInfo(result.backend === 'opencode' ? result.info : null);
       if (!preserveWorkspace) {
         setOpenTabs([]);
         setBetaHomeProject(undefined);
@@ -211,7 +218,7 @@ function MobileApp() {
   }, []);
 
   useEffect(() => {
-    if (!active || !directory) return;
+    if (!active || active.backend === 'pi' || !directory) return;
     const timer = setTimeout(() => {
       saveWorkspace(active.id, { directory, sessionID: sessionID ?? undefined }).catch(cause => setError(errorMessage(cause)));
     }, 300);
@@ -252,6 +259,7 @@ function MobileApp() {
 
   useEffect(() => {
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (active?.backend === 'pi') return false;
       if (tab === 'settings' && settingsCanGoBack.current) return false;
       if (betaLayout && messageSelected && !betaHome && tab === 'sessions') return false;
       if (sessionID && tab === 'sessions') {
@@ -489,7 +497,7 @@ function MobileApp() {
 
   recoverConnection.current = (connection, cause) => {
     if (activeRef.current !== connection || connectingRef.current || recoveringConnection.current?.connection === connection) return;
-    const message = isUnauthorizedError(cause)
+    const message = isConnectionUnauthorized(cause)
       ? `${connection.name} rejected the saved password. Pair again or update its saved connection.`
       : `${connection.name} is not responding. Retry it or connect to another server.`;
     recoveringConnection.current = { connection, message };
@@ -637,7 +645,13 @@ function MobileApp() {
     pendingBetaAction.current = () => { if (owner === activeRef.current && request === epoch.current) action(); };
     setBetaMoreOpen(false);
   }
-  const openServers = () => { setConnectionError(null); showNavigationSheet('servers'); };
+  const openServers = () => {
+    setConnectionError(null);
+    setForm({ id: '', name: '', url: '', token: '' });
+    setPairingLink(null);
+    setFlowRevision(value => value + 1);
+    void showNavigationSheet('servers');
+  };
   const navigation = client && active ? <>
     <View style={styles.navigationBrand}><OpenCodeLogo width={Platform.OS === 'android' ? 112 : 136} />{!wide && <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={() => setNavigationOpen(false)} style={styles.iconButton}><ShellIcon name="close" color={colors.muted} /></Pressable>}</View>
     <Pressable accessibilityRole="button" accessibilityLabel={`Switch project directory. Current project: ${projectLabel}`} accessibilityHint={directory} onPress={() => void openProjects()} style={({ pressed }) => [styles.projectChoice, pressed && styles.pressed]}>
@@ -652,37 +666,32 @@ function MobileApp() {
 
   if (booting) return <SafeAreaView style={styles.safe}><View style={styles.boot}><OpenCodeLogo width={160} /><Busy /><Label muted>Restoring your workspace</Label></View></SafeAreaView>;
 
-  return <SafeAreaView style={[styles.safe, betaLayout && { backgroundColor: scheme === 'dark' ? '#080808' : '#fafafa' }]} edges={['top', 'left', 'right', 'bottom']}>
-    {!client || !active ? <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" automaticOffset><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.onboarding, betaLayout && styles.betaOnboarding]}>
+  return <SafeAreaView style={[styles.safe, betaLayout && tab !== 'settings' && { backgroundColor: scheme === 'dark' ? '#080808' : '#fafafa' }]} edges={['top', 'left', 'right', 'bottom']}>
+    {active?.backend === 'pi' ? <PiWorkspace key={`${active.id}:${connectionRevision}`} connection={active} foreground={foreground && !connecting} onManageServers={openServers} onConnectionLost={onPiConnectionLost} /> : !client || !active ? <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" automaticOffset><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.onboarding, betaLayout && styles.betaOnboarding]}>
       {!betaLayout && <View style={{ gap: 16, marginBottom: 20 }}><OpenCodeLogo width={180} /><Label muted>Mobile client</Label></View>}
       {serverForm}
     </ScrollView></KeyboardAvoidingView> : <View style={styles.shell}>
       {wide && <View style={styles.sidebar}>{navigation}</View>}
       <View style={styles.main}>
-      {betaLayout && !showMessageSelection && <BetaTabStrip current={currentOpenTab} count={openTabs.length} busy={creatingSession} onOpen={openNavigation} />}
+      {betaLayout && tab !== 'settings' && !showMessageSelection && <BetaTabStrip current={currentOpenTab} count={openTabs.length} busy={creatingSession} onOpen={openNavigation} />}
       {error && <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><ErrorNotice error={error} /></View>}
       {pendingLocation?.sessionID === sessionID && <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><ErrorNotice error={`This session uses ${pendingLocation.directory}. Update the workspace before you attach files or open its terminal.`} onRetry={() => { void syncSelectedLocation(); }} /></View>}
-      <View style={[styles.body, betaLayout && styles.betaSurface]}>
+      <SessionSurface style={styles.body} framed={betaLayout && tab !== 'settings' && !showMessageSelection}>
         {betaLayout && !betaHome && sessionID && tab !== 'settings' && !showMessageSelection && <BetaSessionNavigation pane={selectedPane} directory={directory} onSelect={openBetaPane} onMore={() => { Keyboard.dismiss(); setBetaMoreOpen(true); }} onProject={() => { void openProjects(); }} />}
         <MotionScreen visible={tab === 'sessions'} style={[styles.full, { flexDirection: 'row' }, tab !== 'sessions' && { display: 'none' }]}>
           {!wide && (betaLayout || !sessionID) && <View style={[styles.full, betaLayout && !betaHome && sessionID && { display: 'none' }]}><SessionsScreen key={`${active.id}:${connectionRevision}`} client={client} directory={directory} betaLayout={betaLayout} projectScope={betaHomeProject} onChooseDirectory={() => { void openProjects(); }} onNewSession={betaLayout ? target => { void createBetaSession(target); } : undefined} selectedSessionID={sessionID ?? undefined} revision={revision} onOpenSession={openSession} onOpenNavigation={openNavigation} /></View>}
-          {(wide || sessionID) && <View style={[styles.full, betaLayout && betaHome && { display: 'none' }]}>{sessionID ? <ChatScreen key={`${active.id}:${connectionRevision}:${sessionID}`} client={client} sessionID={sessionID} serverID={active.id} draftKey={`${active.id}:${sessionID}`} betaLayout={betaLayout} onSelectionChange={setMessageSelected} onSessionInfo={recordSessionInfo} sessionPanelRequest={sessionPanelRequest} visible={tab === 'sessions' && (!betaLayout || !betaHome)} projectLabel={projectLabel} onOpenNavigation={wide ? undefined : openNavigation} onSessionChanged={() => { setRevision(value => value + 1); void syncSelectedLocation(); }} onOpenSession={id => { void openSession(id); setRevision(value => value + 1); }} attachmentPath={attachmentPath} attachmentContext={attachmentContext} onAttachmentConsumed={() => { setAttachmentPath(undefined); setAttachmentContext(undefined); }} /> : <View style={styles.welcome}><OpenCodeLogo width={160} /><Heading>Start a session</Heading><Label muted style={styles.welcomeDetail}>Choose a conversation, or create a new session in {projectLabel}.</Label></View>}</View>}
+          {(wide || sessionID) && <View style={[styles.full, betaLayout && betaHome && { display: 'none' }]}>{sessionID ? <ChatScreen key={`${active.id}:${connectionRevision}:${sessionID}`} backend={chatBackend!} sessionID={sessionID} serverID={active.id} draftKey={`${active.id}:${sessionID}`} betaLayout={betaLayout} onSelectionChange={setMessageSelected} onSessionInfo={recordSessionInfo} sessionPanelRequest={sessionPanelRequest} visible={tab === 'sessions' && (!betaLayout || !betaHome)} projectLabel={projectLabel} onOpenNavigation={wide ? undefined : openNavigation} onSessionChanged={() => { setRevision(value => value + 1); void syncSelectedLocation(); }} onOpenSession={id => { void openSession(id); setRevision(value => value + 1); }} attachmentPath={attachmentPath} attachmentContext={attachmentContext} onAttachmentConsumed={() => { setAttachmentPath(undefined); setAttachmentContext(undefined); }} /> : <View style={styles.welcome}><OpenCodeLogo width={160} /><Heading>Start a session</Heading><Label muted style={styles.welcomeDetail}>Choose a conversation, or create a new session in {projectLabel}.</Label></View>}</View>}
         </MotionScreen>
         {visited.workspace && <MotionScreen visible={tab === 'workspace'} style={[styles.full, tab !== 'workspace' && { display: 'none' }]}><WorkspaceScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} connection={active} directory={directory} sessionID={sessionID ?? undefined} section={betaLayout ? workspaceSection : undefined} hideChrome={betaLayout} visible={tab === 'workspace'} onDirectoryChange={changeDirectory} onAttachFile={attachFile} onBack={wide ? undefined : returnToSessions} backLabel={returnLabel} onOpenNavigation={wide ? undefined : openNavigation} /></MotionScreen>}
         {visited.settings && <MotionScreen visible={tab === 'settings'} style={[styles.full, tab !== 'settings' && { display: 'none' }]}><SettingsScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} directory={directory} betaLayout={betaLayout} onManageServers={openServers} serverLabel={active.name} visible={tab === 'settings'} onBackStateChange={setSettingsBackState} onBack={wide ? undefined : returnToSessions} backLabel={returnLabel} onOpenNavigation={wide ? undefined : openNavigation} /></MotionScreen>}
-      </View>
+      </SessionSurface>
       </View>
     </View>}
     <MotionDrawer visible={navigationOpen && !wide && !!active && !betaLayout} width={Math.min(width - 32, 352)} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} panelStyle={styles.drawer}>
       <SafeAreaView style={styles.full} edges={['top', 'bottom', 'left']}>{navigation}</SafeAreaView>
     </MotionDrawer>
     {betaLayout && <BetaTabsSheet visible={navigationOpen && !!active} tabs={openTabs} selectedID={currentOpenTab?.id} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} onSelect={id => { void openSession(id); }} onCloseTab={id => { void closeBetaTab(id); }} onNew={() => afterBetaNavigation(() => { void createBetaSession(); })} onHome={() => afterBetaNavigation(showBetaHome)} onSettings={() => afterBetaNavigation(() => { void changeTab('settings'); })} onHelp={() => afterBetaNavigation(() => { void Linking.openURL('https://opencode.ai/v2/docs/'); })} />}
-    {betaLayout && <Sheet visible={betaMoreOpen} title="More options" fitContent showHeader={false} contentStyle={styles.betaMenu} onClose={() => setBetaMoreOpen(false)} onDismiss={() => { const action = pendingBetaAction.current; pendingBetaAction.current = null; action?.(); }}>
-      <SheetGrip onClose={() => setBetaMoreOpen(false)} />
-      {(['Files', 'Terminal', 'Worktrees'] as const).map(pane => <Pressable key={pane} accessibilityRole="button" onPress={() => afterBetaMenu(() => openBetaPane(pane))} style={({ pressed }) => [styles.betaMenuRow, pressed && styles.pressed]}><Label style={styles.betaMenuText}>{pane}</Label><Label muted>{selectedPane === pane ? '✓' : ''}</Label></Pressable>)}
-      <Pressable accessibilityRole="button" onPress={() => requestSessionPanel('stats')} style={({ pressed }) => [styles.betaMenuRow, pressed && styles.pressed]}><Label style={styles.betaMenuText}>Usage</Label></Pressable>
-      <Pressable accessibilityRole="button" onPress={() => requestSessionPanel('actions')} style={({ pressed }) => [styles.betaMenuRow, pressed && styles.pressed]}><Label style={styles.betaMenuText}>Session details</Label><ShellIcon name="chevron" size={14} color={colors.muted} /></Pressable>
-    </Sheet>}
+    {betaLayout && <BetaMoreSheet visible={betaMoreOpen} pane={selectedPane} onClose={() => setBetaMoreOpen(false)} onDismiss={() => { const action = pendingBetaAction.current; pendingBetaAction.current = null; action?.(); }} onView={pane => afterBetaMenu(() => openBetaPane(pane))} onUsage={() => requestSessionPanel('stats')} onDetails={() => requestSessionPanel('actions')} />}
     <Sheet visible={serversOpen && !!active} title={unavailableID === active?.id ? 'Connection' : 'Servers'} allowDuringRecovery onClose={() => { serverSheetRequest.current += 1; setServersOpen(false); }} onDismiss={resumeSheets}>{serversOpen && active && serverForm}</Sheet>
     <Sheet visible={projectsOpen} title="Open a project" scroll={false} onClose={() => setProjectsOpen(false)}>
       {projectsOpen && client && active && <ProjectDirectoryBrowser key={`${active.id}:${connectionRevision}:${directory}`} client={client} directory={directory} value={newDirectory} projects={projects} busy={projectBusy} error={projectError} onChangeValue={value => { setNewDirectory(value); setProjectError(null); }} onOpenDirectory={value => { void openDirectory(value); }} />}
@@ -697,8 +706,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', minHeight: 0 }, main: { flex: 1, minWidth: 0, minHeight: 0 },
   iconButton: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
   body: { flex: 1, flexDirection: 'row', minHeight: 0 }, full: { flex: 1, minWidth: 0, minHeight: 0 },
-  betaSurface: { flexDirection: 'column', borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.bg, overflow: 'hidden' },
-  betaMenu: { padding: 12, paddingTop: 0, paddingBottom: 4, gap: 0 }, betaMenuRow: { minHeight: 48, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, betaMenuText: { fontSize: 13, lineHeight: 18 },
   sidebar: { width: 288, borderRightWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
   navigationBrand: { height: Platform.OS === 'android' ? 48 : 64, paddingHorizontal: pageInset, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   projectChoice: { marginHorizontal: pageInset, paddingHorizontal: 15, paddingVertical: 10, minHeight: Platform.OS === 'android' ? 48 : 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border },

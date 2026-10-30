@@ -19,8 +19,10 @@ import { useMotionPreference } from '../components/motion';
 import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
 import { useHasUnsavedChanges, useUnsavedChanges, useUnsavedGuard } from '../lib/unsaved';
 import { pageInset } from '../lib/layout';
+import { useBetaLayout } from '../lib/betaLayout';
 
-type Section = 'Accounts' | 'Models' | 'MCP' | 'Config' | 'Skills' | 'Plugins' | 'Permissions' | 'Advanced' | 'Appearance';
+export type Section = 'Accounts' | 'Models' | 'MCP' | 'Config' | 'Skills' | 'Plugins' | 'Permissions' | 'Advanced' | 'Appearance';
+type ModelCatalog = Pick<Client['model'], 'list'>;
 const sectionDescriptions: Record<Section, string> = {
   Accounts: 'Provider connections and credentials',
   Models: 'Available models and capabilities',
@@ -38,45 +40,48 @@ const sectionGroups: { title: string; items: Section[] }[] = [
   { title: 'Agent', items: ['Skills', 'Plugins', 'Permissions'] },
   { title: 'Advanced', items: ['Advanced'] },
 ];
+const allSections = sectionGroups.flatMap(group => group.items);
 
 type HeaderRefresh = { refresh?: () => void; loading?: boolean } | null;
 const HeaderRefreshContext = createContext<React.Dispatch<React.SetStateAction<HeaderRefresh>> | null>(null);
-const BetaLayoutContext = createContext(false);
 type SettingsStackParams = { Index: undefined; Section: { section: Section } };
 const SettingsStack = createNativeStackNavigator<SettingsStackParams>();
 const zeroInsets = { top: 0, bottom: 0, left: 0, right: 0 };
 // The native toolbar supplies its inset before the shared back control applies its own margins.
 const nativeBackInsets = Platform.select<ViewStyle>({ android: { marginStart: -7, marginEnd: 33 }, ios: { minWidth: 44, height: 44, justifyContent: 'center' } });
 
-export function SettingsScreen({ client, directory, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation, betaLayout = false, onManageServers, serverLabel }: { client: Client; directory: string; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void; betaLayout?: boolean; onManageServers?: () => void; serverLabel?: string }) {
+export function SettingsScreen({ client, modelCatalog = client?.model, directory, sections = allSections, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation, betaLayout = false, onManageServers, serverLabel }: { client?: Client; modelCatalog?: ModelCatalog; directory: string; sections?: Section[]; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void; betaLayout?: boolean; onManageServers?: () => void; serverLabel?: string }) {
   const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const reducedMotion = useMotionPreference();
   // A resize must not replace the navigator and discard an open editor.
-  const [nativeStackEnabled] = useState(() => !betaLayout && Platform.OS !== 'web' && width < 920);
+  const [nativeStackEnabled] = useState(() => Platform.OS !== 'web' && width < 920);
   const wide = !betaLayout && !nativeStackEnabled && width >= 920;
-  const [section, setSection] = useState<Section | null>(betaLayout ? 'Appearance' : null);
+  const [section, setSection] = useState<Section | null>(null);
   const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
   const mounted = useRef(true);
   const navigationRef = useNavigationContainerRef<SettingsStackParams>();
-  const selected = section ?? (wide ? 'Accounts' : null);
+  const availableSections = useMemo(() => sections.filter(value => !!client || value === 'Appearance' || value === 'Models' && !!modelCatalog), [client, modelCatalog, sections]);
+  const defaultSection = availableSections.includes('Accounts') ? 'Accounts' : availableSections[0] ?? null;
+  const selected = section !== null && availableSections.includes(section) ? section : wide ? defaultSection : null;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const changeSection = useCallback(async (next: Section | null) => {
+    if (next !== null && !availableSections.includes(next)) return false;
     if (next === section) return true;
     if (section !== null && !await confirmNavigation()) return false;
     if (!mounted.current) return false;
     setSection(next);
     return true;
-  }, [section, confirmNavigation]);
+  }, [section, availableSections, confirmNavigation]);
   useEffect(() => {
     if (nativeStackEnabled) return;
-    onBackStateChange?.(!betaLayout && visible && !wide && section !== null);
+    onBackStateChange?.(visible && !wide && section !== null);
     return () => onBackStateChange?.(false);
   }, [betaLayout, nativeStackEnabled, onBackStateChange, visible, wide, section]);
   useEffect(() => {
-    if (betaLayout || nativeStackEnabled || !visible || wide || section === null) return;
+    if (nativeStackEnabled || !visible || wide || section === null) return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => { void changeSection(null); return true; });
     return () => subscription.remove();
   }, [betaLayout, nativeStackEnabled, visible, wide, section, changeSection]);
@@ -102,8 +107,8 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
   const renderIndex = () => <SettingsIndex onSelect={next => {
     if (!nativeStackEnabled) { void changeSection(next); return; }
     navigationRef.navigate('Section', { section: next });
-  }} selected={selected} wide={wide} />;
-  const renderSection = (value: Section) => <SettingsSection client={client} directory={directory} section={value} />;
+  }} sections={availableSections} selected={selected} wide={wide} onManageServers={onManageServers} serverLabel={serverLabel} />;
+  const renderSection = (value: Section) => <SettingsSection client={client} modelCatalog={modelCatalog} directory={directory} section={value} />;
 
   const navigationTheme = useMemo(() => ({ ...DefaultTheme, dark: scheme === 'dark', colors: { ...DefaultTheme.colors, primary: colors.accent, background: colors.bg, card: colors.panel, text: colors.text, border: colors.border, notification: colors.danger } }), [colors, scheme]);
   const navigation = <BaseNavigationContainer ref={navigationRef} theme={navigationTheme} onReady={updateNativeBackState} onStateChange={updateNativeBackState}>
@@ -118,19 +123,15 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
       <SettingsStack.Screen name="Index" options={{
         title: 'Settings',
         headerLeft: onBack ? () => <SettingsBackButton label={backLabel || 'Sessions'} onPress={onBack} /> : undefined,
-        headerRight: onOpenNavigation ? () => <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={{ width: 44, height: 44, marginEnd: Platform.OS === 'android' ? -16 : 0, alignItems: 'center', justifyContent: 'center' }}><ShellIcon name="menu" color={colors.text} /></Pressable> : undefined,
+        headerRight: !betaLayout && onOpenNavigation ? () => <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={{ width: 44, height: 44, marginEnd: Platform.OS === 'android' ? -16 : 0, alignItems: 'center', justifyContent: 'center' }}><ShellIcon name="menu" color={colors.text} /></Pressable> : undefined,
       }}>
         {renderIndex}
       </SettingsStack.Screen>
       <SettingsStack.Screen name="Section" options={({ route, navigation: screenNavigation }) => ({ title: route.params.section, headerBackButtonDisplayMode: 'minimal', ...(Platform.OS === 'android' ? { headerBackVisible: false, headerLeft: () => <SettingsBackButton label="Settings" onPress={() => screenNavigation.goBack()} /> } : {}) })}>
-        {({ route, navigation: screenNavigation }) => <NativeSettingsSection client={client} directory={directory} section={route.params.section} navigation={screenNavigation} />}
+        {({ route, navigation: screenNavigation }) => availableSections.includes(route.params.section) ? <NativeSettingsSection client={client} modelCatalog={modelCatalog} directory={directory} section={route.params.section} navigation={screenNavigation} /> : null}
       </SettingsStack.Screen>
     </SettingsStack.Navigator>
   </BaseNavigationContainer>;
-
-  if (betaLayout) return <BetaSettingsContent section={section ?? 'Appearance'} onSelect={changeSection} onBack={onBack} onManageServers={onManageServers} serverLabel={serverLabel} headerRefresh={headerRefresh}>
-    <HeaderRefreshContext.Provider value={setHeaderRefresh}>{renderSection(section ?? 'Appearance')}</HeaderRefreshContext.Provider>
-  </BetaSettingsContent>;
 
   return <View style={[styles.screen, !wide && styles.narrowScreen]}>
     {!nativeStackEnabled ? <>
@@ -143,91 +144,50 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
   </View>;
 }
 
-function BetaSettingsContent({ section, onSelect, onBack, onManageServers, serverLabel, headerRefresh, children }: { section: Section; onSelect: (section: Section) => Promise<boolean>; onBack?: () => void; onManageServers?: () => void; serverLabel?: string; headerRefresh: HeaderRefresh; children: React.ReactNode }) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const [query, setQuery] = useState('');
-  const [choosing, setChoosing] = useState(false);
-  const [chooserQuery, setChooserQuery] = useState('');
-  const pendingServer = useRef(false);
-  const sections = sectionGroups.flatMap(group => group.items);
-  const matches = (item: Section, value: string) => `${item} ${sectionDescriptions[item]}`.toLowerCase().includes(value.trim().toLowerCase());
-  const select = async (item: Section) => {
-    if (!await onSelect(item)) return;
-    setQuery('');
-    setChoosing(false);
-  };
-  const sectionRow = (item: Section) => <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Open ${item}. ${sectionDescriptions[item]}`} accessibilityState={{ selected: section === item }} onPress={() => { void select(item); }} style={({ pressed }) => [styles.betaCategoryRow, pressed && { backgroundColor: colors.raised }]}>
-    <View style={styles.detail}><Label style={styles.betaTitle}>{item}</Label><Label muted style={styles.betaDescription}>{sectionDescriptions[item]}</Label></View>
-    {section === item && <Label accessibilityElementsHidden>✓</Label>}
-  </Pressable>;
-  return <View style={styles.betaScreen}>
-    <View style={styles.betaTopRow}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to app" onPress={onBack} disabled={!onBack} style={styles.betaBack}><ShellIcon name="back" size={14} color={colors.muted} /><Label style={styles.betaBackLabel}>Back to app</Label></Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Settings category: ${section}`} accessibilityState={{ expanded: choosing }} onPress={() => { setChooserQuery(''); setChoosing(true); }} style={styles.betaChooserTarget}>
-        <View style={styles.betaChooser}><Label style={styles.betaBackLabel}>{section}</Label><View style={{ transform: [{ rotate: '90deg' }] }}><ShellIcon name="chevron" size={12} color={colors.text} /></View></View>
-      </Pressable>
-    </View>
-    <View style={styles.betaSearch}><ShellIcon name="search" size={16} color={colors.muted} /><Field placeholder="Search" accessibilityLabel="Search settings categories" value={query} onChangeText={setQuery} containerStyle={styles.detail} style={styles.betaSearchInput} />{!!query && <Pressable accessibilityRole="button" accessibilityLabel="Clear settings search" onPress={() => setQuery('')} style={styles.betaClear}><ShellIcon name="close" size={16} color={colors.muted} /></Pressable>}</View>
-    {!!query.trim() && <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.betaResults}>
-      {sections.filter(item => matches(item, query)).map(sectionRow)}
-      {!sections.some(item => matches(item, query)) && <Empty title="No matching settings" detail="Try a category name or description." />}
-    </ScrollView>}
-    <View style={[styles.detail, !!query.trim() && styles.betaHidden]}>
-      <View style={styles.betaSectionHeader}>
-        <View style={styles.betaSectionHeading}><Label accessibilityRole="header" style={styles.betaTitle}>{section}</Label><Label muted style={styles.betaDescription}>{sectionDescriptions[section]}</Label></View>
-        {headerRefresh?.refresh && <Pressable accessibilityRole="button" accessibilityLabel="Refresh" accessibilityState={{ disabled: headerRefresh.loading, busy: headerRefresh.loading }} disabled={headerRefresh.loading} onPress={() => headerRefresh.refresh?.()} style={styles.betaClear}>{headerRefresh.loading ? <ActivityIndicator size="small" color={colors.muted} /> : <ShellIcon name="refresh" size={18} color={colors.text} />}</Pressable>}
-      </View>
-      <BetaLayoutContext.Provider value>{children}</BetaLayoutContext.Provider>
-    </View>
-    <Sheet visible={choosing} title="Settings" fitContent contentStyle={{ gap: 0 }} onClose={() => setChoosing(false)} onDismiss={() => {
-      if (!pendingServer.current) return;
-      pendingServer.current = false;
-      onManageServers?.();
-    }}>
-      <Field placeholder="Search categories" value={chooserQuery} onChangeText={setChooserQuery} />
-      {sections.filter(item => matches(item, chooserQuery)).map(sectionRow)}
-      {onManageServers && `server ${serverLabel ?? ''}`.toLowerCase().includes(chooserQuery.trim().toLowerCase()) && <Pressable accessibilityRole="button" accessibilityLabel="Manage servers" onPress={() => { pendingServer.current = true; setChoosing(false); }} style={({ pressed }) => [styles.betaCategoryRow, pressed && { backgroundColor: colors.raised }]}><View style={styles.detail}><Label style={styles.betaTitle}>Server</Label><Label muted style={styles.betaDescription}>{serverLabel || 'Manage server connections'}</Label></View><ShellIcon name="chevron" size={16} color={colors.muted} /></Pressable>}
-    </Sheet>
-  </View>;
-}
-
 function SettingsBackButton({ label, onPress }: { label: string; onPress: () => void }) {
   const { colors } = useTheme();
   // The stock iOS image reserves label space even in icon-only mode.
   return <HeaderBackButton displayMode="minimal" accessibilityLabel={`Back to ${label}`} onPress={onPress} tintColor={colors.text} style={nativeBackInsets} backImage={Platform.OS === 'ios' ? ({ tintColor }) => <ShellIcon name="back" color={tintColor} size={22} /> : undefined} />;
 }
 
-function SettingsIndex({ onSelect, selected, wide }: { onSelect: (section: Section) => void; selected: Section | null; wide: boolean }) {
+function SettingsIndex({ onSelect, sections, selected, wide, onManageServers, serverLabel }: { onSelect: (section: Section) => void; sections: Section[]; selected: Section | null; wide: boolean; onManageServers?: () => void; serverLabel?: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return <ScrollView style={wide ? styles.sidebar : undefined} contentContainerStyle={styles.index}>
     {wide && <View style={styles.indexHeader}><Heading>Settings</Heading><Label muted>Preferences, connections, and tools</Label></View>}
-    {sectionGroups.map(group => <View key={group.title} style={styles.group}>
-      {!(group.items.length === 1 && group.items[0] === group.title) && <Label muted style={styles.groupTitle}>{group.title.toUpperCase()}</Label>}
-      <View style={styles.groupPanel}>{group.items.map((item, index) => <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Open ${item}. ${sectionDescriptions[item]}`} accessibilityState={{ selected: selected === item }} aria-current={selected === item ? 'page' : undefined} onPress={() => onSelect(item)} style={({ pressed }) => [styles.sectionRow, index > 0 && styles.sectionDivider, wide && selected === item && styles.currentSection, pressed && { backgroundColor: colors.raised }]}>
+    {sectionGroups.map(group => {
+      const items = group.items.filter(item => sections.includes(item));
+      const manageServers = group.title === 'Connections' && onManageServers;
+      if (!items.length && !manageServers) return null;
+      return <View key={group.title} style={styles.group}>
+      {!(items.length === 1 && items[0] === group.title) && <Label muted style={styles.groupTitle}>{group.title.toUpperCase()}</Label>}
+      <View style={styles.groupPanel}>
+      {manageServers && <Pressable accessibilityRole="button" accessibilityLabel="Servers. Scan a QR code, paste a link, or switch servers" onPress={onManageServers} style={({ pressed }) => [styles.sectionRow, pressed && { backgroundColor: colors.raised }]}><View style={styles.detail}><Label style={styles.sectionName}>Servers</Label><Label muted style={styles.sectionDescription}>{serverLabel ? `${serverLabel} · Scan or paste a link` : 'Scan, paste a link, or switch servers'}</Label></View><ShellIcon name="chevron" size={16} color={colors.muted} /></Pressable>}
+      {items.map((item, index) => <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Open ${item}. ${sectionDescriptions[item]}`} accessibilityState={{ selected: selected === item }} aria-current={selected === item ? 'page' : undefined} onPress={() => onSelect(item)} style={({ pressed }) => [styles.sectionRow, wide && selected === item && styles.currentSection, pressed && { backgroundColor: colors.raised }]}>
+        {(index > 0 || !!manageServers) && <View pointerEvents="none" style={styles.sectionDivider} />}
         <View style={{ flex: 1, minWidth: 0 }}><Label style={styles.sectionName}>{item}</Label><Label muted numberOfLines={1} style={styles.sectionDescription}>{sectionDescriptions[item]}</Label></View>
-        <Label muted accessibilityElementsHidden style={styles.chevron}>›</Label>
+        <ShellIcon name="chevron" size={16} color={colors.muted} />
       </Pressable>)}</View>
-    </View>)}
+    </View>; })}
   </ScrollView>;
 }
 
-function SettingsSection({ client, directory, section }: { client: Client; directory: string; section: Section }) {
+function SettingsSection({ client, modelCatalog, directory, section }: { client?: Client; modelCatalog?: ModelCatalog; directory: string; section: Section }) {
+  if (section === 'Appearance') return <View key={`${directory}:${section}`} style={{ flex: 1 }}><AppearanceSettings /></View>;
+  if (section === 'Models') return modelCatalog ? <View key={`${directory}:${section}`} style={{ flex: 1 }}><Models catalog={modelCatalog} client={client} directory={directory} /></View> : null;
+  if (!client) return null;
   return <View key={`${directory}:${section}`} style={{ flex: 1 }}>
       {section === 'Accounts' && <Accounts client={client} directory={directory} />}
-      {section === 'Models' && <Models client={client} directory={directory} />}
       {section === 'MCP' && <Mcp client={client} directory={directory} />}
       {section === 'Config' && <Configuration client={client} directory={directory} />}
       {section === 'Skills' && <Skills client={client} directory={directory} />}
       {section === 'Plugins' && <Plugins client={client} directory={directory} />}
       {section === 'Permissions' && <Permissions client={client} directory={directory} />}
       {section === 'Advanced' && <AdvancedSettings client={client} directory={directory} />}
-      {section === 'Appearance' && <AppearanceSettings />}
   </View>;
 }
 
-function NativeSettingsSection({ client, directory, section, navigation }: { client: Client; directory: string; section: Section; navigation: NativeStackScreenProps<SettingsStackParams, 'Section'>['navigation'] }) {
+function NativeSettingsSection({ client, modelCatalog, directory, section, navigation }: { client?: Client; modelCatalog?: ModelCatalog; directory: string; section: Section; navigation: NativeStackScreenProps<SettingsStackParams, 'Section'>['navigation'] }) {
   const { colors } = useTheme();
   const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
@@ -248,11 +208,11 @@ function NativeSettingsSection({ client, directory, section, navigation }: { cli
   useEffect(() => {
     navigation.setOptions({ headerRight: headerRefresh?.refresh ? () => <Pressable accessibilityRole="button" accessibilityLabel="Refresh" accessibilityState={{ disabled: headerRefresh.loading, busy: headerRefresh.loading }} disabled={headerRefresh.loading} onPress={() => headerRefresh.refresh?.()} style={{ width: 44, height: 44, marginEnd: Platform.OS === 'android' ? -16 : 0, alignItems: 'center', justifyContent: 'center' }}>{headerRefresh.loading ? <ActivityIndicator size="small" color={colors.muted} /> : <ShellIcon name="refresh" color={colors.text} />}</Pressable> : undefined });
   }, [colors, headerRefresh, navigation]);
-  return <HeaderRefreshContext.Provider value={setHeaderRefresh}><SettingsSection client={client} directory={directory} section={section} /></HeaderRefreshContext.Provider>;
+  return <HeaderRefreshContext.Provider value={setHeaderRefresh}><SettingsSection client={client} modelCatalog={modelCatalog} directory={directory} section={section} /></HeaderRefreshContext.Provider>;
 }
 
-function useResource<T>(client: Client, directory: string, load: (signal: AbortSignal) => Promise<T>) {
-  const scope = useMemo(() => ({ client, directory }), [client, directory]);
+function useResource<T>(source: object, directory: string, load: (signal: AbortSignal) => Promise<T>) {
+  const scope = useMemo(() => ({ source, directory }), [source, directory]);
   const [data, setData] = useState<T>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -298,7 +258,7 @@ function Page({ children, error, loading, refresh }: { children: React.ReactNode
 function AppearanceSettings() {
   const { appearance, scheme, setAppearance, colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const betaLayout = useContext(BetaLayoutContext);
+  const betaLayout = useBetaLayout();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [choosing, setChoosing] = useState(false);
@@ -448,12 +408,12 @@ function ConnectIntegration({ client, directory, integration, onClose }: { clien
   </Sheet>;
 }
 
-function Models({ client, directory }: { client: Client; directory: string }) {
+function Models({ catalog, client, directory }: { catalog: ModelCatalog; client?: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(client, directory, async signal => {
-    const [models, providers] = await Promise.all([client.model.list({ location: { directory }, types: ['chat', 'image', 'decision'] }, { signal }), client.provider.list({ location: { directory } }, { signal })]);
-    return { models: models.data, providers: providers.data };
+  const { data, error, loading, refresh } = useResource(client ?? catalog, directory, async signal => {
+    const [models, providers] = await Promise.all([catalog.list({ location: { directory }, types: ['chat', 'image', 'decision'] }, { signal }), client?.provider.list({ location: { directory } }, { signal })]);
+    return { models: models.data, providers: providers?.data };
   });
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<ModelInfo>();
@@ -461,16 +421,17 @@ function Models({ client, directory }: { client: Client; directory: string }) {
   useEffect(() => setLimit(40), [query]);
   const search = query.trim().toLowerCase();
   const models = data?.models.filter(item => `${item.name} ${item.providerID} ${item.id}`.toLowerCase().includes(search)) ?? [];
+  const details = selected && (client ? selected : { id: selected.id, providerID: selected.providerID, name: selected.name, contextWindow: selected.limit.context, thinkingLevels: selected.variants.map(item => item.id) });
   return <Page error={error} loading={loading} refresh={refresh}>
     <Row style={{ flexWrap: 'nowrap', alignItems: 'flex-end' }}><Field label="Find a model" placeholder="Name or provider" value={query} onChangeText={setQuery} containerStyle={{ flex: 1 }} />{!!query && <Button title="Clear" accessibilityLabel="Clear model search" compact variant="ghost" onPress={() => setQuery('')} />}</Row>
-    <Label muted>Select a model inside a chat to use it. Edit configuration to change server defaults or custom providers.</Label>
+    <Label muted>Select a model inside a chat to use it.{client ? ' Edit configuration to change server defaults or custom providers.' : ''}</Label>
     <Label style={styles.sectionLabel}>{models.length} MODELS</Label>
     {models.slice(0, limit).map(item => <Card key={`${item.providerID}/${item.id}`}><Row style={{ justifyContent: 'space-between' }}><View style={{ flex: 1 }}><Label style={styles.name}>{item.name}</Label><Label muted>{item.providerID} · {item.enabled ? 'Available' : 'Not connected'}</Label></View><Button title="Details" compact onPress={() => setSelected(item)} /></Row></Card>)}
     {models.length > limit && <><Label muted>Showing {limit} of {models.length} models.</Label><Button title="Load more models" onPress={() => setLimit(value => value + 40)} /></>}
     {data && !loading && !!data.models.length && !!search && !models.length && <Card><Empty title="No matching models" detail="Try a model name, provider, or model ID, or clear the search to see all models." /><Button title="Clear search" onPress={() => setQuery('')} /></Card>}
     {data && !loading && !data.models.length && <Empty title="No models available" detail="Your server did not publish a model catalog for this project." />}
-    <Disclosure title={`Providers (${data?.providers.length ?? 0})`}>{data?.providers.map(item => <View key={item.id} style={{ gap: 4 }}><Label>{item.name}</Label><Label muted>{item.id} · {item.activation}</Label></View>)}</Disclosure>
-    <Sheet visible={!!selected} title={selected?.name || 'Model'} onClose={() => setSelected(undefined)}>{selected && <><Label muted>{selected.providerID}/{selected.id}</Label><Label>Context: {selected.limit.context.toLocaleString()} tokens · Output: {selected.limit.output.toLocaleString()} tokens</Label><Label>Variants: {selected.variants.map(item => item.id).join(', ') || 'Default'}</Label><Disclosure title="Capabilities"><JsonView value={selected.capabilities} /></Disclosure><Disclosure title="Prices"><JsonView value={selected.cost} /></Disclosure><Disclosure title="Details"><JsonView value={selected} /></Disclosure></>}</Sheet>
+    {client && <Disclosure title={`Providers (${data?.providers?.length ?? 0})`}>{data?.providers?.map(item => <View key={item.id} style={{ gap: 4 }}><Label>{item.name}</Label><Label muted>{item.id} · {item.activation}</Label></View>)}</Disclosure>}
+    <Sheet visible={!!selected} title={selected?.name || 'Model'} onClose={() => setSelected(undefined)}>{selected && <><Label muted>{selected.providerID}/{selected.id}</Label><Label>Context: {selected.limit.context.toLocaleString()} tokens{client ? ` · Output: ${selected.limit.output.toLocaleString()} tokens` : ''}</Label><Label>Variants: {selected.variants.map(item => item.id).join(', ') || (client ? 'Default' : 'Unavailable')}</Label>{client ? <><Disclosure title="Capabilities"><JsonView value={selected.capabilities} /></Disclosure><Disclosure title="Prices"><JsonView value={selected.cost} /></Disclosure></> : <Label muted>Output limits and prices are unavailable from this server.</Label>}<Disclosure title="Details"><JsonView value={details} /></Disclosure></>}</Sheet>
   </Page>;
 }
 
@@ -605,26 +566,20 @@ function Permissions({ client, directory }: { client: Client; directory: string 
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
-  betaScreen: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
   betaAppearanceCard: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.panel },
   betaSettingTitle: { fontFamily: sans, fontSize: 13, lineHeight: 20, fontWeight: '500' },
   betaSettingChooser: { minHeight: 28, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  betaTopRow: { minHeight: 48, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  betaBack: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 6 }, betaBackLabel: { fontSize: 13, lineHeight: 18 },
-  betaChooserTarget: { minHeight: 48, justifyContent: 'center' }, betaChooser: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  betaSearch: { minHeight: 48, marginHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  betaSearchInput: { minHeight: 48, borderWidth: 0, backgroundColor: 'transparent', paddingHorizontal: 0, fontSize: 14 }, betaClear: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  betaSectionHeader: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }, betaSectionHeading: { flex: 1, gap: 6 }, betaTitle: { fontFamily: sans, fontSize: 14, lineHeight: 20, fontWeight: '500' }, betaDescription: { fontSize: 13, lineHeight: 20 },
-  betaCategoryRow: { minHeight: 48, paddingVertical: 6, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 12 }, betaResults: { paddingHorizontal: 14, paddingBottom: 24 }, betaHidden: { display: 'none' },
+  betaBackLabel: { fontSize: 13, lineHeight: 18 }, betaChooserTarget: { minHeight: 48, justifyContent: 'center' }, betaDescription: { fontSize: 13, lineHeight: 20 },
+  betaCategoryRow: { minHeight: 48, paddingVertical: 6, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 12 },
   screen: { flex: 1, flexDirection: 'row', minHeight: 0, backgroundColor: colors.bg }, nativeNavigation: { flex: 1, minHeight: 0 },
   narrowScreen: { flexDirection: 'column' }, content: { flex: 1, flexDirection: 'row', minHeight: 0 }, narrowContent: { flexDirection: 'column' },
   sidebar: { width: 220, flexGrow: 0, borderRightWidth: 1, borderRightColor: colors.border },
-  index: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 32, gap: 24 },
-  indexHeader: { gap: 5 }, group: { gap: 8 }, groupTitle: { fontSize: 11, fontWeight: '600', letterSpacing: 0.8, paddingHorizontal: 16 },
+  index: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 24, gap: 24 },
+  indexHeader: { gap: 5 }, group: { gap: 10 }, groupTitle: { fontSize: 12, fontWeight: '500', letterSpacing: 0.4, paddingHorizontal: 8 },
   groupPanel: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border, borderRadius: 10, overflow: 'hidden' },
-  sectionRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 15, paddingVertical: 12 },
-  sectionDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }, currentSection: { backgroundColor: colors.selected },
-  sectionName: { fontFamily: sans, fontSize: 16, fontWeight: '500' }, sectionDescription: { fontSize: 12, lineHeight: 18 }, chevron: { fontSize: 24 },
+  sectionRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  sectionDivider: { position: 'absolute', top: 0, left: 16, right: 16, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }, currentSection: { backgroundColor: colors.selected },
+  sectionName: { fontFamily: sans, fontSize: 16, lineHeight: 22, fontWeight: '500' }, sectionDescription: { fontSize: 12, lineHeight: 18 },
   detail: { flex: 1, minWidth: 0 }, detailHeader: { minHeight: 64, paddingHorizontal: 12, paddingVertical: 6, flexWrap: 'nowrap', borderBottomWidth: 1, borderBottomColor: colors.border },
   detailTitle: { fontFamily: sans, fontSize: 24, lineHeight: 30, fontWeight: '500', flex: 1, flexShrink: 1 },
   page: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 32, gap: 16 },
