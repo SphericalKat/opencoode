@@ -38,6 +38,12 @@ Scan its QR code or paste its link into the same connection screen.
 Pi shares the active terminal conversation and supports models, tools, images, session controls, and compaction.
 Custom Pi terminal dialogs require a response in the terminal.
 
+OpenCode and Pi use the same conversation components and Settings screen.
+The Pi adapter supplies session snapshots and commands through the companion protocol.
+Each connection exposes its supported controls through the shared interface.
+
+For a companion update, follow the [update procedure](docs/pi.md#update-an-existing-installation).
+
 For OpenCode:
 
 1. Run `opencode pair` on your computer.
@@ -46,6 +52,8 @@ For OpenCode:
 
 If the camera is unavailable, paste the link into **Pairing link**, then select **Connect**.
 For a saved server, select its name to reconnect.
+If servers exist, **Settings → Servers** opens the saved list.
+Select **Add server** to open the connection wizard.
 
 For manual setup:
 
@@ -72,6 +80,9 @@ For an Android emulator, use `10.0.2.2` to reach the host computer.
 The iOS simulator can use `127.0.0.1`.
 
 ## Available controls
+
+The list below describes OpenCode controls.
+The [Pi guide](docs/pi.md#available-controls) lists the controls available from Pi.
 
 - Multiple servers, pairing, secure native credentials, and project selection
 - Session search, history, archive, fork, move, import, and export

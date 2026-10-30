@@ -13,7 +13,7 @@ import { MotionContent } from './motion';
 import { OpenCodeLogo } from './OpenCodeLogo';
 
 export type ConnectionForm = { id: string; name: string; url: string; token: string; username?: string };
-type Step = 'home' | 'pair' | 'address' | 'password' | 'scan';
+type Step = 'servers' | 'home' | 'pair' | 'address' | 'password' | 'scan';
 type Props = {
   form: ConnectionForm;
   connections: Connection[];
@@ -35,7 +35,7 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const beta = useBetaLayout();
-  const [navigation, setNavigation] = useState(() => ({ step: (form.id ? 'password' : form.url ? /\/auth\/connect\/[^/]+\/?$/.test(form.url) ? 'pair' : 'address' : 'home') as Step, direction: 0 as -1 | 0 | 1, revision: 0 }));
+  const [navigation, setNavigation] = useState(() => ({ step: (form.id ? 'password' : form.url ? /\/auth\/connect\/[^/]+\/?$/.test(form.url) ? 'pair' : 'address' : connections.length && !unavailableID ? 'servers' : 'home') as Step, direction: 0 as -1 | 0 | 1, revision: 0 }));
   const { step } = navigation;
   const [pairingText, setPairingText] = useState(form.id ? '' : form.url);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -56,6 +56,10 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
   const busy = connecting || !!submission || reading || !!removingID;
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+
+  useEffect(() => {
+    if (step === 'servers' && (!connections.length || unavailableID)) setStep('home');
+  }, [connections.length, unavailableID, step]);
 
   useEffect(() => {
     if (!pairingLink) return;
@@ -191,10 +195,14 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
   }
 
   const betaStart = beta && (step === 'home' || step === 'pair');
-  const back = step !== 'home' && !betaStart && !submission ? <Button title="‹ Back" compact variant="ghost" disabled={busy} onPress={() => go(step === 'password' ? 'address' : 'home', -1)} /> : null;
+  const canReturnToServers = connections.length > 0 && !unavailableID;
+  const backStep = step === 'home' || betaStart ? 'servers' : step === 'password' ? 'address' : 'home';
+  const back = step !== 'servers' && !submission && (canReturnToServers || step !== 'home' && !betaStart) ? <Button title="‹ Back" compact variant="ghost" disabled={busy} onPress={() => go(backStep, -1)} /> : null;
+  const manageServers = <Button title={managing ? 'Done' : 'Manage'} compact variant="ghost" disabled={busy} onPress={() => setManaging(value => !value)} />;
   const savedServers = !!connections.length && <View style={styles.saved}>
-    <Row style={{ justifyContent: 'space-between' }}><Label muted style={styles.instruction}>Your servers</Label><Button title={managing ? 'Done' : 'Manage'} compact variant="ghost" disabled={busy} onPress={() => setManaging(value => !value)} /></Row>
+    <Row style={{ justifyContent: 'space-between' }}><Label muted style={styles.instruction}>Your servers</Label>{step === 'servers' ? <Button title="Add server" compact variant="ghost" disabled={busy} onPress={() => { onChangeForm(blankForm); setPairingText(''); setManaging(false); go('home'); }} /> : manageServers}</Row>
     {connections.map(connection => <View key={connection.id} style={styles.savedItem}><Pressable accessibilityRole="button" accessibilityLabel={`${unavailableID === connection.id ? 'Retry' : 'Connect to'} ${connection.name}${activeID === connection.id ? ', current server' : ''}`} disabled={busy} onPress={() => submit([connection])} style={({ pressed }) => [styles.server, pressed && { backgroundColor: colors.raised }]}><ShellIcon name="server" color={colors.muted} size={20} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{connection.name}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.small}>{connection.url}</Label></View>{unavailableID === connection.id ? <Label style={[styles.small, { color: colors.danger }]}>Retry</Label> : activeID === connection.id ? <Label muted style={styles.small}>Current</Label> : <ShellIcon name="chevron" color={colors.faint} size={16} />}</Pressable>{managing && <Row style={styles.manage}><Button title="Edit" compact disabled={busy} onPress={() => { clearError(); onChangeForm({ ...connection, token: connection.token || '' }); setStep('password'); }} /><Button title={removingID === connection.id ? 'Removing server' : 'Remove'} compact variant="ghost" busy={removingID === connection.id} disabled={busy} onPress={() => { void remove(connection); }} /></Row>}</View>)}
+    {step === 'servers' && <Row style={{ justifyContent: 'flex-end' }}>{manageServers}</Row>}
   </View>;
 
   return <MotionContent variant="connection" transitionKey={navigation.revision} direction={navigation.direction} enabled={!busy && step !== 'scan'} style={[styles.container, beta && styles.betaContainer]}>
@@ -202,7 +210,7 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
     {unavailableID && step === 'home' && error && !localError ? <Card><Label accessibilityRole="alert">{error}</Label></Card> : <ErrorNotice error={localError || error} />}
     {cameraBlocked && <Button title="Open camera settings" disabled={busy} onPress={() => { void Linking.openSettings().catch(() => setLocalError('Open your device settings and enable camera access for Opencoode.')); }} />}
     {submission || connecting ? <Card><Busy /><Label style={styles.center}>Connecting to {serverName(submission?.[0]?.url || form.url)}</Label><Label muted style={styles.center}>Opening your workspace</Label></Card>
-      : betaStart ? <>
+      : step === 'servers' ? savedServers : betaStart ? <>
         <View style={styles.betaIntro}>
           <View style={styles.betaLogo}><OpenCodeLogo width={160} /></View>
           <Label accessibilityRole="header" style={styles.betaTitle}>Connect to a server</Label>
@@ -218,7 +226,7 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
           <Label muted style={styles.betaHint}>OpenCode: run this on the server computer. Pi: use /mobile in an active session with the companion extension installed.</Label>
           <View style={styles.betaCommand}><Label selectable style={styles.command}>opencode pair</Label></View>
         </View>
-        {savedServers}
+        {unavailableID && savedServers}
       </> : step === 'scan' ? <>
         <Heading>Scan a pairing QR code</Heading>
         <Label muted>Point your camera at the code on your computer.</Label>
@@ -253,14 +261,14 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
         <Label muted style={styles.small}>Leave this blank if your server does not require a password.</Label>
         <Disclosure title="Connection details"><Field label="Name" value={form.name} onChangeText={name => onChangeForm({ ...form, name })} /><Field label="Username" placeholder="Username" value={form.username ?? 'opencode'} onChangeText={username => onChangeForm({ ...form, username })} /></Disclosure>
       </> : <>
-        {activeID && savedServers}
+        {unavailableID && activeID && savedServers}
         <View style={styles.intro}><PairingIcon color={colors.muted} /><Heading>{unavailableID ? 'Reconnect to a server' : activeID ? 'Add a server' : 'Connect to a server'}</Heading><Label muted style={styles.center}>{unavailableID ? 'Retry a saved server or pair with a server again.' : 'Your computer does the work. Pick up the conversation here.'}</Label></View>
         <View style={styles.actions}><Button title="Scan QR code" variant="primary" busy={reading} disabled={busy} onPress={() => { void scan(); }} /><Button title="Paste pairing link" disabled={busy} onPress={() => { void pastePairing(); }} /></View>
         <Card><Label style={styles.instruction}>On your computer</Label><Label muted>OpenCode: run the command below. Pi: use /mobile in an active session with the companion extension installed. Then scan the QR code or paste the pairing link.</Label><Label selectable style={styles.command}>opencode pair</Label></Card>
         <Button title="Connect with a server address" variant="ghost" disabled={busy} onPress={() => { onChangeForm(blankForm); go('address'); }} />
-        {!activeID && savedServers}
+        {unavailableID && !activeID && savedServers}
       </>}
-    {step !== 'scan' && <Label muted style={styles.privacy}>{Platform.OS === 'web' ? 'Connections stay in this tab. Your server must allow this browser origin with --cors.' : 'Your server credentials stay in secure storage on this device.'}</Label>}
+    {step !== 'scan' && step !== 'servers' && <Label muted style={styles.privacy}>{Platform.OS === 'web' ? 'Connections stay in this tab. Your server must allow this browser origin with --cors.' : 'Your server credentials stay in secure storage on this device.'}</Label>}
   </MotionContent>;
 }
 

@@ -49,7 +49,7 @@ export type PiEvent =
   | { type: 'waiting'; waiting?: { kind: string; title?: string } }
   | { type: 'reset' };
 export type PiEventBatch = { cursor: number; instanceID: string; events: PiEvent[]; reset?: boolean };
-export type PiCommand =
+export type PiCommand = (
   | { type: 'prompt'; text: string; delivery?: 'steer' | 'followUp'; images?: { mimeType: string; data: string }[] }
   | { type: 'abort' }
   | { type: 'compact'; instructions?: string }
@@ -58,4 +58,5 @@ export type PiCommand =
   | { type: 'rename'; name: string }
   | { type: 'new' }
   | { type: 'switch'; sessionID: string }
-  | { type: 'fork'; entryID: string };
+  | { type: 'fork'; entryID: string }
+) & { expectedSessionID?: string };

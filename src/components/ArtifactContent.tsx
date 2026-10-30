@@ -8,7 +8,7 @@ import { type ThemeColors, useThemedStyles } from '../lib/theme';
 import { useNativePresentation } from '../lib/sheets';
 import { Button, ErrorNotice, Label, Row } from './ui';
 
-type Props = { content: ToolFileContent; client: Client; directory?: string };
+type Props = { content: ToolFileContent; client?: Client; directory?: string };
 const imageTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif', 'image/bmp']);
 
 function source(uri: string): { kind: 'data' } | { kind: 'file'; path: string } | { kind: 'remote'; url: string } | undefined {
@@ -79,7 +79,10 @@ function Artifact({ content, client, directory }: Props) {
   async function read(signal: AbortSignal) {
     if (!target) throw new Error('This attachment URI is not supported');
     if (target.kind === 'data') return inlineBytes(content.uri);
-    if (target.kind === 'file') return client.file.read({ location: directory ? { directory } : undefined, path: target.path }, { signal });
+    if (target.kind === 'file') {
+      if (!client) throw new Error('This server does not provide remote file downloads. Open this file in the terminal.');
+      return client.file.read({ location: directory ? { directory } : undefined, path: target.path }, { signal });
+    }
     const response = await fetch(target.url, { signal, credentials: 'omit' });
     if (!response.ok) throw new Error(`The attachment request failed (HTTP ${response.status})`);
     return new Uint8Array(await response.arrayBuffer());

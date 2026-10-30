@@ -41,6 +41,30 @@ The pairing code expires after five minutes and permits one use. `/mobile` creat
 Pi supports [local package installation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md).
 Pi does not install dependencies for local packages, so the separate dependency step is required.
 
+## Update an existing installation
+
+1. Update the local Opencoode checkout.
+2. Enter `/reload` in the active Pi terminal.
+3. Enter `/mobile` in that terminal.
+4. Pair the phone with the new QR code or link.
+
+## Shared mobile interface
+
+OpenCode and Pi use the same `ChatScreen` and conversation components.
+Both connections use the same Appearance editor and Servers navigation.
+
+The shared screen supplies these controls:
+
+- Transcript and reasoning
+- Tool details and status
+- Scroll behavior and composer
+- Message actions and model picker
+
+The Pi adapter converts companion snapshots into the session and message types for the shared screen.
+It sends commands through the Pi companion protocol.
+Capabilities control which actions appear and which requests run.
+Pi exposes its supported controls in the shared interface.
+
 ## Available controls
 
 | Control | Behavior |
@@ -60,6 +84,10 @@ Pi does not install dependencies for local packages, so the separate dependency 
 | Rename | Changes the active session name |
 | Compact context | Asks Pi to summarize the active context |
 
+The shared model picker lists Pi thinking levels as model variants.
+Pi requires an explicit level and has no **Model default** action.
+The companion omits unsupported OpenCode controls.
+
 Model changes and session controls require an idle session without a terminal dialog.
 The app displays a notice when Pi needs input in the terminal.
 The companion cannot submit answers to arbitrary extension dialogs or custom terminal screens.
@@ -75,6 +103,11 @@ Session changes preserve the listener and device token.
 Pi exit, `/reload`, and `/mobile stop` close the listener and revoke the token.
 
 If you change sessions in the terminal, enter `/mobile` before you use the phone's New, Open, or Fork controls.
+
+Mobile commands include the target session ID.
+The companion rejects a command if the active session changes before execution.
+Earlier companion versions lack this check.
+The update procedure above reloads the companion and enables this session check.
 
 To disconnect the phone and revoke access, enter this command in Pi:
 
@@ -118,12 +151,13 @@ Durable fits a separate server that owns conversations and must recover interrup
 
 ## Verification boundary
 
-I paired Android Expo Go with Pi 1.4 through the shared connection screen.
-I sent a prompt from Android, opened its real bash output, and read the response.
-I created a session from Android and reopened the original without another pair step.
-I opened the long-press action bar on a message.
-I received a terminal prompt and its live tool status on Android, then used Jump to latest after the response.
-I restored the saved OpenCode connection and stopped the separate Pi review process.
+I paired Android Expo Go with an isolated Pi 1.4 session through the shared connection screen.
+I sent a prompt through the shared `ChatScreen` and observed its real command activity and response.
+I scrolled through the response, used Jump to latest, and opened the shared long-press selection bar.
+I opened the shared Settings overview and the saved server list.
+I selected Add server and returned to the list with Back.
+
+Earlier Android checks covered session creation, session selection, and tool output before the shared screen replaced the Pi screen.
 
 I did not run automated tests, typechecks, linters, or builds.
-I did not verify image uploads or iOS on a device.
+I did not verify image uploads, the fork callback, or iOS on a device after this refactor.

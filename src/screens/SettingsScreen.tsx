@@ -21,7 +21,7 @@ import { useHasUnsavedChanges, useUnsavedChanges, useUnsavedGuard } from '../lib
 import { pageInset } from '../lib/layout';
 import { useBetaLayout } from '../lib/betaLayout';
 
-type Section = 'Accounts' | 'Models' | 'MCP' | 'Config' | 'Skills' | 'Plugins' | 'Permissions' | 'Advanced' | 'Appearance';
+export type Section = 'Accounts' | 'Models' | 'MCP' | 'Config' | 'Skills' | 'Plugins' | 'Permissions' | 'Advanced' | 'Appearance';
 const sectionDescriptions: Record<Section, string> = {
   Accounts: 'Provider connections and credentials',
   Models: 'Available models and capabilities',
@@ -39,6 +39,7 @@ const sectionGroups: { title: string; items: Section[] }[] = [
   { title: 'Agent', items: ['Skills', 'Plugins', 'Permissions'] },
   { title: 'Advanced', items: ['Advanced'] },
 ];
+const allSections = sectionGroups.flatMap(group => group.items);
 
 type HeaderRefresh = { refresh?: () => void; loading?: boolean } | null;
 const HeaderRefreshContext = createContext<React.Dispatch<React.SetStateAction<HeaderRefresh>> | null>(null);
@@ -48,7 +49,7 @@ const zeroInsets = { top: 0, bottom: 0, left: 0, right: 0 };
 // The native toolbar supplies its inset before the shared back control applies its own margins.
 const nativeBackInsets = Platform.select<ViewStyle>({ android: { marginStart: -7, marginEnd: 33 }, ios: { minWidth: 44, height: 44, justifyContent: 'center' } });
 
-export function SettingsScreen({ client, directory, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation, betaLayout = false, onManageServers, serverLabel }: { client: Client; directory: string; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void; betaLayout?: boolean; onManageServers?: () => void; serverLabel?: string }) {
+export function SettingsScreen({ client, directory, sections = allSections, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation, betaLayout = false, onManageServers, serverLabel }: { client?: Client; directory: string; sections?: Section[]; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void; betaLayout?: boolean; onManageServers?: () => void; serverLabel?: string }) {
   const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
@@ -61,15 +62,18 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
   const mounted = useRef(true);
   const navigationRef = useNavigationContainerRef<SettingsStackParams>();
-  const selected = section ?? (wide ? 'Accounts' : null);
+  const availableSections = useMemo(() => sections.filter(value => !!client || value === 'Appearance'), [client, sections]);
+  const defaultSection = availableSections.includes('Accounts') ? 'Accounts' : availableSections[0] ?? null;
+  const selected = section !== null && availableSections.includes(section) ? section : wide ? defaultSection : null;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const changeSection = useCallback(async (next: Section | null) => {
+    if (next !== null && !availableSections.includes(next)) return false;
     if (next === section) return true;
     if (section !== null && !await confirmNavigation()) return false;
     if (!mounted.current) return false;
     setSection(next);
     return true;
-  }, [section, confirmNavigation]);
+  }, [section, availableSections, confirmNavigation]);
   useEffect(() => {
     if (nativeStackEnabled) return;
     onBackStateChange?.(visible && !wide && section !== null);
@@ -102,7 +106,7 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
   const renderIndex = () => <SettingsIndex onSelect={next => {
     if (!nativeStackEnabled) { void changeSection(next); return; }
     navigationRef.navigate('Section', { section: next });
-  }} selected={selected} wide={wide} onManageServers={onManageServers} serverLabel={serverLabel} />;
+  }} sections={availableSections} selected={selected} wide={wide} onManageServers={onManageServers} serverLabel={serverLabel} />;
   const renderSection = (value: Section) => <SettingsSection client={client} directory={directory} section={value} />;
 
   const navigationTheme = useMemo(() => ({ ...DefaultTheme, dark: scheme === 'dark', colors: { ...DefaultTheme.colors, primary: colors.accent, background: colors.bg, card: colors.panel, text: colors.text, border: colors.border, notification: colors.danger } }), [colors, scheme]);
@@ -123,7 +127,7 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
         {renderIndex}
       </SettingsStack.Screen>
       <SettingsStack.Screen name="Section" options={({ route, navigation: screenNavigation }) => ({ title: route.params.section, headerBackButtonDisplayMode: 'minimal', ...(Platform.OS === 'android' ? { headerBackVisible: false, headerLeft: () => <SettingsBackButton label="Settings" onPress={() => screenNavigation.goBack()} /> } : {}) })}>
-        {({ route, navigation: screenNavigation }) => <NativeSettingsSection client={client} directory={directory} section={route.params.section} navigation={screenNavigation} />}
+        {({ route, navigation: screenNavigation }) => availableSections.includes(route.params.section) ? <NativeSettingsSection client={client} directory={directory} section={route.params.section} navigation={screenNavigation} /> : null}
       </SettingsStack.Screen>
     </SettingsStack.Navigator>
   </BaseNavigationContainer>;
@@ -145,25 +149,31 @@ function SettingsBackButton({ label, onPress }: { label: string; onPress: () => 
   return <HeaderBackButton displayMode="minimal" accessibilityLabel={`Back to ${label}`} onPress={onPress} tintColor={colors.text} style={nativeBackInsets} backImage={Platform.OS === 'ios' ? ({ tintColor }) => <ShellIcon name="back" color={tintColor} size={22} /> : undefined} />;
 }
 
-function SettingsIndex({ onSelect, selected, wide, onManageServers, serverLabel }: { onSelect: (section: Section) => void; selected: Section | null; wide: boolean; onManageServers?: () => void; serverLabel?: string }) {
+function SettingsIndex({ onSelect, sections, selected, wide, onManageServers, serverLabel }: { onSelect: (section: Section) => void; sections: Section[]; selected: Section | null; wide: boolean; onManageServers?: () => void; serverLabel?: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return <ScrollView style={wide ? styles.sidebar : undefined} contentContainerStyle={styles.index}>
     {wide && <View style={styles.indexHeader}><Heading>Settings</Heading><Label muted>Preferences, connections, and tools</Label></View>}
-    {sectionGroups.map(group => <View key={group.title} style={styles.group}>
-      {!(group.items.length === 1 && group.items[0] === group.title) && <Label muted style={styles.groupTitle}>{group.title.toUpperCase()}</Label>}
+    {sectionGroups.map(group => {
+      const items = group.items.filter(item => sections.includes(item));
+      const manageServers = group.title === 'Connections' && onManageServers;
+      if (!items.length && !manageServers) return null;
+      return <View key={group.title} style={styles.group}>
+      {!(items.length === 1 && items[0] === group.title) && <Label muted style={styles.groupTitle}>{group.title.toUpperCase()}</Label>}
       <View style={styles.groupPanel}>
-      {group.title === 'Connections' && onManageServers && <Pressable accessibilityRole="button" accessibilityLabel="Servers. Scan a QR code, paste a link, or switch servers" onPress={onManageServers} style={({ pressed }) => [styles.sectionRow, pressed && { backgroundColor: colors.raised }]}><View style={styles.detail}><Label style={styles.sectionName}>Servers</Label><Label muted style={styles.sectionDescription}>{serverLabel ? `${serverLabel} · Scan or paste a link` : 'Scan, paste a link, or switch servers'}</Label></View><ShellIcon name="chevron" size={16} color={colors.muted} /></Pressable>}
-      {group.items.map((item, index) => <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Open ${item}. ${sectionDescriptions[item]}`} accessibilityState={{ selected: selected === item }} aria-current={selected === item ? 'page' : undefined} onPress={() => onSelect(item)} style={({ pressed }) => [styles.sectionRow, wide && selected === item && styles.currentSection, pressed && { backgroundColor: colors.raised }]}>
-        {(index > 0 || group.title === 'Connections' && !!onManageServers) && <View pointerEvents="none" style={styles.sectionDivider} />}
+      {manageServers && <Pressable accessibilityRole="button" accessibilityLabel="Servers. Scan a QR code, paste a link, or switch servers" onPress={onManageServers} style={({ pressed }) => [styles.sectionRow, pressed && { backgroundColor: colors.raised }]}><View style={styles.detail}><Label style={styles.sectionName}>Servers</Label><Label muted style={styles.sectionDescription}>{serverLabel ? `${serverLabel} · Scan or paste a link` : 'Scan, paste a link, or switch servers'}</Label></View><ShellIcon name="chevron" size={16} color={colors.muted} /></Pressable>}
+      {items.map((item, index) => <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Open ${item}. ${sectionDescriptions[item]}`} accessibilityState={{ selected: selected === item }} aria-current={selected === item ? 'page' : undefined} onPress={() => onSelect(item)} style={({ pressed }) => [styles.sectionRow, wide && selected === item && styles.currentSection, pressed && { backgroundColor: colors.raised }]}>
+        {(index > 0 || !!manageServers) && <View pointerEvents="none" style={styles.sectionDivider} />}
         <View style={{ flex: 1, minWidth: 0 }}><Label style={styles.sectionName}>{item}</Label><Label muted numberOfLines={1} style={styles.sectionDescription}>{sectionDescriptions[item]}</Label></View>
         <ShellIcon name="chevron" size={16} color={colors.muted} />
       </Pressable>)}</View>
-    </View>)}
+    </View>; })}
   </ScrollView>;
 }
 
-function SettingsSection({ client, directory, section }: { client: Client; directory: string; section: Section }) {
+function SettingsSection({ client, directory, section }: { client?: Client; directory: string; section: Section }) {
+  if (section === 'Appearance') return <View key={`${directory}:${section}`} style={{ flex: 1 }}><AppearanceSettings /></View>;
+  if (!client) return null;
   return <View key={`${directory}:${section}`} style={{ flex: 1 }}>
       {section === 'Accounts' && <Accounts client={client} directory={directory} />}
       {section === 'Models' && <Models client={client} directory={directory} />}
@@ -173,11 +183,10 @@ function SettingsSection({ client, directory, section }: { client: Client; direc
       {section === 'Plugins' && <Plugins client={client} directory={directory} />}
       {section === 'Permissions' && <Permissions client={client} directory={directory} />}
       {section === 'Advanced' && <AdvancedSettings client={client} directory={directory} />}
-      {section === 'Appearance' && <AppearanceSettings />}
   </View>;
 }
 
-function NativeSettingsSection({ client, directory, section, navigation }: { client: Client; directory: string; section: Section; navigation: NativeStackScreenProps<SettingsStackParams, 'Section'>['navigation'] }) {
+function NativeSettingsSection({ client, directory, section, navigation }: { client?: Client; directory: string; section: Section; navigation: NativeStackScreenProps<SettingsStackParams, 'Section'>['navigation'] }) {
   const { colors } = useTheme();
   const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);

@@ -30,6 +30,11 @@ function text(value: unknown, key: string, limit = 100_000): string {
 
 function command(value: unknown): PiCommand {
   if (!object(value)) throw new RequestError(400, 'Expected a command');
+  const expectedSessionID = value.expectedSessionID === undefined ? undefined : text(value.expectedSessionID, 'expected session ID', 128);
+  return { ...commandPayload(value), expectedSessionID };
+}
+
+function commandPayload(value: Record<string, unknown>): PiCommand {
   switch (value.type) {
     case 'prompt': {
       const prompt = typeof value.text === 'string' && value.text.length <= 1_000_000 ? value.text : undefined;
@@ -461,6 +466,7 @@ class MobileBridge {
     } else if (request.method === 'POST' && url.pathname === '/pi/command') {
       const parsed = command(await readJson(request));
       if (this.closed) throw new RequestError(503, 'The mobile listener is stopped');
+      if (parsed.expectedSessionID !== undefined && this.current().sessionManager.getSessionId() !== parsed.expectedSessionID) throw new RequestError(409, 'The active Pi session changed. Send the command again');
       if (parsed.type === 'abort') this.current().abort();
       else await this.enqueue(parsed);
       this.reply(response, 200, { ok: true });
@@ -483,6 +489,7 @@ class MobileBridge {
     if (this.closed) throw new RequestError(503, 'The mobile listener is stopped');
     const ctx = this.current();
     const sessionID = ctx.sessionManager.getSessionId();
+    if (value.expectedSessionID !== undefined && sessionID !== value.expectedSessionID) throw new RequestError(409, 'The active Pi session changed. Send the command again');
     if (this.prompts.length) throw new RequestError(409, 'Pi needs a response in the terminal. Complete the terminal dialog first');
     if (value.type === 'prompt') {
       if (this.compacting) throw new RequestError(409, 'Wait for compaction to finish');
