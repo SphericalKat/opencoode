@@ -26,6 +26,10 @@ export function projectLiveEvent(messages: SessionMessageInfo[], event: OpenCode
   return projectLiveEvents(messages, [event], sessionID);
 }
 
+export function isAssistantProgress(event: OpenCodeEvent): boolean {
+  return ['session.text.started', 'session.text.delta', 'session.reasoning.started', 'session.reasoning.delta', 'session.tool.input.started', 'session.tool.input.delta', 'session.tool.called', 'session.step.started', 'session.step.streamed', 'session.step.ended', 'session.step.failed'].includes(event.type);
+}
+
 export function projectLiveEvents(messages: SessionMessageInfo[], events: OpenCodeEvent[], sessionID: string): SessionMessageInfo[] {
   if (!events.length) return messages;
   const indices = new Map(messages.map((message, index) => [message.id, index]));
@@ -54,7 +58,7 @@ export function projectLiveEvents(messages: SessionMessageInfo[], events: OpenCo
     const current = index === undefined ? undefined : next[index];
     if (!current || current.type !== 'assistant') continue;
     const mutable = () => changed.has(messageID) ? current : store({ ...current, content: [...current.content], time: { ...current.time } });
-    if (current.retry && (event.type.startsWith('session.text.') || event.type.startsWith('session.reasoning.') || event.type.startsWith('session.tool.') || event.type.startsWith('session.step.'))) delete mutable().retry;
+    if (current.retry && isAssistantProgress(event)) delete mutable().retry;
     const fragment = (kind: 'text' | 'reasoning', ordinal: number) => {
       let count = 0;
       return current.content.findIndex(part => part.type === kind && count++ === ordinal);

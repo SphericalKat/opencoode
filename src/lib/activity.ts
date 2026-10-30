@@ -23,6 +23,7 @@ export function sessionActivity(messages: SessionMessageInfo[], active: boolean,
   const assistant: SessionMessageAssistant | undefined = current?.type === 'assistant' && current.time.completed === undefined && !current.error ? current : undefined;
   const retry = status?.type === 'retry' ? { attempt: status.attempt, at: status.next, message: status.message } : !status && assistant?.retry ? { attempt: assistant.retry.attempt, at: assistant.retry.at, message: assistant.retry.error.message } : undefined;
   if (retry) return { kind: 'retry', label: 'Retrying', retry };
+  if (current?.type === 'assistant' && current.error) return { kind: 'idle', label: '' };
   if (current?.type === 'compaction' && current.status === 'running') return { kind: 'compaction', label: 'Compacting context' };
   if (current?.type === 'shell' && current.status === 'running') return { kind: 'shell', label: 'Running command' };
   if (assistant) {

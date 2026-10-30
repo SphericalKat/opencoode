@@ -5,7 +5,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { darkColors, type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { PressFeedback, useMotionPreference } from './motion';
 import { useSheetCoordinator } from '../lib/sheets';
-import { MessageActionsContext } from '../lib/messageActions';
+import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
 
 export const colors = darkColors;
 export const sans = 'Inter';
@@ -125,11 +125,13 @@ export function JsonView({ value }: { value: unknown }) {
   const { colors } = useTheme();
   return <Text selectable style={{ fontFamily: mono, fontSize: 12, lineHeight: 19, color: colors.text }}>{JSON.stringify(value, null, 2)}</Text>;
 }
-export function Disclosure({ title, children }: { title: string; children: React.ReactNode }) {
+export function Disclosure({ title, children, disclosureKey }: { title: string; children: React.ReactNode; disclosureKey?: string }) {
   const styles = useThemedStyles(createStyles);
   const openMessageActions = useContext(MessageActionsContext);
-  const [open, setOpen] = useState(false);
-  return <Card style={styles.disclosure}><Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(!open)} onLongPress={Platform.OS === 'web' ? undefined : openMessageActions} style={({ pressed }) => [styles.disclosureHeader, pressed && styles.ghostPressed]}><Label style={{ fontWeight: '500' }}>{open ? '−' : '+'}  {title}</Label></Pressable>{open && <View style={styles.disclosureBody}>{children}</View>}</Card>;
+  const disclosures = useContext(MessageDisclosureContext);
+  const [open, setOpen] = useState(() => disclosureKey ? disclosures?.isOpen(disclosureKey) ?? false : false);
+  useLayoutEffect(() => { setOpen(disclosureKey ? disclosures?.isOpen(disclosureKey) ?? false : false); }, [disclosureKey, disclosures]);
+  return <Card style={styles.disclosure}><Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(disclosureKey && disclosures ? disclosures.toggle(disclosureKey) : !open)} onLongPress={Platform.OS === 'web' ? undefined : openMessageActions} style={({ pressed }) => [styles.disclosureHeader, pressed && styles.ghostPressed]}><Label style={{ fontWeight: '500' }}>{open ? '−' : '+'}  {title}</Label></Pressable>{open && <View style={styles.disclosureBody}>{children}</View>}</Card>;
 }
 function createStyles(colors: ThemeColors) {
   const inset = Platform.OS !== 'android' || Number(Platform.Version) >= 29;

@@ -7,11 +7,12 @@ import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { Label } from './ui';
 import { WorkingIndicator } from './motion';
 
-export const AgentActivityBar = memo(function AgentActivityBar({ activity, connected, sending, stopping, animate, onReview }: {
-  activity: AgentActivity; connected: boolean; sending: boolean; stopping: boolean; animate: boolean; onReview: () => void;
+export const AgentActivityBar = memo(function AgentActivityBar({ activity, connectionStatus, sending, stopping, animate, onReview }: {
+  activity: AgentActivity; connectionStatus: string; sending: boolean; stopping: boolean; animate: boolean; onReview: () => void;
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const connected = connectionStatus === 'Live';
   const retry = connected && !stopping ? activity.retry : undefined;
   const [now, setNow] = useState(Date.now);
   const [showError, setShowError] = useState(false);
@@ -24,8 +25,8 @@ export const AgentActivityBar = memo(function AgentActivityBar({ activity, conne
   }, [retry?.at, retry?.attempt, animate]);
   const blocked = connected && !stopping && (activity.kind === 'approval' || activity.kind === 'question');
   const seconds = retry ? Math.max(0, Math.ceil((retry.at - now) / 1000)) : 0;
-  const label = !connected ? 'Reconnecting' : stopping ? 'Stopping' : retry ? `${seconds ? `Retrying in ${seconds}s` : 'Retrying now'} · Attempt ${retry.attempt}` : sending && activity.kind === 'idle' ? 'Sending' : activity.label;
-  const announcement = !connected ? 'Reconnecting' : stopping ? 'Stopping' : retry ? 'Waiting to retry' : sending && activity.kind === 'idle' ? 'Sending' : activity.label;
+  const label = !connected ? connectionStatus : stopping ? 'Stopping' : retry ? `${seconds ? `Retrying in ${seconds}s` : 'Retrying now'} · Attempt ${retry.attempt}` : sending && activity.kind === 'idle' ? 'Sending' : activity.label;
+  const announcement = !connected ? connectionStatus : stopping ? 'Stopping' : retry ? 'Waiting to retry' : sending && activity.kind === 'idle' ? 'Sending' : activity.label;
   const lastAnnouncement = useRef(announcement);
   useEffect(() => {
     if (lastAnnouncement.current === announcement) return;
@@ -35,10 +36,11 @@ export const AgentActivityBar = memo(function AgentActivityBar({ activity, conne
   const busy = !!label && connected && !blocked;
   return <View style={styles.lane}>
     <View style={styles.bar}>
-      <View style={styles.summary} accessibilityLiveRegion="polite" aria-live="polite" accessibilityLabel={label || undefined}>
-        {!!label && (busy ? <WorkingIndicator active={animate} color={colors.muted} size={14} /> : <Svg width={14} height={14} viewBox="0 0 16 16" fill="none" aria-hidden><Path d={blocked ? 'M8 2 14 13H2L8 2ZM8 6v3m0 2v.1' : 'M3 3l10 10M13 3 3 13'} stroke={colors.muted} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg>)}
+      <View style={styles.summary} accessibilityLiveRegion="none" aria-live="off" accessibilityLabel={label || undefined}>
+        {!!label && (blocked ? <Svg width={14} height={14} viewBox="0 0 16 16" fill="none" aria-hidden><Path d="M8 2 14 13H2L8 2ZM8 6v3m0 2v.1" stroke={colors.muted} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg> : <WorkingIndicator active={busy && animate} color={colors.muted} size={14} />)}
         <Label muted numberOfLines={1} style={styles.label}>{label}</Label>
       </View>
+      {Platform.OS === 'web' && <View aria-live="polite" style={styles.announcement}><Label>{announcement || 'Agent is ready'}</Label></View>}
       {blocked && <Pressable accessibilityRole="button" accessibilityLabel="Review pending requests" onPress={onReview} style={styles.action}><Label style={styles.actionText}>Review ↓</Label></Pressable>}
       {retry && <Pressable accessibilityRole="button" accessibilityLabel="Retry details" accessibilityState={{ expanded: showError }} onPress={() => setShowError(value => !value)} style={styles.action}><Label muted style={styles.actionText}>{showError ? 'Less' : 'Details'}</Label></Pressable>}
     </View>
@@ -46,8 +48,8 @@ export const AgentActivityBar = memo(function AgentActivityBar({ activity, conne
   </View>;
 });
 
-export function ActivityDisclosure({ detailsKey, title, detail, busy, animate, failed, complete = true, children }: {
-  detailsKey: string; title: string; detail?: string; busy?: boolean; animate?: boolean; failed?: boolean; complete?: boolean; children: React.ReactNode;
+export function ActivityDisclosure({ detailsKey, title, detail, busy, animate, failed, complete = true, thought, children }: {
+  detailsKey: string; title: string; detail?: string; busy?: boolean; animate?: boolean; failed?: boolean; complete?: boolean; thought?: boolean; children: React.ReactNode;
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -55,10 +57,10 @@ export function ActivityDisclosure({ detailsKey, title, detail, busy, animate, f
   const disclosures = useContext(MessageDisclosureContext);
   const [open, setOpen] = useState(() => disclosures?.isOpen(detailsKey) ?? false);
   return <View>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${title}${detail ? `, ${detail}` : ''}`} accessibilityState={{ expanded: open }} aria-expanded={open}
+    <Pressable accessibilityRole="button" accessibilityLabel={`${title}${detail ? `, ${detail}` : ''}`} accessibilityState={{ expanded: open, busy: !!busy }} aria-expanded={open}
       onPress={() => setOpen(disclosures ? disclosures.toggle(detailsKey) : !open)} onLongPress={Platform.OS === 'web' ? undefined : actions}
       style={({ pressed }) => [styles.disclosureHeader, pressed && { backgroundColor: colors.raised }]}>
-      {busy ? <WorkingIndicator active={!!animate} color={colors.muted} size={14} /> : <Svg width={14} height={14} viewBox="0 0 16 16" fill="none" aria-hidden><Path d={failed ? 'm4 4 8 8m0-8-8 8' : complete ? 'm3.5 8 3 3 6-6' : 'M5 4v8m6-8v8'} stroke={failed ? colors.danger : colors.muted} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
+      {busy ? <WorkingIndicator active={!!animate} color={colors.muted} size={14} /> : <Svg width={14} height={14} viewBox="0 0 16 16" fill="none" aria-hidden><Path d={thought ? 'M4 4.5h8M4 8h6m-6 3.5h8' : failed ? 'm4 4 8 8m0-8-8 8' : complete ? 'm3.5 8 3 3 6-6' : 'M5 4v8m6-8v8'} stroke={failed ? colors.danger : colors.muted} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
       <View style={styles.disclosureTitle}><Label muted style={styles.label}>{title}</Label>{!!detail && <Label muted numberOfLines={1} style={styles.detail}>{detail}</Label>}</View>
       <Svg width={12} height={12} viewBox="0 0 16 16" fill="none" aria-hidden><Path d={open ? 'm4 6 4 4 4-4' : 'm6 4 4 4-4 4'} stroke={colors.faint} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg>
     </Pressable>
@@ -67,8 +69,9 @@ export function ActivityDisclosure({ detailsKey, title, detail, busy, animate, f
 }
 
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
-  lane: { width: '100%', maxWidth: 736, minHeight: 44 },
-  bar: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6 },
+  lane: { width: '100%', maxWidth: 736, minHeight: 28 },
+  bar: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6 },
+  announcement: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 },
   summary: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
   label: { fontSize: 13, lineHeight: 20, flexShrink: 1 },
   action: { minHeight: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 8, justifyContent: 'center' },

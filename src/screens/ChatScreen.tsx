@@ -9,7 +9,7 @@ import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
 import type { AgentInfo, CommandInfo, FileDiffInfo, FileSystemEntry, FormInfo, ModelInfo, OpenCodeEvent, PermissionRequest, SessionInboxInfo, SessionInfo, SessionMessageAssistant, SessionMessageInfo, SessionPromptInput, SessionStatus, SkillInfo } from '@opencode/client';
 import { errorMessage, type Client } from '../lib/client';
-import { mergeMessages, parseComposer, projectLiveEvents, serverFileUri } from '../lib/chat';
+import { isAssistantProgress, mergeMessages, parseComposer, projectLiveEvents, serverFileUri } from '../lib/chat';
 import { Button, Busy, Card, confirmAction, Disclosure, Empty, ErrorNotice, Field, Heading, JsonView, Label, mono, Row, Sheet } from '../components/ui';
 import { SessionForms } from '../components/SessionForms';
 import { Markdown } from '../components/Markdown';
@@ -52,7 +52,7 @@ type Panel = 'actions' | 'models' | 'agents' | 'commands' | 'mentions' | 'tools'
 type SyncScope = 'metadata' | 'history' | 'inbox' | 'requests';
 const messageKey = (message: SessionMessageInfo) => message.id;
 const messageType = (message: SessionMessageInfo) => message.type;
-const MessageSeparator = () => <View style={{ height: 24 }} />;
+const MessageSeparator = ({ leadingItem, trailingItem }: { leadingItem?: SessionMessageInfo; trailingItem?: SessionMessageInfo }) => <View style={{ height: leadingItem?.type === 'assistant' && trailingItem?.type === 'assistant' ? 10 : 24 }} />;
 
 export function ChatScreen(props: Props) {
   return <ChatSession key={props.sessionID} {...props} />;
@@ -524,7 +524,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
               if (event.type === 'session.retry.scheduled') {
                 activityRevision.current++;
                 setSessionStatus({ type: 'retry', attempt: event.data.attempt, next: event.data.at, message: event.data.error.message });
-              } else if (/^session\.(text|reasoning|tool)\./.test(event.type) || event.type === 'session.step.started') {
+              } else if (isAssistantProgress(event)) {
                 setSessionStatus(current => current?.type === 'retry' ? { type: 'busy' } : current);
               }
               if (event.type === 'session.compaction.delta') continue;
@@ -693,8 +693,9 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const interrupt = () => run(async () => {
     setStopping(true);
     try { await client.session.interrupt({ sessionID }); }
-    finally { if (alive.current) setStopping(false); }
+    catch (reason) { if (alive.current) setStopping(false); throw reason; }
   });
+  useEffect(() => { if (!active) setStopping(false); }, [active]);
 
   const attachDevice = async () => {
     if (!draftLoaded || !alive.current || devicePickerActive.current) return;
@@ -838,18 +839,18 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     </>}</MotionContent>
     {error && <View style={styles.errorBanner}><ErrorNotice error={error} /><Button title="Dismiss" compact variant="ghost" onPress={() => setError(null)} /></View>}
     {(fetchError || catalogError || Object.values(syncErrors)[0]) && <View style={styles.errorBanner}><ErrorNotice error={fetchError || catalogError || Object.values(syncErrors)[0]} onRetry={() => { setCatalogRevision(value => value + 1); void refresh(); }} /></View>}
-    {streamStatus !== 'Live' && !fetchError && <Label muted style={styles.connectionStatus}>{streamStatus}…</Label>}
     {session.revert && <View style={styles.revert}><Label>A revert is staged</Label><Label muted>Later messages are excluded from the context.</Label><Row><Button title="Restore" compact onPress={() => { void run(() => client.session.revert.clear({ sessionID })); }} /><Button title="Commit revert" compact variant="danger" disabled={pending} onPress={() => { void run(async () => { if (await confirmAction('Commit this revert?', 'This permanently removes messages after the revert point.')) { await client.session.revert.commit({ sessionID }); historyEpoch.current++; liveMessages.current.clear(); } }); }} /></Row></View>}
     <MessageDisclosureContext.Provider value={disclosures}><View style={styles.transcriptFrame}><FlashList ref={list} data={transcriptMessages} keyExtractor={messageKey} getItemType={messageType} renderItem={renderMessage} ItemSeparatorComponent={MessageSeparator} maintainVisibleContentPosition={maintainPosition}
       style={styles.transcript} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} onLoad={listLoaded} onContentSizeChange={contentSizeChanged} onLayout={transcriptLayoutChanged}
       onScroll={updateScrollPosition} scrollEventThrottle={16} onScrollBeginDrag={beginUserScroll} onScrollEndDrag={finishUserScroll} onMomentumScrollBegin={beginUserScroll} onMomentumScrollEnd={finishUserScroll}
       ListHeaderComponent={cursor ? <Button title="Load earlier messages" variant="ghost" compact busy={loadingOlder} onPress={() => { setFollowing(false); void loadOlder(); }} /> : undefined}
       ListEmptyComponent={<Empty title="Start something good" detail="Ask a question, describe a change, or attach a file from your project." />}
-      ListFooterComponent={<View style={{ gap: 12 }}><SessionForms client={client} sessionID={sessionID} forms={forms} permissions={permissions} onChanged={refreshRef.current} onError={showError} locationDirectory={session.location.directory} />
-        {inbox.length > 0 && <Card><Label muted style={styles.eyebrow}>PENDING INPUTS · {inbox.length}</Label>{inbox.map(item => <View key={item.id} style={{ gap: 8 }}>{item.type === 'synthetic' ? <Disclosure title={item.payload.description || 'Server context'}><MessageText text={item.payload.text} /></Disclosure> : <Label numberOfLines={3}>{item.type === 'user' ? item.payload.text : item.type === 'compaction' ? 'Compact context' : 'Move session'}</Label>}<Row><Label muted>{item.delivery === 'steer' ? 'Steer current work' : 'After current work'}</Label><Button title={item.delivery === 'steer' ? 'Queue' : 'Steer'} compact onPress={() => { void run(() => client.session.inbox.update({ sessionID, inboxID: item.id, delivery: item.delivery === 'steer' ? 'queue' : 'steer' })); }} />{(item.type === 'user' || item.type === 'synthetic') && <Button title="Edit" compact disabled={!draftLoaded} onPress={() => { void editInbox(item); }} />}<Button title="Cancel" compact variant="ghost" onPress={() => { void run(() => client.session.inbox.cancel({ sessionID, inboxID: item.id })); }} /></Row></View>)}</Card>}
+      ListFooterComponent={<View style={{ gap: 12 }}>
+        {inbox.length > 0 && <Card><Label muted style={styles.eyebrow}>PENDING INPUTS · {inbox.length}</Label>{inbox.map(item => <View key={item.id} style={{ gap: 8 }}>{item.type === 'synthetic' ? <Disclosure disclosureKey={item.id} title={item.payload.description || 'Server context'}><MessageText text={item.payload.text} /></Disclosure> : <Label numberOfLines={3}>{item.type === 'user' ? item.payload.text : item.type === 'compaction' ? 'Compact context' : 'Move session'}</Label>}<Row><Label muted>{item.delivery === 'steer' ? 'Steer current work' : 'After current work'}</Label><Button disabled={pending} title={item.delivery === 'steer' ? 'Queue' : 'Steer'} compact onPress={() => { void run(() => client.session.inbox.update({ sessionID, inboxID: item.id, delivery: item.delivery === 'steer' ? 'queue' : 'steer' })); }} />{(item.type === 'user' || item.type === 'synthetic') && <Button title="Edit" compact disabled={!draftLoaded || pending} onPress={() => { void editInbox(item); }} />}<Button title="Cancel" compact variant="ghost" disabled={pending} onPress={() => { void run(() => client.session.inbox.cancel({ sessionID, inboxID: item.id })); }} /></Row></View>)}</Card>}
+        <SessionForms client={client} sessionID={sessionID} forms={forms} permissions={permissions} onChanged={refreshRef.current} onError={showError} locationDirectory={session.location.directory} />
       </View>}
-    />{!followingLatest && awayFromLatest && <View pointerEvents="box-none" style={styles.latestButton}><Button title={activity.kind === 'approval' ? 'Approval needed ↓' : activity.kind === 'question' ? 'Answer needed ↓' : 'Jump to latest'} compact onPress={jumpToLatest} /></View>}</View></MessageDisclosureContext.Provider>
-    <View style={styles.composerDock}><AgentActivityBar activity={activity} connected={streamStatus === 'Live'} sending={sending} stopping={stopping} animate={visible && foreground} onReview={jumpToLatest} /><View style={styles.composer}>
+    />{!followingLatest && awayFromLatest && activity.kind !== "approval" && activity.kind !== "question" && <View pointerEvents="box-none" style={styles.latestButton}><Button title="Jump to latest" compact onPress={jumpToLatest} /></View>}</View></MessageDisclosureContext.Provider>
+    <View style={styles.composerDock}><AgentActivityBar activity={activity} connectionStatus={streamStatus} sending={sending} stopping={stopping} animate={visible && foreground} onReview={jumpToLatest} /><View style={styles.composer}>
       {!draftLoaded ? <Busy /> : <>
       {(attachments.length > 0 || selectedSkills.length > 0 || restoredSkillIDs.length > 0 || selectedAgentIDs.length > 0) && <ScrollView horizontal contentContainerStyle={{ gap: 6 }}>
         {attachments.map((file, index) => <Button key={`${file.name}-${index}`} title={`${file.name || 'File'} ×`} compact onPress={() => setAttachments(current => current.filter((_, i) => i !== index))} />)}
@@ -858,7 +859,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         {selectedAgentIDs.map(id => <Button key={id} title={`@${agents.find(agent => agent.id === id)?.name || id} ×`} compact onPress={() => setSelectedAgentIDs(current => current.filter(value => value !== id))} />)}
       </ScrollView>}
       <Field accessibilityLabel="Message" placeholder="Ask OpenCode…" multiline value={draft} onChangeText={setDraft} onFocus={() => setSelectedMessageID(null)} style={styles.composerInput} />
-      <View style={styles.composerToolbar}><ChatIconButton name="plus" label="Message tools" onPress={() => setPanel('tools')} /><Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${currentModel?.name || session.model?.id || 'Server default'}`} onPress={() => setPanel('models')} style={({ pressed }) => [styles.modelTrigger, pressed && { opacity: 0.6 }]}><Label numberOfLines={1} style={styles.modelTriggerText}>{currentModel?.name || session.model?.id || 'Server default'}</Label><ChatGlyph name="down" size={14} color={colors.muted} /></Pressable>{active && hasPrompt && <Button title={delivery === 'steer' ? 'Steer' : 'Queue'} accessibilityLabel="Message delivery" compact variant="ghost" onPress={() => setDelivery(value => value === 'steer' ? 'queue' : 'steer')} />}<ChatIconButton name={active && !hasPrompt ? 'stop' : 'up'} label={active && !hasPrompt ? 'Stop generation' : active && delivery === 'queue' ? 'Queue message' : 'Send message'} raised busy={pending} disabled={active && !hasPrompt ? !stopReady : !hasPrompt} onPress={() => { if (active && !hasPrompt) void interrupt(); else void send(); }} /></View>
+      <View style={styles.composerToolbar}><ChatIconButton name="plus" label="Message tools" onPress={() => setPanel('tools')} /><Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${currentModel?.name || session.model?.id || 'Server default'}`} onPress={() => setPanel('models')} style={({ pressed }) => [styles.modelTrigger, pressed && { opacity: 0.6 }]}><Label numberOfLines={1} style={styles.modelTriggerText}>{currentModel?.name || session.model?.id || 'Server default'}</Label><ChatGlyph name="down" size={14} color={colors.muted} /></Pressable>{active && hasPrompt && <Button title={delivery === 'steer' ? 'Steer' : 'Queue'} accessibilityLabel="Message delivery" compact variant="ghost" onPress={() => setDelivery(value => value === 'steer' ? 'queue' : 'steer')} />}<ChatIconButton name={active && !hasPrompt ? 'stop' : 'up'} label={active && !hasPrompt ? 'Stop generation' : active && delivery === 'queue' ? 'Queue message' : 'Send message'} raised busy={pending} disabled={active && !hasPrompt ? !stopReady || stopping : !hasPrompt} onPress={() => { if (active && !hasPrompt) void interrupt(); else void send(); }} /></View>
       </>}
     </View></View>
     <Sheet visible={panel === 'actions'} title="Session" onClose={() => setPanel(null)}>
@@ -969,13 +970,13 @@ const MessageContent = memo(function MessageContent({ message, live, activityKin
   if (message.type === 'idle') return message.error ? <ErrorNotice error={message.error.message} /> : null;
   if (message.type === 'assistant') return <View style={styles.assistant}>{message.content.map((part, index) => <AssistantPart key={part.type === 'tool' ? part.id : `${part.type}:${index}`} detailsKey={`${message.id}:${part.type === 'tool' ? part.id : index}`} part={part} live={!!live && (part.type === 'tool' || index === message.content.length - 1)} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={selectable} />)}{message.error && <ErrorNotice error={message.error.message} />}</View>;
   if (message.type === 'user') return <View style={styles.userGroup}><View style={styles.user}><MessageText text={message.text} selectable={selectable} />{message.files?.map((file, index) => <View key={index} style={{ gap: 8 }}><Label muted style={{ fontFamily: mono, fontSize: 12 }}>↳ {file.name || file.mime}</Label>{file.mime.startsWith('image/') && <Image source={{ uri: `data:${file.mime};base64,${file.data}` }} style={{ height: 180, width: '100%', borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name || 'Attached image'} />}</View>)}{message.skills?.map(skill => <Label key={skill.id} muted>Skill: {skill.name}</Label>)}</View></View>;
-  if (message.type === 'shell') return <Disclosure title={`$ ${message.command} · ${message.status}`}><CodeBlock code={message.output?.output || 'No output'} selectable={selectable} />{message.output?.truncated && <Label muted>Output truncated by the server</Label>}</Disclosure>;
-  if (message.type === 'compaction') return <Disclosure title={`Context compaction · ${message.status}`}>{'summary' in message && <MessageText text={message.summary} selectable={selectable} />}{'error' in message && <ErrorNotice error={message.error.message} />}</Disclosure>;
+  if (message.type === 'shell') return <Disclosure disclosureKey={message.id} title={`$ ${message.command} · ${message.status}`}><CodeBlock code={message.output?.output || 'No output'} selectable={selectable} />{message.output?.truncated && <Label muted>Output truncated by the server</Label>}</Disclosure>;
+  if (message.type === 'compaction') return <Disclosure disclosureKey={message.id} title={`Context compaction · ${message.status}`}>{'summary' in message && <MessageText text={message.summary} selectable={selectable} />}{'error' in message && <ErrorNotice error={message.error.message} />}</Disclosure>;
   if (message.type === 'agent-switched') return <Label muted style={styles.notice}>Agent → {message.agent}</Label>;
   if (message.type === 'model-switched') return <Label muted style={styles.notice}>Model → {message.model.id}{message.model.variant ? ` · ${message.model.variant}` : ''}</Label>;
   if (message.type === 'location-switched') return <Label muted style={styles.notice}>Directory → {message.location.directory}</Label>;
-  if (message.type === 'skill') return <Disclosure title={`Skill · ${message.name}`}><MessageText text={message.text} selectable={selectable} /></Disclosure>;
-  return <Disclosure title={message.description || message.type}><MessageText text={message.text} selectable={selectable} /></Disclosure>;
+  if (message.type === 'skill') return <Disclosure disclosureKey={message.id} title={`Skill · ${message.name}`}><MessageText text={message.text} selectable={selectable} /></Disclosure>;
+  return <Disclosure disclosureKey={message.id} title={message.description || message.type}><MessageText text={message.text} selectable={selectable} /></Disclosure>;
 });
 
 const AssistantPart = memo(function AssistantPart({ part, detailsKey, live, activityKind, animate, client, directory, selectable }: { part: SessionMessageAssistant['content'][number]; detailsKey: string; live: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; client: Client; directory: string; selectable: boolean }) {
@@ -985,7 +986,7 @@ const AssistantPart = memo(function AssistantPart({ part, detailsKey, live, acti
   if (part.type === 'reasoning') {
     const thinking = live && !waiting && part.time?.completed === undefined;
     const duration = part.time?.completed === undefined ? undefined : Math.max(1, Math.round((part.time.completed - part.time.created) / 1000));
-    return <ActivityDisclosure detailsKey={detailsKey} title={thinking ? 'Thinking' : duration ? `Thought for ${duration}s` : 'Thought process'} busy={thinking} animate={animate}><MessageText text={part.text} muted selectable={selectable} /></ActivityDisclosure>;
+    return <ActivityDisclosure detailsKey={detailsKey} title={thinking ? 'Thinking' : duration ? `Thought for ${duration}s` : 'Thought process'} busy={thinking} animate={animate} thought><MessageText text={part.text} muted selectable={selectable} /></ActivityDisclosure>;
   }
   const pendingTool = part.state.status === 'streaming' || part.state.status === 'running';
   const busy = live && pendingTool && !waiting;
@@ -1029,7 +1030,7 @@ function createStyles(colors: ThemeColors) { return StyleSheet.create({
   eyebrow: { fontFamily: mono, fontSize: 10, color: colors.muted, letterSpacing: 1.2 }, notice: { fontFamily: mono, fontSize: 11 },
   composerDock: { padding: 12, paddingTop: 4, alignItems: 'center' }, composer: { width: '100%', maxWidth: 736, paddingHorizontal: 8, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, borderRadius: 18, backgroundColor: colors.panel }, composerInput: { minHeight: 44, maxHeight: 120, borderWidth: 0, borderRadius: 0, boxShadow: [], backgroundColor: colors.panel, paddingHorizontal: 6, paddingVertical: 6, fontSize: 16, lineHeight: 24 }, composerToolbar: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }, modelTrigger: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8 }, modelTriggerText: { flexShrink: 1, fontSize: 12, color: colors.muted },
   iconTarget: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }, iconFace: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, raisedFace: { backgroundColor: colors.primary, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1, elevation: 2 },
-  errorBanner: { paddingHorizontal: 12, paddingTop: 8, gap: 4 }, connectionStatus: { fontSize: 12, paddingHorizontal: 16, paddingVertical: 6 }, modelSearch: { padding: 16, paddingBottom: 10, gap: 8 }, modelList: { paddingHorizontal: 12, paddingBottom: 24 }, modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 66, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 }, variants: { gap: 8, paddingHorizontal: 4, paddingBottom: 16 }, radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center' }, radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.text },
+  errorBanner: { paddingHorizontal: 12, paddingTop: 8, gap: 4 }, modelSearch: { padding: 16, paddingBottom: 10, gap: 8 }, modelList: { paddingHorizontal: 12, paddingBottom: 24 }, modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 66, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 }, variants: { gap: 8, paddingHorizontal: 4, paddingBottom: 16 }, radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center' }, radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.text },
   code: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 8, overflow: 'hidden' }, codeText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19, padding: 12, paddingTop: 4 },
   revert: { margin: 12, padding: 14, gap: 8, backgroundColor: colors.raised, borderRadius: 10 },
 }); }
