@@ -147,7 +147,7 @@ function PiWorkspaceSession({ connection, foreground, onManageServers, onConnect
   return <View style={{ flex: 1 }}>
     {!settingsOpen && !selected && <BetaTabStrip current={currentTab} count={tabs.length} busy={busy || !session} onOpen={() => setNavigationOpen(true)} />}
     {error && <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><ErrorNotice error={error} onRetry={() => { setError(null); void refreshSession().catch(cause => setError(errorMessage(cause))); }} /></View>}
-    <SessionSurface framed={betaLayout && !settingsOpen}>
+    <SessionSurface framed={betaLayout && !settingsOpen && !selected}>
       {!settingsOpen && !selected && session && betaLayout && <BetaSessionNavigation pane="Session" directory={session.location.directory} changes={false} onSelect={() => setSettingsOpen(false)} onMore={() => { Keyboard.dismiss(); setMoreOpen(true); }} />}
       {session ? <>
         <View style={[{ flex: 1 }, settingsOpen && { display: 'none' }]}><ChatScreen backend={backend} sessionID={session.id} draftKey={`pi:${connection.id}:${session.id}`} serverID={connection.id} betaLayout={betaLayout} visible={foreground && !settingsOpen} projectLabel={session.location.directory.split(/[\\/]/).filter(Boolean).pop()} onOpenNavigation={() => setNavigationOpen(true)} onSelectionChange={setSelected} onSessionInfo={recordSession} onSessionChanged={() => { void refreshSession().catch(cause => { if (alive.current) setError(errorMessage(cause)); }); }} onOpenSession={openChatSession} onConnectionLost={onConnectionLost} sessionPanelRequest={panelRequest} /></View>

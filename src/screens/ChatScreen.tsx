@@ -1086,7 +1086,8 @@ const MessageRow = memo(function MessageRow({ message, live, activityKind, anima
     accessibilityActions={separateContent ? undefined : [{ name: 'activate', label: 'Select message' }, { name: 'longpress', label: 'Select message' }]}
     onAccessibilityAction={separateContent ? undefined : () => onSelect(message.id)} focusable={!screenReader}
     onLongPress={() => onSelect(message.id)} onPress={selectionActive ? () => onSelect(message.id) : undefined}
-    style={[styles.selectableMessage, selected && { backgroundColor: colors.selected }]}>
+    style={styles.selectableMessage}>
+    {selected && <View pointerEvents="none" aria-hidden style={[styles.selectionMarker, { backgroundColor: colors.muted }]} />}
     <MessageActionsContext.Provider value={select}><MessageContent message={message} live={live} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={false} /></MessageActionsContext.Provider>
     {screenReader && <Button title="Message actions" compact variant="ghost" accessibilityLabel={`Message actions: ${messagePreview(message)}`} onPress={() => onSelect(message.id)} />}
   </Pressable>;
@@ -1157,7 +1158,7 @@ function ChatIconButton({ name, label, onPress, raised, disabled, busy, selected
 }
 
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
-  frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border }, headerLeading: { marginStart: pageInset - 24, marginEnd: 24 - pageInset }, headerTrailing: { marginStart: 24 - pageInset, marginEnd: pageInset - 24 }, selectionHeader: { backgroundColor: colors.panel }, selectionCount: { flex: 1, minWidth: 0, fontSize: 14, paddingStart: pageInset - 4 }, selectableMessage: { borderRadius: 16 },
+  frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border }, headerLeading: { marginStart: pageInset - 24, marginEnd: 24 - pageInset }, headerTrailing: { marginStart: 24 - pageInset, marginEnd: pageInset - 24 }, selectionHeader: { backgroundColor: colors.panel }, selectionCount: { flex: 1, minWidth: 0, fontSize: 14, paddingStart: pageInset - 4 }, selectableMessage: { position: 'relative' }, selectionMarker: { position: 'absolute', start: -8, top: 0, bottom: 0, width: 2, borderRadius: 1 },
   headerTitle: { flex: 1, minWidth: 0, gap: 1, paddingHorizontal: 4, paddingStart: pageInset - 8 }, headerTitleWithNavigation: { paddingStart: pageInset - 4 }, sessionTitle: { fontSize: 16, fontWeight: '500', lineHeight: 21 }, headerSubtitle: { flexDirection: 'row', alignItems: 'center', gap: 6 }, projectLabel: { fontSize: 12, lineHeight: 16, flexShrink: 1 }, dot: { width: 5, height: 5, borderRadius: 3 }, transcriptFrame: { flex: 1, minHeight: 0, paddingBottom: 8 }, transcript: { flex: 1, minHeight: 0, width: '100%', maxWidth: 760, alignSelf: 'center' }, messages: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 24, flexGrow: 1 },
   assistant: { gap: 6 }, jsonText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
   eyebrow: { fontFamily: mono, fontSize: 10, color: colors.muted, letterSpacing: 1.2 }, notice: { fontFamily: mono, fontSize: 11 },

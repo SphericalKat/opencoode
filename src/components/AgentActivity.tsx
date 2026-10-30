@@ -5,7 +5,7 @@ import type { AgentActivity } from '../lib/activity';
 import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { Label } from './ui';
-import { MotionDisclosureBody, MotionDisclosureChevron, PressFeedback, WorkingIndicator } from './motion';
+import { MotionDisclosureBody, MotionDisclosureChevron, WorkingIndicator } from './motion';
 
 export const AgentActivityBar = memo(function AgentActivityBar({ activity, connectionStatus, sending, stopping, animate, show, onReview }: {
   activity: AgentActivity; connectionStatus: string; sending: boolean; stopping: boolean; animate: boolean; show: boolean; onReview: () => void;
@@ -62,11 +62,11 @@ export function ActivityDisclosure({ detailsKey, title, detail, busy, animate, f
   return <View>
     <Pressable accessibilityRole="button" accessibilityLabel={`${title}${detail ? `, ${detail}` : ''}`} accessibilityState={{ expanded: open, busy: !!busy }} aria-expanded={open}
       onPress={() => setOpen(disclosures ? disclosures.toggle(detailsKey) : !open)} onLongPress={Platform.OS === 'web' ? undefined : actions}
-    >{({ pressed }) => <PressFeedback pressed={pressed} style={[styles.disclosureHeader, pressed && { backgroundColor: colors.raised }]}>
+      style={({ pressed }) => [styles.disclosureHeader, pressed && { backgroundColor: colors.raised }]}>
       {busy ? <WorkingIndicator active={!!animate} color={colors.muted} size={14} /> : <Svg width={14} height={14} viewBox="0 0 16 16" fill="none" aria-hidden><Path d={thought ? 'M4 4.5h8M4 8h6m-6 3.5h8' : failed ? 'm4 4 8 8m0-8-8 8' : complete ? 'm3.5 8 3 3 6-6' : 'M5 4v8m6-8v8'} stroke={failed ? colors.danger : colors.muted} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
       <View style={styles.disclosureTitle}><Label muted style={styles.label}>{title}</Label>{!!detail && <Label muted numberOfLines={1} style={styles.detail}>{detail}</Label>}</View>
       <MotionDisclosureChevron open={open}><Svg width={12} height={12} viewBox="0 0 16 16" fill="none" aria-hidden><Path d="m6 4 4 4-4 4" stroke={colors.faint} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg></MotionDisclosureChevron>
-    </PressFeedback>}</Pressable>
+    </Pressable>
     <MotionDisclosureBody open={open} style={styles.disclosureBody}>{children}</MotionDisclosureBody>
   </View>;
 }
