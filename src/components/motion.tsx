@@ -57,7 +57,7 @@ export function MotionContent({ transitionKey, variant, direction = 1, enabled =
   const entry = useAnimatedStyle(() => ({
     opacity: reduced ? 0.9 + progress.get() * 0.1 : variant === 'context' ? 0.75 + progress.get() * 0.25 : 0.8 + progress.get() * 0.2,
     transform: [{ translateX: variant === 'connection' && !reduced ? direction * 12 * (1 - progress.get()) : 0 }],
-  }), [variant, direction, reduced]);
+  }), Platform.OS === 'web' ? [variant, direction, reduced] : undefined);
   return <Animated.View style={[style, entry]}>{children}</Animated.View>;
 }
 
@@ -127,7 +127,7 @@ export function MotionDrawer({ visible, width, onClose, onDismiss, children, pan
   useEffect(() => () => cancelAnimation(progress), [progress]);
 
   const backdrop = useAnimatedStyle(() => ({ opacity: progress.get() }));
-  const panel = useAnimatedStyle(() => ({ opacity: reduced ? progress.get() : 1, transform: [{ translateX: reduced ? 0 : -width * (1 - progress.get()) }] }), [reduced, width]);
+  const panel = useAnimatedStyle(() => ({ opacity: reduced ? progress.get() : 1, transform: [{ translateX: reduced ? 0 : -width * (1 - progress.get()) }] }), Platform.OS === 'web' ? [reduced, width] : undefined);
   return <Modal visible={presented} transparent animationType="none" supportedOrientations={['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right']} onRequestClose={onClose} onDismiss={notifyDismissed} onShow={() => {
     showing.current = true;
     animate(requested.current);

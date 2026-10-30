@@ -19,7 +19,7 @@ import { loadDraft, saveDraft } from '../lib/drafts';
 import { useUnsavedChanges } from '../lib/unsaved';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { ShellIcon } from '../components/ShellIcon';
-import { MotionContent, PressFeedback } from '../components/motion';
+import { MotionContent, PressFeedback, WorkingIndicator } from '../components/motion';
 import { ActivityDisclosure, AgentActivityBar } from '../components/AgentActivity';
 import { sessionActivity, toolActivityLabel, type AgentActivity } from '../lib/activity';
 import { createStreamBatch } from '../lib/streamBatch';
@@ -75,6 +75,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [catalogRevision, setCatalogRevision] = useState(0);
   const [draft, setDraft] = useState('');
+  const [composerHeight, setComposerHeight] = useState(44);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<SkillInfo[]>([]);
   const [selectedAgentIDs, setSelectedAgentIDs] = useState<string[]>([]);
@@ -246,8 +247,10 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   }, [measureEndDistance, followContent]);
   const updateScrollPosition = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const previousOffset = scrollMetrics.current.offset;
     scrollMetrics.current = { content: contentSize.height, viewport: layoutMeasurement.height, offset: contentOffset.y };
     measureEndDistance();
+    if (Platform.OS !== 'web' && contentOffset.y < previousOffset - 1 && !nearEnd.current) setFollowing(false);
     if (Platform.OS === 'web' && userScrolling.current && nearEnd.current && wheelDirection.current >= 0) setFollowing(true);
   }, [setFollowing, measureEndDistance]);
   const beginUserScroll = useCallback(() => {
@@ -394,7 +397,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     }
     if (messageResult.status === 'fulfilled') {
       applyMessageSnapshot(messageResult.value.data, reset);
-      if (reset) { setCursor(messageResult.value.cursor.next ?? undefined); appliedHistoryEpoch.current = historyVersion; }
+      if (reset) { setCursor(messageResult.value.data.length === 80 ? messageResult.value.cursor.next ?? undefined : undefined); appliedHistoryEpoch.current = historyVersion; }
     }
     if (inboxResult.status === 'fulfilled') setInbox(inboxResult.value);
     if (formsResult.status === 'fulfilled' || globalFormsResult.status === 'fulfilled') setForms(current => [...(formsResult.status === 'fulfilled' ? formsResult.value : current.filter(form => form.sessionID === sessionID)), ...(globalFormsResult.status === 'fulfilled' ? globalFormsResult.value.data.filter(form => form.sessionID === 'global') : current.filter(form => form.sessionID === 'global'))]);
@@ -736,7 +739,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     const historyVersion = historyEpoch.current;
     try {
       const page = await client.message.list({ sessionID, cursor, limit: 80 });
-      if (alive.current && historyVersion === historyEpoch.current) { setMessages(current => mergeMessages(page.data, current)); setCursor(page.cursor.next ?? undefined); }
+      if (alive.current && historyVersion === historyEpoch.current) { setMessages(current => mergeMessages(page.data, current)); setCursor(page.data.length === 80 ? page.cursor.next ?? undefined : undefined); }
     } catch (reason) { showError(reason); }
     finally { if (alive.current) setLoadingOlder(false); }
   };
@@ -818,6 +821,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     return () => clearTimeout(timer);
   }, [active, hasPrompt]);
   const activity = useMemo(() => sessionActivity(messages, active, sessionStatus, permissions.filter(permission => permission.sessionID === sessionID).length, forms.filter(form => form.sessionID === sessionID).length), [messages, active, sessionStatus, permissions, forms, sessionID]);
+  const showActivityBar = streamStatus !== 'Live' || stopping || ['retry', 'approval', 'question', 'error'].includes(activity.kind);
+  const showHeaderActivity = active && !showActivityBar && (awayFromLatest || !['thinking', 'tool', 'writing'].includes(activity.kind));
   const latestStep = messages.findLast(message => ['assistant', 'idle', 'user', 'shell', 'compaction'].includes(message.type));
   const liveMessageID = active && latestStep?.type === 'assistant' && latestStep.time.completed === undefined && !latestStep.error ? latestStep.id : undefined;
   const chooseModel = (model: ModelInfo, variant?: string) => run(async () => {
@@ -834,7 +839,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   return <View style={styles.frame}><KeyboardAvoidingView style={styles.container} behavior="padding" automaticOffset enabled={visible && !panel}>
     <MotionContent variant="context" transitionKey={!!actionMessage} style={[styles.header, !!actionMessage && styles.selectionHeader]}>{actionMessage ? <><ChatIconButton name="close" label="Close message selection" onPress={() => setSelectedMessageID(null)} /><Label accessibilityRole="header" style={styles.selectionCount}>1 selected</Label><Button title="Copy" compact variant="ghost" disabled={!canCopySelected} onPress={copySelected} />{actionMessage.type === 'user' ? <Button title="Edit" compact variant="ghost" disabled={!draftLoaded || pending} onPress={() => { void editMessage(actionMessage); }} /> : <Button title="Fork" compact variant="ghost" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }); }} />}<ChatIconButton name="more" label="Selected message actions" onPress={() => setPanel('message')} /></> : <>
       {onOpenNavigation && <ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} />}
-      <View style={styles.headerTitle}><Label numberOfLines={1} accessibilityLabel={session.title || 'New session'} style={styles.sessionTitle}>{session.title || 'New session'}</Label><Label numberOfLines={1} muted style={styles.projectLabel}>{projectLabel || session.location.directory.split('/').filter(Boolean).pop() || session.location.directory}</Label></View>
+      <View style={styles.headerTitle}><Label numberOfLines={1} accessibilityLabel={session.title || 'New session'} style={styles.sessionTitle}>{session.title || 'New session'}</Label><View style={styles.headerSubtitle}>{showHeaderActivity && <WorkingIndicator active={visible && foreground} color={colors.muted} size={12} />}<Label numberOfLines={1} muted style={styles.projectLabel}>{showHeaderActivity ? activity.label : projectLabel || session.location.directory.split('/').filter(Boolean).pop() || session.location.directory}</Label></View></View>
       <ChatIconButton name="more" label="Session actions" onPress={() => setPanel('actions')} />
     </>}</MotionContent>
     {error && <View style={styles.errorBanner}><ErrorNotice error={error} /><Button title="Dismiss" compact variant="ghost" onPress={() => setError(null)} /></View>}
@@ -849,8 +854,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         {inbox.length > 0 && <Card><Label muted style={styles.eyebrow}>PENDING INPUTS · {inbox.length}</Label>{inbox.map(item => <View key={item.id} style={{ gap: 8 }}>{item.type === 'synthetic' ? <Disclosure disclosureKey={item.id} title={item.payload.description || 'Server context'}><MessageText text={item.payload.text} /></Disclosure> : <Label numberOfLines={3}>{item.type === 'user' ? item.payload.text : item.type === 'compaction' ? 'Compact context' : 'Move session'}</Label>}<Row><Label muted>{item.delivery === 'steer' ? 'Steer current work' : 'After current work'}</Label><Button disabled={pending} title={item.delivery === 'steer' ? 'Queue' : 'Steer'} compact onPress={() => { void run(() => client.session.inbox.update({ sessionID, inboxID: item.id, delivery: item.delivery === 'steer' ? 'queue' : 'steer' })); }} />{(item.type === 'user' || item.type === 'synthetic') && <Button title="Edit" compact disabled={!draftLoaded || pending} onPress={() => { void editInbox(item); }} />}<Button title="Cancel" compact variant="ghost" disabled={pending} onPress={() => { void run(() => client.session.inbox.cancel({ sessionID, inboxID: item.id })); }} /></Row></View>)}</Card>}
         <SessionForms client={client} sessionID={sessionID} forms={forms} permissions={permissions} onChanged={refreshRef.current} onError={showError} locationDirectory={session.location.directory} />
       </View>}
-    />{!followingLatest && awayFromLatest && activity.kind !== "approval" && activity.kind !== "question" && <View pointerEvents="box-none" style={styles.latestButton}><Button title="Jump to latest" compact onPress={jumpToLatest} /></View>}</View></MessageDisclosureContext.Provider>
-    <View style={styles.composerDock}><AgentActivityBar activity={activity} connectionStatus={streamStatus} sending={sending} stopping={stopping} animate={visible && foreground} onReview={jumpToLatest} /><View style={styles.composer}>
+    />{!followingLatest && awayFromLatest && activity.kind !== 'approval' && activity.kind !== 'question' && <View pointerEvents="box-none" style={styles.latestButton}><ChatIconButton name="down" label="Jump to latest" raised onPress={jumpToLatest} /></View>}</View></MessageDisclosureContext.Provider>
+    <View style={styles.composerDock}><AgentActivityBar activity={activity} connectionStatus={streamStatus} sending={sending} stopping={stopping} animate={visible && foreground} show={showActivityBar} onReview={jumpToLatest} /><View style={styles.composer}>
       {!draftLoaded ? <Busy /> : <>
       {(attachments.length > 0 || selectedSkills.length > 0 || restoredSkillIDs.length > 0 || selectedAgentIDs.length > 0) && <ScrollView horizontal contentContainerStyle={{ gap: 6 }}>
         {attachments.map((file, index) => <Button key={`${file.name}-${index}`} title={`${file.name || 'File'} ×`} compact onPress={() => setAttachments(current => current.filter((_, i) => i !== index))} />)}
@@ -858,7 +863,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         {restoredSkillIDs.map(id => <Button key={id} title={`${id} ×`} compact onPress={() => setRestoredSkillIDs(current => current.filter(value => value !== id))} />)}
         {selectedAgentIDs.map(id => <Button key={id} title={`@${agents.find(agent => agent.id === id)?.name || id} ×`} compact onPress={() => setSelectedAgentIDs(current => current.filter(value => value !== id))} />)}
       </ScrollView>}
-      <Field accessibilityLabel="Message" placeholder="Ask OpenCode…" multiline value={draft} onChangeText={setDraft} onFocus={() => setSelectedMessageID(null)} style={styles.composerInput} />
+      <Field accessibilityLabel="Message" placeholder="Ask OpenCode…" multiline value={draft} onChangeText={setDraft} onContentSizeChange={event => setComposerHeight(Math.max(44, Math.min(120, event.nativeEvent.contentSize.height)))} onFocus={() => setSelectedMessageID(null)} style={[styles.composerInput, { height: draft ? composerHeight : 44 }]} />
       <View style={styles.composerToolbar}><ChatIconButton name="plus" label="Message tools" onPress={() => setPanel('tools')} /><Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${currentModel?.name || session.model?.id || 'Server default'}`} onPress={() => setPanel('models')} style={({ pressed }) => [styles.modelTrigger, pressed && { opacity: 0.6 }]}><Label numberOfLines={1} style={styles.modelTriggerText}>{currentModel?.name || session.model?.id || 'Server default'}</Label><ChatGlyph name="down" size={14} color={colors.muted} /></Pressable>{active && hasPrompt && <Button title={delivery === 'steer' ? 'Steer' : 'Queue'} accessibilityLabel="Message delivery" compact variant="ghost" onPress={() => setDelivery(value => value === 'steer' ? 'queue' : 'steer')} />}<ChatIconButton name={active && !hasPrompt ? 'stop' : 'up'} label={active && !hasPrompt ? 'Stop generation' : active && delivery === 'queue' ? 'Queue message' : 'Send message'} raised busy={pending} disabled={active && !hasPrompt ? !stopReady || stopping : !hasPrompt} onPress={() => { if (active && !hasPrompt) void interrupt(); else void send(); }} /></View>
       </>}
     </View></View>
@@ -1025,8 +1030,8 @@ function ChatIconButton({ name, label, onPress, raised, disabled, busy, selected
 
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
   frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border }, selectionHeader: { backgroundColor: colors.panel }, selectionCount: { flex: 1, minWidth: 0, fontSize: 14 }, selectableMessage: { borderRadius: 16 },
-  headerTitle: { flex: 1, minWidth: 0, gap: 1, paddingHorizontal: 4 }, sessionTitle: { fontSize: 16, fontWeight: '500', lineHeight: 21 }, projectLabel: { fontSize: 12, lineHeight: 16 }, dot: { width: 5, height: 5, borderRadius: 3 }, transcriptFrame: { flex: 1, minHeight: 0 }, transcript: { flex: 1, minHeight: 0, width: '100%', maxWidth: 760, alignSelf: 'center' }, messages: { padding: 16, paddingBottom: 24, flexGrow: 1 }, latestButton: { position: 'absolute', bottom: 12, left: 0, right: 0, alignItems: 'center' },
-  userGroup: { alignSelf: 'flex-end', maxWidth: '92%' }, user: { alignSelf: 'flex-end', minWidth: 100, padding: 14, borderRadius: 14, backgroundColor: colors.raised, gap: 12 }, assistant: { gap: 14, paddingVertical: 6 }, jsonText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
+  headerTitle: { flex: 1, minWidth: 0, gap: 1, paddingHorizontal: 4 }, sessionTitle: { fontSize: 16, fontWeight: '500', lineHeight: 21 }, headerSubtitle: { flexDirection: 'row', alignItems: 'center', gap: 6 }, projectLabel: { fontSize: 12, lineHeight: 16, flexShrink: 1 }, dot: { width: 5, height: 5, borderRadius: 3 }, transcriptFrame: { flex: 1, minHeight: 0 }, transcript: { flex: 1, minHeight: 0, width: '100%', maxWidth: 760, alignSelf: 'center' }, messages: { padding: 16, paddingBottom: 24, flexGrow: 1 }, latestButton: { position: 'absolute', bottom: 12, right: 16 },
+  userGroup: { alignSelf: 'flex-end', maxWidth: '92%' }, user: { alignSelf: 'flex-end', padding: 14, borderRadius: 14, backgroundColor: colors.raised, gap: 12 }, assistant: { gap: 6 }, jsonText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
   eyebrow: { fontFamily: mono, fontSize: 10, color: colors.muted, letterSpacing: 1.2 }, notice: { fontFamily: mono, fontSize: 11 },
   composerDock: { padding: 12, paddingTop: 4, alignItems: 'center' }, composer: { width: '100%', maxWidth: 736, paddingHorizontal: 8, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, borderRadius: 18, backgroundColor: colors.panel }, composerInput: { minHeight: 44, maxHeight: 120, borderWidth: 0, borderRadius: 0, boxShadow: [], backgroundColor: colors.panel, paddingHorizontal: 6, paddingVertical: 6, fontSize: 16, lineHeight: 24 }, composerToolbar: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }, modelTrigger: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8 }, modelTriggerText: { flexShrink: 1, fontSize: 12, color: colors.muted },
   iconTarget: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }, iconFace: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, raisedFace: { backgroundColor: colors.primary, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1, elevation: 2 },
