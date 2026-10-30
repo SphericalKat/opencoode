@@ -116,10 +116,11 @@ jobs:
             echo 'No executable apksigner was found in the Android SDK build tools' >&2
             exit 1
           fi
-          expected="$(keytool -exportcert -keystore "$RELEASE_KEYSTORE_PATH" -storepass:env RELEASE_STORE_PASSWORD -alias "$RELEASE_KEY_ALIAS" -rfc | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
-          actual="$("$signer" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          expected="$(keytool -exportcert -keystore "$RELEASE_KEYSTORE_PATH" -storepass:env RELEASE_STORE_PASSWORD -alias "$RELEASE_KEY_ALIAS" | sha256sum | cut -d' ' -f1)"
+          actual="$("$signer" verify --print-certs-pem android/app/build/outputs/apk/release/app-release.apk | sed -n '/^-----BEGIN CERTIFICATE-----$/,/^-----END CERTIFICATE-----$/p' | openssl x509 -outform DER | sha256sum | cut -d' ' -f1)"
           if [[ -z "$expected" || "$expected" != "$actual" ]]; then
             echo 'The APK signer does not match the supplied release key' >&2
+            printf 'Expected certificate SHA-256: %s\nActual certificate SHA-256: %s\n' "$expected" "$actual" >&2
             exit 1
           fi
           mkdir -p artifacts
