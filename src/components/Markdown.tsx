@@ -97,6 +97,32 @@ function Blocks({ nodes, muted }: { nodes: Node[]; muted?: boolean }) {
   return nodes.map((node, index) => <Block key={index} node={node} muted={muted} />);
 }
 
+function MarkdownTable({ node, muted }: { node: Node; muted?: boolean }) {
+  const styles = useMarkdownStyles();
+  const selectable = useContext(SelectionContext);
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const rows = node.children.flatMap(section => section.children);
+  const columnCount = Math.max(1, ...rows.map(row => row.children.length));
+  const columnWidth = Math.max(120, Math.floor(((availableWidth || columnCount * 120 + 1) - 1) / columnCount));
+  const contentWidth = columnWidth * columnCount + 1;
+  const renderRow = (row: Node, rowIndex: number) => <View key={rowIndex} style={styles.tableRow}>
+    {row.children.map((cell, cellIndex) => {
+      const isHeader = cell.token.type === 'th_open';
+      const alignment = cell.token.attrGet('style');
+      const textAlign = alignment === 'text-align:right' ? 'right' : alignment === 'text-align:center' ? 'center' : 'left';
+      return <View key={cellIndex} style={[styles.cell, { width: columnWidth }, isHeader && styles.tableHeader]}>
+        <Text selectable={selectable} style={[styles.text, muted && styles.muted, { textAlign }, isHeader && styles.bold]}><Inline nodes={cell.children.flatMap(child => child.children)} /></Text>
+      </View>;
+    })}
+  </View>;
+  return <View style={styles.tableContainer} onLayout={event => setAvailableWidth(event.nativeEvent.layout.width)}>
+    <ScrollView horizontal nestedScrollEnabled directionalLockEnabled persistentScrollbar showsHorizontalScrollIndicator contentContainerStyle={{ width: contentWidth }} style={styles.tableScroll}>
+      <View style={[styles.table, { width: contentWidth }]}>{rows.map(renderRow)}</View>
+    </ScrollView>
+    {contentWidth > availableWidth && availableWidth > 0 && <Text style={[styles.tableHint, muted && styles.muted]}>Swipe to see more columns</Text>}
+  </View>;
+}
+
 const ListItem = memo(function ListItem({ node, marker, markerWidth, muted }: { node: Node; marker: string; markerWidth: number; muted?: boolean }) {
   const styles = useMarkdownStyles();
   const selectable = useContext(SelectionContext);
@@ -135,18 +161,7 @@ const Block = memo(function Block({ node, muted }: { node: Node; muted?: boolean
       case 'hr':
         return <View style={styles.rule} />;
       case 'table_open':
-        return <ScrollView horizontal style={styles.tableScroll}><View style={styles.table}><Blocks nodes={children} muted={muted} /></View></ScrollView>;
-      case 'tr_open':
-        return <View style={styles.tableRow}><Blocks nodes={children} muted={muted} /></View>;
-      case 'thead_open':
-      case 'tbody_open':
-        return <View><Blocks nodes={children} muted={muted} /></View>;
-      case 'th_open':
-      case 'td_open': {
-        const alignment = token.attrGet('style');
-        const textAlign = alignment === 'text-align:right' ? 'right' : alignment === 'text-align:center' ? 'center' : 'left';
-        return <View style={[styles.cell, token.type === 'th_open' && styles.tableHeader]}><Text selectable={selectable} style={[prose, { textAlign }, token.type === 'th_open' && styles.bold]}><Inline nodes={children.flatMap(node => node.children)} /></Text></View>;
-      }
+        return <MarkdownTable node={node} muted={muted} />;
       default:
         return children.length ? <View style={styles.group}><Blocks nodes={children} muted={muted} /></View> : token.content ? <Text selectable={selectable} style={prose}>{token.content}</Text> : null;
     }
@@ -185,11 +200,13 @@ const createStyles = (colors: ThemeColors, beta: boolean) => ({
   codeContent: { paddingHorizontal: 12, paddingBottom: 12 },
   codeText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
   copyError: { color: colors.danger, fontFamily: sans, fontSize: 12, paddingHorizontal: 12, paddingBottom: 8 },
-  tableScroll: { maxWidth: '100%' },
+  tableContainer: { width: '100%', minWidth: 0 },
+  tableScroll: { width: '100%', minWidth: 0 },
   table: { borderTopWidth: 1, borderLeftWidth: 1, borderColor: colors.border },
-  tableRow: { flexDirection: 'row' },
-  cell: { width: 180, padding: 10, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
+  tableRow: { flexDirection: 'row', alignItems: 'stretch' },
+  cell: { minWidth: 0, flexShrink: 0, padding: 10, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
   tableHeader: { backgroundColor: colors.raised },
+  tableHint: { color: colors.muted, fontFamily: sans, fontSize: 12, lineHeight: 18, paddingTop: 4 },
   }),
   headingSizes: beta ? [21, 20, 19, 18, 17, 17] : [23, 21, 19, 17, 15, 13],
   headingLineHeights: beta ? [26, 25, 24, 23, 22, 22] : [31, 30, 29, 28, 27, 26],
