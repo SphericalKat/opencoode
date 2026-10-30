@@ -116,17 +116,27 @@ jobs:
             exit 1
           fi
           expected="$(keytool -exportcert -keystore "$RELEASE_KEYSTORE_PATH" -storepass:env RELEASE_STORE_PASSWORD -alias "$RELEASE_KEY_ALIAS" | sha256sum | cut -d' ' -f1)"
-          actual="$("$signer" verify --print-certs-pem android/app/build/outputs/apk/release/app-release.apk | sed -n '/^-----BEGIN CERTIFICATE-----$/,/^-----END CERTIFICATE-----$/p' | openssl x509 -outform DER | sha256sum | cut -d' ' -f1)"
-          if [[ -z "$expected" || "$expected" != "$actual" ]]; then
-            echo 'The APK signer does not match the supplied release key' >&2
-            printf 'Expected certificate SHA-256: %s\nActual certificate SHA-256: %s\n' "$expected" "$actual" >&2
-            exit 1
-          fi
           mkdir -p artifacts
-          cp android/app/build/outputs/apk/release/app-release.apk "artifacts/opencoode-$RELEASE_TAG.apk"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            apk="android/app/build/outputs/apk/release/app-$abi-release.apk"
+            actual="$("$signer" verify --print-certs-pem "$apk" | sed -n '/^-----BEGIN CERTIFICATE-----$/,/^-----END CERTIFICATE-----$/p' | openssl x509 -outform DER | sha256sum | cut -d' ' -f1)"
+            if [[ -z "$expected" || "$expected" != "$actual" ]]; then
+              printf 'The %s APK signer does not match the supplied release key\n' "$abi" >&2
+              printf 'Expected certificate SHA-256: %s\nActual certificate SHA-256: %s\n' "$expected" "$actual" >&2
+              exit 1
+            fi
+            cp "$apk" "artifacts/opencoode-$RELEASE_TAG-$abi.apk"
+          done
           cp android/app/build/outputs/bundle/release/app-release.aab "artifacts/opencoode-$RELEASE_TAG.aab"
           cd artifacts
           sha256sum ./*.apk ./*.aab > SHA256SUMS-android.txt
+          {
+            echo '### Android artifact sizes'
+            echo
+            echo '```text'
+            du -h ./*.apk ./*.aab
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           gh release upload "$RELEASE_TAG" ./*.apk ./*.aab SHA256SUMS-android.txt --clobber
 
       - name: Remove signing key
