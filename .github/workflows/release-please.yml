@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4.4.1
+        id: release
+        with:
+          target-branch: develop
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - uses: actions/checkout@v6
+        if: steps.release.outputs.pr != ''
+
+      - uses: actions/setup-node@v6
+        if: steps.release.outputs.pr != ''
+        with:
+          node-version: 24
+
+      - name: Sync native versions into the release PR
+        if: steps.release.outputs.pr != ''
+        env:
+          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr || '{}').headBranchName }}
+        run: |
+          git fetch origin "$RELEASE_BRANCH"
+          git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+          node .github/scripts/prepare-release.mjs
+          if git diff --quiet -- app.json; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.json
+          git commit -m 'chore: sync native release versions'
+          git push origin "HEAD:$RELEASE_BRANCH"
+
+  artifacts:
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    uses: ./.github/workflows/release-build.yml
+    with:
+      tag: ${{ needs.release.outputs.tag_name }}
+      platform: all
+    secrets: inherit
