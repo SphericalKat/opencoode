@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, useColorScheme } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { useBetaLayout } from './betaLayout';
 
 export type Appearance = 'system' | 'light' | 'dark';
 export type ThemeColors = {
@@ -38,6 +39,7 @@ const Context = createContext<Theme>({ colors: darkColors, appearance: 'system',
 const preferenceKey = 'opencoode.appearance';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const betaLayout = useBetaLayout();
   const system = useColorScheme();
   const [appearance, updateAppearance] = useState<Appearance>('system');
   const revision = useRef(0);
@@ -62,10 +64,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (Platform.OS === 'web') document.documentElement.style.colorScheme = scheme;
   }, [scheme]);
-  const colors = scheme === 'light' ? lightColors : darkColors;
+  const colors = scheme === 'light' ? lightColors : betaLayout ? betaDarkColors : darkColors;
   const theme = useMemo(() => ({ colors, appearance, scheme, setAppearance }), [colors, appearance, scheme, setAppearance]);
   return <Context.Provider value={theme}>{children}</Context.Provider>;
 }
+
+const betaDarkColors: ThemeColors = { ...darkColors, bg: '#161616', text: '#fafafa', border: '#ffffff1a' };
 
 export function useTheme() { return useContext(Context); }
 

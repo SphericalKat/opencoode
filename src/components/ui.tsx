@@ -56,7 +56,7 @@ export function ErrorNotice({ error, onRetry }: { error: string | null | undefin
   return <View accessibilityRole="alert" style={styles.error}><Label style={{ color: colors.danger, flex: 1 }}>{error}</Label>{onRetry && <Button title="Retry" compact onPress={onRetry} />}</View>;
 }
 export function Busy() { const { colors } = useTheme(); return <ActivityIndicator style={{ padding: 30 }} color={colors.muted} />; }
-export function Sheet({ visible, title, children, onClose, onDismiss, scroll = true, allowDuringRecovery = false, fitContent = false }: { visible: boolean; title: string; children: React.ReactNode; onClose: () => void; onDismiss?: () => void; scroll?: boolean; allowDuringRecovery?: boolean; fitContent?: boolean }) {
+export function Sheet({ visible, title, children, onClose, onDismiss, scroll = true, allowDuringRecovery = false, fitContent = false, showHeader = true, contentStyle }: { visible: boolean; title: string; children: React.ReactNode; onClose: () => void; onDismiss?: () => void; scroll?: boolean; allowDuringRecovery?: boolean; fitContent?: boolean; showHeader?: boolean; contentStyle?: StyleProp<ViewStyle> }) {
   const styles = useThemedStyles(createStyles);
   const reduced = useMotionPreference();
   const { suspended, recoveryPending, presentSheet, dismissSheet } = useSheetCoordinator();
@@ -106,9 +106,9 @@ export function Sheet({ visible, title, children, onClose, onDismiss, scroll = t
     return () => cancelAnimationFrame(frame);
   }, [effectiveVisible, notifyDismissed]);
   const content = <View style={[styles.sheetInner, fitContent && styles.fitInner]}>
-          <View style={styles.sheetHeader}><Heading>{title}</Heading><Button title="Done" compact onPress={onClose} /></View>
+          {showHeader ? <View style={styles.sheetHeader}><Heading>{title}</Heading><Button title="Done" compact onPress={onClose} /></View> : <Label accessibilityRole="header" style={styles.hiddenHeading}>{title}</Label>}
           {recoveryPending && !allowDuringRecovery && <Label accessibilityRole="alert" style={styles.recoveryNotice}>Close this panel to open the connection wizard.</Label>}
-          {scroll ? <ScrollView style={[styles.sheetScroll, fitContent && styles.fitScroll]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={styles.sheetContent}>{children}</ScrollView> : <View style={[styles.sheetBody, fitContent && styles.fitScroll]}>{children}</View>}
+          {scroll ? <ScrollView style={[styles.sheetScroll, fitContent && styles.fitScroll]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={[styles.sheetContent, contentStyle]}>{children}</ScrollView> : <View style={[styles.sheetBody, fitContent && styles.fitScroll, contentStyle]}>{children}</View>}
         </View>;
   return <Modal visible={effectiveVisible} transparent={fitContent} animationType={fitContent || reduced ? 'fade' : 'slide'} presentationStyle={fitContent ? 'overFullScreen' : 'pageSheet'} supportedOrientations={['portrait', 'landscape-left', 'landscape-right']} onRequestClose={onClose} onDismiss={notifyDismissed}>
     <SafeAreaRoot>{fitContent ? <KeyboardAvoidingView style={styles.sheetOverlay} behavior="padding" automaticOffset>
@@ -150,6 +150,7 @@ function createStyles(colors: ThemeColors) {
   recoveryNotice: { color: colors.muted, fontSize: 12, lineHeight: 18, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: colors.raised },
   sheetScroll: { flex: 1, minHeight: 0 }, sheetContent: { padding: 18, gap: 16, paddingBottom: 24 }, sheetBody: { flex: 1, minHeight: 0 },
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' }, sheetScrim: { ...StyleSheet.absoluteFill, backgroundColor: '#00000070' },
+  hiddenHeading: { position: 'absolute', width: 1, height: 1, overflow: 'hidden' },
   fitSheet: { flexShrink: 1, maxHeight: '85%', width: '100%', maxWidth: 680, alignSelf: 'center', backgroundColor: colors.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' }, fitInner: { flex: 0, flexShrink: 1 }, fitScroll: { flex: 0, flexShrink: 1 },
   disclosure: { padding: 0, gap: 0 }, disclosureHeader: { minHeight: touchTarget, padding: 14, justifyContent: 'center', borderRadius: 8 }, disclosureBody: { padding: 14, paddingTop: 0, gap: 10 },
 }); }

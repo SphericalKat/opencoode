@@ -14,6 +14,8 @@ import { useNativePresentation } from '../lib/sheets';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { pageInset } from '../lib/layout';
 
+export type WorkspaceSection = 'Files' | 'Changes' | 'Worktrees' | 'Terminal';
+
 type Props = {
   client: Client;
   connection: Connection;
@@ -25,25 +27,28 @@ type Props = {
   onBack?: () => void;
   backLabel?: string;
   onOpenNavigation?: () => void;
+  section?: WorkspaceSection;
+  hideChrome?: boolean;
 };
 
 export function WorkspaceScreen(props: Props) {
   return <Workspace key={`${props.connection.id}:${props.directory}`} {...props} />;
 }
 
-function Workspace({ client, connection, directory, onDirectoryChange, onAttachFile, visible = true, sessionID, onBack, backLabel, onOpenNavigation }: Props) {
+function Workspace({ client, connection, directory, onDirectoryChange, onAttachFile, visible = true, sessionID, onBack, backLabel, onOpenNavigation, section, hideChrome = false }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const [tab, setTab] = useState<'Files' | 'Changes' | 'Worktrees' | 'Terminal'>('Files');
+  const [tab, setTab] = useState<WorkspaceSection>('Files');
+  const activeTab = section ?? tab;
   return <View style={styles.screen}>
-    {onBack ? <ScreenHeader title="Workspace" backLabel={backLabel} onBack={onBack} onOpenNavigation={onOpenNavigation} /> : <View style={styles.header}><Label accessibilityRole="header" style={styles.title}>Workspace</Label></View>}
-    <View accessibilityRole="tablist" accessibilityLabel="Workspace sections" style={[styles.tabs, onBack && { marginTop: 12 }]}>
-      {(['Files', 'Changes', 'Worktrees', 'Terminal'] as const).map(item => <Pressable key={item} accessibilityRole="tab" accessibilityLabel={item} accessibilityState={{ selected: tab === item }} aria-selected={tab === item} style={({ pressed }) => [styles.workspaceTab, tab === item && styles.selectedTab, pressed && { opacity: 0.65 }]} onPress={() => setTab(item)}><Label style={{ textAlign: 'center', fontSize: 13, color: tab === item ? colors.text : colors.muted }}>{item}</Label></Pressable>)}
-    </View>
-    <View style={[styles.screen, tab !== 'Files' && { display: 'none' }]}><Files client={client} directory={directory} onAttachFile={onAttachFile} /></View>
-    {tab === 'Changes' && <Changes client={client} directory={directory} onAttachFile={onAttachFile} />}
-    {tab === 'Worktrees' && <Worktrees client={client} directory={directory} onDirectoryChange={onDirectoryChange} />}
-    {visible && tab === 'Terminal' && <TerminalPanel client={client} connection={connection} directory={directory} sessionID={sessionID} />}
+    {!hideChrome && (onBack ? <ScreenHeader title="Workspace" backLabel={backLabel} onBack={onBack} onOpenNavigation={onOpenNavigation} /> : <View style={styles.header}><Label accessibilityRole="header" style={styles.title}>Workspace</Label></View>)}
+    {!hideChrome && <View accessibilityRole="tablist" accessibilityLabel="Workspace sections" style={[styles.tabs, onBack && { marginTop: 12 }]}>
+      {(['Files', 'Changes', 'Worktrees', 'Terminal'] as const).map(item => <Pressable key={item} accessibilityRole="tab" accessibilityLabel={item} accessibilityState={{ selected: activeTab === item }} aria-selected={activeTab === item} style={({ pressed }) => [styles.workspaceTab, activeTab === item && styles.selectedTab, pressed && { opacity: 0.65 }]} onPress={() => setTab(item)}><Label style={{ textAlign: 'center', fontSize: 13, color: activeTab === item ? colors.text : colors.muted }}>{item}</Label></Pressable>)}
+    </View>}
+    <View style={[styles.screen, activeTab !== 'Files' && { display: 'none' }]}><Files client={client} directory={directory} onAttachFile={onAttachFile} /></View>
+    {activeTab === 'Changes' && <Changes client={client} directory={directory} onAttachFile={onAttachFile} />}
+    {activeTab === 'Worktrees' && <Worktrees client={client} directory={directory} onDirectoryChange={onDirectoryChange} />}
+    {visible && activeTab === 'Terminal' && <TerminalPanel client={client} connection={connection} directory={directory} sessionID={sessionID} />}
   </View>;
 }
 

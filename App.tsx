@@ -1,17 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { AppState, BackHandler, Keyboard, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller';
 import { useFonts } from 'expo-font';
-import { ClientError, isLocationNotFoundError, isUnauthorizedError, type Project, type ServerInfo } from '@opencode/client';
+import { ClientError, isLocationNotFoundError, isUnauthorizedError, type Project, type ServerInfo, type SessionInfo } from '@opencode/client';
 import { Button, Busy, confirmAction, ErrorNotice, Heading, Label, sans, Sheet } from './src/components/ui';
 import { clearPairingRetry, connect, connectionErrorMessage, createClient, errorMessage, normalizeConnection, withServerDeadline, type Connection } from './src/lib/client';
 import { loadActiveConnectionId, loadConnections, loadWorkspace, saveActiveConnectionId, saveConnections, saveWorkspace } from './src/lib/storage';
 import { ChatScreen } from './src/screens/ChatScreen';
 import { SessionsScreen } from './src/screens/SessionsScreen';
-import { WorkspaceScreen } from './src/screens/WorkspaceScreen';
+import { WorkspaceScreen, type WorkspaceSection } from './src/screens/WorkspaceScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { UnsavedProvider, useUnsavedGuard } from './src/lib/unsaved';
 import { ThemeProvider, useTheme, useThemedStyles, type ThemeColors } from './src/lib/theme';
@@ -23,6 +23,8 @@ import { MotionDrawer, MotionScreen } from './src/components/motion';
 import { ConnectionFlow, type ConnectionForm } from './src/components/ConnectionFlow';
 import { SheetCoordinatorProvider, useSheetCoordinator } from './src/lib/sheets';
 import { pageInset } from './src/lib/layout';
+import { BetaLayoutContext, useBetaLayout } from './src/lib/betaLayout';
+import { BetaSessionNavigation, BetaTabsSheet, BetaTabStrip, SheetGrip, type OpenSessionTab, type SessionPane } from './src/components/BetaNavigation';
 
 type Tab = 'sessions' | 'workspace' | 'settings';
 const destinations: { id: Tab; label: string }[] = [
@@ -31,19 +33,24 @@ const destinations: { id: Tab; label: string }[] = [
 ];
 
 export default function App() {
+  const { width } = useWindowDimensions();
+  const betaLayout = Platform.OS === 'android' && width < 920;
   const [fontsReady, fontError] = useFonts({ Inter: require('./assets/fonts/Inter.ttf'), IBMPlexMono: require('./assets/fonts/IBMPlexMono-Text.ttf') });
   if (!fontsReady && !fontError) return <View style={{ flex: 1, backgroundColor: '#080808' }} />;
-  return <SafeAreaProvider><KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge><ThemeProvider><SheetCoordinatorProvider><UnsavedProvider><ThemedStatusBar /><MobileApp /></UnsavedProvider></SheetCoordinatorProvider></ThemeProvider></KeyboardProvider></SafeAreaProvider>;
+  return <SafeAreaProvider><KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge><BetaLayoutContext.Provider value={betaLayout}><ThemeProvider><SheetCoordinatorProvider><UnsavedProvider><ThemedStatusBar /><MobileApp /></UnsavedProvider></SheetCoordinatorProvider></ThemeProvider></BetaLayoutContext.Provider></KeyboardProvider></SafeAreaProvider>;
 }
 
 function ThemedStatusBar() {
   const { scheme, colors } = useTheme();
-  useEffect(() => { if (Platform.OS !== 'web') void SystemUI.setBackgroundColorAsync(colors.bg); }, [colors.bg]);
+  const betaLayout = useBetaLayout();
+  const background = betaLayout ? scheme === 'dark' ? '#080808' : '#f8f8f8' : colors.bg;
+  useEffect(() => { if (Platform.OS !== 'web') void SystemUI.setBackgroundColorAsync(background); }, [background]);
   return <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />;
 }
 
 function MobileApp() {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
+  const betaLayout = useBetaLayout();
   const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const wide = width >= 920;
@@ -62,6 +69,16 @@ function MobileApp() {
   const [directory, setDirectory] = useState('');
   const [sessionID, setSessionID] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('sessions');
+  const [betaHome, setBetaHome] = useState(true);
+  const [openTabs, setOpenTabs] = useState<OpenSessionTab[]>([]);
+  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('Changes');
+  const [betaMoreOpen, setBetaMoreOpen] = useState(false);
+  const [messageSelected, setMessageSelected] = useState(false);
+  const [creatingSession, setCreatingSession] = useState(false);
+  const creatingSessionRef = useRef(false);
+  const [sessionPanelRequest, setSessionPanelRequest] = useState<{ id: number; sessionID: string; panel: 'stats' | 'actions' }>();
+  const panelRequestID = useRef(0);
+  const pendingBetaAction = useRef<(() => void) | null>(null);
   const [visited, setVisited] = useState<Partial<Record<Tab, boolean>>>({ sessions: true });
   const [serversOpen, setServersOpen] = useState(false);
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -88,6 +105,7 @@ function MobileApp() {
   const connectingRef = useRef(false);
   const selection = useRef(0);
   const selectedSessionRef = useRef(sessionID);
+  const openingSessionRef = useRef<string | null>(null);
   const settingsCanGoBack = useRef(false);
   const setSettingsBackState = useCallback((canGoBack: boolean) => { settingsCanGoBack.current = canGoBack; }, []);
   const directoryRef = useRef(directory);
@@ -97,6 +115,24 @@ function MobileApp() {
   const activeRef = useRef<Connection | null>(null);
   activeRef.current = active;
   const client = useMemo(() => active ? createClient(active) : null, [active]);
+  const recordSessionInfo = useCallback((session: SessionInfo) => {
+    if (session.id !== selectedSessionRef.current) return;
+    const next = { id: session.id, title: session.title || 'New session', directory: session.location.directory };
+    setOpenTabs(current => {
+      const previous = current.find(item => item.id === next.id);
+      if (previous?.title === next.title && previous.directory === next.directory) return current;
+      return previous ? current.map(item => item.id === next.id ? next : item) : [...current, next];
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!betaLayout || !client || !sessionID) return;
+    const controller = new AbortController();
+    void client.session.get({ sessionID }, { signal: controller.signal }).then(session => {
+      if (!controller.signal.aborted) recordSessionInfo(session);
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [betaLayout, client, sessionID, recordSessionInfo]);
 
   const selectServer = useCallback(async (connection: Connection, existing?: Connection[], alternatives?: Connection[], explicitName = false) => {
     if (connectingRef.current) return;
@@ -142,6 +178,8 @@ function MobileApp() {
       if (!preserveWorkspace) setConnectionRevision(value => value + 1);
       setInfo(result.info);
       if (!preserveWorkspace) {
+        setOpenTabs([]);
+        setBetaHome(!restoredSessionID);
         setDirectory(location.directory);
         directoryRef.current = location.directory;
         setNewDirectory(location.directory);
@@ -214,6 +252,8 @@ function MobileApp() {
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
       if (tab === 'settings' && settingsCanGoBack.current) return false;
       if (sessionID && tab === 'sessions') {
+        if (betaLayout && !betaHome) { showBetaHome(); return true; }
+        if (betaLayout) return false;
         const request = epoch.current;
         const navigation = ++selection.current;
         void confirmNavigation().then(leave => {
@@ -227,7 +267,7 @@ function MobileApp() {
       return false;
     });
     return () => back.remove();
-  }, [active, sessionID, tab, confirmNavigation]);
+  }, [active, sessionID, tab, confirmNavigation, betaLayout, betaHome]);
 
   const changeDirectory = useCallback((next: string) => {
     if (activeRef.current !== active) return;
@@ -236,10 +276,12 @@ function MobileApp() {
     void confirmNavigation().then(leave => {
       if (!leave || activeRef.current !== active || request !== epoch.current || navigation !== selection.current) return;
       directoryRef.current = next; selectedSessionRef.current = null;
+      setBetaHome(true);
+      if (betaLayout) setTab('sessions');
       setDirectory(next); setNewDirectory(next); setSessionID(null); setAttachmentPath(undefined); setAttachmentContext(undefined); setProjectsOpen(false);
       setPendingLocation(null);
     });
-  }, [active, confirmNavigation]);
+  }, [active, confirmNavigation, betaLayout]);
 
   const syncSelectedLocation = useCallback((): Promise<string | null> => {
     if (!client || activeRef.current !== active) return Promise.resolve(null);
@@ -272,32 +314,100 @@ function MobileApp() {
     return promise;
   }, [active, client, confirmNavigation]);
 
-  const openSession = useCallback((id: string) => {
-    if (!client || activeRef.current !== active) return;
-    if (id === selectedSessionRef.current) {
-      void syncSelectedLocation().then(next => {
-        if (next && activeRef.current === active && selectedSessionRef.current === id) { setTab('sessions'); setNavigationOpen(false); }
-      });
-      return;
-    }
+  const openSession = useCallback(async (id: string, keepNavigation = false): Promise<boolean> => {
+    if (!client || activeRef.current !== active) return false;
     const request = epoch.current;
     const navigation = ++selection.current;
+    openingSessionRef.current = id;
     const current = () => activeRef.current === active && request === epoch.current && navigation === selection.current;
-    void (async () => {
-      try {
+    try {
+        if (id === selectedSessionRef.current) {
+          const next = await syncSelectedLocation();
+          if (!next || !current() || selectedSessionRef.current !== id) return false;
+          setTab('sessions'); setBetaHome(false);
+          if (!keepNavigation) setNavigationOpen(false);
+          return true;
+        }
         const selected = id ? await client.session.get({ sessionID: id }, { signal: AbortSignal.timeout(15_000) }) : null;
-        if (!current() || !(await confirmNavigation()) || !current()) return;
+        if (!current() || !(await confirmNavigation()) || !current()) return false;
         if (selected) {
           directoryRef.current = selected.location.directory;
           setDirectory(selected.location.directory); setNewDirectory(selected.location.directory);
         }
         selectedSessionRef.current = id || null;
-        setSessionID(id || null); setTab('sessions'); setAttachmentPath(undefined); setAttachmentContext(undefined); setPendingLocation(null); setNavigationOpen(false);
-      } catch (cause) { if (current()) setError(errorMessage(cause)); }
-    })();
-  }, [active, client, confirmNavigation, syncSelectedLocation]);
+        setSessionID(id || null); setTab('sessions'); setBetaHome(!id); setAttachmentPath(undefined); setAttachmentContext(undefined); setPendingLocation(null);
+        if (selected) recordSessionInfo(selected);
+        if (!keepNavigation) setNavigationOpen(false);
+        return true;
+      } catch (cause) { if (current()) setError(errorMessage(cause)); return false; }
+      finally { if (current()) openingSessionRef.current = null; }
+  }, [active, client, confirmNavigation, syncSelectedLocation, recordSessionInfo]);
+
+  async function createBetaSession(target = directoryRef.current) {
+    if (!client || creatingSessionRef.current) return;
+    const owner = activeRef.current;
+    const request = epoch.current;
+    const navigation = ++selection.current;
+    openingSessionRef.current = null;
+    const current = () => owner === activeRef.current && request === epoch.current && navigation === selection.current;
+    creatingSessionRef.current = true;
+    setCreatingSession(true);
+    try {
+      if (!(await confirmNavigation()) || !current()) return;
+      const created = await client.session.create({ location: { directory: target } });
+      if (!current()) return;
+      selectedSessionRef.current = created.id;
+      directoryRef.current = created.location.directory;
+      setSessionID(created.id); setDirectory(created.location.directory); setNewDirectory(created.location.directory);
+      setAttachmentPath(undefined); setAttachmentContext(undefined); setPendingLocation(null);
+      recordSessionInfo(created);
+      setTab('sessions'); setBetaHome(false); setRevision(value => value + 1);
+    } catch (cause) { if (current()) setError(errorMessage(cause)); }
+    finally { creatingSessionRef.current = false; setCreatingSession(false); }
+  }
+
+  async function closeBetaTab(id: string) {
+    if (openingSessionRef.current === id) { selection.current++; openingSessionRef.current = null; }
+    if (id === selectedSessionRef.current) {
+      const next = openTabs.find(item => item.id !== id);
+      if (next) {
+        const wasHome = betaHome;
+        if (!await openSession(next.id, true)) return;
+        setBetaHome(wasHome);
+      } else {
+        const owner = activeRef.current;
+        const request = epoch.current;
+        const navigation = ++selection.current;
+        if (!await confirmNavigation()) return;
+        if (owner !== activeRef.current || request !== epoch.current || navigation !== selection.current) return;
+        selectedSessionRef.current = null;
+        setSessionID(null); setPendingLocation(null); setBetaHome(true); setTab('sessions');
+      }
+    }
+    setOpenTabs(current => current.filter(item => item.id !== id));
+  }
+
+  function showBetaHome() {
+    selection.current++;
+    openingSessionRef.current = null;
+    setTab('sessions'); setBetaHome(true); setNavigationOpen(false);
+  }
+
+  function afterBetaNavigation(action: () => void) {
+    const owner = activeRef.current;
+    const request = epoch.current;
+    pendingBetaAction.current = () => { if (owner === activeRef.current && request === epoch.current) action(); };
+    setNavigationOpen(false);
+  }
+
+  function openBetaPane(pane: SessionPane) {
+    if (pane === 'Session') { void changeTab('sessions'); return; }
+    setWorkspaceSection(pane);
+    void changeTab('workspace');
+  }
 
   async function changeTab(next: Tab) {
+    if (betaLayout) { selection.current++; openingSessionRef.current = null; }
     if (next === 'sessions' || next === tab) {
       setTab(next);
       setNavigationOpen(false);
@@ -327,6 +437,7 @@ function MobileApp() {
   }
 
   function openNavigation() {
+    Keyboard.dismiss();
     if (pendingNavigationSheet.current?.kind === 'servers') { serverSheetRequest.current += 1; automaticServerRequest.current = null; resumeSheets(); }
     pendingNavigationSheet.current = null;
     navigationPresented.current = !wide;
@@ -362,6 +473,9 @@ function MobileApp() {
     navigationPresented.current = false;
     const pending = pendingNavigationSheet.current;
     pendingNavigationSheet.current = null;
+    const betaAction = pendingBetaAction.current;
+    pendingBetaAction.current = null;
+    if (!pending && betaAction) { betaAction(); return; }
     if (!pending || pending.epoch !== epoch.current || !activeRef.current || pending.kind === 'servers' && pending.serverRequest !== serverSheetRequest.current) {
       if (pending?.kind === 'servers') resumeSheets();
       return;
@@ -490,6 +604,7 @@ function MobileApp() {
       if (activeRef.current !== owner || epoch.current !== request || selection.current !== navigation) return false;
       selectedSessionRef.current = selected;
       setSessionID(selected);
+      setBetaHome(false);
       setAttachmentContext(contextText);
       setAttachmentPath(path);
       setRevision(value => value + 1);
@@ -506,6 +621,19 @@ function MobileApp() {
   const projectLabel = directory.split('/').filter(Boolean).pop() || 'Project';
   const returnLabel = sessionID ? 'Chat' : 'Sessions';
   const returnToSessions = () => { void changeTab('sessions'); };
+  const currentOpenTab = !betaHome && tab !== 'settings' && sessionID ? openTabs.find(item => item.id === sessionID) ?? { id: sessionID, title: 'Session', directory } : undefined;
+  const showMessageSelection = messageSelected && tab === 'sessions' && !betaHome && !!sessionID;
+  const selectedPane: SessionPane = tab === 'workspace' ? workspaceSection : 'Session';
+  const requestSessionPanel = (panel: 'stats' | 'actions') => {
+    if (!sessionID) return;
+    afterBetaMenu(() => { setTab('sessions'); setSessionPanelRequest({ id: ++panelRequestID.current, sessionID, panel }); });
+  };
+  function afterBetaMenu(action: () => void) {
+    const owner = activeRef.current;
+    const request = epoch.current;
+    pendingBetaAction.current = () => { if (owner === activeRef.current && request === epoch.current) action(); };
+    setBetaMoreOpen(false);
+  }
   const openServers = () => { setConnectionError(null); showNavigationSheet('servers'); };
   const navigation = client && active ? <>
     <View style={styles.navigationBrand}><OpenCodeLogo width={Platform.OS === 'android' ? 112 : 136} />{!wide && <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={() => setNavigationOpen(false)} style={styles.iconButton}><ShellIcon name="close" color={colors.muted} /></Pressable>}</View>
@@ -521,28 +649,37 @@ function MobileApp() {
 
   if (booting) return <SafeAreaView style={styles.safe}><View style={styles.boot}><OpenCodeLogo width={160} /><Busy /><Label muted>Restoring your workspace</Label></View></SafeAreaView>;
 
-  return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
-    {!client || !active ? <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" automaticOffset><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.onboarding}>
-      <View style={{ gap: 16, marginBottom: 20 }}><OpenCodeLogo width={180} /><Label muted>Mobile client</Label></View>
+  return <SafeAreaView style={[styles.safe, betaLayout && { backgroundColor: scheme === 'dark' ? '#080808' : '#f8f8f8' }]} edges={['top', 'left', 'right', 'bottom']}>
+    {!client || !active ? <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" automaticOffset><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.onboarding, betaLayout && styles.betaOnboarding]}>
+      {!betaLayout && <View style={{ gap: 16, marginBottom: 20 }}><OpenCodeLogo width={180} /><Label muted>Mobile client</Label></View>}
       {serverForm}
     </ScrollView></KeyboardAvoidingView> : <View style={styles.shell}>
       {wide && <View style={styles.sidebar}>{navigation}</View>}
       <View style={styles.main}>
+      {betaLayout && !showMessageSelection && <BetaTabStrip current={currentOpenTab} count={openTabs.length} busy={creatingSession} onOpen={openNavigation} />}
       {error && <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><ErrorNotice error={error} /></View>}
       {pendingLocation?.sessionID === sessionID && <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><ErrorNotice error={`This session uses ${pendingLocation.directory}. Update the workspace before you attach files or open its terminal.`} onRetry={() => { void syncSelectedLocation(); }} /></View>}
-      <View style={styles.body}>
+      <View style={[styles.body, betaLayout && styles.betaSurface]}>
+        {betaLayout && !betaHome && sessionID && tab !== 'settings' && !showMessageSelection && <BetaSessionNavigation pane={selectedPane} directory={directory} onSelect={openBetaPane} onMore={() => { Keyboard.dismiss(); setBetaMoreOpen(true); }} onProject={() => { void openProjects(); }} />}
         <MotionScreen visible={tab === 'sessions'} style={[styles.full, { flexDirection: 'row' }, tab !== 'sessions' && { display: 'none' }]}>
-          {!wide && !sessionID && <View style={styles.full}><SessionsScreen key={`${active.id}:${connectionRevision}`} client={client} directory={directory} selectedSessionID={sessionID ?? undefined} revision={revision} onOpenSession={openSession} onOpenNavigation={openNavigation} /></View>}
-          {(wide || sessionID) && <View style={styles.full}>{sessionID ? <ChatScreen key={`${active.id}:${connectionRevision}:${sessionID}`} client={client} sessionID={sessionID} serverID={active.id} draftKey={`${active.id}:${sessionID}`} visible={tab === 'sessions'} projectLabel={projectLabel} onOpenNavigation={wide ? undefined : openNavigation} onSessionChanged={() => { setRevision(value => value + 1); void syncSelectedLocation(); }} onOpenSession={id => { openSession(id); setRevision(value => value + 1); }} attachmentPath={attachmentPath} attachmentContext={attachmentContext} onAttachmentConsumed={() => { setAttachmentPath(undefined); setAttachmentContext(undefined); }} /> : <View style={styles.welcome}><OpenCodeLogo width={160} /><Heading>Start a session</Heading><Label muted style={styles.welcomeDetail}>Choose a conversation, or create a new session in {projectLabel}.</Label></View>}</View>}
+          {!wide && (betaLayout || !sessionID) && <View style={[styles.full, betaLayout && !betaHome && sessionID && { display: 'none' }]}><SessionsScreen key={`${active.id}:${connectionRevision}`} client={client} directory={directory} betaLayout={betaLayout} onChooseDirectory={() => { void openProjects(); }} onNewSession={betaLayout ? target => { void createBetaSession(target); } : undefined} selectedSessionID={sessionID ?? undefined} revision={revision} onOpenSession={openSession} onOpenNavigation={openNavigation} /></View>}
+          {(wide || sessionID) && <View style={[styles.full, betaLayout && betaHome && { display: 'none' }]}>{sessionID ? <ChatScreen key={`${active.id}:${connectionRevision}:${sessionID}`} client={client} sessionID={sessionID} serverID={active.id} draftKey={`${active.id}:${sessionID}`} betaLayout={betaLayout} onSelectionChange={setMessageSelected} onSessionInfo={recordSessionInfo} sessionPanelRequest={sessionPanelRequest} visible={tab === 'sessions' && (!betaLayout || !betaHome)} projectLabel={projectLabel} onOpenNavigation={wide ? undefined : openNavigation} onSessionChanged={() => { setRevision(value => value + 1); void syncSelectedLocation(); }} onOpenSession={id => { void openSession(id); setRevision(value => value + 1); }} attachmentPath={attachmentPath} attachmentContext={attachmentContext} onAttachmentConsumed={() => { setAttachmentPath(undefined); setAttachmentContext(undefined); }} /> : <View style={styles.welcome}><OpenCodeLogo width={160} /><Heading>Start a session</Heading><Label muted style={styles.welcomeDetail}>Choose a conversation, or create a new session in {projectLabel}.</Label></View>}</View>}
         </MotionScreen>
-        {visited.workspace && <MotionScreen visible={tab === 'workspace'} style={[styles.full, tab !== 'workspace' && { display: 'none' }]}><WorkspaceScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} connection={active} directory={directory} sessionID={sessionID ?? undefined} visible={tab === 'workspace'} onDirectoryChange={changeDirectory} onAttachFile={attachFile} onBack={wide ? undefined : returnToSessions} backLabel={returnLabel} onOpenNavigation={wide ? undefined : openNavigation} /></MotionScreen>}
-        {visited.settings && <MotionScreen visible={tab === 'settings'} style={[styles.full, tab !== 'settings' && { display: 'none' }]}><SettingsScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} directory={directory} visible={tab === 'settings'} onBackStateChange={setSettingsBackState} onBack={wide ? undefined : returnToSessions} backLabel={returnLabel} onOpenNavigation={wide ? undefined : openNavigation} /></MotionScreen>}
+        {visited.workspace && <MotionScreen visible={tab === 'workspace'} style={[styles.full, tab !== 'workspace' && { display: 'none' }]}><WorkspaceScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} connection={active} directory={directory} sessionID={sessionID ?? undefined} section={betaLayout ? workspaceSection : undefined} hideChrome={betaLayout} visible={tab === 'workspace'} onDirectoryChange={changeDirectory} onAttachFile={attachFile} onBack={wide ? undefined : returnToSessions} backLabel={returnLabel} onOpenNavigation={wide ? undefined : openNavigation} /></MotionScreen>}
+        {visited.settings && <MotionScreen visible={tab === 'settings'} style={[styles.full, tab !== 'settings' && { display: 'none' }]}><SettingsScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} directory={directory} betaLayout={betaLayout} onManageServers={openServers} serverLabel={active.name} visible={tab === 'settings'} onBackStateChange={setSettingsBackState} onBack={wide ? undefined : returnToSessions} backLabel={returnLabel} onOpenNavigation={wide ? undefined : openNavigation} /></MotionScreen>}
       </View>
       </View>
     </View>}
-    <MotionDrawer visible={navigationOpen && !wide && !!active} width={Math.min(width - 32, 352)} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} panelStyle={styles.drawer}>
+    <MotionDrawer visible={navigationOpen && !wide && !!active && !betaLayout} width={Math.min(width - 32, 352)} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} panelStyle={styles.drawer}>
       <SafeAreaView style={styles.full} edges={['top', 'bottom', 'left']}>{navigation}</SafeAreaView>
     </MotionDrawer>
+    {betaLayout && <BetaTabsSheet visible={navigationOpen && !!active} tabs={openTabs} selectedID={currentOpenTab?.id} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} onSelect={id => { void openSession(id); }} onCloseTab={id => { void closeBetaTab(id); }} onNew={() => afterBetaNavigation(() => { void createBetaSession(); })} onHome={() => afterBetaNavigation(showBetaHome)} onSettings={() => afterBetaNavigation(() => { void changeTab('settings'); })} onHelp={() => afterBetaNavigation(() => { void Linking.openURL('https://opencode.ai/v2/docs/'); })} />}
+    {betaLayout && <Sheet visible={betaMoreOpen} title="More options" fitContent showHeader={false} contentStyle={styles.betaMenu} onClose={() => setBetaMoreOpen(false)} onDismiss={() => { const action = pendingBetaAction.current; pendingBetaAction.current = null; action?.(); }}>
+      <SheetGrip onClose={() => setBetaMoreOpen(false)} />
+      {(['Files', 'Terminal', 'Worktrees'] as const).map(pane => <Pressable key={pane} accessibilityRole="button" onPress={() => afterBetaMenu(() => openBetaPane(pane))} style={({ pressed }) => [styles.betaMenuRow, pressed && styles.pressed]}><Label style={styles.betaMenuText}>{pane}</Label><Label muted>{selectedPane === pane ? '✓' : ''}</Label></Pressable>)}
+      <Pressable accessibilityRole="button" onPress={() => requestSessionPanel('stats')} style={({ pressed }) => [styles.betaMenuRow, pressed && styles.pressed]}><Label style={styles.betaMenuText}>Usage</Label></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => requestSessionPanel('actions')} style={({ pressed }) => [styles.betaMenuRow, pressed && styles.pressed]}><Label style={styles.betaMenuText}>Session details</Label><ShellIcon name="chevron" size={14} color={colors.muted} /></Pressable>
+    </Sheet>}
     <Sheet visible={serversOpen && !!active} title={unavailableID === active?.id ? 'Connection' : 'Servers'} allowDuringRecovery onClose={() => { serverSheetRequest.current += 1; setServersOpen(false); }} onDismiss={resumeSheets}>{serversOpen && active && serverForm}</Sheet>
     <Sheet visible={projectsOpen} title="Open a project" scroll={false} onClose={() => setProjectsOpen(false)}>
       {projectsOpen && client && active && <ProjectDirectoryBrowser key={`${active.id}:${connectionRevision}:${directory}`} client={client} directory={directory} value={newDirectory} projects={projects} busy={projectBusy} error={projectError} onChangeValue={value => { setNewDirectory(value); setProjectError(null); }} onOpenDirectory={value => { void openDirectory(value); }} />}
@@ -553,9 +690,12 @@ function MobileApp() {
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg }, boot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   onboarding: { flexGrow: 1, padding: 24, paddingVertical: 40, maxWidth: 520, width: '100%', alignSelf: 'center', gap: 16 },
+  betaOnboarding: { justifyContent: 'center', paddingVertical: 32 },
   shell: { flex: 1, flexDirection: 'row', minHeight: 0 }, main: { flex: 1, minWidth: 0, minHeight: 0 },
   iconButton: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
   body: { flex: 1, flexDirection: 'row', minHeight: 0 }, full: { flex: 1, minWidth: 0, minHeight: 0 },
+  betaSurface: { flexDirection: 'column', borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.bg, overflow: 'hidden' },
+  betaMenu: { padding: 12, paddingTop: 0, paddingBottom: 4, gap: 0 }, betaMenuRow: { minHeight: 48, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, betaMenuText: { fontSize: 13, lineHeight: 18 },
   sidebar: { width: 288, borderRightWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
   navigationBrand: { height: Platform.OS === 'android' ? 48 : 64, paddingHorizontal: pageInset, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   projectChoice: { marginHorizontal: pageInset, paddingHorizontal: 15, paddingVertical: 10, minHeight: Platform.OS === 'android' ? 48 : 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border },

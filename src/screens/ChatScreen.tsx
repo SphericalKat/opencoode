@@ -7,7 +7,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
-import type { AgentInfo, CommandInfo, FileDiffInfo, FileSystemEntry, FormInfo, ModelInfo, OpenCodeEvent, PermissionRequest, SessionInboxInfo, SessionInfo, SessionMessageAssistant, SessionMessageInfo, SessionPromptInput, SessionStatus, SkillInfo } from '@opencode/client';
+import type { AgentInfo, CommandInfo, FileDiffInfo, FileSystemEntry, FormInfo, ModelInfo, OpenCodeEvent, PermissionRequest, ProviderInfo, SessionInboxInfo, SessionInfo, SessionMessageAssistant, SessionMessageInfo, SessionPromptInput, SessionStatus, SkillInfo } from '@opencode/client';
 import { errorMessage, type Client } from '../lib/client';
 import { isAssistantProgress, mergeMessages, parseComposer, projectLiveEvents, serverFileUri } from '../lib/chat';
 import { Button, Busy, Card, confirmAction, Disclosure, Empty, ErrorNotice, Field, Heading, JsonView, Label, mono, Row, Sheet } from '../components/ui';
@@ -33,6 +33,7 @@ import { modelPreferenceID, useModelPreferences } from '../lib/modelPreferences'
 import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
 import { useNativePresentation } from '../lib/sheets';
 import { pageInset } from '../lib/layout';
+import { useBetaLayout } from '../lib/betaLayout';
 
 type Props = {
   client: Client;
@@ -47,9 +48,13 @@ type Props = {
   onOpenNavigation?: () => void;
   projectLabel?: string;
   serverID?: string;
+  betaLayout?: boolean;
+  onSelectionChange?: (selected: boolean) => void;
+  onSessionInfo?: (session: SessionInfo) => void;
+  sessionPanelRequest?: { id: number; sessionID: string; panel: 'stats' | 'actions' };
 };
 type Attachment = NonNullable<SessionPromptInput['files']>[number];
-type Panel = 'actions' | 'models' | 'agents' | 'commands' | 'mentions' | 'tools' | 'message' | 'selectText' | 'diff' | 'context' | 'instructions' | 'schedules' | 'background' | 'children' | 'stats' | 'btw' | 'resources' | null;
+type Panel = 'actions' | 'variants' | 'models' | 'agents' | 'commands' | 'mentions' | 'tools' | 'message' | 'selectText' | 'diff' | 'context' | 'instructions' | 'schedules' | 'background' | 'children' | 'stats' | 'btw' | 'resources' | null;
 type SyncScope = 'metadata' | 'history' | 'inbox' | 'requests';
 const messageKey = (message: SessionMessageInfo) => message.id;
 const messageType = (message: SessionMessageInfo) => message.type;
@@ -59,10 +64,10 @@ export function ChatScreen(props: Props) {
   return <ChatSession key={props.sessionID} {...props} />;
 }
 
-function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attachmentPath, attachmentContext, onAttachmentConsumed, draftKey = sessionID, visible = true, onOpenNavigation, projectLabel, serverID }: Props) {
+function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attachmentPath, attachmentContext, onAttachmentConsumed, draftKey = sessionID, visible = true, onOpenNavigation, projectLabel, serverID, betaLayout = false, onSelectionChange, onSessionInfo, sessionPanelRequest }: Props) {
   const { colors } = useTheme();
   const { fontScale } = useWindowDimensions();
-  const minimumComposerHeight = Math.max(44, Math.ceil(24 * fontScale + 12));
+  const minimumComposerHeight = Math.max(44, Math.ceil(betaLayout ? 22 * fontScale + 20 : 24 * fontScale + 12));
   const maximumComposerHeight = Math.max(120, minimumComposerHeight);
   const styles = useThemedStyles(createStyles);
   const modelPreferences = useModelPreferences(serverID || '');
@@ -74,6 +79,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const [forms, setForms] = useState<FormInfo[]>([]);
   const [permissions, setPermissions] = useState<PermissionRequest[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [commands, setCommands] = useState<CommandInfo[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -148,6 +154,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const didLoadDraft = useRef(false);
   const onSessionChangedRef = useRef(onSessionChanged);
   const consumedAttachment = useRef<{ path: string; context?: string } | null>(null);
+  const handledPanelRequest = useRef<number | undefined>(undefined);
   const queuedDevicePicker = useRef(false);
   const queuedMessagePanel = useRef<'selectText' | 'background' | null>(null);
   const devicePickerActive = useRef(false);
@@ -187,6 +194,16 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       setPanel(current => current === 'message' || current === 'selectText' ? null : current);
     }
   }, [messages, selectedMessageID]);
+  useEffect(() => {
+    onSelectionChange?.(visible && !!selectedMessageID);
+    return () => onSelectionChange?.(false);
+  }, [visible, selectedMessageID, onSelectionChange]);
+  useEffect(() => { if (session) onSessionInfo?.(session); }, [session, onSessionInfo]);
+  useEffect(() => {
+    if (!visible || !sessionPanelRequest || sessionPanelRequest.sessionID !== sessionID || handledPanelRequest.current === sessionPanelRequest.id) return;
+    handledPanelRequest.current = sessionPanelRequest.id;
+    setPanel(sessionPanelRequest.panel);
+  }, [visible, sessionID, sessionPanelRequest]);
   const setFollowing = useCallback((follow: boolean) => {
     followingLatestRef.current = follow;
     if (!follow && followFrame.current !== undefined) { cancelAnimationFrame(followFrame.current); followFrame.current = undefined; }
@@ -603,6 +620,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     const controller = new AbortController();
     const location = { directory: session.location.directory };
     void Promise.allSettled([
+      betaLayout ? client.provider.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setProviders(value.data); }) : Promise.resolve(),
       client.model.list({ location, types: ['chat'] }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setModels(value.data); }),
       client.agent.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setAgents(value.data); }),
       client.command.list({ location }, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setCommands(value.data); }),
@@ -612,7 +630,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       if (!controller.signal.aborted) setCatalogError(failed?.status === 'rejected' ? errorMessage(failed.reason) : null);
     });
     return () => controller.abort();
-  }, [client, session?.location.directory, sessionID, !!session, foreground, visible, catalogRevision, showError]);
+  }, [client, session?.location.directory, sessionID, !!session, foreground, visible, catalogRevision, betaLayout, showError]);
 
   useEffect(() => {
     if (!foreground || !visible || !session?.time.idle) return;
@@ -813,6 +831,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   });
 
   const currentModel = useMemo(() => models.find(model => model.id === session?.model?.id && model.providerID === session?.model.providerID), [models, session?.model?.id, session?.model?.providerID]);
+  const providerID = currentModel?.providerID || session?.model?.providerID;
+  const providerLabel = providers.find(provider => provider.id === providerID)?.name || providerID?.replace(/[-_]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
   const actionMessage = selectedMessageID ? messages.find(message => message.id === selectedMessageID) : undefined;
   const enabledModels = useMemo(() => models.filter(model => model.enabled), [models]);
   const preferredIDs = modelFilter === 'favorites' ? modelPreferences.favoriteIDs : modelPreferences.recentIDs;
@@ -831,28 +851,28 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const showLatestControl = !followingLatest && awayFromLatest && !['approval', 'question'].includes(activity.kind);
   const latestStep = messages.findLast(message => ['assistant', 'idle', 'user', 'shell', 'compaction'].includes(message.type));
   const liveMessageID = active && latestStep?.type === 'assistant' && latestStep.time.completed === undefined && !latestStep.error ? latestStep.id : undefined;
-  const chooseModel = (model: ModelInfo, variant?: string) => run(async () => {
+  const chooseModel = (model: ModelInfo, variant?: string, closePanel = false) => run(async () => {
     await client.session.switchModel({ sessionID, model: { id: model.id, providerID: model.providerID, ...(variant === undefined ? {} : { variant }) } });
     await modelPreferences.recordRecent(model.providerID, model.id);
-  });
+  }, closePanel);
   const messageDirectory = session?.location.directory || '';
   const transcriptMessages = useMemo(() => messages.filter(message => message.type !== 'idle' || !!message.error), [messages]);
   const renderMessage = useCallback(({ item }: { item: SessionMessageInfo }) => <MessageRow message={item} live={item.id === liveMessageID} activityKind={item.id === liveMessageID ? activity.kind : undefined} animate={visible && foreground && streamStatus === 'Live'} onSelect={selectMessage} selected={item.id === selectedMessageID} selectionActive={!!selectedMessageID} screenReader={screenReader} client={client} directory={messageDirectory} />, [selectMessage, selectedMessageID, screenReader, client, messageDirectory, liveMessageID, activity.kind, visible, foreground, streamStatus]);
   const canCopySelected = actionMessage?.type === 'assistant' ? actionMessage.content.some(part => part.type === 'text' && !!part.text) : !!actionMessage;
   const copySelected = () => { if (actionMessage) { const messageID = actionMessage.id; const text = messageText(actionMessage); if (text) void Clipboard.setStringAsync(text).then(() => { if (alive.current) setSelectedMessageID(current => current === messageID ? null : current); }).catch(showError); } };
 
-  if (!session) return <View style={styles.container}><View style={styles.header}>{onOpenNavigation && <View style={styles.headerLeading}><ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} /></View>}<View style={[styles.headerTitle, onOpenNavigation && styles.headerTitleWithNavigation]}><Label numberOfLines={1} style={styles.sessionTitle}>{loading ? 'Loading session' : 'Session unavailable'}</Label><Label numberOfLines={1} muted style={styles.projectLabel}>{projectLabel || 'OpenCode'}</Label></View></View>{loading ? <Busy /> : <View style={{ padding: 16 }}><ErrorNotice error={error || fetchError || 'The session is unavailable'} onRetry={() => { void refresh(); }} /></View>}</View>;
+  if (!session) return <View style={styles.container}>{!betaLayout && <View style={styles.header}>{onOpenNavigation && <View style={styles.headerLeading}><ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} /></View>}<View style={[styles.headerTitle, onOpenNavigation && styles.headerTitleWithNavigation]}><Label numberOfLines={1} style={styles.sessionTitle}>{loading ? 'Loading session' : 'Session unavailable'}</Label><Label numberOfLines={1} muted style={styles.projectLabel}>{projectLabel || 'OpenCode'}</Label></View></View>}{loading ? <Busy /> : <View style={{ padding: 16 }}><ErrorNotice error={error || fetchError || 'The session is unavailable'} onRetry={() => { void refresh(); }} /></View>}</View>;
   return <View style={styles.frame}><KeyboardAvoidingView style={styles.container} behavior="padding" automaticOffset enabled={visible && !panel}>
-    <MotionContent variant="context" transitionKey={!!actionMessage} style={[styles.header, !!actionMessage && styles.selectionHeader]}>{actionMessage ? <><View style={styles.headerLeading}><ChatIconButton name="close" label="Close message selection" onPress={() => setSelectedMessageID(null)} /></View><Label accessibilityRole="header" style={styles.selectionCount}>1 selected</Label><Button title="Copy" compact variant="ghost" disabled={!canCopySelected} onPress={copySelected} />{actionMessage.type === 'user' ? <Button title="Edit" compact variant="ghost" disabled={!draftLoaded || pending} onPress={() => { void editMessage(actionMessage); }} /> : <Button title="Fork" compact variant="ghost" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }); }} />}<View style={styles.headerTrailing}><ChatIconButton name="more" label="Selected message actions" onPress={() => setPanel('message')} /></View></> : <>
+    {(!betaLayout || !!actionMessage) && <MotionContent variant="context" transitionKey={!!actionMessage} style={[styles.header, !!actionMessage && styles.selectionHeader]}>{actionMessage ? <><View style={styles.headerLeading}><ChatIconButton name="close" label="Close message selection" onPress={() => setSelectedMessageID(null)} /></View><Label accessibilityRole="header" style={styles.selectionCount}>1 selected</Label><Button title="Copy" compact variant="ghost" disabled={!canCopySelected} onPress={copySelected} />{actionMessage.type === 'user' ? <Button title="Edit" compact variant="ghost" disabled={!draftLoaded || pending} onPress={() => { void editMessage(actionMessage); }} /> : <Button title="Fork" compact variant="ghost" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }); }} />}<View style={styles.headerTrailing}><ChatIconButton name="more" label="Selected message actions" onPress={() => setPanel('message')} /></View></> : <>
       {onOpenNavigation && <View style={styles.headerLeading}><ChatIconButton name="menu" label="Open navigation" onPress={onOpenNavigation} /></View>}
       <View style={[styles.headerTitle, onOpenNavigation && styles.headerTitleWithNavigation]}><Label numberOfLines={1} accessibilityLabel={session.title || 'New session'} style={styles.sessionTitle}>{session.title || 'New session'}</Label><View style={styles.headerSubtitle}>{showHeaderActivity && <WorkingIndicator active={visible && foreground} color={colors.muted} size={12} />}<Label numberOfLines={1} muted style={styles.projectLabel}>{showHeaderActivity ? activity.label : projectLabel || session.location.directory.split('/').filter(Boolean).pop() || session.location.directory}</Label></View></View>
       <View style={styles.headerTrailing}><ChatIconButton name="more" label="Session actions" onPress={() => setPanel('actions')} /></View>
-    </>}</MotionContent>
+    </>}</MotionContent>}
     {error && <View style={styles.errorBanner}><ErrorNotice error={error} /><Button title="Dismiss" compact variant="ghost" onPress={() => setError(null)} /></View>}
     {(fetchError || catalogError || Object.values(syncErrors)[0]) && <View style={styles.errorBanner}><ErrorNotice error={fetchError || catalogError || Object.values(syncErrors)[0]} onRetry={() => { setCatalogRevision(value => value + 1); void refresh(); }} /></View>}
     {session.revert && <View style={styles.revert}><Label>A revert is staged</Label><Label muted>Later messages are excluded from the context.</Label><Row><Button title="Restore" compact onPress={() => { void run(() => client.session.revert.clear({ sessionID })); }} /><Button title="Commit revert" compact variant="danger" disabled={pending} onPress={() => { void run(async () => { if (await confirmAction('Commit this revert?', 'This permanently removes messages after the revert point.')) { await client.session.revert.commit({ sessionID }); historyEpoch.current++; liveMessages.current.clear(); } }); }} /></Row></View>}
     <MessageDisclosureContext.Provider value={disclosures}><View style={styles.transcriptFrame}><FlashList ref={list} data={transcriptMessages} keyExtractor={messageKey} getItemType={messageType} renderItem={renderMessage} ItemSeparatorComponent={MessageSeparator} maintainVisibleContentPosition={maintainPosition}
-      style={styles.transcript} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} onLoad={listLoaded} onContentSizeChange={contentSizeChanged} onLayout={transcriptLayoutChanged}
+      style={styles.transcript} contentContainerStyle={betaLayout ? styles.betaMessages : styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} onLoad={listLoaded} onContentSizeChange={contentSizeChanged} onLayout={transcriptLayoutChanged}
       onScroll={updateScrollPosition} scrollEventThrottle={16} onScrollBeginDrag={beginUserScroll} onScrollEndDrag={finishUserScroll} onMomentumScrollBegin={beginUserScroll} onMomentumScrollEnd={finishUserScroll}
       ListHeaderComponent={cursor ? <Button title="Load earlier messages" variant="ghost" compact busy={loadingOlder} onPress={() => { setFollowing(false); void loadOlder(); }} /> : undefined}
       ListEmptyComponent={<Empty title="Start something good" detail="Ask a question, describe a change, or attach a file from your project." />}
@@ -861,7 +881,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         <SessionForms client={client} sessionID={sessionID} forms={forms} permissions={permissions} onChanged={refreshRef.current} onError={showError} locationDirectory={session.location.directory} />
       </View>}
     /></View></MessageDisclosureContext.Provider>
-    <View style={styles.composerDock}><AgentActivityBar activity={activity} connectionStatus={streamStatus} sending={sending} stopping={stopping} animate={visible && foreground} show={showActivityBar} onReview={jumpToLatest} /><View style={styles.composer}>
+    <View style={[styles.composerDock, betaLayout && styles.betaComposerDock]}><AgentActivityBar activity={activity} connectionStatus={streamStatus} sending={sending} stopping={stopping} animate={visible && foreground} show={showActivityBar} onReview={jumpToLatest} /><View style={[styles.composer, betaLayout && styles.betaComposer]}>
       {!draftLoaded ? <Busy /> : <>
       {(attachments.length > 0 || selectedSkills.length > 0 || restoredSkillIDs.length > 0 || selectedAgentIDs.length > 0) && <ScrollView horizontal contentContainerStyle={{ gap: 6 }}>
         {attachments.map((file, index) => <Button key={`${file.name}-${index}`} title={`${file.name || 'File'} ×`} compact onPress={() => setAttachments(current => current.filter((_, i) => i !== index))} />)}
@@ -869,8 +889,9 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         {restoredSkillIDs.map(id => <Button key={id} title={`${id} ×`} compact onPress={() => setRestoredSkillIDs(current => current.filter(value => value !== id))} />)}
         {selectedAgentIDs.map(id => <Button key={id} title={`@${agents.find(agent => agent.id === id)?.name || id} ×`} compact onPress={() => setSelectedAgentIDs(current => current.filter(value => value !== id))} />)}
       </ScrollView>}
-      <Field accessibilityLabel="Message" placeholder="Ask OpenCode…" multiline value={draft} onChangeText={setDraft} onContentSizeChange={updateComposerHeight} onFocus={() => setSelectedMessageID(null)} style={[styles.composerInput, { minHeight: minimumComposerHeight, maxHeight: maximumComposerHeight, height: draft ? Math.max(minimumComposerHeight, composerHeight) : minimumComposerHeight }]} />
-      <View style={styles.composerToolbar}><ChatIconButton name="plus" label="Message tools" onPress={() => setPanel('tools')} /><Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${currentModel?.name || session.model?.id || 'Server default'}`} onPress={() => setPanel('models')} style={({ pressed }) => [styles.modelTrigger, pressed && { opacity: 0.6 }]}><Label numberOfLines={1} style={styles.modelTriggerText}>{currentModel?.name || session.model?.id || 'Server default'}</Label><ChatGlyph name="down" size={14} color={colors.muted} /></Pressable>{active && hasPrompt && <Button title={delivery === 'steer' ? 'Steer' : 'Queue'} accessibilityLabel="Message delivery" compact variant="ghost" onPress={() => setDelivery(value => value === 'steer' ? 'queue' : 'steer')} />}{active && hasPrompt ? <ChatIconButton name='stop' label='Stop generation' disabled={pending || stopping} onPress={() => { void interrupt(); }} /> : showLatestControl ? <ChatIconButton name='down' label='Jump to latest' onPress={jumpToLatest} /> : null}<ChatIconButton name={active && !hasPrompt ? 'stop' : 'up'} label={active && !hasPrompt ? 'Stop generation' : active && delivery === 'queue' ? 'Queue message' : 'Send message'} raised busy={pending} disabled={active && !hasPrompt ? !stopReady || stopping : !hasPrompt} onPress={() => { if (active && !hasPrompt) void interrupt(); else void send(); }} /></View>
+      <Field accessibilityLabel="Message" placeholder={betaLayout ? 'Ask anything, / for commands, @ for context…' : 'Ask OpenCode…'} multiline value={draft} onChangeText={setDraft} onContentSizeChange={updateComposerHeight} onFocus={() => setSelectedMessageID(null)} style={[styles.composerInput, betaLayout && styles.betaComposerInput, { minHeight: minimumComposerHeight, maxHeight: maximumComposerHeight, height: draft ? Math.max(minimumComposerHeight, composerHeight) : minimumComposerHeight }]} />
+      {betaLayout && (active && hasPrompt || showLatestControl) && <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>{active && hasPrompt && <Button title={delivery === 'steer' ? 'Steer' : 'Queue'} accessibilityLabel="Message delivery" compact variant="ghost" onPress={() => setDelivery(value => value === 'steer' ? 'queue' : 'steer')} />}{active && hasPrompt ? <ChatIconButton name='stop' label='Stop generation' disabled={pending || stopping} onPress={() => { void interrupt(); }} /> : showLatestControl ? <ChatIconButton name='down' label='Jump to latest' onPress={jumpToLatest} /> : null}</View>}
+      <View style={[styles.composerToolbar, betaLayout && styles.betaComposerToolbar]}><ChatIconButton name="plus" label="Message tools" compactFace={betaLayout} onPress={() => setPanel('tools')} /><Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${betaLayout && providerLabel ? `${providerLabel}, ` : ''}${currentModel?.name || session.model?.id || 'Server default'}`} onPress={() => setPanel('models')} style={({ pressed }) => [styles.modelTrigger, betaLayout && styles.betaModelTrigger, pressed && { opacity: 0.6 }]}>{betaLayout && providerLabel && <><Label numberOfLines={1} style={[styles.betaTriggerText, styles.betaProviderLabel]}>{providerLabel}</Label><Label muted style={styles.betaTriggerText}>/</Label></>}<Label numberOfLines={1} style={[styles.modelTriggerText, betaLayout && styles.betaTriggerText]}>{currentModel?.name || session.model?.id || 'Server default'}</Label><ChatGlyph name="down" size={betaLayout ? 12 : 14} color={colors.muted} /></Pressable>{betaLayout && !!currentModel?.variants.length && <Pressable accessibilityRole="button" accessibilityLabel={`Choose variant, ${session.model?.variant || 'Model default'}`} accessibilityState={{ disabled: pending }} disabled={pending} onPress={() => setPanel('variants')} style={({ pressed }) => [styles.betaVariantTrigger, pressed && { opacity: 0.6 }]}><Label numberOfLines={1} style={styles.betaTriggerText}>{session.model?.variant || 'Default'}</Label><ChatGlyph name="down" size={12} color={colors.muted} /></Pressable>}{!betaLayout && <>{active && hasPrompt && <Button title={delivery === 'steer' ? 'Steer' : 'Queue'} accessibilityLabel="Message delivery" compact variant="ghost" onPress={() => setDelivery(value => value === 'steer' ? 'queue' : 'steer')} />}{active && hasPrompt ? <ChatIconButton name='stop' label='Stop generation' disabled={pending || stopping} onPress={() => { void interrupt(); }} /> : showLatestControl ? <ChatIconButton name='down' label='Jump to latest' onPress={jumpToLatest} /> : null}</>}<ChatIconButton name={active && !hasPrompt ? 'stop' : 'up'} label={active && !hasPrompt ? 'Stop generation' : active && delivery === 'queue' ? 'Queue message' : 'Send message'} raised compactFace={betaLayout} busy={pending} disabled={active && !hasPrompt ? !stopReady || stopping : !hasPrompt} onPress={() => { if (active && !hasPrompt) void interrupt(); else void send(); }} /></View>
       </>}
     </View></View>
     <Sheet visible={panel === 'actions'} title="Session" onClose={() => setPanel(null)}>
@@ -885,6 +906,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       <Disclosure title="Manage session"><Field label="Session title" value={title} onChangeText={setTitle} /><Button title="Rename" disabled={!title.trim()} busy={pending} onPress={() => { void run(() => client.session.update({ sessionID, title: title.trim() }), true); }} /><Field label="Move to server directory" placeholder="/path/to/project" value={moveDirectory} onChangeText={setMoveDirectory} /><Button title="Move session" disabled={!moveDirectory.startsWith('/') || pending} onPress={() => { void run(() => client.session.move({ sessionID, directory: moveDirectory, delivery }), true); }} /><Button title="Fork session" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID }); onOpenSession(next.id); }, true); }} /><Button title="Compact context" disabled={pending} onPress={() => { void run(() => client.session.compact({ sessionID, delivery: 'queue' }), true); }} />{active && <Button title="Background blocking tools" disabled={pending} onPress={() => { void run(() => client.session.background({ sessionID }), true); }} />}{(session.parentID || session.fork?.sessionID) && <Button title="Open source session" onPress={() => { setPanel(null); onOpenSession(session.parentID || session.fork!.sessionID); }} />}<Button title={session.time.archived ? 'Unarchive session' : 'Archive session'} disabled={pending} onPress={() => { void run(() => client.session.update({ sessionID, archived: !session.time.archived }), true); }} /><Button title="Delete session" variant="danger" disabled={pending} onPress={() => { void run(async () => { if (await confirmAction('Delete this session?', 'This permanently deletes this session and its messages.')) { await client.session.remove({ sessionID }); onOpenSession(''); } }, true); }} /></Disclosure>
       <Disclosure title="Raw session details"><JsonView value={session} /></Disclosure>
     </Sheet>
+    <Sheet visible={panel === 'variants'} title="Choose variant" fitContent onClose={() => setPanel(null)}><ErrorNotice error={error} />{currentModel && <><Button title="Model default" selected={!session.model?.variant} disabled={pending} onPress={() => { void chooseModel(currentModel, undefined, true); }} />{currentModel.variants.map(variant => <Button key={variant.id} title={variant.id} selected={session.model?.variant === variant.id} disabled={pending} onPress={() => { void chooseModel(currentModel, variant.id, true); }} />)}</>}</Sheet>
     <Sheet visible={panel === 'models'} title="Choose model" scroll={false} onClose={() => setPanel(null)}>
       {panel === 'models' && <View style={{ flex: 1, minHeight: 0 }}><View style={styles.modelSearch}><Field label="Search models" value={modelSearch} onChangeText={setModelSearch} placeholder="Model or provider" /><Row><Button title="All" compact selected={modelFilter === 'all'} onPress={() => setModelFilter('all')} /><Button title="Favorites" compact selected={modelFilter === 'favorites'} onPress={() => setModelFilter('favorites')} /><Button title="Recent" compact selected={modelFilter === 'recent'} onPress={() => setModelFilter('recent')} /></Row><ErrorNotice error={error || catalogError || modelPreferences.error} onRetry={() => { modelPreferences.reload(); setCatalogRevision(value => value + 1); }} /></View>
       <FlatList data={filteredModels} keyExtractor={model => `${model.providerID}/${model.id}`} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets initialNumToRender={12} maxToRenderPerBatch={12} windowSize={5} contentContainerStyle={styles.modelList}
@@ -978,9 +1000,10 @@ const MessageRow = memo(function MessageRow({ message, live, activityKind, anima
 
 const MessageContent = memo(function MessageContent({ message, live, activityKind, animate, client, directory, selectable }: { message: SessionMessageInfo; live?: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; client: Client; directory: string; selectable: boolean }) {
   const styles = useThemedStyles(createStyles);
+  const betaLayout = useBetaLayout();
   if (message.type === 'idle') return message.error ? <ErrorNotice error={message.error.message} /> : null;
-  if (message.type === 'assistant') return <View style={styles.assistant}>{message.content.map((part, index) => <AssistantPart key={`${message.id}:${part.type === 'tool' ? part.id : index}`} detailsKey={`${message.id}:${part.type === 'tool' ? part.id : index}`} part={part} live={!!live && (part.type === 'tool' || index === message.content.length - 1)} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={selectable} />)}{message.error && <ErrorNotice error={message.error.message} />}</View>;
-  if (message.type === 'user') return <View style={styles.userGroup}><View style={styles.user}><MessageText text={message.text} selectable={selectable} />{message.files?.map((file, index) => <View key={index} style={{ gap: 8 }}><Label muted style={{ fontFamily: mono, fontSize: 12 }}>↳ {file.name || file.mime}</Label>{file.mime.startsWith('image/') && <Image source={{ uri: `data:${file.mime};base64,${file.data}` }} style={{ height: 180, width: '100%', borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name || 'Attached image'} />}</View>)}{message.skills?.map(skill => <Label key={skill.id} muted>Skill: {skill.name}</Label>)}</View></View>;
+  if (message.type === 'assistant') return <View style={styles.assistant}>{message.content.map((part, index) => <AssistantPart key={`${message.id}:${part.type === 'tool' ? part.id : index}`} detailsKey={`${message.id}:${part.type === 'tool' ? part.id : index}`} part={part} live={!!live && (part.type === 'tool' || index === message.content.length - 1)} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={selectable} />)}{message.error && <ErrorNotice error={message.error.message} />}{betaLayout && !live && message.time.completed !== undefined && message.content.some(part => part.type === 'text' && !!part.text.trim()) && <CompletedAssistantFooter key={message.id} message={message} />}</View>;
+  if (message.type === 'user') return <View style={[styles.userGroup, betaLayout && styles.betaUserGroup]}><View style={[styles.user, betaLayout && styles.betaUser]}><MessageText text={message.text} selectable={selectable} />{message.files?.map((file, index) => <View key={index} style={{ gap: 8 }}><Label muted style={{ fontFamily: mono, fontSize: 12 }}>↳ {file.name || file.mime}</Label>{file.mime.startsWith('image/') && <Image source={{ uri: `data:${file.mime};base64,${file.data}` }} style={{ height: 180, width: '100%', borderRadius: 10 }} resizeMode="contain" accessibilityLabel={file.name || 'Attached image'} />}</View>)}{message.skills?.map(skill => <Label key={skill.id} muted>Skill: {skill.name}</Label>)}</View></View>;
   if (message.type === 'shell') return <Disclosure disclosureKey={message.id} title={`$ ${message.command} · ${message.status}`}><CodeBlock code={message.output?.output || 'No output'} selectable={selectable} />{message.output?.truncated && <Label muted>Output truncated by the server</Label>}</Disclosure>;
   if (message.type === 'compaction') return <Disclosure disclosureKey={message.id} title={`Context compaction · ${message.status}`}>{'summary' in message && <MessageText text={message.summary} selectable={selectable} />}{'error' in message && <ErrorNotice error={message.error.message} />}</Disclosure>;
   if (message.type === 'agent-switched') return <Label muted style={styles.notice}>Agent → {message.agent}</Label>;
@@ -989,6 +1012,22 @@ const MessageContent = memo(function MessageContent({ message, live, activityKin
   if (message.type === 'skill') return <Disclosure disclosureKey={message.id} title={`Skill · ${message.name}`}><MessageText text={message.text} selectable={selectable} /></Disclosure>;
   return <Disclosure disclosureKey={message.id} title={message.description || message.type}><MessageText text={message.text} selectable={selectable} /></Disclosure>;
 });
+
+function CompletedAssistantFooter({ message }: { message: SessionMessageAssistant }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const elapsed = Math.max(0, Math.round(((message.time.completed ?? message.time.created) - message.time.created) / 1000));
+  return <View>
+    <View style={styles.responseFooter}><Pressable accessibilityRole="button" accessibilityLabel={copied ? 'Response copied' : 'Copy response'} onPress={event => {
+      event.stopPropagation();
+      setError(null);
+      void Clipboard.setStringAsync(message.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')).then(() => setCopied(true)).catch(reason => { setCopied(false); setError(errorMessage(reason)); });
+    }} style={({ pressed }) => [styles.responseCopyTarget, pressed && { opacity: 0.6 }]}><ChatGlyph name={copied ? 'check' : 'copy'} color={colors.muted} size={14} /></Pressable><Label muted accessibilityLiveRegion="polite" style={styles.responseElapsed}>{copied ? 'Copied · ' : ''}{elapsed}s</Label></View>
+    {error && <Text accessibilityRole="alert" style={[styles.responseElapsed, { color: colors.danger }]}>{error}</Text>}
+  </View>;
+}
 
 const AssistantPart = memo(function AssistantPart({ part, detailsKey, live, activityKind, animate, client, directory, selectable }: { part: SessionMessageAssistant['content'][number]; detailsKey: string; live: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; client: Client; directory: string; selectable: boolean }) {
   const styles = useThemedStyles(createStyles);
@@ -1022,25 +1061,29 @@ function PanelLink({ title, onPress }: { title: string; onPress: () => void }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({ pressed }) => ({ minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, opacity: pressed ? 0.6 : 1 })}><Label style={{ flex: 1 }}>{title}</Label><ShellIcon name="chevron" size={16} color={colors.muted} /></Pressable>;
 }
 
-type ChatIconName = 'menu' | 'more' | 'plus' | 'up' | 'down' | 'star' | 'stop' | 'close';
+type ChatIconName = 'menu' | 'more' | 'plus' | 'up' | 'down' | 'star' | 'stop' | 'close' | 'copy' | 'check';
 function ChatGlyph({ name, color, size = 20, selected }: { name: ChatIconName; color: string; size?: number; selected?: boolean }) {
   if (name === 'menu') return <ShellIcon name="menu" size={size} color={color} />;
-  const path = { more: 'M5 12h.01M12 12h.01M19 12h.01', plus: 'M12 5v14M5 12h14', up: 'M12 19V5M6 11l6-6 6 6', down: 'M6 9l6 6 6-6', star: 'm12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.3l-5.6 3 1.1-6.3L3 9.6l6.2-.9Z', stop: 'M7 7h10v10H7Z', close: 'M6 6l12 12M18 6 6 18' }[name];
+  const path = { copy: 'M8 8h12v13H8Z M16 8V3H3v13h5', check: 'm5 12 4 4L19 6', more: 'M5 12h.01M12 12h.01M19 12h.01', plus: 'M12 5v14M5 12h14', up: 'M12 19V5M6 11l6-6 6 6', down: 'M6 9l6 6 6-6', star: 'm12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.3l-5.6 3 1.1-6.3L3 9.6l6.2-.9Z', stop: 'M7 7h10v10H7Z', close: 'M6 6l12 12M18 6 6 18' }[name];
   return <Svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><Path d={path} stroke={color} strokeWidth={name === 'more' ? 3 : 1.6} strokeLinecap="round" strokeLinejoin="round" fill={name === 'stop' || name === 'star' && selected ? color : 'none'} /></Svg>;
 }
 function ChatIconButton({ name, label, onPress, raised, disabled, busy, selected, compactFace }: { name: ChatIconName; label: string; onPress: () => void; raised?: boolean; disabled?: boolean; busy?: boolean; selected?: boolean; compactFace?: boolean }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy, selected }} aria-pressed={selected} disabled={disabled || busy} onPress={event => { event.stopPropagation(); onPress(); }} style={styles.iconTarget}>{({ pressed }) => <PressFeedback pressed={pressed} disabled={disabled || busy} style={[styles.iconFace, compactFace && { width: 32, height: 32 }, raised && styles.raisedFace, (disabled || busy) && { opacity: 0.4 }]}>{busy ? <ActivityIndicator size="small" color={colors.primaryText} /> : <ChatGlyph name={name} selected={selected} color={raised ? colors.primaryText : selected ? colors.text : colors.muted} />}</PressFeedback>}</Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy, selected }} aria-pressed={selected} disabled={disabled || busy} onPress={event => { event.stopPropagation(); onPress(); }} style={styles.iconTarget}>{({ pressed }) => <PressFeedback pressed={pressed} disabled={disabled || busy} style={[styles.iconFace, compactFace && { width: 28, height: 28, borderRadius: raised ? 6 : 14 }, raised && styles.raisedFace, raised && compactFace && styles.betaRaisedFace, (disabled || busy) && { opacity: 0.4 }]}>{busy ? <ActivityIndicator size="small" color={colors.primaryText} /> : <ChatGlyph name={name} selected={selected} color={raised ? compactFace ? colors.bg : colors.primaryText : selected ? colors.text : colors.muted} />}</PressFeedback>}</Pressable>;
 }
 
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
   frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border }, headerLeading: { marginStart: pageInset - 24, marginEnd: 24 - pageInset }, headerTrailing: { marginStart: 24 - pageInset, marginEnd: pageInset - 24 }, selectionHeader: { backgroundColor: colors.panel }, selectionCount: { flex: 1, minWidth: 0, fontSize: 14, paddingStart: pageInset - 4 }, selectableMessage: { borderRadius: 16 },
   headerTitle: { flex: 1, minWidth: 0, gap: 1, paddingHorizontal: 4, paddingStart: pageInset - 8 }, headerTitleWithNavigation: { paddingStart: pageInset - 4 }, sessionTitle: { fontSize: 16, fontWeight: '500', lineHeight: 21 }, headerSubtitle: { flexDirection: 'row', alignItems: 'center', gap: 6 }, projectLabel: { fontSize: 12, lineHeight: 16, flexShrink: 1 }, dot: { width: 5, height: 5, borderRadius: 3 }, transcriptFrame: { flex: 1, minHeight: 0, paddingBottom: 8 }, transcript: { flex: 1, minHeight: 0, width: '100%', maxWidth: 760, alignSelf: 'center' }, messages: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 24, flexGrow: 1 },
+  betaUserGroup: { alignSelf: 'stretch', maxWidth: '100%' }, betaUser: { alignSelf: 'stretch', padding: 0, borderRadius: 0, backgroundColor: 'transparent' },
   userGroup: { alignSelf: 'flex-end', maxWidth: '92%' }, user: { alignSelf: 'flex-end', padding: 14, borderRadius: 14, backgroundColor: colors.raised, gap: 12 }, assistant: { gap: 6 }, jsonText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
+  responseFooter: { flexDirection: 'row', alignItems: 'center', marginStart: -16 }, responseCopyTarget: { width: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }, responseElapsed: { fontSize: 11, lineHeight: 16 },
   eyebrow: { fontFamily: mono, fontSize: 10, color: colors.muted, letterSpacing: 1.2 }, notice: { fontFamily: mono, fontSize: 11 },
   composerDock: { padding: 12, paddingHorizontal: pageInset, paddingTop: 4, alignItems: 'center' }, composer: { width: '100%', maxWidth: 736, paddingHorizontal: 8, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, borderRadius: 18, backgroundColor: colors.panel }, composerInput: { minHeight: 44, maxHeight: 120, borderWidth: 0, borderRadius: 0, boxShadow: [], backgroundColor: colors.panel, paddingHorizontal: 7, paddingVertical: 6, fontSize: 16, lineHeight: 24 }, composerToolbar: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }, modelTrigger: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8 }, modelTriggerText: { flexShrink: 1, fontSize: 12, color: colors.muted },
+  betaMessages: { padding: 16, paddingBottom: 24, flexGrow: 1 }, betaComposerDock: { paddingHorizontal: 12, paddingBottom: 10 }, betaComposer: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 12, backgroundColor: colors.panel, borderTopColor: colors.border }, betaComposerInput: { backgroundColor: colors.panel, paddingHorizontal: 11, paddingVertical: 10, fontSize: 13, lineHeight: 22 }, betaComposerToolbar: { gap: 0 }, betaProviderLabel: { maxWidth: 80 }, betaModelTrigger: { minWidth: 48, gap: 3, paddingHorizontal: 4 }, betaVariantTrigger: { minWidth: 48, maxWidth: 72, minHeight: 48, paddingHorizontal: 4, flexDirection: 'row', gap: 3, alignItems: 'center', flexShrink: 1 }, betaTriggerText: { fontSize: 13, color: colors.muted, flexShrink: 1 },
   iconTarget: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }, iconFace: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, raisedFace: { backgroundColor: colors.primary, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1, elevation: 2 },
+  betaRaisedFace: { backgroundColor: colors.text, borderColor: colors.text, borderTopColor: colors.text },
   errorBanner: { paddingHorizontal: 12, paddingTop: 8, gap: 4 }, modelSearch: { padding: 16, paddingBottom: 10, gap: 8 }, modelList: { paddingHorizontal: 12, paddingBottom: 24 }, modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 66, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 }, variants: { gap: 8, paddingHorizontal: 4, paddingBottom: 16 }, radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center' }, radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.text },
   code: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 8, overflow: 'hidden' }, codeText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19, padding: 12, paddingTop: 4 },
   revert: { margin: 12, padding: 14, gap: 8, backgroundColor: colors.raised, borderRadius: 10 },

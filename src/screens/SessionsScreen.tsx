@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActionSheetIOS, ActivityIndicator, Alert, AppState, FlatList, Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import type { SessionInfo } from '@opencode/client';
+import type { Project, SessionInfo } from '@opencode/client';
 import { type Client, errorMessage } from '../lib/client';
 import { useNativePresentation } from '../lib/sheets';
 import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
@@ -19,12 +20,25 @@ type Props = {
   selectedSessionID?: string;
   compact?: boolean;
   onOpenNavigation?: () => void;
+  betaLayout?: boolean;
+  onChooseDirectory?: () => void;
+  onNewSession?: (directory: string) => void;
 };
 
-export function SessionsScreen({ client, directory, onOpenSession, revision, selectedSessionID, compact = false, onOpenNavigation }: Props) {
+export function SessionsScreen({ client, directory, onOpenSession, revision, selectedSessionID, compact = false, onOpenNavigation, betaLayout = false, onChooseDirectory, onNewSession }: Props) {
   const withNativePresentation = useNativePresentation();
   const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const betaHome = betaLayout && Platform.OS === 'android';
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectDirectory, setProjectDirectory] = useState<string>();
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState<string>();
+  const pendingDirectoryPicker = useRef(false);
+  const pendingListActions = useRef(false);
+  const listDirectory = betaHome ? projectDirectory : directory;
+  const creationDirectory = betaHome ? projectDirectory ?? directory : directory;
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [width, setWidth] = useState(360);
   const [active, setActive] = useState<Set<string>>(new Set());
@@ -53,8 +67,8 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   const refreshRequest = useRef<AbortController | null>(null);
   const quietRefreshPending = useRef(false);
   const mounted = useRef(true);
-  const scope = useRef({ client, directory });
-  if (scope.current.client !== client || scope.current.directory !== directory) scope.current = { client, directory };
+  const scope = useRef({ client, directory: creationDirectory, listDirectory });
+  if (scope.current.client !== client || scope.current.directory !== creationDirectory || scope.current.listDirectory !== listDirectory) scope.current = { client, directory: creationDirectory, listDirectory };
   const paging = useRef(false);
   const operationPending = useRef(false);
   const pendingImport = useRef<(() => void) | null>(null);
@@ -90,7 +104,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     try {
       const [page, running] = await Promise.race([
         Promise.allSettled([
-          client.session.list({ directory, search: search.trim() || undefined, archived, limit: cursor ? 40 : loadedCount.current, cursor, order: 'desc' }, { signal: controller.signal }),
+          client.session.list({ directory: listDirectory, search: search.trim() || undefined, archived, limit: cursor ? 40 : loadedCount.current, cursor, order: 'desc' }, { signal: controller.signal }),
           client.session.active({ signal: controller.signal }),
         ]),
         cancelled,
@@ -131,7 +145,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
         }
       }
     }
-  }, [client, directory, search, archived]);
+  }, [client, listDirectory, search, archived]);
   refreshRef.current = (quiet, signal) => refresh(undefined, quiet, signal);
 
   useEffect(() => {
@@ -144,12 +158,35 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     return () => { clearTimeout(timer); generation.current += 1; refreshRequest.current?.abort(); };
   }, [refresh, revision]);
 
+  const loadProjects = useCallback(async (signal?: AbortSignal) => {
+    setProjectsLoading(true);
+    setProjectsError(undefined);
+    try {
+      const items = await client.project.list(undefined, { signal });
+      if (!signal?.aborted && mounted.current && scope.current.client === client) setProjects(items);
+    } catch (cause) {
+      if (!signal?.aborted && mounted.current && scope.current.client === client) setProjectsError(errorMessage(cause));
+    } finally {
+      if (!signal?.aborted && mounted.current && scope.current.client === client) setProjectsLoading(false);
+    }
+  }, [client]);
+
+  useEffect(() => {
+    setProjectDirectory(undefined);
+    setProjects([]);
+    setProjectsOpen(false);
+    if (!betaHome) return;
+    const controller = new AbortController();
+    void loadProjects(controller.signal);
+    return () => controller.abort();
+  }, [client, betaHome, loadProjects]);
+
   useEffect(() => {
     setSelected(undefined);
     setActions(null);
     setSheetError(undefined);
     pendingImport.current = null;
-  }, [client, directory]);
+  }, [client, creationDirectory, listDirectory]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', state => setForeground(state === 'active'));
@@ -242,7 +279,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     const owner = scope.current;
     setCreating(true);
     try {
-      const created = await client.session.create({ location: { directory }, title: named ? title.trim() || undefined : undefined });
+      const created = await client.session.create({ location: { directory: creationDirectory }, title: named ? title.trim() || undefined : undefined });
       if (scope.current.client !== owner.client || scope.current.directory !== owner.directory || !mounted.current) return;
       setActions(null);
       setTitle('');
@@ -251,6 +288,23 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       if (!archived) await refresh();
     } finally { if (mounted.current) setCreating(false); }
   }, named);
+
+  const startSession = () => {
+    Keyboard.dismiss();
+    if (onNewSession) onNewSession(creationDirectory);
+    else void createSession();
+  };
+
+  const manageSession = (item: SessionInfo) => {
+    Keyboard.dismiss();
+    setSelected(item);
+    setEditTitle(item.title || '');
+    setMoveDirectory(item.location.directory);
+    setSheetError(undefined);
+  };
+
+  const projectName = (item: SessionInfo) => projects.find(project => project.id === item.projectID)?.name
+    || directoryName(projects.find(project => project.id === item.projectID)?.canonical ?? item.location.directory);
 
   const changeSession = (operation: (item: SessionInfo) => Promise<void>) => run(async () => {
     if (!selected) return;
@@ -295,9 +349,9 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     if (!transcript || typeof transcript !== 'object' || !transcript.info || typeof transcript.info !== 'object' || !Array.isArray(transcript.messages)) {
       throw new Error('Choose a JSON transcript exported by OpenCode');
     }
-    if (!await confirmAction('Import session?', `Import this transcript into ${directory}? The server validates its contents.`)) return;
+    if (!await confirmAction('Import session?', `Import this transcript into ${creationDirectory}? The server validates its contents.`)) return;
     if (scope.current.client !== owner.client || scope.current.directory !== owner.directory || !mounted.current) return;
-    const imported = await client.experimental.session.import({ info: transcript.info, messages: transcript.messages, location: { directory } });
+    const imported = await client.experimental.session.import({ info: transcript.info, messages: transcript.messages, location: { directory: creationDirectory } });
     if (scope.current.client !== owner.client || scope.current.directory !== owner.directory || !mounted.current) return;
     await refresh();
     openConversation(imported.id);
@@ -347,19 +401,28 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     })).catch(cause => { if (mounted.current && scope.current === owner) setError(errorMessage(cause)); });
   };
 
-  return <View style={styles.screen} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
-    <View style={[styles.header, compactHeader && styles.compactHeader]}>
-      <Row style={styles.headingRow}>
+  const newSessionAction = <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={startSession} style={({ pressed }) => [styles.betaNewSession, (pressed || busy) && styles.pressed]}>
+    {creating ? <ActivityIndicator size="small" color={colors.text} /> : <ShellIcon name="compose" color={colors.muted} size={14} />}
+    <Label style={styles.betaNewLabel}>New session</Label>
+  </Pressable>;
+
+  return <View style={[styles.screen, betaHome && styles.betaScreen]} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
+    <View style={[styles.header, compactHeader && styles.compactHeader, betaHome && styles.betaHeader]}>
+      {betaHome ? <Pressable accessibilityRole="button" accessibilityLabel="Select project" accessibilityState={{ expanded: projectsOpen }} onPress={() => { Keyboard.dismiss(); setProjectsOpen(true); void loadProjects(); }} style={({ pressed }) => [styles.projectSelector, pressed && styles.pressed]}>
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden><Path d="M3 5h6l2 3h10v12H3V5Z" stroke={colors.muted} strokeWidth={1.5} strokeLinejoin="round" /></Svg>
+        <Label numberOfLines={1} style={styles.projectSelectorLabel}>{projectDirectory ? projects.find(project => project.canonical === projectDirectory)?.name || directoryName(projectDirectory) : 'All projects'}</Label>
+        <View style={styles.projectChevron}><ShellIcon name="chevron" color={colors.faint} size={10} /></View>
+      </Pressable> : <Row style={styles.headingRow}>
         {!compact && onOpenNavigation && <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={({ pressed }) => [styles.navigationButton, pressed && styles.pressed]}><ShellIcon name="menu" color={colors.text} /></Pressable>}
         <View style={styles.headingText}><Label accessibilityRole="header" numberOfLines={1} style={[styles.title, compactHeader && styles.compactTitle, compact && Platform.OS === 'android' && styles.drawerTitle]}>{Platform.OS === 'android' && archived ? 'Archived sessions' : compact ? 'Your sessions' : 'Sessions'}</Label></View>
-        <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={() => { void createSession(); }} style={({ pressed }) => [styles.newButton, (pressed || busy) && styles.pressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={startSession} style={({ pressed }) => [styles.newButton, (pressed || busy) && styles.pressed]}>
           {creating ? <ActivityIndicator size="small" color={colors.text} /> : <ShellIcon name="compose" color={colors.text} size={20} />}
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Session list actions" onPress={() => { setSheetError(undefined); setActions('menu'); }} style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}><ShellIcon name="more" color={colors.muted} size={18} /></Pressable>
-      </Row>
-      {Platform.OS === 'android' ? <View style={styles.androidSearch}>
+      </Row>}
+      {Platform.OS === 'android' ? <View style={[styles.androidSearch, betaHome && styles.betaSearch, betaHome && { backgroundColor: scheme === 'dark' ? colors.panel : colors.raised }]}>
         <ShellIcon name="search" color={colors.faint} size={16} />
-        <Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} containerStyle={styles.searchField} style={styles.androidSearchInput} />
+        <Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} containerStyle={styles.searchField} style={[styles.androidSearchInput, betaHome && styles.betaSearchInput]} />
         {!!search && <Pressable accessibilityRole="button" accessibilityLabel="Clear session search" hitSlop={4} onPress={() => setSearch('')} style={({ pressed }) => [styles.clearSearch, pressed && styles.pressed]}><ShellIcon name="close" color={colors.muted} size={16} /></Pressable>}
       </View> : <Row style={styles.searchRow}>
         <View style={{ flex: 1, minWidth: 0 }}><Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} clearButtonMode="while-editing" style={styles.search} /></View>
@@ -373,7 +436,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     <FlatList
       data={sessions}
       keyExtractor={item => item.id}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, betaHome && styles.betaList]}
       keyboardShouldPersistTaps="handled"
       refreshing={loading && sessions.length > 0}
       onRefresh={() => { void refresh(); }}
@@ -382,6 +445,10 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       initialNumToRender={12}
       maxToRenderPerBatch={12}
       windowSize={7}
+      ListHeaderComponent={betaHome ? <View style={styles.betaGroupHeader}>
+        <Label accessibilityRole="header" muted style={styles.betaGroupLabel}>{archived ? 'Archived sessions' : search.trim() ? 'Search results' : sessions.length ? sessionDateGroup(sessions[0].time.updated) : 'Today'}</Label>
+        {newSessionAction}
+      </View> : undefined}
       ListEmptyComponent={loading ? <Busy /> : <Empty title={listUnavailable ? 'Could not load sessions' : search.trim() ? 'No matching sessions' : archived ? 'No archived sessions' : 'Start your first session'} detail={listUnavailable ? 'Use Retry to load your history.' : search.trim() ? 'Try another title or clear the search.' : archived ? 'Sessions appear here after you archive them.' : 'Create a session to work with OpenCode in this directory.'} />}
       ListFooterComponent={sessions.length ? loading ? <Busy /> : nextCursor ? <Button title="Load more" variant="ghost" onPress={loadMore} /> : undefined : undefined}
       renderItem={({ item, index }) => {
@@ -389,24 +456,39 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
         const unread = item.time.idle && (!item.time.viewed || item.time.viewed < item.time.idle);
         const visibleStatus = status === 'Working' || status === 'Needs attention' || status === 'Stopped' ? status : undefined;
         const group = sessionDateGroup(item.time.updated);
-        const startsGroup = Platform.OS === 'android' && !search.trim() && (index === 0 || sessionDateGroup(sessions[index - 1].time.updated) !== group);
+        const startsGroup = Platform.OS === 'android' && !search.trim() && (!betaHome || index > 0) && (index === 0 || sessionDateGroup(sessions[index - 1].time.updated) !== group);
+        const name = projectName(item);
         return <View>
-          {startsGroup && <Label accessibilityRole="header" muted style={[styles.dateGroup, index > 0 && styles.laterDateGroup]}>{group}</Label>}
-          <View style={[styles.session, selectedSessionID === item.id && styles.selected]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title || 'Untitled session'}`} accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`} onPress={() => openConversation(item.id)} style={({ pressed }) => [styles.sessionMain, pressed && styles.sessionPressed]}>
-            <Label numberOfLines={1} style={styles.sessionTitle}>{item.title || 'Untitled session'}</Label>
-            <Label muted numberOfLines={1} style={styles.metadata}>{[visibleStatus, unread ? 'Unread' : undefined, updatedLabel(item.time.updated), item.parentID ? 'Child session' : undefined].filter(Boolean).join(' · ')}</Label>
+          {startsGroup && <Label accessibilityRole="header" muted style={[styles.dateGroup, index > 0 && styles.laterDateGroup, betaHome && styles.betaDateGroup]}>{group}</Label>}
+          <View style={[styles.session, betaHome && styles.betaSession, selectedSessionID === item.id && styles.selected]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title || 'Untitled session'}`} accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`} onPress={() => openConversation(item.id)} onLongPress={betaHome ? () => manageSession(item) : undefined} accessibilityActions={betaHome ? [{ name: 'manage', label: 'Manage session' }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'manage') manageSession(item); }} style={({ pressed }) => [styles.sessionMain, betaHome && styles.betaSessionMain, pressed && styles.sessionPressed]}>
+            {betaHome && <View style={styles.projectBadge}><Label style={styles.projectBadgeLabel}>{name.charAt(0).toUpperCase()}</Label></View>}
+            <View style={[styles.sessionText, betaHome && styles.betaSessionText]}>
+            <Label numberOfLines={1} style={[styles.sessionTitle, betaHome && styles.betaSessionTitle]}>{item.title || 'Untitled session'}</Label>
+            {betaHome ? <View style={styles.betaMetadataRow}>
+              <Label muted numberOfLines={1} style={[styles.betaMetadata, styles.betaProjectName]}>{name}</Label>
+              {(visibleStatus || unread) ? <Label muted numberOfLines={1} style={styles.betaMetadata}> · {[visibleStatus, unread ? 'Unread' : undefined].filter(Boolean).join(' · ')}</Label> : null}
+            </View> : <Label muted numberOfLines={1} style={styles.metadata}>{[visibleStatus, unread ? 'Unread' : undefined, updatedLabel(item.time.updated), item.parentID ? 'Child session' : undefined].filter(Boolean).join(' · ')}</Label>}
+            </View>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${item.title || 'session'}`} onPress={() => { setSelected(item); setEditTitle(item.title || ''); setMoveDirectory(item.location.directory); setSheetError(undefined); }} style={({ pressed }) => [styles.rowAction, pressed && styles.pressed]}><ShellIcon name="more" color={colors.faint} size={18} /></Pressable>
+          {!betaHome && <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${item.title || 'session'}`} onPress={() => manageSession(item)} style={({ pressed }) => [styles.rowAction, pressed && styles.pressed]}><ShellIcon name="more" color={colors.faint} size={18} /></Pressable>}
           </View>
         </View>;
       }}
     />
+    <Sheet visible={projectsOpen} title="Projects" onClose={() => { pendingDirectoryPicker.current = false; pendingListActions.current = false; setProjectsOpen(false); }} onDismiss={() => { if (pendingDirectoryPicker.current) { pendingDirectoryPicker.current = false; onChooseDirectory?.(); } else if (pendingListActions.current) { pendingListActions.current = false; setSheetError(undefined); setActions('menu'); } }}>
+      <Pressable accessibilityRole="radio" accessibilityState={{ checked: !projectDirectory }} onPress={() => { setProjectDirectory(undefined); setProjectsOpen(false); }} style={styles.menuRow}><Label>All projects</Label><Label muted>{!projectDirectory ? '✓' : ''}</Label></Pressable>
+      {projectsLoading && <Busy />}
+      <ErrorNotice error={projectsError} onRetry={() => { void loadProjects(); }} />
+      {projects.map(project => <Pressable key={project.id} accessibilityRole="radio" accessibilityState={{ checked: projectDirectory === project.canonical }} onPress={() => { setProjectDirectory(project.canonical); setProjectsOpen(false); }} style={styles.menuRow}><View style={styles.projectOption}><Label numberOfLines={1}>{project.name || directoryName(project.canonical)}</Label><Label muted numberOfLines={1} style={styles.metadata}>{project.canonical}</Label></View><Label muted>{projectDirectory === project.canonical ? '✓' : ''}</Label></Pressable>)}
+      <Button title="Session list actions" variant="ghost" onPress={() => { pendingListActions.current = true; setProjectsOpen(false); }} />
+      {onChooseDirectory && <Button title="Choose a folder" variant="ghost" onPress={() => { pendingDirectoryPicker.current = true; setProjectsOpen(false); }} />}
+    </Sheet>
     <Sheet visible={actions !== null} fitContent={Platform.OS === 'android'} title={displayedActions === 'create' ? 'Name a new session' : displayedActions === 'filter' ? 'Session history' : 'Session list actions'} onClose={() => { if (!creating) setActions(null); }} onDismiss={finishActionsDismissal}>
       {displayedActions === 'create' ? <>
         <Field label="Session title" placeholder="What do you want to work on?" value={title} onChangeText={setTitle} editable={!creating} />
         <Label muted>You can choose a model and agent in the conversation.</Label>
-        <Card><Label muted>Remote directory</Label><Label selectable>{directory}</Label></Card>
+        <Card><Label muted>Remote directory</Label><Label selectable>{creationDirectory}</Label></Card>
         <ErrorNotice error={sheetError} />
         <Button title="Create session" variant="primary" busy={creating} onPress={() => { void createSession(true); }} />
       </> : <View>
@@ -448,6 +530,30 @@ const sessionListEvents = new Set([
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  betaScreen: { backgroundColor: colors.bg },
+  betaHeader: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 0, gap: 8 },
+  projectSelector: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6 },
+  projectSelectorLabel: { flex: 1, fontSize: 13, lineHeight: 18 },
+  projectChevron: { transform: [{ rotate: '90deg' }], marginHorizontal: 8 },
+  projectOption: { flex: 1, minWidth: 0, gap: 2 },
+  betaSearch: { borderRadius: 6, paddingHorizontal: 14 },
+  betaSearchInput: { fontSize: 13, lineHeight: 18, paddingVertical: 10 },
+  betaList: { paddingHorizontal: 6, paddingBottom: 12, gap: 0 },
+  betaGroupHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingLeft: 12 },
+  betaGroupLabel: { flex: 1, fontSize: 12, lineHeight: 18 },
+  betaNewSession: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
+  betaNewLabel: { fontSize: 13, lineHeight: 18, color: colors.muted },
+  betaDateGroup: { paddingTop: 20, paddingBottom: 12 },
+  betaSession: { minHeight: 48, borderRadius: 6 },
+  betaSessionMain: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingLeft: 12, paddingRight: 12 },
+  sessionText: { gap: 3 },
+  betaSessionText: { flex: 1, minWidth: 0, gap: 0 },
+  betaSessionTitle: { fontSize: 13, lineHeight: 18 },
+  betaMetadata: { fontSize: 12, lineHeight: 16 },
+  betaMetadataRow: { flexDirection: 'row', alignItems: 'center' },
+  betaProjectName: { flexShrink: 1 },
+  projectBadge: { width: 16, height: 16, borderRadius: 3, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.muted },
+  projectBadgeLabel: { fontSize: 10, lineHeight: 14, color: colors.panel, includeFontPadding: false },
   header: { paddingHorizontal: pageInset, paddingTop: 6, paddingBottom: 10, gap: 8 },
   compactHeader: { paddingTop: 8 },
   headingRow: { flexWrap: 'nowrap', gap: Platform.OS === 'android' ? 0 : 8 },
@@ -479,6 +585,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   menuRow: { minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   selected: { backgroundColor: colors.selected },
 });
+
+function directoryName(directory: string): string {
+  return directory.split(/[\\/]/).filter(Boolean).pop() || directory;
+}
 
 function sessionDateGroup(time: number): string {
   const date = new Date(time);

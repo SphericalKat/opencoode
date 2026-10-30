@@ -47,15 +47,15 @@ const zeroInsets = { top: 0, bottom: 0, left: 0, right: 0 };
 // The native toolbar supplies its inset before the shared back control applies its own margins.
 const nativeBackInsets = Platform.select<ViewStyle>({ android: { marginStart: -7, marginEnd: 33 }, ios: { minWidth: 44, height: 44, justifyContent: 'center' } });
 
-export function SettingsScreen({ client, directory, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation }: { client: Client; directory: string; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void }) {
+export function SettingsScreen({ client, directory, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation, betaLayout = false, onManageServers, serverLabel }: { client: Client; directory: string; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void; betaLayout?: boolean; onManageServers?: () => void; serverLabel?: string }) {
   const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const reducedMotion = useMotionPreference();
   // A resize must not replace the navigator and discard an open editor.
-  const [nativeStackEnabled] = useState(() => Platform.OS !== 'web' && width < 920);
-  const wide = !nativeStackEnabled && width >= 920;
-  const [section, setSection] = useState<Section | null>(null);
+  const [nativeStackEnabled] = useState(() => !betaLayout && Platform.OS !== 'web' && width < 920);
+  const wide = !betaLayout && !nativeStackEnabled && width >= 920;
+  const [section, setSection] = useState<Section | null>(betaLayout ? 'Appearance' : null);
   const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
   const mounted = useRef(true);
@@ -63,20 +63,22 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
   const selected = section ?? (wide ? 'Accounts' : null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const changeSection = useCallback(async (next: Section | null) => {
-    if (next === section) return;
-    if (section !== null && !await confirmNavigation()) return;
-    if (mounted.current) setSection(next);
+    if (next === section) return true;
+    if (section !== null && !await confirmNavigation()) return false;
+    if (!mounted.current) return false;
+    setSection(next);
+    return true;
   }, [section, confirmNavigation]);
   useEffect(() => {
     if (nativeStackEnabled) return;
-    onBackStateChange?.(visible && !wide && section !== null);
+    onBackStateChange?.(!betaLayout && visible && !wide && section !== null);
     return () => onBackStateChange?.(false);
-  }, [nativeStackEnabled, onBackStateChange, visible, wide, section]);
+  }, [betaLayout, nativeStackEnabled, onBackStateChange, visible, wide, section]);
   useEffect(() => {
-    if (nativeStackEnabled || !visible || wide || section === null) return;
+    if (betaLayout || nativeStackEnabled || !visible || wide || section === null) return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => { void changeSection(null); return true; });
     return () => subscription.remove();
-  }, [nativeStackEnabled, visible, wide, section, changeSection]);
+  }, [betaLayout, nativeStackEnabled, visible, wide, section, changeSection]);
   const updateNativeBackState = useCallback(() => {
     if (!nativeStackEnabled) return;
     const canGoBack = navigationRef.current?.canGoBack() ?? false;
@@ -125,6 +127,10 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
     </SettingsStack.Navigator>
   </BaseNavigationContainer>;
 
+  if (betaLayout) return <BetaSettingsContent section={section ?? 'Appearance'} onSelect={changeSection} onBack={onBack} onManageServers={onManageServers} serverLabel={serverLabel}>
+    {renderSection(section ?? 'Appearance')}
+  </BetaSettingsContent>;
+
   return <View style={[styles.screen, !wide && styles.narrowScreen]}>
     {!nativeStackEnabled ? <>
       {!wide && <ScreenHeader title={selected ?? 'Settings'} backLabel={section !== null ? 'Settings' : backLabel} onBack={section !== null ? () => { void changeSection(null); } : onBack} onOpenNavigation={section === null ? onOpenNavigation : undefined} onRefresh={section !== null ? headerRefresh?.refresh : undefined} refreshing={headerRefresh?.loading} />}
@@ -133,6 +139,52 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
         {selected && (wide || section !== null) && <View style={styles.detail}>{wide && <Row style={styles.detailHeader}><Label accessibilityRole="header" style={styles.detailTitle}>{selected}</Label></Row>}{renderSection(selected)}</View>}
       </View></HeaderRefreshContext.Provider>
     </> : <SafeAreaInsetsContext.Provider value={zeroInsets}><View style={styles.nativeNavigation}>{navigation}</View></SafeAreaInsetsContext.Provider>}
+  </View>;
+}
+
+function BetaSettingsContent({ section, onSelect, onBack, onManageServers, serverLabel, children }: { section: Section; onSelect: (section: Section) => Promise<boolean>; onBack?: () => void; onManageServers?: () => void; serverLabel?: string; children: React.ReactNode }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const [query, setQuery] = useState('');
+  const [choosing, setChoosing] = useState(false);
+  const [chooserQuery, setChooserQuery] = useState('');
+  const pendingServer = useRef(false);
+  const sections = sectionGroups.flatMap(group => group.items);
+  const matches = (item: Section, value: string) => `${item} ${sectionDescriptions[item]}`.toLowerCase().includes(value.trim().toLowerCase());
+  const select = async (item: Section) => {
+    if (!await onSelect(item)) return;
+    setQuery('');
+    setChoosing(false);
+  };
+  const sectionRow = (item: Section) => <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Open ${item}. ${sectionDescriptions[item]}`} accessibilityState={{ selected: section === item }} onPress={() => { void select(item); }} style={({ pressed }) => [styles.betaCategoryRow, pressed && { backgroundColor: colors.raised }]}>
+    <View style={styles.detail}><Label style={styles.betaTitle}>{item}</Label><Label muted style={styles.betaDescription}>{sectionDescriptions[item]}</Label></View>
+    {section === item && <Label accessibilityElementsHidden>✓</Label>}
+  </Pressable>;
+  return <View style={styles.betaScreen}>
+    <View style={styles.betaTopRow}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to app" onPress={onBack} disabled={!onBack} style={styles.betaBack}><ShellIcon name="back" size={14} color={colors.muted} /><Label style={styles.betaBackLabel}>Back to app</Label></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Settings category: ${section}`} accessibilityState={{ expanded: choosing }} onPress={() => { setChooserQuery(''); setChoosing(true); }} style={styles.betaChooserTarget}>
+        <View style={styles.betaChooser}><Label style={styles.betaBackLabel}>{section}</Label><View style={{ transform: [{ rotate: '90deg' }] }}><ShellIcon name="chevron" size={12} color={colors.text} /></View></View>
+      </Pressable>
+    </View>
+    <View style={styles.betaSearch}><ShellIcon name="search" size={16} color={colors.muted} /><Field placeholder="Search" accessibilityLabel="Search settings categories" value={query} onChangeText={setQuery} containerStyle={styles.detail} style={styles.betaSearchInput} />{!!query && <Pressable accessibilityRole="button" accessibilityLabel="Clear settings search" onPress={() => setQuery('')} style={styles.betaClear}><ShellIcon name="close" size={16} color={colors.muted} /></Pressable>}</View>
+    {!!query.trim() && <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.betaResults}>
+      {sections.filter(item => matches(item, query)).map(sectionRow)}
+      {!sections.some(item => matches(item, query)) && <Empty title="No matching settings" detail="Try a category name or description." />}
+    </ScrollView>}
+    <View style={[styles.detail, !!query.trim() && styles.betaHidden]}>
+      <View style={styles.betaSectionHeader}><Label accessibilityRole="header" style={styles.betaTitle}>{section}</Label><Label muted style={styles.betaDescription}>{sectionDescriptions[section]}</Label></View>
+      {children}
+    </View>
+    <Sheet visible={choosing} title="Settings" fitContent onClose={() => setChoosing(false)} onDismiss={() => {
+      if (!pendingServer.current) return;
+      pendingServer.current = false;
+      onManageServers?.();
+    }}>
+      <Field placeholder="Search categories" value={chooserQuery} onChangeText={setChooserQuery} />
+      {sections.filter(item => matches(item, chooserQuery)).map(sectionRow)}
+      {onManageServers && `server ${serverLabel ?? ''}`.toLowerCase().includes(chooserQuery.trim().toLowerCase()) && <Pressable accessibilityRole="button" accessibilityLabel="Manage servers" onPress={() => { pendingServer.current = true; setChoosing(false); }} style={({ pressed }) => [styles.betaCategoryRow, pressed && { backgroundColor: colors.raised }]}><View style={styles.detail}><Label style={styles.betaTitle}>Server</Label><Label muted style={styles.betaDescription}>{serverLabel || 'Manage server connections'}</Label></View><ShellIcon name="chevron" size={16} color={colors.muted} /></Pressable>}
+    </Sheet>
   </View>;
 }
 
@@ -530,6 +582,14 @@ function Permissions({ client, directory }: { client: Client; directory: string 
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  betaScreen: { flex: 1, minHeight: 0, backgroundColor: colors.panel },
+  betaTopRow: { minHeight: 48, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  betaBack: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 6 }, betaBackLabel: { fontSize: 13, lineHeight: 18 },
+  betaChooserTarget: { minHeight: 48, justifyContent: 'center' }, betaChooser: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  betaSearch: { minHeight: 48, marginHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  betaSearchInput: { minHeight: 48, borderWidth: 0, backgroundColor: 'transparent', paddingHorizontal: 0, fontSize: 14 }, betaClear: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  betaSectionHeader: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8, gap: 6 }, betaTitle: { fontFamily: sans, fontSize: 14, lineHeight: 20, fontWeight: '500' }, betaDescription: { fontSize: 13, lineHeight: 20 },
+  betaCategoryRow: { minHeight: 48, paddingVertical: 10, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 12 }, betaResults: { paddingHorizontal: 14, paddingBottom: 24 }, betaHidden: { display: 'none' },
   screen: { flex: 1, flexDirection: 'row', minHeight: 0, backgroundColor: colors.bg }, nativeNavigation: { flex: 1, minHeight: 0 },
   narrowScreen: { flexDirection: 'column' }, content: { flex: 1, flexDirection: 'row', minHeight: 0 }, narrowContent: { flexDirection: 'column' },
   sidebar: { width: 220, flexGrow: 0, borderRightWidth: 1, borderRightColor: colors.border },
