@@ -32,7 +32,8 @@ Keep the local Opencoode checkout after installation. Pi loads the extension fro
 6. Select **Scan QR code** in the native app.
 7. Scan the QR code from Pi.
 
-If the camera is unavailable, select **Paste pairing link** and paste a link from the Pi terminal.
+If the app already connects to another server, open **Settings → Servers** from the top menu.
+If the camera is unavailable, paste Pi's URL into **Pairing link**, then select **Connect**.
 
 The app detects Pi through the same connection flow as OpenCode. There is no separate backend selector.
 The pairing code expires after five minutes and permits one use. `/mobile` creates a new code.

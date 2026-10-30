@@ -31,6 +31,8 @@ Metro uses at most two workers. Run one simulator or emulator at a time on a com
 
 ## Connect a server
 
+If the app already connects to a server, open **Settings → Servers** from the top menu.
+
 For Pi, install the [companion extension](docs/pi.md), then enter `/mobile` in your active terminal session.
 Scan its QR code or paste its link into the same connection screen.
 Pi shares the active terminal conversation and supports models, tools, images, session controls, and compaction.
@@ -42,7 +44,7 @@ For OpenCode:
 2. Select **Scan QR code** in the mobile app.
 3. Scan the code from OpenCode.
 
-If the camera is unavailable, select **Paste pairing link**.
+If the camera is unavailable, paste the link into **Pairing link**, then select **Connect**.
 For a saved server, select its name to reconnect.
 
 For manual setup:
