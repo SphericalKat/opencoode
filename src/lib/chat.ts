@@ -54,6 +54,7 @@ export function projectLiveEvents(messages: SessionMessageInfo[], events: OpenCo
     const current = index === undefined ? undefined : next[index];
     if (!current || current.type !== 'assistant') continue;
     const mutable = () => changed.has(messageID) ? current : store({ ...current, content: [...current.content], time: { ...current.time } });
+    if (current.retry && (event.type.startsWith('session.text.') || event.type.startsWith('session.reasoning.') || event.type.startsWith('session.tool.') || event.type.startsWith('session.step.'))) delete mutable().retry;
     const fragment = (kind: 'text' | 'reasoning', ordinal: number) => {
       let count = 0;
       return current.content.findIndex(part => part.type === kind && count++ === ordinal);
@@ -62,7 +63,7 @@ export function projectLiveEvents(messages: SessionMessageInfo[], events: OpenCo
     case 'session.text.started':
     case 'session.reasoning.started': {
       const kind = event.type === 'session.text.started' ? 'text' : 'reasoning';
-      if (fragment(kind, event.data.ordinal) < 0) mutable().content.push({ type: kind, text: '' });
+      if (fragment(kind, event.data.ordinal) < 0) mutable().content.push(kind === 'reasoning' ? { type: kind, text: '', time: { created: event.created } } : { type: kind, text: '' });
       break;
     }
     case 'session.text.delta':
@@ -72,9 +73,9 @@ export function projectLiveEvents(messages: SessionMessageInfo[], events: OpenCo
       const kind = event.type.startsWith('session.text.') ? 'text' : 'reasoning';
       let index = fragment(kind, event.data.ordinal);
       const assistant = mutable();
-      if (index < 0) { assistant.content.push({ type: kind, text: '' }); index = assistant.content.length - 1; }
+      if (index < 0) { assistant.content.push(kind === 'reasoning' ? { type: kind, text: '', time: { created: event.created } } : { type: kind, text: '' }); index = assistant.content.length - 1; }
       const part = assistant.content[index];
-      if (part.type === 'text' || part.type === 'reasoning') assistant.content[index] = { ...part, text: 'delta' in event.data ? part.text + event.data.delta : event.data.text };
+      if (part.type === 'text' || part.type === 'reasoning') assistant.content[index] = { ...part, text: 'delta' in event.data ? part.text + event.data.delta : event.data.text, ...(part.type === 'reasoning' && event.type === 'session.reasoning.ended' ? { time: { created: part.time?.created ?? event.created, completed: event.created } } : {}) };
       break;
     }
     case 'session.tool.input.started': {
