@@ -1,6 +1,11 @@
 gradle.beforeProject { project ->
     project.plugins.withId('com.android.application') {
         project.extensions.getByName('androidComponents').finalizeDsl { android ->
+            android.splits.abi.enable = true
+            android.splits.abi.reset()
+            android.splits.abi.include('armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64')
+            android.splits.abi.universalApk = false
+
             def signing = android.signingConfigs.maybeCreate('ciRelease')
             signing.storeFile = new File(System.getenv('RELEASE_KEYSTORE_PATH'))
             signing.storePassword = System.getenv('RELEASE_STORE_PASSWORD')
