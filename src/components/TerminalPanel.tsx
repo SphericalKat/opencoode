@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { Busy, Button, confirmAction, Empty, ErrorNotice, Label, mono, Row, Shee
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { useMotionPreference } from './motion';
 import { useUnsavedChanges, useUnsavedGuard } from '../lib/unsaved';
+import { useSheetCoordinator } from '../lib/sheets';
 
 type Props = { client: Client; connection: Connection; directory: string; sessionID?: string };
 type Mode = 'desktop' | 'workspace';
@@ -23,6 +24,8 @@ export function TerminalPanel(props: Props) {
 function Terminals(props: Props) {
   const styles = useThemedStyles(createStyles);
   const confirmUnsaved = useUnsavedGuard();
+  const { suspended } = useSheetCoordinator();
+  const capabilityKnown = useRef(false);
   const [persistent, setPersistent] = useState<boolean | null>(null);
   const [mode, setMode] = useState<Mode>('workspace');
   const [sessionID, setSessionID] = useState(props.sessionID);
@@ -36,16 +39,18 @@ function Terminals(props: Props) {
 
   useEffect(() => { setSessionID(props.sessionID); }, [props.sessionID]);
   useEffect(() => {
+    if (suspended) return;
     mounted.current = true;
     const controller = new AbortController();
     void props.client.server.info({ signal: controller.signal }).then(info => {
       if (controller.signal.aborted) return;
       const supported = info.capabilities?.persistentPty === true;
       setPersistent(supported);
-      if (supported) setMode('desktop');
+      if (!supported || !capabilityKnown.current) setMode(supported ? 'desktop' : 'workspace');
+      capabilityKnown.current = true;
     }).catch(failure => { if (!controller.signal.aborted) setError(errorMessage(failure)); });
     return () => { mounted.current = false; controller.abort(); };
-  }, [props.client, checkRevision]);
+  }, [props.client, checkRevision, suspended]);
 
   async function pickSession(cursor?: string) {
     setSessionPicker(true);
@@ -97,6 +102,7 @@ function TerminalList({ client, connection, directory, sessionID, mode }: Props 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const confirmUnsaved = useUnsavedGuard();
+  const { suspended } = useSheetCoordinator();
   const [terminals, setTerminals] = useState<Pty[]>([]);
   const [selectedID, setSelectedID] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,7 +143,7 @@ function TerminalList({ client, connection, directory, sessionID, mode }: Props 
   }, []);
 
   useEffect(() => {
-    if (!foreground) return;
+    if (!foreground || suspended) return;
     const controller = new AbortController();
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -173,8 +179,8 @@ function TerminalList({ client, connection, directory, sessionID, mode }: Props 
         }
       }
     })().catch(failure => { if (!controller.signal.aborted) setError(errorMessage(failure)); });
-    return () => { controller.abort(); clearTimeout(refreshTimer); clearTimeout(retryTimer); retryResolve?.(); };
-  }, [client, directory, mode, sessionID, foreground, refresh]);
+    return () => { controller.abort(); request.current?.abort(); clearTimeout(refreshTimer); clearTimeout(retryTimer); retryResolve?.(); };
+  }, [client, directory, mode, sessionID, foreground, refresh, suspended]);
 
   async function create() {
     if (!await confirmUnsaved()) return;
@@ -241,6 +247,10 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
   const reducedMotion = useMotionPreference();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { suspended, recoveryPending, presentSheet, dismissSheet } = useSheetCoordinator();
+  const modalID = useId();
+  const suspendedRef = useRef(suspended);
+  suspendedRef.current = suspended;
   const renderer = useRef<TerminalRendererHandle>(null);
   const socket = useRef<WebSocket | null>(null);
   const cursor = useRef<number | undefined>(undefined);
@@ -268,6 +278,61 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
   const nativeInput = useRef<React.ComponentRef<typeof TextInput>>(null);
   const rendererGeneration = useRef(0);
   sizeRef.current = size;
+  const effectiveFullscreen = fullscreen && !suspended;
+  const requestedModal = useRef(effectiveFullscreen);
+  requestedModal.current = effectiveFullscreen;
+  const previousModalVisible = useRef(effectiveFullscreen);
+  const pendingModalDismiss = useRef(false);
+  const previousSuspended = useRef(suspended);
+
+  const notifyModalDismissed = useCallback(() => {
+    if (requestedModal.current || !pendingModalDismiss.current) return;
+    pendingModalDismiss.current = false;
+    dismissSheet(modalID);
+  }, [dismissSheet, modalID]);
+
+  useLayoutEffect(() => {
+    if (effectiveFullscreen) {
+      pendingModalDismiss.current = false;
+      presentSheet(modalID);
+    } else if (previousModalVisible.current) pendingModalDismiss.current = true;
+    previousModalVisible.current = effectiveFullscreen;
+  }, [effectiveFullscreen, presentSheet, modalID]);
+
+  useEffect(() => () => { dismissSheet(modalID); }, [dismissSheet, modalID]);
+
+  useEffect(() => {
+    if (effectiveFullscreen || !pendingModalDismiss.current || Platform.OS !== 'android') return;
+    const frame = requestAnimationFrame(notifyModalDismissed);
+    return () => cancelAnimationFrame(frame);
+  }, [effectiveFullscreen, notifyModalDismissed]);
+
+  const resetTerminalView = useCallback(() => {
+    const ws = socket.current;
+    socket.current = null;
+    if (ws) { ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close(); }
+    if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }
+    pending.current = [];
+    cursor.current = undefined;
+    restored.current = false;
+    controllerRef.current = false;
+    rendererGeneration.current++;
+    setReady(false);
+    setRendererBroken(false);
+    setController(false);
+    setStatus('connecting');
+    setRendererEpoch(value => value + 1);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (previousSuspended.current === suspended) return;
+    previousSuspended.current = suspended;
+    resetTerminalView();
+    if (suspended) {
+      nativeInput.current?.blur();
+      setStatus('disconnected');
+    }
+  }, [suspended, resetTerminalView]);
 
   useEffect(() => {
     if (!ready) return;
@@ -286,16 +351,16 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
   }, []);
 
   useEffect(() => {
-    if (ready || rendererBroken) return;
+    if (ready || rendererBroken || suspended) return;
     const timer = setTimeout(() => {
       setRendererBroken(true);
       setError('The terminal view did not start. Tap Reconnect to reload it.');
     }, 10000);
     return () => clearTimeout(timer);
-  }, [ready, rendererEpoch, rendererBroken]);
+  }, [ready, rendererEpoch, rendererBroken, suspended]);
 
   useEffect(() => {
-    if (!ready || !active) {
+    if (!ready || !active || suspended) {
       setStatus('disconnected');
       return;
     }
@@ -314,12 +379,12 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
       pending.current = [];
     }
     function retry() {
-      if (disposed || retryTimer) return;
+      if (disposed || suspendedRef.current || retryTimer) return;
       setStatus('disconnected');
       retryTimer = setTimeout(() => { retryTimer = undefined; void open(); }, Math.min(30000, 1000 * 2 ** Math.min(retries++, 5)));
     }
     async function open() {
-      if (disposed) return;
+      if (disposed || suspendedRef.current) return;
       setStatus('connecting');
       restored.current = false;
       controllerRef.current = false;
@@ -328,7 +393,7 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
         let url: string;
         if (mode === 'desktop') {
           const snapshot = await client.experimental.persistentPty.snapshot({ ptyID: terminal.id }, { signal: controller.signal });
-          if (disposed) return;
+          if (disposed || suspendedRef.current) return;
           flush();
           decoder = new TextDecoder();
           renderer.current?.send({ type: 'restore', checkpoint: snapshot.checkpoint, ...snapshot.info.size });
@@ -340,14 +405,14 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
             return;
           }
           const token = await client.experimental.persistentPty.connectToken({ ptyID: terminal.id, 'x-opencode-ticket': '1' }, { signal: controller.signal });
-          if (disposed) return;
+          if (disposed || suspendedRef.current) return;
           url = persistentPtySocketUrl(connection.url, terminal.id, token.ticket, { cursor: snapshot.info.output.tail, attachmentID, role: 'observer' });
         } else {
           const current = await client.pty.get({ ptyID: terminal.id, location: { directory } }, { signal: controller.signal });
-          if (disposed) return;
+          if (disposed || suspendedRef.current) return;
           if (current.data.status === 'exited') { onExitRef.current(); return; }
           const token = await client.pty.connect.token({ ptyID: terminal.id, location: { directory }, 'x-opencode-ticket': '1' }, { signal: controller.signal });
-          if (disposed) return;
+          if (disposed || suspendedRef.current) return;
           url = ptySocketUrl(connection.url, directory, terminal.id, token.data.ticket, cursor.current);
         }
         const ws = new WebSocket(url);
@@ -360,7 +425,7 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
           }
         }, 15000);
         ws.onopen = () => {
-          if (disposed) { ws.close(); return; }
+          if (disposed || suspendedRef.current) { ws.close(); return; }
           retries = 0;
           setError(null);
           if (mode === 'workspace') {
@@ -369,7 +434,7 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
           }
         };
         ws.onmessage = event => {
-          if (disposed) return;
+          if (disposed || suspendedRef.current) return;
           if (mode === 'desktop') {
             if (event.data instanceof ArrayBuffer) {
               cursor.current = (cursor.current ?? 0) + event.data.byteLength;
@@ -457,26 +522,27 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
       socket.current = null;
       if (ws) { ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close(); }
     };
-  }, [client, connection.url, directory, terminal.id, mode, attachmentID, ready, active, revision]);
+  }, [client, connection.url, directory, terminal.id, mode, attachmentID, ready, active, revision, suspended]);
 
   useEffect(() => {
-    if (status !== 'connected') return;
+    if (status !== 'connected' || suspended) return;
     if (mode === 'desktop') {
-      if (controllerRef.current && restored.current && socket.current?.readyState === WebSocket.OPEN) socket.current.send(persistentInputFrame(size));
+      if (!suspendedRef.current && controllerRef.current && restored.current && socket.current?.readyState === WebSocket.OPEN) socket.current.send(persistentInputFrame(size));
       return;
     }
     const requestController = new AbortController();
     const timer = setTimeout(() => {
+      if (suspendedRef.current) return;
       void client.pty.update({ ptyID: terminal.id, location: { directory }, size }, { signal: requestController.signal }).catch(failure => {
         if (!requestController.signal.aborted) setError(errorMessage(failure));
       });
     }, 120);
     return () => { clearTimeout(timer); requestController.abort(); };
-  }, [client, directory, terminal.id, size, status, controller, mode]);
+  }, [client, directory, terminal.id, size, status, controller, mode, suspended]);
 
   function send(data: string, binary = false, reportError = false): boolean {
     const ws = socket.current;
-    if (!ready || !ws || ws.readyState !== WebSocket.OPEN) {
+    if (suspendedRef.current || !ready || !ws || ws.readyState !== WebSocket.OPEN) {
       if (reportError) setError('Reconnect to the shell before you send text');
       return false;
     }
@@ -496,14 +562,16 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
     }
   }
   function takeControl() {
-    if (restored.current && socket.current?.readyState === WebSocket.OPEN) socket.current.send(persistentInputFrame(size));
+    if (!suspendedRef.current && restored.current && socket.current?.readyState === WebSocket.OPEN) socket.current.send(persistentInputFrame(size));
   }
   function event(message: TerminalEvent) {
+    if (suspendedRef.current) return;
     if (message.type === 'ready') setReady(true);
     if (message.type === 'input') send(message.data, message.binary);
     if (message.type === 'resize') setSize(current => current.cols === message.cols && current.rows === message.rows ? current : { cols: message.cols, rows: message.rows });
   }
   function reconnect() {
+    if (suspendedRef.current) return;
     if (rendererBroken) {
       setReady(false);
       cursor.current = undefined;
@@ -515,20 +583,8 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
     setError(null);
   }
   function changeFullscreen(next: boolean) {
-    const ws = socket.current;
-    socket.current = null;
-    if (ws) { ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close(); }
-    if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }
-    pending.current = [];
-    cursor.current = undefined;
-    restored.current = false;
-    controllerRef.current = false;
-    rendererGeneration.current++;
-    setReady(false);
-    setRendererBroken(false);
-    setController(false);
-    setStatus('connecting');
-    setRendererEpoch(value => value + 1);
+    if (suspendedRef.current) return;
+    resetTerminalView();
     setFullscreen(next);
   }
   function submitNative(appendReturn: boolean, text = nativeText) {
@@ -536,15 +592,18 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
     if (send(`${text}${appendReturn ? '\r' : ''}`, false, true)) setNativeText('');
   }
   function focusInput() {
+    if (suspendedRef.current) return;
     if (Platform.OS === 'android') nativeInput.current?.focus();
     else renderer.current?.send({ type: 'focus' });
   }
-  const canSend = ready && status === 'connected' && (mode !== 'desktop' || controller);
+  const canSend = !suspended && ready && status === 'connected' && (mode !== 'desktop' || controller);
   const generation = rendererEpoch;
   const content = <View style={styles.session}>
     <Row style={styles.connectionBar}><Label muted style={{ flex: 1, fontSize: 11 }}>{status === 'connected' ? `${mode === 'desktop' ? controller ? 'In control' : 'View only' : 'Connected'} · ${size.cols} × ${size.rows}` : active ? status === 'connecting' ? 'Connect to shell…' : 'Disconnected' : 'Paused in background'}</Label>{mode === 'desktop' && status === 'connected' && !controller && <Button title="Take control" compact onPress={takeControl} />}<Button title={fullscreen ? 'Close' : 'Full screen'} compact onPress={() => changeFullscreen(!fullscreen)} /></Row>
     {fullscreen && <Row style={styles.connectionBar}><Label muted style={{ flex: 1 }} numberOfLines={1}>{terminal.title || terminal.command}</Label><Button title="Reconnect" compact onPress={reconnect} /></Row>}
-    {error && <View style={styles.notice}><ErrorNotice error={error} /></View>}
+    {recoveryPending
+      ? <View style={styles.notice}><Label accessibilityRole="alert">Close this panel to open the connection wizard.</Label></View>
+      : error && <View style={styles.notice}><ErrorNotice error={error} /></View>}
     <View style={styles.terminal}><TerminalRenderer key={rendererEpoch} ref={renderer} onEvent={message => { if (generation === rendererGeneration.current) event(message); }} onError={message => { if (generation !== rendererGeneration.current) return; setReady(false); setRendererBroken(true); setError(message); }} /></View>
     {Platform.OS === 'android' && (fullscreen
       ? <Row style={styles.nativeComposer}><TextInput ref={nativeInput} accessibilityLabel="Terminal text" placeholder={canSend ? 'Text for the terminal' : mode === 'desktop' && !controller ? 'Take control to send text' : 'Connect to send text'} placeholderTextColor={colors.faint} style={styles.nativeInput} value={nativeText} onChangeText={setNativeText} editable={canSend} autoCorrect={false} autoCapitalize="none" spellCheck={false} secureTextEntry={privateInput} textContentType="none" autoComplete="off" importantForAutofill="no" submitBehavior="submit" returnKeyType="send" onSubmitEditing={event => submitNative(true, event.nativeEvent.text)} /><Button title="Send line" compact variant="primary" disabled={!canSend} onPress={() => submitNative(true)} /></Row>
@@ -554,7 +613,7 @@ function TerminalSession({ client, connection, directory, terminal, mode, onExit
       {([['Enter', '\r'], ['Esc', '\u001b'], ['Tab', '\t'], ['Ctrl C', '\u0003'], ['Ctrl D', '\u0004'], ['↑', '\u001b[A'], ['↓', '\u001b[B'], ['←', '\u001b[D'], ['→', '\u001b[C'], ['Ctrl L', '\u000c'], ['Ctrl Z', '\u001a'], ['Ctrl R', '\u0012'], ['Home', '\u001b[H'], ['End', '\u001b[F'], ['Delete', '\u001b[3~']] as const).map(([title, data]) => <Button key={title} title={title} accessibilityLabel={`Send ${title} to terminal`} compact disabled={!canSend} onPress={() => { send(data, false, true); focusInput(); }} />)}
     </ScrollView>
   </View>;
-  return <View style={styles.session}>{!fullscreen && content}<Modal visible={fullscreen} animationType={reducedMotion ? 'fade' : 'slide'} presentationStyle="fullScreen" supportedOrientations={['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right']} onRequestClose={() => changeFullscreen(false)}><ModalSafeAreaRoot><SafeAreaView style={styles.fullscreen} edges={['top', 'bottom', 'left', 'right']}><KeyboardAvoidingView style={styles.session} behavior="padding" automaticOffset>{fullscreen && content}</KeyboardAvoidingView></SafeAreaView></ModalSafeAreaRoot></Modal></View>;
+  return <View style={styles.session}>{!fullscreen && content}<Modal visible={effectiveFullscreen} animationType={reducedMotion ? 'fade' : 'slide'} presentationStyle="fullScreen" supportedOrientations={['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right']} onRequestClose={() => changeFullscreen(false)} onDismiss={notifyModalDismissed}><ModalSafeAreaRoot><SafeAreaView style={styles.fullscreen} edges={['top', 'bottom', 'left', 'right']}><KeyboardAvoidingView style={styles.session} behavior="padding" automaticOffset>{fullscreen && content}</KeyboardAvoidingView></SafeAreaView></ModalSafeAreaRoot></Modal></View>;
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({

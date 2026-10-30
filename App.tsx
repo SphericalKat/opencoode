@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { AppState, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller';
 import { useFonts } from 'expo-font';
-import { isLocationNotFoundError, type Project, type ServerInfo } from '@opencode/client';
+import { ClientError, isLocationNotFoundError, isUnauthorizedError, type Project, type ServerInfo } from '@opencode/client';
 import { Button, Busy, confirmAction, ErrorNotice, Heading, Label, sans, Sheet } from './src/components/ui';
-import { clearPairingRetry, connect, connectionErrorMessage, createClient, errorMessage, normalizeConnection, type Connection } from './src/lib/client';
+import { clearPairingRetry, connect, connectionErrorMessage, createClient, errorMessage, normalizeConnection, withServerDeadline, type Connection } from './src/lib/client';
 import { loadActiveConnectionId, loadConnections, loadWorkspace, saveActiveConnectionId, saveConnections, saveWorkspace } from './src/lib/storage';
 import { ChatScreen } from './src/screens/ChatScreen';
 import { SessionsScreen } from './src/screens/SessionsScreen';
@@ -21,6 +21,7 @@ import { ProjectDirectoryBrowser } from './src/components/ProjectDirectoryBrowse
 import { ShellIcon } from './src/components/ShellIcon';
 import { MotionDrawer } from './src/components/motion';
 import { ConnectionFlow, type ConnectionForm } from './src/components/ConnectionFlow';
+import { SheetCoordinatorProvider, useSheetCoordinator } from './src/lib/sheets';
 
 type Tab = 'sessions' | 'workspace' | 'settings';
 const tabs: { id: Tab; label: string }[] = [
@@ -32,7 +33,7 @@ const tabs: { id: Tab; label: string }[] = [
 export default function App() {
   const [fontsReady, fontError] = useFonts({ Inter: require('./assets/fonts/Inter.ttf'), IBMPlexMono: require('./assets/fonts/IBMPlexMono-Text.ttf') });
   if (!fontsReady && !fontError) return <View style={{ flex: 1, backgroundColor: '#080808' }} />;
-  return <SafeAreaProvider><KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge><ThemeProvider><UnsavedProvider><ThemedStatusBar /><MobileApp /></UnsavedProvider></ThemeProvider></KeyboardProvider></SafeAreaProvider>;
+  return <SafeAreaProvider><KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge><ThemeProvider><SheetCoordinatorProvider><UnsavedProvider><ThemedStatusBar /><MobileApp /></UnsavedProvider></SheetCoordinatorProvider></ThemeProvider></KeyboardProvider></SafeAreaProvider>;
 }
 
 function ThemedStatusBar() {
@@ -47,6 +48,7 @@ function MobileApp() {
   const { width } = useWindowDimensions();
   const wide = width >= 920;
   const confirmNavigation = useUnsavedGuard();
+  const { suspendSheets, resumeSheets } = useSheetCoordinator();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [active, setActive] = useState<Connection | null>(null);
   const [info, setInfo] = useState<ServerInfo | null>(null);
@@ -54,6 +56,8 @@ function MobileApp() {
   const [booting, setBooting] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [unavailableID, setUnavailableID] = useState<string | null>(null);
+  const [foreground, setForeground] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
   const [error, setError] = useState<string | null>(null);
   const [directory, setDirectory] = useState('');
   const [sessionID, setSessionID] = useState<string | null>(null);
@@ -74,7 +78,13 @@ function MobileApp() {
   const [pairingLink, setPairingLink] = useState<string | null>(null);
   const [flowRevision, setFlowRevision] = useState(0);
   const epoch = useRef(0);
-  const pendingNavigationSheet = useRef<{ kind: 'servers' | 'projects'; epoch: number } | null>(null);
+  const pendingNavigationSheet = useRef<{ kind: 'servers' | 'projects'; epoch: number; serverRequest?: number } | null>(null);
+  const navigationPresented = useRef(false);
+  const serverSheetRequest = useRef(0);
+  const automaticServerRequest = useRef<number | null>(null);
+  const showServerSheet = useRef<() => void>(() => {});
+  const recoveringConnection = useRef<{ connection: Connection; message: string } | null>(null);
+  const recoverConnection = useRef<(connection: Connection, cause: unknown) => void>(() => {});
   const connectingRef = useRef(false);
   const selection = useRef(0);
   const selectedSessionRef = useRef(sessionID);
@@ -90,8 +100,6 @@ function MobileApp() {
 
   const selectServer = useCallback(async (connection: Connection, existing?: Connection[], alternatives?: Connection[], explicitName = false) => {
     if (connectingRef.current) return;
-    if (!(await confirmNavigation())) return;
-    if (connectingRef.current) return;
     connectingRef.current = true;
     const request = ++epoch.current;
     setConnecting(true);
@@ -104,16 +112,22 @@ function MobileApp() {
         : undefined;
       const connected = matching ? { ...result.connection, id: matching.id, name: matching.name } : result.connection;
       const nextClient = createClient(connected);
-      const workspace = await loadWorkspace(connected.id);
+      const owner = activeRef.current;
+      const sameServer = owner?.id === connected.id && owner.url === connected.url && (owner.username || 'opencode') === (connected.username || 'opencode');
+      const workspace = sameServer ? { directory: directoryRef.current, sessionID: selectedSessionRef.current ?? undefined } : await loadWorkspace(connected.id);
       let restoredSessionID = workspace?.sessionID;
-      const location = await nextClient.location.get(
+      const location = await withServerDeadline(signal => nextClient.location.get(
         workspace?.directory ? { location: { directory: workspace.directory } } : undefined,
-        { signal: AbortSignal.timeout(15_000) },
+        { signal },
       ).catch(cause => {
-        if (!workspace?.directory || !isLocationNotFoundError(cause)) throw cause;
+        if (signal.aborted || !workspace?.directory || !isLocationNotFoundError(cause)) throw cause;
         restoredSessionID = undefined;
-        return nextClient.location.get(undefined, { signal: AbortSignal.timeout(15_000) });
-      });
+        return nextClient.location.get(undefined, { signal });
+      }));
+      if (request !== epoch.current) return;
+      const preserveWorkspace = sameServer && location.directory === directoryRef.current;
+      if (preserveWorkspace) restoredSessionID = selectedSessionRef.current ?? undefined;
+      if (!preserveWorkspace && !(await confirmNavigation())) return;
       if (request !== epoch.current) return;
       const next = [...current.filter(item => item.id !== connected.id), connected];
       await saveConnections(next);
@@ -123,28 +137,38 @@ function MobileApp() {
       clearPairingRetry();
       setConnections(next);
       setActive(connected);
-      setConnectionRevision(value => value + 1);
+      setUnavailableID(null);
+      recoveringConnection.current = null;
+      if (!preserveWorkspace) setConnectionRevision(value => value + 1);
       setInfo(result.info);
-      setDirectory(location.directory);
-      directoryRef.current = location.directory;
-      setNewDirectory(location.directory);
-      setSessionID(restoredSessionID ?? null);
-      selectedSessionRef.current = restoredSessionID ?? null;
-      setPendingLocation(null);
-      setAttachmentPath(undefined); setAttachmentContext(undefined);
+      if (!preserveWorkspace) {
+        setDirectory(location.directory);
+        directoryRef.current = location.directory;
+        setNewDirectory(location.directory);
+        setSessionID(restoredSessionID ?? null);
+        selectedSessionRef.current = restoredSessionID ?? null;
+        setPendingLocation(null);
+        setAttachmentPath(undefined); setAttachmentContext(undefined);
+        setTab('sessions');
+      }
       setError(null);
-      setTab('sessions');
       setServersOpen(false);
       setForm({ id: '', name: '', url: '', token: '' });
     } catch (cause) {
-      if (request === epoch.current) setConnectionError(connectionErrorMessage(cause, connection));
+      if (request === epoch.current) {
+        setConnectionError(connectionErrorMessage(cause, connection));
+        if (!activeRef.current || activeRef.current.id === connection.id) setUnavailableID(connection.id);
+      }
     } finally {
       connectingRef.current = false;
       if (request === epoch.current) setConnecting(false);
     }
   }, [connections, confirmNavigation]);
 
-  useEffect(() => { if (serversOpen) setConnectionError(null); }, [serversOpen]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => setForeground(state === 'active'));
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (!active || !directory) return;
@@ -178,7 +202,7 @@ function MobileApp() {
         setForm({ id: '', name: '', url: server, token: '' });
         setPairingLink(server);
         setFlowRevision(value => value + 1);
-        setServersOpen(true);
+        showServerSheet.current();
       } catch { setError('The connection link is invalid'); }
     };
     Linking.getInitialURL().then(acceptLink).catch(() => {});
@@ -297,28 +321,120 @@ function MobileApp() {
   }
 
   function openNavigation() {
+    if (pendingNavigationSheet.current?.kind === 'servers') { serverSheetRequest.current += 1; automaticServerRequest.current = null; resumeSheets(); }
     pendingNavigationSheet.current = null;
+    navigationPresented.current = !wide;
     setNavigationOpen(true);
   }
 
-  function showNavigationSheet(kind: 'servers' | 'projects') {
-    if (navigationOpen && !wide) {
-      pendingNavigationSheet.current = { kind, epoch: epoch.current };
+  async function showNavigationSheet(kind: 'servers' | 'projects', automatic = false) {
+    let serverRequest: number | undefined;
+    if (kind === 'servers') {
+      if (!automatic) automaticServerRequest.current = null;
+      if (!activeRef.current) { serverSheetRequest.current += 1; resumeSheets(); return; }
+      const request = ++serverSheetRequest.current;
+      serverRequest = request;
+      if (automatic) automaticServerRequest.current = request;
+      const owner = activeRef.current;
+      const connectionEpoch = epoch.current;
+      await suspendSheets();
+      if (request !== serverSheetRequest.current) return;
+      if (owner !== activeRef.current || connectionEpoch !== epoch.current) { automaticServerRequest.current = null; resumeSheets(); return; }
+    }
+    if ((navigationOpen || navigationPresented.current) && !wide) {
+      pendingNavigationSheet.current = { kind, epoch: epoch.current, serverRequest };
       setNavigationOpen(false);
       return;
     }
     pendingNavigationSheet.current = null;
-    if (kind === 'servers') setServersOpen(true);
+    if (kind === 'servers') { automaticServerRequest.current = null; setServersOpen(true); }
+    else setProjectsOpen(true);
+  }
+  showServerSheet.current = () => { void showNavigationSheet('servers'); };
+
+  function onNavigationDismissed() {
+    navigationPresented.current = false;
+    const pending = pendingNavigationSheet.current;
+    pendingNavigationSheet.current = null;
+    if (!pending || pending.epoch !== epoch.current || !activeRef.current || pending.kind === 'servers' && pending.serverRequest !== serverSheetRequest.current) {
+      if (pending?.kind === 'servers') resumeSheets();
+      return;
+    }
+    if (pending.kind === 'servers') { automaticServerRequest.current = null; setServersOpen(true); }
     else setProjectsOpen(true);
   }
 
-  function onNavigationDismissed() {
-    const pending = pendingNavigationSheet.current;
-    pendingNavigationSheet.current = null;
-    if (!pending || pending.epoch !== epoch.current || !activeRef.current) return;
-    if (pending.kind === 'servers') setServersOpen(true);
-    else setProjectsOpen(true);
-  }
+  recoverConnection.current = (connection, cause) => {
+    if (activeRef.current !== connection || connectingRef.current || recoveringConnection.current?.connection === connection) return;
+    const message = isUnauthorizedError(cause)
+      ? `${connection.name} rejected the saved password. Pair again or update its saved connection.`
+      : `${connection.name} is not responding. Retry it or connect to another server.`;
+    recoveringConnection.current = { connection, message };
+    setUnavailableID(connection.id);
+    setConnectionError(message);
+    if (!serversOpen) {
+      setForm({ id: '', name: '', url: '', token: '' });
+      setPairingLink(null);
+      setFlowRevision(value => value + 1);
+      void showNavigationSheet('servers', true);
+    }
+  };
+
+  useEffect(() => {
+    if (!active || !client || !foreground || connecting) return;
+    const owner = active;
+    const request = epoch.current;
+    let stopped = false;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelProbe: (() => void) | undefined;
+    const current = () => !stopped && activeRef.current === owner && epoch.current === request;
+    const probe = async () => {
+      if (!current()) return;
+      const controller = new AbortController();
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const result = await Promise.race([
+          client.server.info({ signal: controller.signal }),
+          new Promise<never>((_, reject) => {
+            cancelProbe = () => { controller.abort(); reject(new Error('The connection check was canceled')); };
+            deadline = setTimeout(() => {
+              reject(new Error('OpenCode did not respond within five seconds. Check the server address and your network.'));
+              controller.abort();
+            }, 5_000);
+          }),
+        ]);
+        if (!current()) return;
+        if (!result || typeof result.version !== 'string' || !/^2\./.test(result.version)) throw new Error('This address no longer returns an OpenCode 2 server.');
+        failures = 0;
+        const recovery = recoveringConnection.current;
+        if (recovery?.connection === owner) {
+          recoveringConnection.current = null;
+          const automaticRequest = automaticServerRequest.current;
+          if (automaticRequest !== null && automaticRequest === serverSheetRequest.current) {
+            automaticServerRequest.current = null;
+            serverSheetRequest.current += 1;
+            if (pendingNavigationSheet.current?.kind === 'servers' && pendingNavigationSheet.current.serverRequest === automaticRequest) pendingNavigationSheet.current = null;
+            resumeSheets();
+          }
+          setUnavailableID(value => value === owner.id ? null : value);
+          setConnectionError(value => value === recovery.message ? null : value);
+        }
+        timer = setTimeout(() => { void probe(); }, 5_000);
+      } catch (cause) {
+        if (!current()) return;
+        failures += 1;
+        const unauthorized = isUnauthorizedError(cause) || cause instanceof ClientError && cause.reason === 'UnexpectedStatus' && cause.cause && typeof cause.cause === 'object' && 'status' in cause.cause && cause.cause.status === 401;
+        if (unauthorized || failures >= 2) recoverConnection.current(owner, cause);
+        timer = setTimeout(() => { void probe(); }, failures === 1 && !unauthorized ? 1_000 : 5_000);
+      } finally {
+        clearTimeout(deadline);
+        cancelProbe = undefined;
+      }
+    };
+    void probe();
+    return () => { stopped = true; clearTimeout(timer); cancelProbe?.(); };
+  }, [active, client, foreground, connecting, connectionRevision, resumeSheets]);
 
   async function openDirectory(nextDirectory = newDirectory) {
     if (!client) return;
@@ -379,7 +495,7 @@ function MobileApp() {
     }
   }
 
-  const serverForm = <ConnectionFlow key={flowRevision} form={form} connections={connections} activeID={active?.id} connecting={connecting} error={connectionError ?? (!active ? error : null)} pairingLink={pairingLink} onPairingLinkConsumed={() => setPairingLink(null)} onChangeForm={setForm} onClearError={() => setConnectionError(null)} onConnect={(connection, alternatives) => selectServer(connection, undefined, alternatives, !!form.name.trim())} onRemove={removeConnection} />;
+  const serverForm = <ConnectionFlow key={flowRevision} form={form} connections={connections} activeID={active?.id} unavailableID={unavailableID ?? undefined} connecting={connecting} error={connectionError ?? (!active ? error : null)} pairingLink={pairingLink} onPairingLinkConsumed={() => setPairingLink(null)} onChangeForm={setForm} onClearError={() => setConnectionError(null)} onConnect={(connection, alternatives) => selectServer(connection, undefined, alternatives, !!form.name.trim())} onRemove={removeConnection} />;
 
   const projectLabel = directory.split('/').filter(Boolean).pop() || 'Project';
   const showConversation = tab === 'sessions' && !!sessionID;
@@ -425,7 +541,7 @@ function MobileApp() {
     <MotionDrawer visible={navigationOpen && !wide && !!active} width={Math.min(width - 32, 352)} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} panelStyle={styles.drawer}>
       <SafeAreaView style={styles.full} edges={['top', 'bottom', 'left']}>{navigation}</SafeAreaView>
     </MotionDrawer>
-    <Sheet visible={serversOpen && !!active} title="Servers" onClose={() => setServersOpen(false)}>{serversOpen && active && serverForm}</Sheet>
+    <Sheet visible={serversOpen && !!active} title={unavailableID === active?.id ? 'Connection' : 'Servers'} allowDuringRecovery onClose={() => { serverSheetRequest.current += 1; setServersOpen(false); }} onDismiss={resumeSheets}>{serversOpen && active && serverForm}</Sheet>
     <Sheet visible={projectsOpen} title="Open a project" scroll={false} onClose={() => setProjectsOpen(false)}>
       {projectsOpen && client && active && <ProjectDirectoryBrowser key={`${active.id}:${connectionRevision}:${directory}`} client={client} directory={directory} value={newDirectory} projects={projects} busy={projectBusy} error={projectError} onChangeValue={value => { setNewDirectory(value); setProjectError(null); }} onOpenDirectory={value => { void openDirectory(value); }} />}
     </Sheet>

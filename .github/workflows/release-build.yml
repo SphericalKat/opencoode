@@ -1,0 +1,168 @@
+name: Release artifacts
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+      platform:
+        type: string
+        default: all
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, for example v1.1.0
+        type: string
+        required: true
+      platform:
+        type: choice
+        options: [all, android, ios]
+        default: all
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-artifacts-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  CI: '1'
+  RELEASE_TAG: ${{ inputs.tag }}
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      android_signing: ${{ steps.signing.outputs.ready }}
+    steps:
+      - name: Require an existing versioned release
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Use a stable release tag such as v1.1.0' >&2
+            exit 1
+          fi
+          gh release view "$RELEASE_TAG" --json tagName --jq .tagName
+
+      - name: Check Android signing configuration
+        id: signing
+        env:
+          KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$KEYSTORE" && -n "$STORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Android artifacts skipped: configure all four release signing secrets in docs/releases.md.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  android:
+    needs: prepare
+    if: inputs.platform != 'ios' && needs.prepare.outputs.android_signing == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/opencoode-release.jks
+      RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RELEASE_KEYSTORE_PATH"
+
+      - name: Prepare native Android project
+        run: |
+          npm ci
+          node .github/scripts/prepare-release.mjs
+          npx expo prebuild --platform android --no-install
+
+      - name: Build signed APK and app bundle
+        working-directory: android
+        run: ./gradlew --no-daemon --max-workers=2 --init-script ../.github/android-signing.gradle assembleRelease bundleRelease
+
+      - name: Publish Android artifacts
+        run: |
+          signer="$(rg --files "$ANDROID_HOME/build-tools" -g apksigner | sort -V | tail -1)"
+          expected="$(keytool -exportcert -keystore "$RELEASE_KEYSTORE_PATH" -storepass:env RELEASE_STORE_PASSWORD -alias "$RELEASE_KEY_ALIAS" -rfc | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          actual="$("$signer" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          if [[ -z "$expected" || "$expected" != "$actual" ]]; then
+            echo 'The APK signer does not match the supplied release key' >&2
+            exit 1
+          fi
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/release/app-release.apk "artifacts/opencoode-$RELEASE_TAG.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "artifacts/opencoode-$RELEASE_TAG.aab"
+          cd artifacts
+          sha256sum ./*.apk ./*.aab > SHA256SUMS-android.txt
+          gh release upload "$RELEASE_TAG" ./*.apk ./*.aab SHA256SUMS-android.txt --clobber
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RELEASE_KEYSTORE_PATH"
+
+  ios-simulator:
+    needs: prepare
+    if: inputs.platform != 'android'
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Prepare native iOS project
+        run: |
+          npm ci
+          node .github/scripts/prepare-release.mjs
+          npx expo prebuild --platform ios --no-install
+          pod install --project-directory=ios
+
+      - name: Build iOS simulator app
+        run: |
+          xcodebuild -workspace ios/Opencoode.xcworkspace -scheme Opencoode \
+            -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build -jobs 3 CODE_SIGNING_ALLOWED=NO build
+
+      - name: Publish iOS simulator artifact
+        run: |
+          mkdir -p artifacts
+          tar -czf "artifacts/opencoode-$RELEASE_TAG-ios-simulator.tar.gz" \
+            -C build/Build/Products/Release-iphonesimulator Opencoode.app
+          cd artifacts
+          shasum -a 256 ./*.tar.gz > SHA256SUMS-ios-simulator.txt
+          gh release upload "$RELEASE_TAG" ./*.tar.gz SHA256SUMS-ios-simulator.txt --clobber
+          echo 'The iOS archive is for Simulator. Physical-device distribution requires Apple signing credentials.' >> "$GITHUB_STEP_SUMMARY"

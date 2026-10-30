@@ -117,3 +117,48 @@ The screenshots record these results:
 Verdict before improvement: **Block** for the small global targets and the restricted chat reading area.
 Verdict after improvement: **Approve** for the inspected browser flows and sizes.
 Native Back, native keyboard behavior, text scaling, VoiceOver, and TalkBack remain outside this browser verification.
+
+
+## Final browser refinement
+
+The design lead completed this browser pass at 390 × 844 and 320 × 640.
+Both cold reloads placed the transcript at its end, with a measured zero-pixel gap.
+The earlier long-response reload left a 2,176-pixel gap before the final transcript repair.
+
+| Action | Final observed result |
+| --- | --- |
+| Scroll away during a response | The scroll offset stayed exactly 5,107.5 px while total content height grew from 7,088 to 8,733 px. |
+| Select Jump to latest | The end gap measured 0.5 px at a total height of 9,786 px. |
+| Continue the response | Three seconds later, the gap remained 0.5 px at 11,156 px, with the final sixtieth paragraph visible. |
+| Select a message at the end | The contextual header appeared without a redundant Jump overlay. The compact header and composer fit the 320-pixel window. |
+| Long press a browser URL | The message entered selection mode without navigation. |
+| Select text in the snapshot sheet | A paragraph drag selected the exact displayed text. |
+
+I copied the final browser evidence into the repository:
+
+- [Final response at the transcript end](screenshots/final-stream-phone.png)
+- [Selection on a 320-pixel phone](screenshots/final-selection-small-phone.png)
+
+Native gestures, assistant code long press, VoiceOver, and TalkBack remain unverified in this final pass.
+The following recovery record covers a separate browser observation.
+No additional automated tests, type checks, builds, or release workflows ran after the user's prohibition.
+
+## Recovery and compact menus
+
+I observed the automatic wizard after I paused the isolated OpenCode server.
+I reached Retry, QR scan, pairing, and manual setup without a disconnect or removal step.
+I restored the server after each observation.
+
+I kept an unsent side question open during another outage.
+I observed its unchanged text and a notice to close the panel before connection setup.
+I restored the server before I closed the panel.
+I observed that the notice disappeared and the text remained unchanged, without an unnecessary wizard.
+
+I verified the compact message menu and its handoff to the text-selection panel at 390 × 844.
+I retained conversation context behind the three visible actions.
+
+- [Automatic connection wizard](screenshots/connection-recovery-phone.png)
+- [Compact message menu](screenshots/message-menu-phone.png)
+
+I did not verify these changes on a native device.
+Native picker and share registration follows each SDK promise. Native dismissal animation completion remains unverified.

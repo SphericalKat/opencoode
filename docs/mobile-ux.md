@@ -218,3 +218,22 @@ This preserves the native status-bar repair without a second web inset measureme
 
 The earlier streaming evidence remains valid within its stated scope.
 I ran no tests, type checks, builds, or UI actions for this documentation update after the user prohibited those checks.
+
+## Automatic connection recovery
+
+I added foreground server checks with a five-second deadline and a second check after an ordinary network failure.
+I added immediate recovery for a rejected server login.
+I bounded connection setup and location resolution to fifteen seconds each.
+
+I kept the active workspace mounted during recovery.
+I preserved its screen instances, selected session, attachments, and current tab after reconnection to the same server and directory.
+I retained the unsaved-change confirmation for a different workspace.
+
+I delayed the wizard while a native panel remains open, because a hidden native modal can unmount its child form.
+I added a notice that asks the user to close that panel through its normal controls.
+I kept its existing close guards and local values until that explicit close.
+I opened recovery after the last panel and the navigation drawer finish dismissal.
+I deferred queued picker handoffs until the recovery wizard closes.
+
+This section records source behavior.
+It does not establish native lifecycle, camera, or offline draft validation.

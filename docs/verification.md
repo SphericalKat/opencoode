@@ -108,3 +108,25 @@ The [native record](native-verification.md) records secure credential restoratio
 It also states the remaining keyboard, device, and distribution limits.
 The [mobile UX record](mobile-ux.md) records browser layout evidence separately.
 The [API research](api-research.md) records the source contracts and version differences.
+
+
+## Final browser UX evidence
+
+The design lead observed a zero-pixel transcript end gap after cold reloads at 390 × 844 and 320 × 640.
+An explicit scroll away held its exact 5,107.5-pixel offset while the response added 1,645 pixels of content.
+Jump to latest restored a 0.5-pixel end gap and retained that gap through the final sixtieth paragraph.
+
+The design lead verified message selection at the end without a redundant Jump overlay.
+The compact header and composer fit the 320-pixel window.
+A browser URL long press selected the message without navigation.
+A paragraph drag in the text snapshot sheet selected the exact displayed text.
+The [UX audit](ux-audit.md#final-browser-refinement) contains the final screenshots and measurements.
+
+These observations establish browser behavior only.
+Native gestures and assistant code long press remain unverified in this pass.
+I separately observed the automatic reconnect wizard after a temporary outage of the isolated server.
+I also observed an open side-question draft through an outage and recovery, with its text intact.
+The pending notice cleared when the server returned, without an unnecessary wizard.
+I verified the compact message menu and its handoff to text selection in the browser.
+The [recovery record](ux-audit.md#recovery-and-compact-menus) includes screenshots and native boundaries.
+No additional automated tests, type checks, builds, or release workflows ran after the user's prohibition.

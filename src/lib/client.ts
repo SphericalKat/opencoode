@@ -77,8 +77,27 @@ async function checkConnection(next: Connection, fetchOverride: typeof globalThi
   return { connection: next, info };
 }
 
+export async function withServerDeadline<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation(controller.signal),
+      new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => {
+          reject(new Error('The server did not respond within 15 seconds. Check its address and your network.'));
+          controller.abort();
+        }, 15_000);
+      }),
+    ]);
+  } finally { clearTimeout(deadline); controller.abort(); }
+}
+
 export async function connect(connection: Connection, fetchOverride: typeof globalThis.fetch = globalThis.fetch, alternatives: Connection[] = []) {
-  const signal = AbortSignal.timeout(15_000);
+  return withServerDeadline(signal => connectWithSignal(connection, fetchOverride, alternatives, signal));
+}
+
+async function connectWithSignal(connection: Connection, fetchOverride: typeof globalThis.fetch, alternatives: Connection[], signal: AbortSignal) {
   const next = normalizeConnection(connection);
   const pairing = pairingAddress(next);
   if (!pairing) return checkConnection(next, fetchOverride, signal);

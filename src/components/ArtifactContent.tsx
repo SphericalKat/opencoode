@@ -5,6 +5,7 @@ import * as Sharing from 'expo-sharing';
 import type { ToolFileContent } from '@opencode/client';
 import { type Client, errorMessage } from '../lib/client';
 import { type ThemeColors, useThemedStyles } from '../lib/theme';
+import { useNativePresentation } from '../lib/sheets';
 import { Button, ErrorNotice, Label, Row } from './ui';
 
 type Props = { content: ToolFileContent; client: Client; directory?: string };
@@ -56,6 +57,7 @@ export function ArtifactContent(props: Props) {
 
 function Artifact({ content, client, directory }: Props) {
   const styles = useThemedStyles(createStyles);
+  const presentNative = useNativePresentation();
   const target = source(content.uri);
   const mime = content.mime.split(';')[0].trim().toLowerCase();
   const image = imageTypes.has(mime);
@@ -102,7 +104,8 @@ function Artifact({ content, client, directory }: Props) {
       } else {
         temporary = new File(Paths.cache, `artifact-${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`);
         await temporary.write(bytes);
-        if (!signal.aborted) await Sharing.shareAsync(temporary.uri, { mimeType: mime, dialogTitle: filename });
+        const uri = temporary.uri;
+        if (!signal.aborted) await presentNative(() => Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: filename }));
       }
     } catch (reason) {
       if (!signal.aborted) setError(errorMessage(reason));

@@ -16,6 +16,7 @@ type Props = {
   form: ConnectionForm;
   connections: Connection[];
   activeID?: string;
+  unavailableID?: string;
   connecting: boolean;
   error: string | null;
   pairingLink?: string | null;
@@ -28,7 +29,7 @@ type Props = {
 
 const blankForm: ConnectionForm = { id: '', name: '', url: '', token: '' };
 
-export function ConnectionFlow({ form, connections, activeID, connecting, error, pairingLink, onPairingLinkConsumed, onChangeForm, onClearError, onConnect, onRemove }: Props) {
+export function ConnectionFlow({ form, connections, activeID, unavailableID, connecting, error, pairingLink, onPairingLinkConsumed, onChangeForm, onClearError, onConnect, onRemove }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [navigation, setNavigation] = useState(() => ({ step: (form.id ? 'password' : form.url ? /\/auth\/connect\/[^/]+\/?$/.test(form.url) ? 'pair' : 'address' : 'home') as Step, direction: 0 as -1 | 0 | 1, revision: 0 }));
@@ -189,12 +190,12 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
   const back = step !== 'home' && !submission ? <Button title="‹ Back" compact variant="ghost" disabled={busy} onPress={() => go(step === 'password' ? 'address' : 'home', -1)} /> : null;
   const savedServers = !!connections.length && <View style={styles.saved}>
     <Row style={{ justifyContent: 'space-between' }}><Label muted style={styles.instruction}>Your servers</Label><Button title={managing ? 'Done' : 'Manage'} compact variant="ghost" disabled={busy} onPress={() => setManaging(value => !value)} /></Row>
-    {connections.map(connection => <View key={connection.id} style={styles.savedItem}><Pressable accessibilityRole="button" accessibilityLabel={`Connect to ${connection.name}${activeID === connection.id ? ', current server' : ''}`} disabled={busy} onPress={() => submit([connection])} style={({ pressed }) => [styles.server, pressed && { backgroundColor: colors.raised }]}><ShellIcon name="server" color={colors.muted} size={20} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{connection.name}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.small}>{connection.url}</Label></View>{activeID === connection.id ? <Label muted style={styles.small}>Current</Label> : <ShellIcon name="chevron" color={colors.faint} size={16} />}</Pressable>{managing && <Row style={styles.manage}><Button title="Edit" compact disabled={busy} onPress={() => { clearError(); onChangeForm({ ...connection, token: connection.token || '' }); setStep('password'); }} /><Button title={removingID === connection.id ? 'Removing server' : 'Remove'} compact variant="ghost" busy={removingID === connection.id} disabled={busy} onPress={() => { void remove(connection); }} /></Row>}</View>)}
+    {connections.map(connection => <View key={connection.id} style={styles.savedItem}><Pressable accessibilityRole="button" accessibilityLabel={`${unavailableID === connection.id ? 'Retry' : 'Connect to'} ${connection.name}${activeID === connection.id ? ', current server' : ''}`} disabled={busy} onPress={() => submit([connection])} style={({ pressed }) => [styles.server, pressed && { backgroundColor: colors.raised }]}><ShellIcon name="server" color={colors.muted} size={20} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{connection.name}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.small}>{connection.url}</Label></View>{unavailableID === connection.id ? <Label style={[styles.small, { color: colors.danger }]}>Retry</Label> : activeID === connection.id ? <Label muted style={styles.small}>Current</Label> : <ShellIcon name="chevron" color={colors.faint} size={16} />}</Pressable>{managing && <Row style={styles.manage}><Button title="Edit" compact disabled={busy} onPress={() => { clearError(); onChangeForm({ ...connection, token: connection.token || '' }); setStep('password'); }} /><Button title={removingID === connection.id ? 'Removing server' : 'Remove'} compact variant="ghost" busy={removingID === connection.id} disabled={busy} onPress={() => { void remove(connection); }} /></Row>}</View>)}
   </View>;
 
   return <MotionContent variant="connection" transitionKey={navigation.revision} direction={navigation.direction} enabled={!busy && step !== 'scan'} style={styles.container}>
     {back && <View style={styles.back}>{back}</View>}
-    <ErrorNotice error={localError || error} />
+    {unavailableID && step === 'home' && error && !localError ? <Card><Label accessibilityRole="alert">{error}</Label></Card> : <ErrorNotice error={localError || error} />}
     {cameraBlocked && <Button title="Open camera settings" disabled={busy} onPress={() => { void Linking.openSettings().catch(() => setLocalError('Open your device settings and enable camera access for Opencoode.')); }} />}
     {submission || connecting ? <Card><Busy /><Label style={styles.center}>Connecting to {serverName(submission?.[0]?.url || form.url)}</Label><Label muted style={styles.center}>Opening your workspace</Label></Card>
       : step === 'scan' ? <>
@@ -232,7 +233,7 @@ export function ConnectionFlow({ form, connections, activeID, connecting, error,
         <Disclosure title="Connection details"><Field label="Name" value={form.name} onChangeText={name => onChangeForm({ ...form, name })} /><Field label="Username" placeholder="opencode" value={form.username ?? 'opencode'} onChangeText={username => onChangeForm({ ...form, username })} /></Disclosure>
       </> : <>
         {activeID && savedServers}
-        <View style={styles.intro}><PairingIcon color={colors.muted} /><Heading>{activeID ? 'Add a server' : 'Connect to OpenCode'}</Heading><Label muted style={styles.center}>Your computer does the work. Pick up the conversation here.</Label></View>
+        <View style={styles.intro}><PairingIcon color={colors.muted} /><Heading>{unavailableID ? 'Reconnect to OpenCode' : activeID ? 'Add a server' : 'Connect to OpenCode'}</Heading><Label muted style={styles.center}>{unavailableID ? 'Retry a saved server or pair with OpenCode again.' : 'Your computer does the work. Pick up the conversation here.'}</Label></View>
         <View style={styles.actions}><Button title="Scan QR code" variant="primary" busy={reading} disabled={busy} onPress={() => { void scan(); }} /><Button title="Paste pairing link" disabled={busy} onPress={() => { void pastePairing(); }} /></View>
         <Card><Label style={styles.instruction}>On your computer</Label><Label muted>Run the command below, then scan the QR code or copy its connection link.</Label><Label selectable style={styles.command}>opencode pair</Label></Card>
         <Button title="Connect with a server address" variant="ghost" disabled={busy} onPress={() => { onChangeForm(blankForm); go('address'); }} />

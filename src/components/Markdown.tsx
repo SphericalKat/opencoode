@@ -4,6 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import MarkdownIt, { type Token } from 'markdown-it';
 import { Button, mono, sans } from './ui';
 import { type ThemeColors, useThemedStyles } from '../lib/theme';
+import { MessageActionsContext } from '../lib/messageActions';
 
 const parser = new MarkdownIt({ html: false, linkify: true, breaks: true, maxNesting: 40 });
 const SelectionContext = createContext(true);
@@ -54,13 +55,16 @@ function safeUrl(value: string | number | null): string | undefined {
 const Inline = memo(function Inline({ nodes }: { nodes: Node[] }) {
   const styles = useThemedStyles(createStyles);
   const selectable = useContext(SelectionContext);
+  const selectMessage = useContext(MessageActionsContext);
   return nodes.map(({ token, children }, index) => {
-    const content = children.length ? <Inline nodes={children} /> : token.content;
+    if (token.type === 'text') return token.content;
     if (token.type === 'softbreak' || token.type === 'hardbreak') return '\n';
+    const content = children.length ? <Inline nodes={children} /> : token.content;
     if (token.type === 'link_open' || token.type === 'image') {
       const uri = safeUrl(token.attrGet(token.type === 'image' ? 'src' : 'href'));
       const label = token.type === 'image' ? <>Image: {content || 'Open image'}</> : content;
       return <Text key={index} selectable={selectable} accessibilityRole={uri ? 'link' : undefined} accessibilityHint={uri ? `Open ${uri}` : undefined} style={uri && styles.link}
+        onLongPress={uri && Platform.OS !== 'web' ? selectMessage : undefined}
         onPress={uri ? () => { void Linking.openURL(uri).catch(() => {}); } : undefined}>{label}</Text>;
     }
     const style = token.type === 'strong_open' ? styles.bold : token.type === 'em_open' ? styles.italic : token.type === 's_open' ? styles.strike : token.type === 'code_inline' ? styles.inlineCode : undefined;

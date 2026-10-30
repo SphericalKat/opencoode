@@ -1,0 +1,12 @@
+gradle.beforeProject { project ->
+    project.plugins.withId('com.android.application') {
+        project.extensions.getByName('androidComponents').finalizeDsl { android ->
+            def signing = android.signingConfigs.maybeCreate('ciRelease')
+            signing.storeFile = new File(System.getenv('RELEASE_KEYSTORE_PATH'))
+            signing.storePassword = System.getenv('RELEASE_STORE_PASSWORD')
+            signing.keyAlias = System.getenv('RELEASE_KEY_ALIAS')
+            signing.keyPassword = System.getenv('RELEASE_KEY_PASSWORD')
+            android.buildTypes.getByName('release').signingConfig = signing
+        }
+    }
+}

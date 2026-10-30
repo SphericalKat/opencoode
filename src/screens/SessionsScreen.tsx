@@ -5,6 +5,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { SessionInfo } from '@opencode/client';
 import { type Client, errorMessage } from '../lib/client';
+import { useNativePresentation } from '../lib/sheets';
 import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
 import { Button, Busy, Card, Empty, ErrorNotice, Field, Label, Row, Sheet, confirmAction } from '../components/ui';
 
@@ -18,6 +19,7 @@ type Props = {
 };
 
 export function SessionsScreen({ client, directory, onOpenSession, revision, selectedSessionID, compact = false }: Props) {
+  const withNativePresentation = useNativePresentation();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -30,6 +32,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   const [listUnavailable, setListUnavailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [listError, setListError] = useState<string>();
   const [statusError, setStatusError] = useState<string>();
   const [streamError, setStreamError] = useState<string>();
   const [streamStatus, setStreamStatus] = useState('Connecting');
@@ -45,6 +48,8 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   const [moveDirectory, setMoveDirectory] = useState('');
   const [sheetError, setSheetError] = useState<string>();
   const generation = useRef(0);
+  const refreshRequest = useRef<AbortController | null>(null);
+  const quietRefreshPending = useRef(false);
   const mounted = useRef(true);
   const scope = useRef({ client, directory });
   if (scope.current.client !== client || scope.current.directory !== directory) scope.current = { client, directory };
@@ -57,20 +62,41 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; generation.current += 1; pendingImport.current = null; };
+    return () => { mounted.current = false; generation.current += 1; refreshRequest.current?.abort(); pendingImport.current = null; };
   }, []);
 
   const refresh = useCallback(async (cursor?: string, quiet = false, signal?: AbortSignal) => {
+    if (quiet && refreshRequest.current) { quietRefreshPending.current = true; return; }
+    quietRefreshPending.current = false;
     const request = ++generation.current;
-    if (!quiet) { setLoading(true); setError(undefined); }
+    refreshRequest.current?.abort();
+    const controller = new AbortController();
+    refreshRequest.current = controller;
+    let timedOut = false;
+    const cancel = () => controller.abort();
+    let rejectCancelled: (() => void) | undefined;
+    const cancelled = new Promise<never>((_, reject) => {
+      rejectCancelled = () => reject(new Error(timedOut
+        ? 'The server did not respond within 15 seconds. Check your connection, then retry.'
+        : 'Session refresh cancelled'));
+      controller.signal.addEventListener('abort', rejectCancelled, { once: true });
+    });
+    if (signal?.aborted) cancel();
+    else signal?.addEventListener('abort', cancel, { once: true });
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15_000);
+    if (!quiet) { setLoading(true); setListError(undefined); }
     try {
-      const [page, running] = await Promise.allSettled([
-        client.session.list({ directory, search: search.trim() || undefined, archived, limit: cursor ? 40 : loadedCount.current, cursor, order: 'desc' }, { signal }),
-        client.session.active({ signal }),
+      const [page, running] = await Promise.race([
+        Promise.allSettled([
+          client.session.list({ directory, search: search.trim() || undefined, archived, limit: cursor ? 40 : loadedCount.current, cursor, order: 'desc' }, { signal: controller.signal }),
+          client.session.active({ signal: controller.signal }),
+        ]),
+        cancelled,
       ]);
-      if (!mounted.current || request !== generation.current || signal?.aborted) return;
+      if (!mounted.current || request !== generation.current || controller.signal.aborted) return;
       if (page.status === 'rejected') throw page.reason;
       setListUnavailable(false);
+      setListError(undefined);
       setSessions(previous => {
         const next = cursor ? Array.from(new Map([...previous, ...page.value.data].map(item => [item.id, item])).values()) : page.value.data;
         loadedCount.current = Math.max(40, next.length);
@@ -85,13 +111,23 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
         setStatusError(`Active status unavailable: ${errorMessage(running.reason)}`);
       }
     } catch (cause) {
-      if (mounted.current && request === generation.current && !signal?.aborted) {
+      if (mounted.current && request === generation.current && (timedOut || !controller.signal.aborted)) {
         setListUnavailable(true);
-        setError(errorMessage(cause));
+        setListError(errorMessage(cause));
       }
     } finally {
-      if (mounted.current && request === generation.current) setLoading(false);
-      paging.current = false;
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', cancel);
+      if (rejectCancelled) controller.signal.removeEventListener('abort', rejectCancelled);
+      if (refreshRequest.current === controller) refreshRequest.current = null;
+      if (request === generation.current) {
+        if (mounted.current) setLoading(false);
+        paging.current = false;
+        if (mounted.current && quietRefreshPending.current && !controller.signal.aborted) {
+          quietRefreshPending.current = false;
+          void refreshRef.current(true, signal);
+        }
+      }
     }
   }, [client, directory, search, archived]);
   refreshRef.current = (quiet, signal) => refresh(undefined, quiet, signal);
@@ -103,7 +139,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     setNextCursor(undefined);
     setLoading(true);
     const timer = setTimeout(() => { if (AppState.currentState !== 'background' && AppState.currentState !== 'inactive') void refresh(); }, 250);
-    return () => { clearTimeout(timer); generation.current += 1; };
+    return () => { clearTimeout(timer); generation.current += 1; refreshRequest.current?.abort(); };
   }, [refresh, revision]);
 
   useEffect(() => {
@@ -119,7 +155,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   }, []);
 
   useEffect(() => {
-    if (!foreground) { setStreamStatus('Paused'); return; }
+    if (!foreground) { refreshRequest.current?.abort(); quietRefreshPending.current = false; setStreamStatus('Paused'); return; }
     const controller = new AbortController();
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -130,14 +166,39 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       refreshTimer = setTimeout(() => { refreshTimer = undefined; if (!controller.signal.aborted) void refreshRef.current(true, controller.signal); }, 300);
     };
     void (async () => {
-      await refreshRef.current(true, controller.signal);
+      void refreshRef.current(true, controller.signal);
       while (!controller.signal.aborted) {
         try {
           setStreamStatus(attempts ? 'Reconnecting' : 'Connecting');
-          for await (const event of client.event.subscribe({ signal: controller.signal })) {
-            if (controller.signal.aborted) break;
-            setStreamStatus('Live'); setStreamError(undefined); attempts = 0;
-            if (event.type === 'server.connected' || event.type === 'location.shutdown' || sessionListEvents.has(event.type)) scheduleRefresh();
+          const attempt = new AbortController();
+          const cancelAttempt = () => attempt.abort();
+          controller.signal.addEventListener('abort', cancelAttempt, { once: true });
+          let timedOut = false;
+          let rejectCancelled: (() => void) | undefined;
+          const cancelled = new Promise<never>((_, reject) => {
+            rejectCancelled = () => reject(new Error(timedOut
+              ? 'The live connection did not respond within 15 seconds. Check your server connection.'
+              : 'Live connection cancelled'));
+            attempt.signal.addEventListener('abort', rejectCancelled, { once: true });
+          });
+          if (controller.signal.aborted) cancelAttempt();
+          const initialTimeout = setTimeout(() => { timedOut = true; attempt.abort(); }, 15_000);
+          const iterator = client.event.subscribe({ signal: attempt.signal })[Symbol.asyncIterator]();
+          try {
+            while (!controller.signal.aborted) {
+              const result = await Promise.race([iterator.next(), cancelled]);
+              if (result.done || controller.signal.aborted) break;
+              clearTimeout(initialTimeout);
+              const event = result.value;
+              setStreamStatus('Live'); setStreamError(undefined); attempts = 0;
+              if (event.type === 'server.connected' || event.type === 'location.shutdown' || sessionListEvents.has(event.type)) scheduleRefresh();
+            }
+          } finally {
+            clearTimeout(initialTimeout);
+            controller.signal.removeEventListener('abort', cancelAttempt);
+            attempt.abort();
+            if (rejectCancelled) attempt.signal.removeEventListener('abort', rejectCancelled);
+            void iterator.return?.().catch(() => {});
           }
           if (!controller.signal.aborted) throw new Error('The live connection closed');
         } catch (cause) {
@@ -218,13 +279,13 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       if (!await Sharing.isAvailableAsync()) throw new Error('File sharing is unavailable on this device');
       const file = new File(Paths.cache, filename);
       await file.write(text);
-      await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' });
+      await withNativePresentation(() => Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' }));
     }
   }, true);
 
   const importSession = () => run(async () => {
     const owner = scope.current;
-    const picked = await DocumentPicker.getDocumentAsync({ type: ['application/json', 'text/plain'], copyToCacheDirectory: true });
+    const picked = await withNativePresentation(() => DocumentPicker.getDocumentAsync({ type: ['application/json', 'text/plain'], copyToCacheDirectory: true }));
     if (picked.canceled || !mounted.current || scope.current !== owner) return;
     const asset = picked.assets[0];
     if (asset.size && asset.size > 20 * 1024 * 1024) throw new Error('Choose a transcript smaller than 20 MB');
@@ -277,7 +338,8 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
         <View style={{ flex: 1, minWidth: 0 }}><Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} clearButtonMode="while-editing" style={styles.search} /></View>
         {search ? <Button title="Clear" accessibilityLabel="Clear session search" compact variant="ghost" onPress={() => setSearch('')} /> : <Pressable accessibilityRole="button" accessibilityLabel={`Session history: ${archived ? 'Archived' : 'Recent'}`} onPress={() => setActions('filter')} style={styles.filter}><Label muted>{archived ? 'Archived' : 'Recent'} ⌄</Label></Pressable>}
       </Row>
-      <ErrorNotice error={error} onRetry={() => { void refresh(); }} />
+      <ErrorNotice error={listError} onRetry={() => { void refresh(); }} />
+      <ErrorNotice error={error} />
       {statusError && <Label muted>{statusError}</Label>}
       {streamError && <Label muted>{streamError}</Label>}
     </View>

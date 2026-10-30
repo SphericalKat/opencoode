@@ -10,6 +10,7 @@ import { Busy, Button, Card, confirmAction, Empty, ErrorNotice, Field, Label, mo
 import { TerminalPanel } from '../components/TerminalPanel';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { useUnsavedChanges } from '../lib/unsaved';
+import { useNativePresentation } from '../lib/sheets';
 
 type Props = {
   client: Client;
@@ -74,6 +75,7 @@ function quotedText(text: string, language = ''): string {
 function Files({ client, directory, onAttachFile }: Pick<Props, 'client' | 'directory' | 'onAttachFile'>) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const presentNative = useNativePresentation();
   const [path, setPath] = useState('');
   const [query, setQuery] = useState('');
   const [entries, setEntries] = useState<FileSystemEntry[]>([]);
@@ -198,7 +200,7 @@ function Files({ client, directory, onAttachFile }: Pick<Props, 'client' | 'dire
       } else {
         if (!await Sharing.isAvailableAsync()) throw new Error('File sharing is unavailable on this device');
         const exported = new File(Paths.cache, `opencoode-${Date.now()}-${name}`);
-        try { await exported.write(bytes); await Sharing.shareAsync(exported.uri, { mimeType: mime, dialogTitle: 'Save or share file' }); }
+        try { await exported.write(bytes); await presentNative(() => Sharing.shareAsync(exported.uri, { mimeType: mime, dialogTitle: 'Save or share file' })); }
         finally { if (exported.exists) await exported.delete(); }
       }
     } catch (failure) { setSaveError(errorMessage(failure)); }
