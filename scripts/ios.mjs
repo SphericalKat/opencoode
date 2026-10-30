@@ -19,7 +19,7 @@ try {
   if (selected.state !== 'Booted') run('simslim', ['boot', selected.udid], { stdio: 'inherit' });
   run('simslim', ['on', selected.udid, '--no-reboot', '--profile', profile], { stdio: 'inherit' });
   if (!process.argv.includes('--slim-only')) {
-    const expo = spawn('npx', ['expo', 'start', '--ios', '--max-workers', '2'], { stdio: 'inherit' });
+    const expo = spawn('pnpm', ['exec', 'expo', 'start', '--ios', '--max-workers', '2'], { stdio: 'inherit' });
     expo.on('error', error => { console.error(error.message); process.exitCode = 1; });
     expo.on('exit', code => { process.exitCode = code ?? 1; });
   }

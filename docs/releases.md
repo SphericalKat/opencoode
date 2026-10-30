@@ -13,6 +13,11 @@ This avoids the GitHub restriction on new workflow events from `GITHUB_TOKEN`.
 Native builds run on GitHub runners. They do not use this computer or EAS credits.
 The workflows contain no test jobs and do not submit apps to stores.
 
+Both native jobs use `pnpm/setup@v3.1.2` to install Node.js 24 and the pnpm version from `package.json`.
+The action caches the pnpm store through `pnpm-lock.yaml`.
+The jobs use `pnpm install --frozen-lockfile` and `pnpm exec expo prebuild`.
+Dependency changes require an updated lockfile before the release.
+
 | Asset | Purpose | Requirement |
 | --- | --- | --- |
 | `opencoode-vX.Y.Z.apk` | Install on Android devices | All four Android signing secrets |
