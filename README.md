@@ -1,8 +1,8 @@
 # Opencoode
 
-Opencoode is a React Native client for OpenCode 2 on iOS and Android.
+Opencoode is a React Native client for OpenCode 2 and active Pi sessions on iOS and Android.
 It uses the OpenCode OC-2 theme, Inter, IBM Plex Mono, and the official icon set.
-The OpenCode server runs models, tools, commands, and terminals on your computer.
+Your computer runs the models and tools. The app detects the server through one connection flow.
 
 ## Start development
 
@@ -30,6 +30,13 @@ Use `pnpm android` for the Android emulator, or `pnpm web` for the browser previ
 Metro uses at most two workers. Run one simulator or emulator at a time on a computer with limited memory.
 
 ## Connect a server
+
+For Pi, install the [companion extension](docs/pi.md), then enter `/mobile` in your active terminal session.
+Scan its QR code or paste its link into the same connection screen.
+Pi shares the active terminal conversation and supports models, tools, images, session controls, and compaction.
+Custom Pi terminal dialogs require a response in the terminal.
+
+For OpenCode:
 
 1. Run `opencode pair` on your computer.
 2. Select **Scan QR code** in the mobile app.

@@ -1,4 +1,6 @@
-import { ClientError, isUnauthorizedError, OpenCode } from '@opencode/client';
+import { ClientError, isUnauthorizedError, OpenCode, type ServerInfo } from '@opencode/client';
+import { createPiClient, PiConnectionError } from './piClient';
+import type { PiServerInfo } from '../../packages/pi-mobile/protocol';
 
 export type Connection = {
   id: string;
@@ -6,10 +8,14 @@ export type Connection = {
   url: string;
   token?: string;
   username?: string;
+  backend?: 'opencode' | 'pi';
 };
 
 export type Client = ReturnType<typeof OpenCode.make>;
-const invalidServerMessage = 'This address did not return an OpenCode 2 API. The server address or OpenCode version is incorrect.';
+export type ConnectedServer =
+  | { backend: 'opencode'; connection: Connection; info: ServerInfo }
+  | { backend: 'pi'; connection: Connection; info: PiServerInfo };
+const invalidServerMessage = 'This address did not return a supported server. Use OpenCode 2 or the Pi mobile extension.';
 let redeemedPairing: { code: string; token: string; urls: string[]; expiresAt: number } | undefined;
 
 export function clearPairingRetry(): void {
@@ -36,6 +42,7 @@ export function normalizeConnection(input: Omit<Connection, 'id'> & { id?: strin
     url: url.toString().replace(/\/+$/, ''),
     token: input.token || undefined,
     username,
+    backend: input.backend,
   };
 }
 
@@ -59,22 +66,35 @@ function pairingAddress(connection: Connection) {
   const match = /^(.*)\/auth\/connect\/([^/]+)\/?$/.exec(url.pathname);
   if (!match) return;
   let code: string;
-  try { code = decodeURIComponent(match[2]); } catch { throw new Error('This pairing link is invalid. Create a new link in OpenCode.'); }
-  if (!/^[A-Za-z0-9_-]+$/.test(code)) throw new Error('This pairing link is invalid. Create a new link in OpenCode.');
+  try { code = decodeURIComponent(match[2]); } catch { throw new Error('This pairing link is invalid. Create a new link on your computer.'); }
+  if (!/^[A-Za-z0-9_-]+$/.test(code)) throw new Error('This pairing link is invalid. Create a new link on your computer.');
   return { code, url: `${url.origin}${match[1]}`.replace(/\/+$/, '') };
+}
+
+export function isConnectionUnauthorized(error: unknown): boolean {
+  return isUnauthorizedError(error) || error instanceof PiConnectionError && error.status === 401;
 }
 
 function pairingFailure(error: unknown): unknown {
   if (!error || typeof error !== 'object' || !('errors' in error) || !Array.isArray(error.errors)) return error;
-  return error.errors.find(isUnauthorizedError) ?? error.errors[0] ?? new Error('The server is unreachable. Check your network and try again.');
+  return error.errors.find(isConnectionUnauthorized) ?? error.errors[0] ?? new Error('The server is unreachable. Check your network and try again.');
 }
 
-async function checkConnection(next: Connection, fetchOverride: typeof globalThis.fetch, signal: AbortSignal) {
+async function checkConnection(next: Connection, fetchOverride: typeof globalThis.fetch, signal: AbortSignal): Promise<ConnectedServer> {
+  const discovery = await fetchOverride(`${next.url}/opencoode/info`, { signal, headers: { Accept: 'application/json' } });
+  if (discovery.ok && discovery.headers.get('content-type')?.includes('application/json')) {
+    const identity: unknown = await discovery.json();
+    if (identity && typeof identity === 'object' && 'backend' in identity && identity.backend === 'pi') {
+      if (!('protocol' in identity) || identity.protocol !== 1) throw new Error('Update the app and the Pi mobile extension to use the same protocol version.');
+      const info = await createPiClient(next, fetchOverride).info(signal);
+      return { backend: 'pi', connection: { ...next, backend: 'pi' }, info };
+    }
+  }
   const info = await createClient(next, fetchOverride).server.info({ signal });
   if (!info || typeof info !== 'object' || typeof info.version !== 'string') throw new Error(invalidServerMessage);
   if (!/^2\./.test(info.version)) throw new Error(`This app requires OpenCode 2. The server reports ${info.version}`);
   if (typeof info.pid !== 'number' || !Number.isFinite(info.pid) || !Array.isArray(info.urls) || !info.urls.every(url => typeof url === 'string') || !info.paths || typeof info.paths.tmp !== 'string') throw new Error(invalidServerMessage);
-  return { connection: next, info };
+  return { backend: 'opencode', connection: { ...next, backend: 'opencode' }, info };
 }
 
 export async function withServerDeadline<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
@@ -103,7 +123,7 @@ async function connectWithSignal(connection: Connection, fetchOverride: typeof g
   if (!pairing) return checkConnection(next, fetchOverride, signal);
   const candidates = [next, ...alternatives.map(normalizeConnection)].map(pairingAddress);
   if (candidates.some(candidate => !candidate || candidate.code !== pairing.code)) {
-    throw new Error('These pairing addresses do not share one code. Scan the OpenCode QR code again.');
+    throw new Error('These pairing addresses do not share one code. Scan the pairing QR code again.');
   }
   const urls = [...new Set(candidates.flatMap(candidate => candidate ? [candidate.url] : []))];
   if (redeemedPairing && redeemedPairing.expiresAt <= Date.now()) clearPairingRetry();
@@ -114,10 +134,10 @@ async function connectWithSignal(connection: Connection, fetchOverride: typeof g
   if (!cached) {
     try {
       cached = await Promise.any(urls.map(async url => {
-        const paired = await createClient({ ...next, url, token: undefined }, fetchOverride).server.connect(
-          { code: pairing.code }, { headers: { Accept: 'application/json' }, signal },
-        );
-        if (!paired || typeof paired.token !== 'string' || !paired.token) throw new Error(invalidServerMessage);
+        const response = await fetchOverride(`${url}/auth/connect/${encodeURIComponent(pairing.code)}`, { headers: { Accept: 'application/json' }, signal });
+        if (!response.ok) throw new PiConnectionError(response.status === 401 ? 'This pairing link expired or was already used. Create a new pairing link on your computer.' : `The server returned HTTP ${response.status} during pairing.`, response.status);
+        const paired: unknown = await response.json();
+        if (!paired || typeof paired !== 'object' || !('token' in paired) || typeof paired.token !== 'string' || !paired.token) throw new Error(invalidServerMessage);
         const session = { code: pairing.code, token: paired.token, urls, expiresAt: Date.now() + 5 * 60_000 };
         redeemedPairing = session;
         return session;
@@ -131,7 +151,7 @@ async function connectWithSignal(connection: Connection, fetchOverride: typeof g
   try { paired = await Promise.any(checks); }
   catch (error) {
     const failure = pairingFailure(error);
-    if (isUnauthorizedError(failure)) throw new Error('OpenCode rejected the paired connection. Create a new pairing link on your computer.');
+    if (isConnectionUnauthorized(failure)) throw new Error('The server rejected the paired connection. Create a new pairing link on your computer.');
     throw failure;
   }
   if (paired.connection.url === allowed[0]) return paired;
@@ -153,9 +173,9 @@ export function errorMessage(error: unknown): string {
 }
 
 export function connectionErrorMessage(error: unknown, connection: Pick<Connection, 'url'>): string {
-  if (isUnauthorizedError(error)) {
+  if (isConnectionUnauthorized(error)) {
     if (/\/auth\/connect\/[^/]+\/?$/.test(connection.url)) {
-      return 'This pairing link expired or was already used. A new pairing link from OpenCode is required.';
+      return 'This pairing link expired or was already used. A new pairing link from your computer is required.';
     }
     return 'The server rejected this password. The current server password or a new pairing link is required.';
   }

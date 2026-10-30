@@ -7,7 +7,7 @@ import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-co
 import { useFonts } from 'expo-font';
 import { ClientError, isLocationNotFoundError, isUnauthorizedError, type Project, type ServerInfo, type SessionInfo } from '@opencode/client';
 import { Button, Busy, confirmAction, ErrorNotice, Heading, Label, sans, Sheet } from './src/components/ui';
-import { clearPairingRetry, connect, connectionErrorMessage, createClient, errorMessage, normalizeConnection, withServerDeadline, type Connection } from './src/lib/client';
+import { clearPairingRetry, connect, connectionErrorMessage, createClient, errorMessage, isConnectionUnauthorized, normalizeConnection, withServerDeadline, type Connection } from './src/lib/client';
 import { loadActiveConnectionId, loadConnections, loadWorkspace, saveActiveConnectionId, saveConnections, saveWorkspace } from './src/lib/storage';
 import { ChatScreen } from './src/screens/ChatScreen';
 import { SessionsScreen } from './src/screens/SessionsScreen';
@@ -25,6 +25,7 @@ import { SheetCoordinatorProvider, useSheetCoordinator } from './src/lib/sheets'
 import { pageInset } from './src/lib/layout';
 import { BetaLayoutContext, useBetaLayout } from './src/lib/betaLayout';
 import { BetaSessionNavigation, BetaTabsSheet, BetaTabStrip, SheetGrip, type OpenSessionTab, type SessionPane } from './src/components/BetaNavigation';
+import { PiWorkspace } from './src/screens/PiWorkspace';
 
 type Tab = 'sessions' | 'workspace' | 'settings';
 const destinations: { id: Tab; label: string }[] = [
@@ -115,7 +116,10 @@ function MobileApp() {
   const locationSync = useRef<{ key: string; promise: Promise<string | null> } | null>(null);
   const activeRef = useRef<Connection | null>(null);
   activeRef.current = active;
-  const client = useMemo(() => active ? createClient(active) : null, [active]);
+  const client = useMemo(() => active && active.backend !== 'pi' ? createClient(active) : null, [active]);
+  const onPiConnectionLost = useCallback((cause: unknown) => {
+    if (active?.backend === 'pi') recoverConnection.current(active, cause);
+  }, [active]);
   const recordSessionInfo = useCallback((session: SessionInfo) => {
     if (session.id !== selectedSessionRef.current) return;
     const next = { id: session.id, title: session.title || 'New session', directory: session.location.directory };
@@ -148,19 +152,20 @@ function MobileApp() {
         ? current.find(item => item.url === result.connection.url && (item.username || 'opencode') === (result.connection.username || 'opencode'))
         : undefined;
       const connected = matching ? { ...result.connection, id: matching.id, name: matching.name } : result.connection;
-      const nextClient = createClient(connected);
       const owner = activeRef.current;
-      const sameServer = owner?.id === connected.id && owner.url === connected.url && (owner.username || 'opencode') === (connected.username || 'opencode');
+      const sameServer = owner?.id === connected.id && owner.url === connected.url && owner.backend === connected.backend && (owner.username || 'opencode') === (connected.username || 'opencode');
       const workspace = sameServer ? { directory: directoryRef.current, sessionID: selectedSessionRef.current ?? undefined } : await loadWorkspace(connected.id);
       let restoredSessionID = workspace?.sessionID;
-      const location = await withServerDeadline(signal => nextClient.location.get(
+      const nextClient = result.backend === 'opencode' ? createClient(connected) : null;
+      const location = result.backend === 'pi' ? { directory: result.info.session.cwd } : await withServerDeadline(signal => nextClient!.location.get(
         workspace?.directory ? { location: { directory: workspace.directory } } : undefined,
         { signal },
       ).catch(cause => {
         if (signal.aborted || !workspace?.directory || !isLocationNotFoundError(cause)) throw cause;
         restoredSessionID = undefined;
-        return nextClient.location.get(undefined, { signal });
+        return nextClient!.location.get(undefined, { signal });
       }));
+      if (result.backend === 'pi') restoredSessionID = result.info.session.id;
       if (request !== epoch.current) return;
       const preserveWorkspace = sameServer && location.directory === directoryRef.current;
       if (preserveWorkspace) restoredSessionID = selectedSessionRef.current ?? undefined;
@@ -176,8 +181,8 @@ function MobileApp() {
       setActive(connected);
       setUnavailableID(null);
       recoveringConnection.current = null;
-      if (!preserveWorkspace) setConnectionRevision(value => value + 1);
-      setInfo(result.info);
+      if (!preserveWorkspace || connected.backend === 'pi') setConnectionRevision(value => value + 1);
+      setInfo(result.backend === 'opencode' ? result.info : null);
       if (!preserveWorkspace) {
         setOpenTabs([]);
         setBetaHomeProject(undefined);
@@ -211,7 +216,7 @@ function MobileApp() {
   }, []);
 
   useEffect(() => {
-    if (!active || !directory) return;
+    if (!active || active.backend === 'pi' || !directory) return;
     const timer = setTimeout(() => {
       saveWorkspace(active.id, { directory, sessionID: sessionID ?? undefined }).catch(cause => setError(errorMessage(cause)));
     }, 300);
@@ -252,6 +257,7 @@ function MobileApp() {
 
   useEffect(() => {
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (active?.backend === 'pi') return false;
       if (tab === 'settings' && settingsCanGoBack.current) return false;
       if (betaLayout && messageSelected && !betaHome && tab === 'sessions') return false;
       if (sessionID && tab === 'sessions') {
@@ -489,7 +495,7 @@ function MobileApp() {
 
   recoverConnection.current = (connection, cause) => {
     if (activeRef.current !== connection || connectingRef.current || recoveringConnection.current?.connection === connection) return;
-    const message = isUnauthorizedError(cause)
+    const message = isConnectionUnauthorized(cause)
       ? `${connection.name} rejected the saved password. Pair again or update its saved connection.`
       : `${connection.name} is not responding. Retry it or connect to another server.`;
     recoveringConnection.current = { connection, message };
@@ -653,7 +659,7 @@ function MobileApp() {
   if (booting) return <SafeAreaView style={styles.safe}><View style={styles.boot}><OpenCodeLogo width={160} /><Busy /><Label muted>Restoring your workspace</Label></View></SafeAreaView>;
 
   return <SafeAreaView style={[styles.safe, betaLayout && { backgroundColor: scheme === 'dark' ? '#080808' : '#fafafa' }]} edges={['top', 'left', 'right', 'bottom']}>
-    {!client || !active ? <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" automaticOffset><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.onboarding, betaLayout && styles.betaOnboarding]}>
+    {active?.backend === 'pi' ? <PiWorkspace key={`${active.id}:${connectionRevision}`} connection={active} foreground={foreground && !connecting} onManageServers={openServers} onConnectionLost={onPiConnectionLost} /> : !client || !active ? <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" automaticOffset><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.onboarding, betaLayout && styles.betaOnboarding]}>
       {!betaLayout && <View style={{ gap: 16, marginBottom: 20 }}><OpenCodeLogo width={180} /><Label muted>Mobile client</Label></View>}
       {serverForm}
     </ScrollView></KeyboardAvoidingView> : <View style={styles.shell}>

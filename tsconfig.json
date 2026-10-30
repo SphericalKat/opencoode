@@ -4,5 +4,6 @@
     "strict": true,
     "lib": ["ESNext", "DOM"],
     "types": ["react", "react-native", "node"]
-  }
+  },
+  "exclude": ["packages/pi-mobile/index.ts"]
 }

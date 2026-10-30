@@ -206,7 +206,7 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
         <View style={styles.betaIntro}>
           <View style={styles.betaLogo}><OpenCodeLogo width={160} /></View>
           <Label accessibilityRole="header" style={styles.betaTitle}>Connect to a server</Label>
-          <Label muted style={styles.betaHint}>Paste the pairing link from the server, or scan its QR code.</Label>
+          <Label muted style={styles.betaHint}>Paste a pairing link from your computer, or scan its QR code.</Label>
         </View>
         <Field label="Pairing link" placeholder="http://192.168.1.2:4096/auth/connect/…" value={pairingText} editable={!busy} onChangeText={value => { clearError(); setPairingText(value); }} keyboardType="url" autoComplete="off" returnKeyType="go" onSubmitEditing={() => acceptPairing(pairingText)} style={styles.betaInput} />
         <View style={styles.betaActions}>
@@ -215,18 +215,18 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
         </View>
         <Row style={styles.betaPassword}><Label muted style={styles.betaHint}>No pairing link?</Label><Button title="Use password" variant="ghost" compact disabled={busy} onPress={() => { onChangeForm(blankForm); go('address'); }} /></Row>
         <View style={styles.betaInstructions}>
-          <Label muted style={styles.betaHint}>Run this command on the server's computer to get a pairing link and QR code.</Label>
+          <Label muted style={styles.betaHint}>OpenCode: run this on the server computer. Pi: use /mobile in an active session with the companion extension installed.</Label>
           <View style={styles.betaCommand}><Label selectable style={styles.command}>opencode pair</Label></View>
         </View>
         {savedServers}
       </> : step === 'scan' ? <>
-        <Heading>Scan the OpenCode QR code</Heading>
+        <Heading>Scan a pairing QR code</Heading>
         <Label muted>Point your camera at the code on your computer.</Label>
         <View style={styles.camera}>
           <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onCameraReady={() => setCameraReady(true)} onMountError={() => { acceptedScan.current = true; setStep('pair'); setLocalError('The camera is unavailable. Paste a pairing link instead.'); }} onBarcodeScanned={({ data }) => {
             if (acceptedScan.current) return;
             acceptedScan.current = true;
-            if (!acceptPairing(data)) setLocalError('This QR code is not an OpenCode pairing code. Scan the code from OpenCode.');
+            if (!acceptPairing(data)) setLocalError('This QR code is not a server pairing code. Scan a pairing code from your computer.');
           }} />
           <View pointerEvents="none" style={styles.viewfinder}><View style={styles.frame} />{!cameraReady && <Busy />}</View>
         </View>
@@ -234,7 +234,7 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
         <Button title="Paste a pairing link instead" variant="ghost" onPress={() => { void pastePairing(); }} />
       </> : step === 'pair' ? <>
         <Heading>Paste a pairing link</Heading>
-        <Label muted>Copy the connection link from OpenCode on your computer.</Label>
+        <Label muted>Copy the pairing link from the server on your computer.</Label>
         <Field label="Pairing link" placeholder="http://your-computer:4096/auth/connect/…" value={pairingText} onChangeText={value => { clearError(); setPairingText(value); }} keyboardType="url" autoComplete="off" autoFocus returnKeyType="go" onSubmitEditing={() => acceptPairing(pairingText)} />
         <Button title="Connect" variant="primary" disabled={!pairingText.trim() || busy} onPress={() => acceptPairing(pairingText)} />
         <Button title="Scan QR code instead" variant="ghost" onPress={() => { void scan(); }} />
@@ -248,15 +248,15 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
       </> : step === 'password' ? <>
         <Heading>{form.id ? 'Update your server' : 'Enter the server password'}</Heading>
         <Label muted numberOfLines={2}>{form.url}</Label>
-        <Field label="Server password" placeholder="Password from OpenCode" secureTextEntry value={form.token} editable={!busy} onChangeText={token => { clearError(); onChangeForm({ ...form, token }); }} autoComplete="off" autoFocus returnKeyType="go" onSubmitEditing={connectManual} />
+        <Field label="Server password" placeholder="Server password" secureTextEntry value={form.token} editable={!busy} onChangeText={token => { clearError(); onChangeForm({ ...form, token }); }} autoComplete="off" autoFocus returnKeyType="go" onSubmitEditing={connectManual} />
         <Button title="Connect" variant="primary" disabled={busy} onPress={connectManual} />
         <Label muted style={styles.small}>Leave this blank if your server does not require a password.</Label>
-        <Disclosure title="Connection details"><Field label="Name" value={form.name} onChangeText={name => onChangeForm({ ...form, name })} /><Field label="Username" placeholder="opencode" value={form.username ?? 'opencode'} onChangeText={username => onChangeForm({ ...form, username })} /></Disclosure>
+        <Disclosure title="Connection details"><Field label="Name" value={form.name} onChangeText={name => onChangeForm({ ...form, name })} /><Field label="Username" placeholder="Username" value={form.username ?? 'opencode'} onChangeText={username => onChangeForm({ ...form, username })} /></Disclosure>
       </> : <>
         {activeID && savedServers}
-        <View style={styles.intro}><PairingIcon color={colors.muted} /><Heading>{unavailableID ? 'Reconnect to OpenCode' : activeID ? 'Add a server' : 'Connect to OpenCode'}</Heading><Label muted style={styles.center}>{unavailableID ? 'Retry a saved server or pair with OpenCode again.' : 'Your computer does the work. Pick up the conversation here.'}</Label></View>
+        <View style={styles.intro}><PairingIcon color={colors.muted} /><Heading>{unavailableID ? 'Reconnect to a server' : activeID ? 'Add a server' : 'Connect to a server'}</Heading><Label muted style={styles.center}>{unavailableID ? 'Retry a saved server or pair with a server again.' : 'Your computer does the work. Pick up the conversation here.'}</Label></View>
         <View style={styles.actions}><Button title="Scan QR code" variant="primary" busy={reading} disabled={busy} onPress={() => { void scan(); }} /><Button title="Paste pairing link" disabled={busy} onPress={() => { void pastePairing(); }} /></View>
-        <Card><Label style={styles.instruction}>On your computer</Label><Label muted>Run the command below, then scan the QR code or copy its connection link.</Label><Label selectable style={styles.command}>opencode pair</Label></Card>
+        <Card><Label style={styles.instruction}>On your computer</Label><Label muted>OpenCode: run the command below. Pi: use /mobile in an active session with the companion extension installed. Then scan the QR code or paste the pairing link.</Label><Label selectable style={styles.command}>opencode pair</Label></Card>
         <Button title="Connect with a server address" variant="ghost" disabled={busy} onPress={() => { onChangeForm(blankForm); go('address'); }} />
         {!activeID && savedServers}
       </>}
@@ -264,7 +264,7 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
   </MotionContent>;
 }
 
-function serverName(value: string) { try { return new URL(value).hostname; } catch { return 'OpenCode'; } }
+function serverName(value: string) { try { return new URL(value).hostname; } catch { return 'server'; } }
 
 function PairingIcon({ color }: { color: string }) {
   return <Svg width={52} height={52} viewBox="0 0 32 32" fill="none" aria-hidden><Rect x={4} y={4} width={8} height={8} rx={1} stroke={color} strokeWidth={1.5} /><Rect x={20} y={4} width={8} height={8} rx={1} stroke={color} strokeWidth={1.5} /><Rect x={4} y={20} width={8} height={8} rx={1} stroke={color} strokeWidth={1.5} /><Path d="M20 20h4v4h4v4h-8v-4M28 20v-4M16 4v4M4 16h4M12 16h8M16 20v8" stroke={color} strokeWidth={1.5} strokeLinecap="square" /></Svg>;

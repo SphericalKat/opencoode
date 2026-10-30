@@ -37,12 +37,14 @@ export async function loadConnections(): Promise<Connection[]> {
       !('name' in item) || typeof item.name !== 'string' ||
       !('url' in item) || typeof item.url !== 'string' ||
       ('token' in item && item.token !== undefined && typeof item.token !== 'string') ||
-      ('username' in item && item.username !== undefined && typeof item.username !== 'string')
+      ('username' in item && item.username !== undefined && typeof item.username !== 'string') ||
+      ('backend' in item && item.backend !== undefined && item.backend !== 'opencode' && item.backend !== 'pi')
     ) throw new Error('A saved server connection is invalid');
     return normalizeConnection({
       id: item.id, name: item.name, url: item.url,
       token: 'token' in item ? item.token as string | undefined : undefined,
       username: 'username' in item ? item.username as string | undefined : undefined,
+      backend: 'backend' in item ? item.backend as Connection['backend'] : undefined,
     });
   });
 }
