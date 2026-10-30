@@ -3,6 +3,7 @@ import { AccessibilityInfo, Modal, Platform, Pressable, StyleSheet, type StylePr
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Animated, { cancelAnimation, cubicBezier, Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
+import Svg, { Circle } from 'react-native-svg';
 
 const easePress = cubicBezier(0.23, 1, 0.32, 1);
 const easeDrawer = Easing.bezier(0.32, 0.72, 0, 1);
@@ -56,21 +57,21 @@ export function MotionContent({ transitionKey, variant, direction = 1, enabled =
   const entry = useAnimatedStyle(() => ({
     opacity: reduced ? 0.9 + progress.get() * 0.1 : variant === 'context' ? 0.75 + progress.get() * 0.25 : 0.8 + progress.get() * 0.2,
     transform: [{ translateX: variant === 'connection' && !reduced ? direction * 12 * (1 - progress.get()) : 0 }],
-  }), [variant, direction, reduced]);
+  }), Platform.OS === 'web' ? [variant, direction, reduced] : undefined);
   return <Animated.View style={[style, entry]}>{children}</Animated.View>;
 }
 
 export function WorkingIndicator({ active, color, size = 16 }: { active: boolean; color: string; size?: number }) {
   const reduced = useMotionPreference();
-  const opacity = useSharedValue(1);
+  const rotation = useSharedValue(0);
   useEffect(() => {
-    cancelAnimation(opacity);
-    opacity.set(1);
-    if (active && !reduced) opacity.set(withRepeat(withTiming(0.45, { duration: 600, easing: Easing.linear, reduceMotion: ReduceMotion.System }), -1, true));
-    return () => cancelAnimation(opacity);
-  }, [active, reduced, opacity]);
-  const pulse = useAnimatedStyle(() => ({ opacity: opacity.get() }));
-  return <Animated.View aria-hidden style={[styles.indicator, { width: size, height: size }, pulse]}><Animated.View style={{ width: size / 2, height: size / 2, borderRadius: size / 4, backgroundColor: color }} /></Animated.View>;
+    cancelAnimation(rotation);
+    rotation.set(0);
+    if (active && !reduced) rotation.set(withRepeat(withTiming(360, { duration: 1000, easing: Easing.linear, reduceMotion: ReduceMotion.System }), -1, false));
+    return () => cancelAnimation(rotation);
+  }, [active, reduced, rotation]);
+  const spin = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.get()}deg` }] }));
+  return <Animated.View aria-hidden style={[styles.indicator, { width: size, height: size }, spin]}><Svg width={size} height={size} viewBox="0 0 16 16" fill="none"><Circle cx="8" cy="8" r="5.5" stroke={color} strokeOpacity={0.2} strokeWidth="1.5" /><Circle cx="8" cy="8" r="5.5" stroke={color} strokeWidth="1.5" strokeDasharray="12 23" strokeLinecap="round" /></Svg></Animated.View>;
 }
 
 export function MotionDrawer({ visible, width, onClose, onDismiss, children, panelStyle, scrimColor = '#00000070' }: {
@@ -126,7 +127,7 @@ export function MotionDrawer({ visible, width, onClose, onDismiss, children, pan
   useEffect(() => () => cancelAnimation(progress), [progress]);
 
   const backdrop = useAnimatedStyle(() => ({ opacity: progress.get() }));
-  const panel = useAnimatedStyle(() => ({ opacity: reduced ? progress.get() : 1, transform: [{ translateX: reduced ? 0 : -width * (1 - progress.get()) }] }), [reduced, width]);
+  const panel = useAnimatedStyle(() => ({ opacity: reduced ? progress.get() : 1, transform: [{ translateX: reduced ? 0 : -width * (1 - progress.get()) }] }), Platform.OS === 'web' ? [reduced, width] : undefined);
   return <Modal visible={presented} transparent animationType="none" supportedOrientations={['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right']} onRequestClose={onClose} onDismiss={notifyDismissed} onShow={() => {
     showing.current = true;
     animate(requested.current);

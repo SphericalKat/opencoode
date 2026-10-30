@@ -1,5 +1,5 @@
 import React, { createContext, memo, useContext, useMemo, useState } from 'react';
-import { Linking, Platform, ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { Linking, PixelRatio, Platform, ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import MarkdownIt, { type Token } from 'markdown-it';
 import { Button, mono, sans } from './ui';
@@ -90,14 +90,14 @@ function Blocks({ nodes, muted }: { nodes: Node[]; muted?: boolean }) {
   return nodes.map((node, index) => <Block key={index} node={node} muted={muted} />);
 }
 
-const ListItem = memo(function ListItem({ node, marker, muted }: { node: Node; marker: string; muted?: boolean }) {
+const ListItem = memo(function ListItem({ node, marker, markerWidth, muted }: { node: Node; marker: string; markerWidth: number; muted?: boolean }) {
   const styles = useThemedStyles(createStyles);
   const selectable = useContext(SelectionContext);
   return <View style={styles.listItem}>
-    <Text selectable={selectable} style={[styles.text, muted && styles.muted, styles.marker]}>{marker}</Text>
+    <Text selectable={selectable} style={[styles.text, muted && styles.muted, styles.marker, { minWidth: markerWidth }]}>{marker}</Text>
     <View style={styles.listContent}><Blocks nodes={node.children} muted={muted} /></View>
   </View>;
-}, (previous, next) => previous.marker === next.marker && previous.muted === next.muted && sameNode(previous.node, next.node));
+}, (previous, next) => previous.marker === next.marker && previous.markerWidth === next.markerWidth && previous.muted === next.muted && sameNode(previous.node, next.node));
 
 const Block = memo(function Block({ node, muted }: { node: Node; muted?: boolean }) {
     const styles = useThemedStyles(createStyles);
@@ -121,7 +121,8 @@ const Block = memo(function Block({ node, muted }: { node: Node; muted?: boolean
       case 'bullet_list_open':
       case 'ordered_list_open': {
         const start = Number(token.attrGet('start') || 1);
-        return <View style={styles.list}>{children.map((item, itemIndex) => <ListItem key={itemIndex} node={item} marker={token.type === 'ordered_list_open' ? `${start + itemIndex}.` : '•'} muted={muted} />)}</View>;
+        const markerWidth = (token.type === 'ordered_list_open' ? Math.max(20, `${start + children.length - 1}.`.length * 10) : 20) * PixelRatio.getFontScale();
+        return <View style={styles.list}>{children.map((item, itemIndex) => <ListItem key={itemIndex} node={item} marker={token.type === 'ordered_list_open' ? `${start + itemIndex}.` : '•'} markerWidth={markerWidth} muted={muted} />)}</View>;
       }
       case 'hr':
         return <View style={styles.rule} />;
@@ -165,7 +166,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   quote: { borderLeftWidth: 3, borderLeftColor: colors.border, paddingLeft: 12, gap: 10, minWidth: 0 },
   list: { gap: 6, minWidth: 0 },
   listItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, minWidth: 0 },
-  marker: { minWidth: 20, textAlign: 'right', flexShrink: 0 },
+  marker: { textAlign: 'right', flexShrink: 0, fontVariant: ['tabular-nums'] },
   listContent: { flex: 1, minWidth: 0, gap: 6 },
   rule: { height: 1, backgroundColor: colors.border, marginVertical: 4 },
   group: { gap: 8, minWidth: 0 },

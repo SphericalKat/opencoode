@@ -26,6 +26,10 @@ export function projectLiveEvent(messages: SessionMessageInfo[], event: OpenCode
   return projectLiveEvents(messages, [event], sessionID);
 }
 
+export function isAssistantProgress(event: OpenCodeEvent): boolean {
+  return ['session.text.started', 'session.text.delta', 'session.reasoning.started', 'session.reasoning.delta', 'session.tool.input.started', 'session.tool.input.delta', 'session.tool.called', 'session.step.started', 'session.step.streamed', 'session.step.ended', 'session.step.failed'].includes(event.type);
+}
+
 export function projectLiveEvents(messages: SessionMessageInfo[], events: OpenCodeEvent[], sessionID: string): SessionMessageInfo[] {
   if (!events.length) return messages;
   const indices = new Map(messages.map((message, index) => [message.id, index]));
@@ -54,6 +58,7 @@ export function projectLiveEvents(messages: SessionMessageInfo[], events: OpenCo
     const current = index === undefined ? undefined : next[index];
     if (!current || current.type !== 'assistant') continue;
     const mutable = () => changed.has(messageID) ? current : store({ ...current, content: [...current.content], time: { ...current.time } });
+    if (current.retry && isAssistantProgress(event)) delete mutable().retry;
     const fragment = (kind: 'text' | 'reasoning', ordinal: number) => {
       let count = 0;
       return current.content.findIndex(part => part.type === kind && count++ === ordinal);
@@ -62,7 +67,7 @@ export function projectLiveEvents(messages: SessionMessageInfo[], events: OpenCo
     case 'session.text.started':
     case 'session.reasoning.started': {
       const kind = event.type === 'session.text.started' ? 'text' : 'reasoning';
-      if (fragment(kind, event.data.ordinal) < 0) mutable().content.push({ type: kind, text: '' });
+      if (fragment(kind, event.data.ordinal) < 0) mutable().content.push(kind === 'reasoning' ? { type: kind, text: '', time: { created: event.created } } : { type: kind, text: '' });
       break;
     }
     case 'session.text.delta':
@@ -72,9 +77,9 @@ export function projectLiveEvents(messages: SessionMessageInfo[], events: OpenCo
       const kind = event.type.startsWith('session.text.') ? 'text' : 'reasoning';
       let index = fragment(kind, event.data.ordinal);
       const assistant = mutable();
-      if (index < 0) { assistant.content.push({ type: kind, text: '' }); index = assistant.content.length - 1; }
+      if (index < 0) { assistant.content.push(kind === 'reasoning' ? { type: kind, text: '', time: { created: event.created } } : { type: kind, text: '' }); index = assistant.content.length - 1; }
       const part = assistant.content[index];
-      if (part.type === 'text' || part.type === 'reasoning') assistant.content[index] = { ...part, text: 'delta' in event.data ? part.text + event.data.delta : event.data.text };
+      if (part.type === 'text' || part.type === 'reasoning') assistant.content[index] = { ...part, text: 'delta' in event.data ? part.text + event.data.delta : event.data.text, ...(part.type === 'reasoning' && event.type === 'session.reasoning.ended' ? { time: { created: part.time?.created ?? event.created, completed: event.created } } : {}) };
       break;
     }
     case 'session.tool.input.started': {
