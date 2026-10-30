@@ -1,4 +1,9 @@
 childConcurrency: 2
 
+minimumReleaseAgeExclude:
+  - '@opencode/client@2.2.2'
+  - '@opencode/protocol@2.2.2'
+  - '@opencode/schema@2.2.2'
+
 allowBuilds:
   esbuild: true
