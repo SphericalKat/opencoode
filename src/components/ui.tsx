@@ -3,7 +3,8 @@ import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, Style
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { darkColors, type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
-import { PressFeedback, useMotionPreference } from './motion';
+import { MotionDisclosureBody, MotionDisclosureChevron, PressFeedback, useMotionPreference } from './motion';
+import { ShellIcon } from './ShellIcon';
 import { useSheetCoordinator } from '../lib/sheets';
 import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
 import { useBetaLayout } from '../lib/betaLayout';
@@ -129,12 +130,13 @@ export function JsonView({ value }: { value: unknown }) {
   return <Text selectable style={{ fontFamily: mono, fontSize: 12, lineHeight: 19, color: colors.text }}>{JSON.stringify(value, null, 2)}</Text>;
 }
 export function Disclosure({ title, children, disclosureKey }: { title: string; children: React.ReactNode; disclosureKey?: string }) {
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const openMessageActions = useContext(MessageActionsContext);
   const disclosures = useContext(MessageDisclosureContext);
   const [open, setOpen] = useState(() => disclosureKey ? disclosures?.isOpen(disclosureKey) ?? false : false);
   useLayoutEffect(() => { setOpen(disclosureKey ? disclosures?.isOpen(disclosureKey) ?? false : false); }, [disclosureKey, disclosures]);
-  return <Card style={styles.disclosure}><Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(disclosureKey && disclosures ? disclosures.toggle(disclosureKey) : !open)} onLongPress={Platform.OS === 'web' ? undefined : openMessageActions} style={({ pressed }) => [styles.disclosureHeader, pressed && styles.ghostPressed]}><Label style={{ fontWeight: '500' }}>{open ? '−' : '+'}  {title}</Label></Pressable>{open && <View style={styles.disclosureBody}>{children}</View>}</Card>;
+  return <Card style={styles.disclosure}><Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(disclosureKey && disclosures ? disclosures.toggle(disclosureKey) : !open)} onLongPress={Platform.OS === 'web' ? undefined : openMessageActions} style={({ pressed }) => [styles.disclosureHeader, pressed && styles.ghostPressed]}><Label style={{ fontWeight: '500', flex: 1 }}>{title}</Label><MotionDisclosureChevron open={open}><ShellIcon name="chevron" color={colors.muted} size={16} /></MotionDisclosureChevron></Pressable><MotionDisclosureBody open={open} style={styles.disclosureBody}>{children}</MotionDisclosureBody></Card>;
 }
 function createStyles(colors: ThemeColors) {
   const inset = Platform.OS !== 'android' || Number(Platform.Version) >= 29;
@@ -156,5 +158,5 @@ function createStyles(colors: ThemeColors) {
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' }, sheetScrim: { ...StyleSheet.absoluteFill, backgroundColor: '#00000070' },
   hiddenHeading: { position: 'absolute', width: 1, height: 1, overflow: 'hidden' },
   fitSheet: { flexShrink: 1, maxHeight: '85%', width: '100%', maxWidth: 680, alignSelf: 'center', backgroundColor: colors.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' }, fitInner: { flex: 0, flexShrink: 1 }, fitScroll: { flex: 0, flexShrink: 1 },
-  disclosure: { padding: 0, gap: 0 }, disclosureHeader: { minHeight: touchTarget, padding: 14, justifyContent: 'center', borderRadius: 8 }, disclosureBody: { padding: 14, paddingTop: 0, gap: 10 },
+  disclosure: { padding: 0, gap: 0 }, disclosureHeader: { minHeight: touchTarget, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 8 }, disclosureBody: { padding: 14, paddingTop: 0, gap: 10 },
 }); }
