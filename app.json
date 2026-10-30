@@ -3,7 +3,7 @@
     "name": "Opencoode",
     "slug": "opencoode",
     "scheme": "opencoode",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "default",
     "icon": "./assets/opencode-icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,11 +15,13 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }
-      }
+      },
+      "buildNumber": "1.1.0"
     },
     "android": {
       "package": "dev.opencoode.mobile",
-      "predictiveBackGestureEnabled": true
+      "predictiveBackGestureEnabled": true,
+      "versionCode": 10100
     },
     "plugins": [
       "expo-secure-store",
@@ -27,8 +29,22 @@
       "expo-sharing",
       "expo-font",
       "expo-system-ui",
-      ["expo-camera", { "cameraPermission": "Scan the connection QR code from OpenCode on your computer.", "microphonePermission": false, "recordAudioAndroid": false }],
-      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }]
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan the connection QR code from OpenCode on your computer.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "web": {
       "name": "Opencoode"
