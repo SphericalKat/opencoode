@@ -16,7 +16,7 @@
           "NSAllowsArbitraryLoads": true
         }
       },
-      "buildNumber": "1.4.0"
+      "buildNumber": "1.4.1"
     },
     "android": {
       "package": "dev.opencoode.mobile",
@@ -25,7 +25,7 @@
         "backgroundColor": "#131010"
       },
       "predictiveBackGestureEnabled": true,
-      "versionCode": 10400
+      "versionCode": 10401
     },
     "plugins": [
       "expo-secure-store",
