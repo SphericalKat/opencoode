@@ -33,11 +33,12 @@ export const AgentActivityBar = memo(function AgentActivityBar({ activity, conne
     lastAnnouncement.current = announcement;
     if (animate && Platform.OS !== 'web') AccessibilityInfo.announceForAccessibility(announcement || 'Agent is ready');
   }, [announcement, animate]);
-  const busy = !!label && connected && !blocked;
+  const needsAttention = blocked || connected && !stopping && activity.kind === 'error';
+  const busy = !!label && connected && !needsAttention;
   return <View style={styles.lane}>
     <View style={styles.bar}>
       <View style={styles.summary} accessibilityLiveRegion="none" aria-live="off" accessibilityLabel={label || undefined}>
-        {!!label && (blocked ? <Svg width={14} height={14} viewBox="0 0 16 16" fill="none" aria-hidden><Path d="M8 2 14 13H2L8 2ZM8 6v3m0 2v.1" stroke={colors.muted} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg> : <WorkingIndicator active={busy && animate} color={colors.muted} size={14} />)}
+        {!!label && (needsAttention ? <Svg width={14} height={14} viewBox="0 0 16 16" fill="none" aria-hidden><Path d="M8 2 14 13H2L8 2ZM8 6v3m0 2v.1" stroke={colors.muted} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg> : <WorkingIndicator active={busy && animate} color={colors.muted} size={14} />)}
         <Label muted numberOfLines={1} style={styles.label}>{label}</Label>
       </View>
       {Platform.OS === 'web' && <View aria-live="polite" style={styles.announcement}><Label>{announcement || 'Agent is ready'}</Label></View>}
