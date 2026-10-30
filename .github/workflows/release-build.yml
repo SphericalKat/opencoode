@@ -117,15 +117,17 @@ jobs:
           fi
           expected="$(keytool -exportcert -keystore "$RELEASE_KEYSTORE_PATH" -storepass:env RELEASE_STORE_PASSWORD -alias "$RELEASE_KEY_ALIAS" | sha256sum | cut -d' ' -f1)"
           mkdir -p artifacts
-          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            apk="android/app/build/outputs/apk/release/app-$abi-release.apk"
+          for apk in android/app/build/outputs/apk/release/app*-release.apk; do
             actual="$("$signer" verify --print-certs-pem "$apk" | sed -n '/^-----BEGIN CERTIFICATE-----$/,/^-----END CERTIFICATE-----$/p' | openssl x509 -outform DER | sha256sum | cut -d' ' -f1)"
             if [[ -z "$expected" || "$expected" != "$actual" ]]; then
-              printf 'The %s APK signer does not match the supplied release key\n' "$abi" >&2
+              printf 'The APK signer for %s does not match the supplied release key\n' "$apk" >&2
               printf 'Expected certificate SHA-256: %s\nActual certificate SHA-256: %s\n' "$expected" "$actual" >&2
               exit 1
             fi
-            cp "$apk" "artifacts/opencoode-$RELEASE_TAG-$abi.apk"
+            suffix="${apk##*/}"
+            suffix="${suffix#app}"
+            suffix="${suffix%-release.apk}"
+            cp "$apk" "artifacts/opencoode-$RELEASE_TAG$suffix.apk"
           done
           cp android/app/build/outputs/bundle/release/app-release.aab "artifacts/opencoode-$RELEASE_TAG.aab"
           cd artifacts
