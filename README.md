@@ -6,25 +6,27 @@ The OpenCode server runs models, tools, commands, and terminals on your computer
 
 ## Start development
 
-Use Node 22.13+, 24.3+, or 26+. Use an Expo Go version that supports SDK 58.
+Use Node 22.13+, 24.3+, or 26+ and pnpm 12.16.1. Use an Expo Go version that supports SDK 58.
+Install pnpm through its [official installer](https://pnpm.io/installation).
+The `packageManager` field pins the version for this project.
 
 1. Install dependencies.
 
    ```sh
-   npm ci
+   pnpm install --frozen-lockfile
    ```
 
 2. Start the client.
 
    ```sh
-   npm start
+   pnpm start
    ```
 
 3. Open the QR code in Expo Go.
 
-Use `npm run ios` for the iOS simulator. This command applies the committed SimSlim profile before Expo starts.
-Use `SIMULATOR_UDID=<device-id> npm run ios` to select a specific device.
-Use `npm run android` for the Android emulator, or `npm run web` for the browser preview.
+Use `pnpm ios` for the iOS simulator. This command applies the committed SimSlim profile before Expo starts.
+Use `SIMULATOR_UDID=<device-id> pnpm ios` to select a specific device.
+Use `pnpm android` for the Android emulator, or `pnpm web` for the browser preview.
 Metro uses at most two workers. Run one simulator or emulator at a time on a computer with limited memory.
 
 ## Connect a server
@@ -84,7 +86,7 @@ The [native record](docs/native-verification.md) records Expo Go results on iOS 
 The [mobile UX record](docs/mobile-ux.md) records browser measurements and remaining device limits.
 The [parity ledger](docs/parity.md) separates implemented controls from complete verification contracts and unsupported desktop capabilities.
 
-Use `npm run terminal:bundle` after an xterm dependency update.
+Use `pnpm terminal:bundle` after an xterm dependency update.
 The committed terminal bundle contains its dependencies and licenses. It requires no CDN.
 
 ## Native builds
@@ -98,11 +100,11 @@ EAS profiles support an internal Android APK, an iOS simulator build, and produc
 EAS requires your Expo account. Device distribution requires platform credentials.
 
 ```sh
-npx eas-cli build --profile preview --platform android
-npx eas-cli build --profile simulator --platform ios
+pnpm dlx eas-cli build --profile preview --platform android
+pnpm dlx eas-cli build --profile simulator --platform ios
 ```
 
-Use `npx expo run:android` or `npx expo run:ios` for local native builds.
+Use `pnpm exec expo run:android` or `pnpm exec expo run:ios` for local native builds.
 These commands require the Android SDK or Xcode and consume more resources than Expo Go.
 
 ## Limits

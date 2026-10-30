@@ -1,8 +1,8 @@
 {
   "cli": { "appVersionSource": "local" },
   "build": {
-    "preview": { "distribution": "internal", "android": { "buildType": "apk" } },
+    "preview": { "pnpm": "12.16.1", "distribution": "internal", "android": { "buildType": "apk" } },
     "simulator": { "extends": "preview", "ios": { "simulator": true } },
-    "production": { "autoIncrement": true }
+    "production": { "pnpm": "12.16.1", "autoIncrement": true }
   }
 }
