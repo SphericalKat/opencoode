@@ -347,18 +347,18 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   };
 
   return <View style={styles.screen} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
-    <View style={styles.header}>
+    <View style={[styles.header, compactHeader && styles.compactHeader]}>
       <Row style={styles.headingRow}>
         {!compact && onOpenNavigation && <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={({ pressed }) => [styles.navigationButton, pressed && styles.pressed]}><ShellIcon name="menu" color={colors.text} /></Pressable>}
         <View style={styles.headingText}><Label accessibilityRole="header" numberOfLines={1} style={[styles.title, compactHeader && styles.compactTitle]}>{compact ? 'Your sessions' : 'Sessions'}</Label></View>
-        <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={() => { void createSession(); }} style={({ pressed }) => [styles.newButton, compactHeader && styles.compactNew, (pressed || busy) && styles.pressed]}>
-          {creating ? <ActivityIndicator size="small" color={colors.primaryText} /> : <Label style={styles.newText}>{compactHeader ? '＋' : 'New session'}</Label>}
+        <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={() => { void createSession(); }} style={({ pressed }) => [styles.newButton, (pressed || busy) && styles.pressed]}>
+          {creating ? <ActivityIndicator size="small" color={colors.text} /> : <ShellIcon name="compose" color={colors.text} size={20} />}
         </Pressable>
-        <Button title="•••" accessibilityLabel="Session list actions" variant="ghost" compact onPress={() => { setSheetError(undefined); setActions('menu'); }} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Session list actions" onPress={() => { setSheetError(undefined); setActions('menu'); }} style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}><ShellIcon name="more" color={colors.muted} size={18} /></Pressable>
       </Row>
       <Row style={styles.searchRow}>
         <View style={{ flex: 1, minWidth: 0 }}><Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} clearButtonMode="while-editing" style={styles.search} /></View>
-        {search ? <Button title="Clear" accessibilityLabel="Clear session search" compact variant="ghost" onPress={() => setSearch('')} /> : <Pressable accessibilityRole="button" accessibilityLabel={`Session history: ${archived ? 'Archived' : 'Recent'}`} onPress={chooseHistory} style={styles.filter}><Label muted>{archived ? 'Archived' : 'Recent'} ⌄</Label></Pressable>}
+        {search ? <Button title="Clear" accessibilityLabel="Clear session search" compact variant="ghost" onPress={() => setSearch('')} /> : <Pressable accessibilityRole="button" accessibilityLabel={`Session history: ${archived ? 'Archived' : 'Recent'}`} onPress={chooseHistory} style={styles.filter}><Label muted style={styles.filterText}>{archived ? 'Archived' : 'Recent'} ⌄</Label></Pressable>}
       </Row>
       <ErrorNotice error={listError} onRetry={() => { void refresh(); }} />
       <ErrorNotice error={error} />
@@ -381,12 +381,14 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       ListFooterComponent={sessions.length ? loading ? <Busy /> : nextCursor ? <Button title="Load more" variant="ghost" onPress={loadMore} /> : undefined : undefined}
       renderItem={({ item }) => {
         const status = sessionStatus(item, active.has(item.id));
+        const unread = item.time.idle && (!item.time.viewed || item.time.viewed < item.time.idle);
+        const visibleStatus = status === 'Working' || status === 'Needs attention' || status === 'Stopped' ? status : undefined;
         return <View style={[styles.session, selectedSessionID === item.id && styles.selected]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title || 'Untitled session'}`} accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`} onPress={() => openConversation(item.id)} style={styles.sessionMain}>
-            <Row style={{ flexWrap: 'nowrap', gap: 7 }}>{active.has(item.id) && <View accessibilityLabel="Working" style={styles.dot} />}<Label numberOfLines={2} style={styles.sessionTitle}>{item.title || 'Untitled session'}</Label></Row>
-            <Label muted numberOfLines={1} style={styles.metadata}>{status}{item.time.idle && (!item.time.viewed || item.time.viewed < item.time.idle) ? ' · Unread' : ''} · {updatedLabel(item.time.updated)}{item.parentID ? ' · Child session' : ''}</Label>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title || 'Untitled session'}`} accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`} onPress={() => openConversation(item.id)} style={({ pressed }) => [styles.sessionMain, pressed && styles.sessionPressed]}>
+            <Label numberOfLines={1} style={styles.sessionTitle}>{item.title || 'Untitled session'}</Label>
+            <Label muted numberOfLines={1} style={styles.metadata}>{[visibleStatus, unread ? 'Unread' : undefined, updatedLabel(item.time.updated), item.parentID ? 'Child session' : undefined].filter(Boolean).join(' · ')}</Label>
           </Pressable>
-          <View style={{ paddingRight: 4 }}><Button title="•••" accessibilityLabel={`Manage ${item.title || 'session'}`} compact variant="ghost" onPress={() => { setSelected(item); setEditTitle(item.title || ''); setMoveDirectory(item.location.directory); setSheetError(undefined); }} /></View>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${item.title || 'session'}`} onPress={() => { setSelected(item); setEditTitle(item.title || ''); setMoveDirectory(item.location.directory); setSheetError(undefined); }} style={({ pressed }) => [styles.rowAction, pressed && styles.pressed]}><ShellIcon name="more" color={colors.faint} size={18} /></Pressable>
         </View>;
       }}
     />
@@ -434,27 +436,29 @@ const sessionListEvents = new Set([
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 12, paddingTop: 16, paddingBottom: 10, gap: 12 },
+  header: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 8 },
+  compactHeader: { paddingTop: 8 },
   headingRow: { flexWrap: 'nowrap', gap: 8 },
-  navigationButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center' },
+  navigationButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, marginStart: -16, marginEnd: 16, alignItems: 'center', justifyContent: 'center' },
   headingText: { flex: 1, minWidth: 0, gap: 2 },
-  title: { fontSize: 24, lineHeight: 29, fontWeight: '500', letterSpacing: -0.45 },
+  title: { fontSize: 17, lineHeight: 22, fontWeight: '600', letterSpacing: -0.2 },
   compactTitle: { fontSize: 18, lineHeight: 23, letterSpacing: -0.2 },
-  newButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
-  compactNew: { paddingHorizontal: 10 },
-  newText: { color: colors.primaryText, fontSize: 13, fontWeight: '500' },
+  newButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center' },
+  actionButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, marginStart: 16, marginEnd: -16, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.55 },
   searchRow: { flexWrap: 'nowrap', gap: 8 },
-  search: { borderRadius: 8, backgroundColor: colors.panel },
-  filter: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingHorizontal: 12, paddingBottom: 24, gap: 2, flexGrow: 1 },
-  session: { minHeight: 76, flexDirection: 'row', alignItems: 'center', borderRadius: 10 },
-  sessionMain: { flex: 1, minWidth: 0, gap: 6, paddingVertical: 12, paddingLeft: 12 },
-  sessionTitle: { flex: 1, minWidth: 0, fontWeight: '500', fontSize: 16, lineHeight: 21 },
-  metadata: { fontSize: 12, lineHeight: 17 },
+  search: { borderRadius: 8, backgroundColor: colors.panel, minHeight: 40, height: 40, paddingHorizontal: 15, paddingVertical: 9, fontSize: 14, lineHeight: 20, includeFontPadding: false, textAlignVertical: 'center' },
+  filter: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center' },
+  filterText: { fontSize: 13, lineHeight: 20 },
+  list: { paddingHorizontal: 16, paddingBottom: 24, gap: 2, flexGrow: 1 },
+  session: { minHeight: 64, flexDirection: 'row', alignItems: 'center', borderRadius: 10 },
+  sessionMain: { flex: 1, minWidth: 0, gap: 3, paddingVertical: 10, paddingLeft: 16 },
+  sessionPressed: { opacity: 0.65 },
+  sessionTitle: { minWidth: 0, fontWeight: '500', fontSize: 15, lineHeight: 20 },
+  metadata: { fontSize: 11, lineHeight: 16 },
+  rowAction: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
   menuRow: { minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   selected: { backgroundColor: colors.selected },
-  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
 });
 
 function updatedLabel(time: number): string {

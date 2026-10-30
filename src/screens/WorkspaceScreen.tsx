@@ -382,14 +382,14 @@ function Worktrees({ client, directory, onDirectoryChange }: Pick<Props, 'client
 
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
   screen: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 12, gap: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, gap: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 24, lineHeight: 30, fontWeight: '500', letterSpacing: -0.5 },
   tabs: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 12, padding: 4, gap: 2, backgroundColor: colors.raised, borderRadius: 14 },
   workspaceTab: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 4, paddingVertical: 9, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
   selectedTab: { backgroundColor: colors.panel },
-  controls: { paddingHorizontal: 18, paddingBottom: 10, gap: 8 },
-  list: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 24 },
-  content: { padding: 18, gap: 16, paddingBottom: 48 },
+  controls: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
+  list: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 24 },
+  content: { padding: 16, gap: 16, paddingBottom: 32 },
   fileRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border },
   fileIcon: { fontFamily: mono, fontSize: 23, color: colors.muted },
   editor: { flex: 1, minHeight: 0, padding: 16, gap: 12 },
