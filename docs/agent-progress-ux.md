@@ -12,10 +12,10 @@ I also observed live conversations through the mobile app preview at 393 × 852.
 | Tools | Separate preparation, execution, and completion | Raw tool name and static pending symbol | I added action labels, a progress indicator, and a command or path preview. |
 | Retry | Attempt, countdown, and provider error | Persistent retry text without a countdown | I added the countdown and error details. I cleared stale retries when model output resumes. |
 | Requests | Requests replace ordinary work feedback | Generic work feedback remains beside requests | I added an answer or approval state with a Review action. |
-| Placement | Stable activity lane and composer activity chips | Activity in the transcript footer | I kept activity inline and in the header. I placed actionable waits above the composer. |
+| Placement | Stable activity lane and composer activity chips | Activity in the transcript footer | I kept ordinary activity inline at the latest response or in the header while the reader views older messages. I placed waits, retries, and errors above the composer. |
 | Reading | Activity does not disturb the current view | Expanding details can trigger automatic scroll | I paused automatic follow on expansion and retained disclosure state. |
 
-I retained one Stop control in the composer.
+I kept Stop beside Send while the user typed during active execution.
 I kept the stopping state until the server confirms that execution ends.
 I used a UI-thread rotation for the progress indicator and retained reduced-motion support.
 I kept transcript growth and individual text fragments free of entrance animations.
@@ -54,25 +54,25 @@ I requested a separate visual review of the native screenshots.
 
 | Before | After | Why |
 | --- | --- | --- |
-| The empty composer retained the height of a long prompt. | I reset the empty input to 44 points and bounded draft growth. | I recovered space for the conversation. |
-| Nearby activity rows repeated the same busy status. | I kept activity inline and moved progress into the header while the reader views older messages. | I reduced duplicate visual noise. |
+| The empty composer retained the height of a long prompt. | I shrank the empty composer, bounded draft growth, and respected font scale. | I recovered space for the conversation without limiting larger text. |
+| Nearby activity rows repeated the same busy status. | I kept ordinary activity inline at the latest response and moved progress into the header while the reader views older messages. | I reduced duplicate visual noise. |
 | The idle status strip reserved blank space. | I retained the strip only for connection issues, retries, stopping, errors, and requests. | I removed an empty band above the composer. |
-| A centered text button covered the response. | I replaced it with a small circular arrow at the right edge. | I reduced the area that the control covers. |
-| Thought and tool rows had large gaps. | I tightened their spacing and removed extra vertical padding. | I made the work history easier to scan. |
+| A floating return button covered the response. | I moved the return-to-latest arrow inside the composer toolbar. | I kept the control clear of the response. |
+| Thought and tool rows had large gaps. | I tightened activity rows and removed extra vertical padding. | I made the work history easier to scan. |
 | List cells remounted when recycled. | I retained the row and scoped part state to each message. | I reduced unnecessary work during scrolling. |
 | New conversations offered earlier messages. | I hid the action when a response contains fewer than one page of messages. | I removed an action with no older content. |
+| Numbered lists had uneven text columns. | I aligned list text with a numbered marker column. | I aligned the response text. |
+| A follow-up draft hid the Stop control. | I kept Stop beside Send while the user typed during active execution. | I preserved the draft when the user interrupts the agent. |
 
 I scrolled to older content during the command and the thinking phase.
 I observed the progress label in the header and retained the same reading position through completion.
-I returned to the latest response with the arrow.
+I returned to the latest response with the arrow inside the composer toolbar.
 I also inspected native long-press selection and the layout with the on-screen keyboard.
 
-![Native reading during thinking](screenshots/native-reading-thinking.png)
+![Final native chat with the refined composer and toolbar](screenshots/native-refined-chat.png)
 
-![Native reading during a command](screenshots/native-reading-tool.png)
+![Final native layout with the on-screen keyboard](screenshots/native-keyboard-refined.png)
 
-![Native keyboard layout](screenshots/native-keyboard-refined.png)
-
-I ran no automated tests, typechecks, or native builds.
 I reviewed retry failures, permission approvals, and native accessibility behavior from source.
+I did not run tests, typechecks, or native builds.
 I did not measure animation performance on a physical device.
