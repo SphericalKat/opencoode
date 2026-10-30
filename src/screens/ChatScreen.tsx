@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, BackHandler, FlatList, Image, Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, AppState, BackHandler, FlatList, Image, Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { KeyboardAvoidingView, KeyboardEvents } from 'react-native-keyboard-controller';
 import Svg, { Path } from 'react-native-svg';
@@ -90,6 +90,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const [streamStatus, setStreamStatus] = useState('Connecting');
   const [panel, setPanel] = useState<Panel>(null);
   const [selectedMessageID, setSelectedMessageID] = useState<string | null>(null);
+  const [textSelectionMessage, setTextSelectionMessage] = useState<SessionMessageInfo | null>(null);
+  const [screenReader, setScreenReader] = useState(false);
   const [backgroundShellID, setBackgroundShellID] = useState<string>();
   const [backgroundDirectory, setBackgroundDirectory] = useState<string>();
   const [sideQuestion, setSideQuestion] = useState<string>();
@@ -102,15 +104,22 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const [panelLoading, setPanelLoading] = useState(false);
   const [foreground, setForeground] = useState(AppState.currentState !== 'background');
   const [followingLatest, setFollowingLatest] = useState(true);
+  const [awayFromLatest, setAwayFromLatest] = useState(false);
   const alive = useRef(true);
   const submitting = useRef(false);
   const list = useRef<FlashListRef<SessionMessageInfo>>(null);
   const nearEnd = useRef(true);
+  const scrollMetrics = useRef({ content: 0, viewport: 0, offset: 0 });
   const followingLatestRef = useRef(true);
   const userScrolling = useRef(false);
   const wheelDirection = useRef(0);
   const webScrollCleanup = useRef<() => void>(() => {});
   const followKeyboard = useRef(false);
+  const followFrame = useRef<number | undefined>(undefined);
+  const transcriptVisible = useRef(visible);
+  transcriptVisible.current = visible;
+  const screenReaderEnabled = useRef(screenReader);
+  screenReaderEnabled.current = screenReader;
   const refreshRef = useRef<() => void>(() => {});
   const flushStream = useRef<() => void>(() => {});
   const requestVersion = useRef(0);
@@ -132,12 +141,28 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; requestVersion.current++; }; }, []);
   const showError = useCallback((reason: unknown) => { if (alive.current) setError(errorMessage(reason)); }, []);
-  const selectMessage = useCallback((id: string) => { Keyboard.dismiss(); setSelectedMessageID(id); }, []);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    let current = true;
+    void AccessibilityInfo.isScreenReaderEnabled().then(enabled => { if (current) setScreenReader(enabled); }).catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener('screenReaderChanged', setScreenReader);
+    return () => { current = false; subscription.remove(); };
+  }, []);
   useEffect(() => {
     if (Platform.OS !== 'android' || !visible || !selectedMessageID) return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => { setSelectedMessageID(null); return true; });
     return () => subscription.remove();
   }, [visible, selectedMessageID]);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !visible || !selectedMessageID || panel) return;
+    const closeSelection = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      setSelectedMessageID(null);
+    };
+    document.addEventListener('keydown', closeSelection);
+    return () => document.removeEventListener('keydown', closeSelection);
+  }, [visible, selectedMessageID, panel]);
   useEffect(() => {
     if (selectedMessageID && !messages.some(message => message.id === selectedMessageID)) {
       setSelectedMessageID(null);
@@ -146,18 +171,60 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   }, [messages, selectedMessageID]);
   const setFollowing = useCallback((follow: boolean) => {
     followingLatestRef.current = follow;
+    if (!follow && followFrame.current !== undefined) { cancelAnimationFrame(followFrame.current); followFrame.current = undefined; }
     setFollowingLatest(current => current === follow ? current : follow);
   }, []);
+  const selectMessage = useCallback((id: string) => {
+    followKeyboard.current = false;
+    setFollowing(false);
+    Keyboard.dismiss();
+    setSelectedMessageID(id);
+    if (screenReaderEnabled.current) setPanel('message');
+  }, [setFollowing]);
+  const followContent = useCallback(() => {
+    if (!followingLatestRef.current || userScrolling.current || !transcriptVisible.current || followFrame.current !== undefined) return;
+    followFrame.current = requestAnimationFrame(() => {
+      followFrame.current = undefined;
+      if (!alive.current || !followingLatestRef.current || userScrolling.current || !transcriptVisible.current) return;
+      list.current?.getNativeScrollRef()?.scrollToEnd({ animated: false });
+    });
+  }, []);
+  useEffect(() => () => { if (followFrame.current !== undefined) cancelAnimationFrame(followFrame.current); }, []);
+  useEffect(() => {
+    if (!visible && followFrame.current !== undefined) { cancelAnimationFrame(followFrame.current); followFrame.current = undefined; }
+    if (visible) followContent();
+  }, [visible, followContent]);
   const jumpToLatest = useCallback(() => {
     setFollowing(true);
     nearEnd.current = true;
+    setAwayFromLatest(false);
+    setSelectedMessageID(null);
     list.current?.scrollToEnd({ animated: false });
   }, [setFollowing]);
+  const measureEndDistance = useCallback(() => {
+    const { content, viewport, offset } = scrollMetrics.current;
+    const nextNearEnd = content - offset - viewport <= 48;
+    if (nextNearEnd !== nearEnd.current) {
+      nearEnd.current = nextNearEnd;
+      setAwayFromLatest(!nextNearEnd);
+    }
+  }, []);
+  const contentSizeChanged = useCallback((_width: number, height: number) => {
+    scrollMetrics.current.content = height;
+    measureEndDistance();
+    followContent();
+  }, [measureEndDistance, followContent]);
+  const transcriptLayoutChanged = useCallback((event: LayoutChangeEvent) => {
+    scrollMetrics.current.viewport = event.nativeEvent.layout.height;
+    measureEndDistance();
+    followContent();
+  }, [measureEndDistance, followContent]);
   const updateScrollPosition = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-    nearEnd.current = contentSize.height - contentOffset.y - layoutMeasurement.height <= 48;
+    scrollMetrics.current = { content: contentSize.height, viewport: layoutMeasurement.height, offset: contentOffset.y };
+    measureEndDistance();
     if (Platform.OS === 'web' && userScrolling.current && nearEnd.current && wheelDirection.current >= 0) setFollowing(true);
-  }, [setFollowing]);
+  }, [setFollowing, measureEndDistance]);
   const beginUserScroll = useCallback(() => {
     userScrolling.current = true;
     followKeyboard.current = false;
@@ -169,11 +236,13 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     setFollowing(nearEnd.current);
   }, [updateScrollPosition, setFollowing]);
   const listLoaded = useCallback(() => {
+    if (followingLatestRef.current && !userScrolling.current) list.current?.scrollToEnd({ animated: false });
     if (Platform.OS !== 'web') return;
     const node = list.current?.getScrollableNode();
     if (!(node instanceof HTMLElement)) return;
     webScrollCleanup.current();
     const wheel = (event: WheelEvent) => {
+      if (!event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
       userScrolling.current = true;
       wheelDirection.current = event.deltaY;
       followKeyboard.current = false;
@@ -202,7 +271,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     webScrollCleanup.current = () => { node.removeEventListener('wheel', wheel); node.removeEventListener('touchmove', touch); node.removeEventListener('scrollend', end); node.removeEventListener('contextmenu', context); node.removeEventListener('keydown', keyboard); };
   }, [beginUserScroll, setFollowing, selectMessage]);
   useEffect(() => () => webScrollCleanup.current(), []);
-  const maintainPosition = useMemo(() => ({ startRenderingFromBottom: true, autoscrollToBottomThreshold: followingLatest ? 0.2 : undefined, animateAutoScrollToBottom: false }), [followingLatest]);
+  const maintainPosition = useMemo(() => ({ disabled: followingLatest }), [followingLatest]);
   const applyMessageSnapshot = useCallback((snapshot: SessionMessageInfo[], reset = false) => {
     setMessages(current => {
       for (const message of snapshot) {
@@ -221,7 +290,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       const follow = followKeyboard.current;
       followKeyboard.current = false;
       if (!follow) return;
-      frame = requestAnimationFrame(() => { if (alive.current) jumpToLatest(); });
+      frame = requestAnimationFrame(() => { if (alive.current && followingLatestRef.current && !userScrolling.current && transcriptVisible.current) jumpToLatest(); });
     });
     const willHide = KeyboardEvents.addListener('keyboardWillHide', () => { followKeyboard.current = false; if (frame !== undefined) cancelAnimationFrame(frame); });
     return () => { willShow.remove(); didShow.remove(); willHide.remove(); followKeyboard.current = false; if (frame !== undefined) cancelAnimationFrame(frame); };
@@ -683,7 +752,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   });
   const messageDirectory = session?.location.directory || '';
   const transcriptMessages = useMemo(() => messages.filter(message => message.type !== 'idle' || !!message.error), [messages]);
-  const renderMessage = useCallback(({ item }: { item: SessionMessageInfo }) => <MessageRow key={item.id} message={item} onSelect={selectMessage} selected={item.id === selectedMessageID} selectionActive={!!selectedMessageID} client={client} directory={messageDirectory} />, [selectMessage, selectedMessageID, client, messageDirectory]);
+  const renderMessage = useCallback(({ item }: { item: SessionMessageInfo }) => <MessageRow key={item.id} message={item} onSelect={selectMessage} selected={item.id === selectedMessageID} selectionActive={!!selectedMessageID} screenReader={screenReader} client={client} directory={messageDirectory} />, [selectMessage, selectedMessageID, screenReader, client, messageDirectory]);
   const canCopySelected = actionMessage?.type === 'assistant' ? actionMessage.content.some(part => part.type === 'text' && !!part.text) : !!actionMessage;
   const copySelected = () => { if (actionMessage) { const messageID = actionMessage.id; const text = messageText(actionMessage); if (text) void Clipboard.setStringAsync(text).then(() => { if (alive.current) setSelectedMessageID(current => current === messageID ? null : current); }).catch(showError); } };
 
@@ -699,7 +768,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     {streamStatus !== 'Live' && !fetchError && <Label muted style={styles.connectionStatus}>{streamStatus}…</Label>}
     {session.revert && <View style={styles.revert}><Label>A revert is staged</Label><Label muted>Later messages are excluded from the context.</Label><Row><Button title="Restore" compact onPress={() => { void run(() => client.session.revert.clear({ sessionID })); }} /><Button title="Commit revert" compact variant="danger" disabled={pending} onPress={() => { void run(async () => { if (await confirmAction('Commit this revert?', 'This permanently removes messages after the revert point.')) { await client.session.revert.commit({ sessionID }); historyEpoch.current++; liveMessages.current.clear(); } }); }} /></Row></View>}
     <View style={styles.transcriptFrame}><FlashList ref={list} data={transcriptMessages} keyExtractor={messageKey} getItemType={messageType} renderItem={renderMessage} ItemSeparatorComponent={MessageSeparator} maintainVisibleContentPosition={maintainPosition}
-      style={styles.transcript} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" onLoad={listLoaded}
+      style={styles.transcript} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} onLoad={listLoaded} onContentSizeChange={contentSizeChanged} onLayout={transcriptLayoutChanged}
       onScroll={updateScrollPosition} scrollEventThrottle={16} onScrollBeginDrag={beginUserScroll} onScrollEndDrag={finishUserScroll} onMomentumScrollBegin={beginUserScroll} onMomentumScrollEnd={finishUserScroll}
       ListHeaderComponent={cursor ? <Button title="Load earlier messages" variant="ghost" compact busy={loadingOlder} onPress={() => { setFollowing(false); void loadOlder(); }} /> : undefined}
       ListEmptyComponent={<Empty title="Start something good" detail="Ask a question, describe a change, or attach a file from your project." />}
@@ -707,7 +776,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         {inbox.length > 0 && <Card><Label muted style={styles.eyebrow}>PENDING INPUTS · {inbox.length}</Label>{inbox.map(item => <View key={item.id} style={{ gap: 8 }}>{item.type === 'synthetic' ? <Disclosure title={item.payload.description || 'Server context'}><MessageText text={item.payload.text} /></Disclosure> : <Label numberOfLines={3}>{item.type === 'user' ? item.payload.text : item.type === 'compaction' ? 'Compact context' : 'Move session'}</Label>}<Row><Label muted>{item.delivery === 'steer' ? 'Steer current work' : 'After current work'}</Label><Button title={item.delivery === 'steer' ? 'Queue' : 'Steer'} compact onPress={() => { void run(() => client.session.inbox.update({ sessionID, inboxID: item.id, delivery: item.delivery === 'steer' ? 'queue' : 'steer' })); }} />{(item.type === 'user' || item.type === 'synthetic') && <Button title="Edit" compact disabled={!draftLoaded} onPress={() => { void editInbox(item); }} />}<Button title="Cancel" compact variant="ghost" onPress={() => { void run(() => client.session.inbox.cancel({ sessionID, inboxID: item.id })); }} /></Row></View>)}</Card>}
         {active && <Row><WorkingIndicator active={active && visible && foreground} color={colors.success} /><Label muted>The agent is at work</Label><Button title="Stop" variant="danger" compact disabled={pending} onPress={() => { void run(() => client.session.interrupt({ sessionID })); }} /></Row>}
       </View>}
-    />{!followingLatest && <View pointerEvents="box-none" style={styles.latestButton}><Button title="Jump to latest" compact onPress={jumpToLatest} /></View>}</View>
+    />{!followingLatest && awayFromLatest && <View pointerEvents="box-none" style={styles.latestButton}><Button title="Jump to latest" compact onPress={jumpToLatest} /></View>}</View>
     <View style={styles.composerDock}><View style={styles.composer}>
       {!draftLoaded ? <Busy /> : <>
       {(attachments.length > 0 || selectedSkills.length > 0 || restoredSkillIDs.length > 0 || selectedAgentIDs.length > 0) && <ScrollView horizontal contentContainerStyle={{ gap: 6 }}>
@@ -716,7 +785,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         {restoredSkillIDs.map(id => <Button key={id} title={`${id} ×`} compact onPress={() => setRestoredSkillIDs(current => current.filter(value => value !== id))} />)}
         {selectedAgentIDs.map(id => <Button key={id} title={`@${agents.find(agent => agent.id === id)?.name || id} ×`} compact onPress={() => setSelectedAgentIDs(current => current.filter(value => value !== id))} />)}
       </ScrollView>}
-      <Field accessibilityLabel="Message" placeholder="Ask OpenCode…" multiline value={draft} onChangeText={setDraft} style={styles.composerInput} />
+      <Field accessibilityLabel="Message" placeholder="Ask OpenCode…" multiline value={draft} onChangeText={setDraft} onFocus={() => setSelectedMessageID(null)} style={styles.composerInput} />
       <View style={styles.composerToolbar}><ChatIconButton name="plus" label="Message tools" onPress={() => setPanel('tools')} /><Pressable accessibilityRole="button" accessibilityLabel={`Choose model, ${currentModel?.name || session.model?.id || 'Server default'}`} onPress={() => setPanel('models')} style={({ pressed }) => [styles.modelTrigger, pressed && { opacity: 0.6 }]}><Label numberOfLines={1} style={styles.modelTriggerText}>{currentModel?.name || session.model?.id || 'Server default'}</Label><ChatGlyph name="down" size={14} color={colors.muted} /></Pressable>{active && <Button title={delivery === 'steer' ? 'Steer' : 'Queue'} accessibilityLabel="Message delivery" compact variant="ghost" onPress={() => setDelivery(value => value === 'steer' ? 'queue' : 'steer')} />}<ChatIconButton name={active && !hasPrompt ? 'stop' : 'up'} label={active && !hasPrompt ? 'Stop generation' : active && delivery === 'queue' ? 'Queue message' : 'Send message'} raised busy={pending} disabled={!active && !hasPrompt} onPress={() => { if (active && !hasPrompt) void run(() => client.session.interrupt({ sessionID })); else void send(); }} /></View>
       </>}
     </View></View>
@@ -743,7 +812,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     <Sheet visible={panel === 'agents'} title="Choose agent" onClose={() => setPanel(null)}><ErrorNotice error={error} />{agents.filter(agent => !agent.hidden && agent.mode !== 'subagent').map(agent => <Card key={agent.id}><Label style={{ fontWeight: '600' }}>{agent.name}</Label>{agent.description && <Label muted>{agent.description}</Label>}<Button title={session.agent === agent.id ? 'Selected' : 'Use agent'} selected={session.agent === agent.id} disabled={pending} onPress={() => { void run(() => client.session.switchAgent({ sessionID, agent: agent.id }), true); }} /></Card>)}</Sheet>
     <Sheet visible={panel === 'tools'} title="Message tools" onClose={() => setPanel(null)} onDismiss={toolsDismissed}><Button title="Attach from device" disabled={!draftLoaded} onPress={queueDevicePicker} /><Button title="Files & agents" disabled={!draftLoaded} onPress={() => setPanel('mentions')} /><Button title="MCP resource references" disabled={!draftLoaded} onPress={() => setPanel('resources')} /><Button title="Commands & skills" disabled={!draftLoaded} onPress={() => setPanel('commands')} /><Button title="Ask a side question · /btw" onPress={() => { setSideQuestion(undefined); setPanel('btw'); }} /><Button title={`Agent: ${agents.find(agent => agent.id === session.agent)?.name || session.agent || 'Choose agent'}`} onPress={() => setPanel('agents')} /><Label muted>Message delivery</Label><Row><Button title="Steer current work" selected={delivery === 'steer'} onPress={() => setDelivery('steer')} /><Button title="Queue after current work" selected={delivery === 'queue'} onPress={() => setDelivery('queue')} /></Row><Label muted>Start a message with ! to run a shell command on the server.</Label></Sheet>
     <Sheet visible={panel === 'message'} title="Message" onClose={() => setPanel(null)}><ErrorNotice error={error} />{actionMessage && <>
-      <Button title="Select text" onPress={() => setPanel('selectText')} />
+      <Button title="Select text" onPress={() => { setTextSelectionMessage(actionMessage); setPanel('selectText'); }} />
       {'text' in actionMessage && <Button title="Copy message" onPress={() => { void Clipboard.setStringAsync(actionMessage.text).then(() => setPanel(null)).catch(showError); }} />}
       {actionMessage.type === 'assistant' && <Button title="Copy response" onPress={() => { void Clipboard.setStringAsync(actionMessage.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')).then(() => setPanel(null)).catch(showError); }} />}
       {actionMessage.type === 'user' && <Button title="Edit & resend" disabled={!draftLoaded} onPress={() => { void editMessage(actionMessage); }} />}
@@ -757,7 +826,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
       <Button title="Fork before this message" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }, true); }} />
       {actionMessage.type === 'user' && <Button title="Undo from this message" disabled={pending || active} onPress={() => { void run(async () => { if (await confirmAction('Undo from this message?', 'The server will stage a revert of later messages and file changes. You can restore the staged changes.')) await client.session.revert.stage({ sessionID, messageID: actionMessage.id, files: true }); }, true); }} />}
     </>}</Sheet>
-    <Sheet visible={panel === 'selectText'} title="Select text" onClose={() => setPanel(null)}>{actionMessage && <MessageRow message={actionMessage} client={client} directory={session.location.directory} />}</Sheet>
+    <Sheet visible={panel === 'selectText'} title="Select text" onClose={() => { setPanel(null); setTextSelectionMessage(null); }}>{textSelectionMessage && <MessageRow message={textSelectionMessage} client={client} directory={session.location.directory} />}</Sheet>
     <Sheet visible={panel === 'commands'} title="Commands & skills" onClose={() => setPanel(null)}>
       <Label muted>Commands run on the server. Skills join your next message.</Label>
       <Card><Label style={{ fontFamily: mono }}>/btw</Label><Label muted>Ask about this session without a change to its history.</Label><Button title="Use side question" compact disabled={!draftLoaded} onPress={() => { setDraft('/btw '); setPanel(null); }} /></Card>
@@ -797,13 +866,24 @@ function messagePreview(message: SessionMessageInfo): string {
   return messageText(message).slice(0, 240);
 }
 
-type MessageRowProps = { message: SessionMessageInfo; onSelect?: (id: string) => void; selected?: boolean; selectionActive?: boolean; client: Client; directory: string };
-const MessageRow = memo(function MessageRow({ message, onSelect, selected, selectionActive, client, directory }: MessageRowProps) {
+type MessageRowProps = { message: SessionMessageInfo; onSelect?: (id: string) => void; selected?: boolean; selectionActive?: boolean; screenReader?: boolean; client: Client; directory: string };
+const MessageRow = memo(function MessageRow({ message, onSelect, selected, selectionActive, screenReader, client, directory }: MessageRowProps) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const separateContent = screenReader || Platform.OS === 'web';
   if (message.type === 'idle' && !message.error) return null;
   if (!onSelect) return <MessageContent message={message} client={client} directory={directory} selectable />;
-  return <Pressable nativeID={`chat-message-${message.id}`} accessibilityRole="button" accessibilityLabel={messagePreview(message)} accessibilityHint="Long press to select this message. Message actions appear in the header." accessibilityState={{ selected: !!selected }} accessibilityActions={[{ name: 'activate', label: 'Select message' }, { name: 'longpress', label: 'Select message' }]} onAccessibilityAction={() => onSelect(message.id)} focusable onLongPress={() => onSelect(message.id)} onPress={selectionActive ? () => onSelect(message.id) : undefined} style={[styles.selectableMessage, selected && { backgroundColor: colors.selected }]}><MessageContent message={message} client={client} directory={directory} selectable={false} /></Pressable>;
+  return <Pressable nativeID={`chat-message-${message.id}`} accessible={!separateContent}
+    accessibilityRole={separateContent ? undefined : 'button'} accessibilityLabel={separateContent ? undefined : messagePreview(message)}
+    accessibilityHint={separateContent ? undefined : 'Long press to select this message. Message actions appear in the header.'}
+    accessibilityState={separateContent ? undefined : { selected: !!selected }}
+    accessibilityActions={separateContent ? undefined : [{ name: 'activate', label: 'Select message' }, { name: 'longpress', label: 'Select message' }]}
+    onAccessibilityAction={separateContent ? undefined : () => onSelect(message.id)} focusable={!screenReader}
+    onLongPress={() => onSelect(message.id)} onPress={selectionActive ? () => onSelect(message.id) : undefined}
+    style={[styles.selectableMessage, selected && { backgroundColor: colors.selected }]}>
+    <MessageContent message={message} client={client} directory={directory} selectable={false} />
+    {screenReader && <Button title="Message actions" compact variant="ghost" accessibilityLabel={`Message actions: ${messagePreview(message)}`} onPress={() => onSelect(message.id)} />}
+  </Pressable>;
 });
 
 const MessageContent = memo(function MessageContent({ message, client, directory, selectable }: { message: SessionMessageInfo; client: Client; directory: string; selectable: boolean }) {

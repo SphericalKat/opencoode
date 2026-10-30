@@ -55,8 +55,9 @@ const Inline = memo(function Inline({ nodes }: { nodes: Node[] }) {
   const styles = useThemedStyles(createStyles);
   const selectable = useContext(SelectionContext);
   return nodes.map(({ token, children }, index) => {
-    const content = children.length ? <Inline nodes={children} /> : token.content;
+    if (token.type === 'text') return token.content;
     if (token.type === 'softbreak' || token.type === 'hardbreak') return '\n';
+    const content = children.length ? <Inline nodes={children} /> : token.content;
     if (token.type === 'link_open' || token.type === 'image') {
       const uri = safeUrl(token.attrGet(token.type === 'image' ? 'src' : 'href'));
       const label = token.type === 'image' ? <>Image: {content || 'Open image'}</> : content;
