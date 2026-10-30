@@ -11,6 +11,10 @@ import { TerminalPanel } from '../components/TerminalPanel';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { useUnsavedChanges } from '../lib/unsaved';
 import { useNativePresentation } from '../lib/sheets';
+import { ScreenHeader } from '../components/ScreenHeader';
+import { pageInset } from '../lib/layout';
+
+export type WorkspaceSection = 'Files' | 'Changes' | 'Worktrees' | 'Terminal';
 
 type Props = {
   client: Client;
@@ -20,25 +24,31 @@ type Props = {
   onAttachFile?: (path: string, contextText?: string) => void | Promise<boolean | void>;
   visible?: boolean;
   sessionID?: string;
+  onBack?: () => void;
+  backLabel?: string;
+  onOpenNavigation?: () => void;
+  section?: WorkspaceSection;
+  hideChrome?: boolean;
 };
 
 export function WorkspaceScreen(props: Props) {
   return <Workspace key={`${props.connection.id}:${props.directory}`} {...props} />;
 }
 
-function Workspace({ client, connection, directory, onDirectoryChange, onAttachFile, visible = true, sessionID }: Props) {
+function Workspace({ client, connection, directory, onDirectoryChange, onAttachFile, visible = true, sessionID, onBack, backLabel, onOpenNavigation, section, hideChrome = false }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const [tab, setTab] = useState<'Files' | 'Changes' | 'Worktrees' | 'Terminal'>('Files');
+  const [tab, setTab] = useState<WorkspaceSection>('Files');
+  const activeTab = section ?? tab;
   return <View style={styles.screen}>
-    <View style={styles.header}><Label accessibilityRole="header" style={styles.title}>Workspace</Label></View>
-    <View accessibilityRole="tablist" accessibilityLabel="Workspace sections" style={styles.tabs}>
-      {(['Files', 'Changes', 'Worktrees', 'Terminal'] as const).map(item => <Pressable key={item} accessibilityRole="tab" accessibilityLabel={item} accessibilityState={{ selected: tab === item }} aria-selected={tab === item} style={({ pressed }) => [styles.workspaceTab, tab === item && styles.selectedTab, pressed && { opacity: 0.65 }]} onPress={() => setTab(item)}><Label style={{ textAlign: 'center', fontSize: 13, color: tab === item ? colors.text : colors.muted }}>{item}</Label></Pressable>)}
-    </View>
-    <View style={[styles.screen, tab !== 'Files' && { display: 'none' }]}><Files client={client} directory={directory} onAttachFile={onAttachFile} /></View>
-    {tab === 'Changes' && <Changes client={client} directory={directory} onAttachFile={onAttachFile} />}
-    {tab === 'Worktrees' && <Worktrees client={client} directory={directory} onDirectoryChange={onDirectoryChange} />}
-    {visible && tab === 'Terminal' && <TerminalPanel client={client} connection={connection} directory={directory} sessionID={sessionID} />}
+    {!hideChrome && (onBack ? <ScreenHeader title="Workspace" backLabel={backLabel} onBack={onBack} onOpenNavigation={onOpenNavigation} /> : <View style={styles.header}><Label accessibilityRole="header" style={styles.title}>Workspace</Label></View>)}
+    {!hideChrome && <View accessibilityRole="tablist" accessibilityLabel="Workspace sections" style={[styles.tabs, onBack && { marginTop: 12 }]}>
+      {(['Files', 'Changes', 'Worktrees', 'Terminal'] as const).map(item => <Pressable key={item} accessibilityRole="tab" accessibilityLabel={item} accessibilityState={{ selected: activeTab === item }} aria-selected={activeTab === item} style={({ pressed }) => [styles.workspaceTab, activeTab === item && styles.selectedTab, pressed && { opacity: 0.65 }]} onPress={() => setTab(item)}><Label style={{ textAlign: 'center', fontSize: 13, color: activeTab === item ? colors.text : colors.muted }}>{item}</Label></Pressable>)}
+    </View>}
+    <View style={[styles.screen, activeTab !== 'Files' && { display: 'none' }]}><Files client={client} directory={directory} onAttachFile={onAttachFile} /></View>
+    {activeTab === 'Changes' && <Changes client={client} directory={directory} onAttachFile={onAttachFile} />}
+    {activeTab === 'Worktrees' && <Worktrees client={client} directory={directory} onDirectoryChange={onDirectoryChange} />}
+    {visible && activeTab === 'Terminal' && <TerminalPanel client={client} connection={connection} directory={directory} sessionID={sessionID} />}
   </View>;
 }
 
@@ -378,14 +388,14 @@ function Worktrees({ client, directory, onDirectoryChange }: Pick<Props, 'client
 
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
   screen: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 12, gap: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingHorizontal: pageInset, paddingTop: 12, paddingBottom: 12, gap: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 24, lineHeight: 30, fontWeight: '500', letterSpacing: -0.5 },
-  tabs: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 12, padding: 4, gap: 2, backgroundColor: colors.raised, borderRadius: 14 },
+  tabs: { flexDirection: 'row', marginHorizontal: pageInset, marginBottom: 12, padding: 4, gap: 2, backgroundColor: colors.raised, borderRadius: 14 },
   workspaceTab: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 4, paddingVertical: 9, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
   selectedTab: { backgroundColor: colors.panel },
-  controls: { paddingHorizontal: 18, paddingBottom: 10, gap: 8 },
-  list: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 24 },
-  content: { padding: 18, gap: 16, paddingBottom: 48 },
+  controls: { paddingHorizontal: pageInset, paddingBottom: 10, gap: 8 },
+  list: { flexGrow: 1, paddingHorizontal: pageInset, paddingBottom: 24 },
+  content: { padding: 16, paddingHorizontal: pageInset, gap: 16, paddingBottom: 32 },
   fileRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border },
   fileIcon: { fontFamily: mono, fontSize: 23, color: colors.muted },
   editor: { flex: 1, minHeight: 0, padding: 16, gap: 12 },

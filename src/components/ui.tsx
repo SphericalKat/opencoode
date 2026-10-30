@@ -6,6 +6,7 @@ import { darkColors, type ThemeColors, useTheme, useThemedStyles } from '../lib/
 import { PressFeedback, useMotionPreference } from './motion';
 import { useSheetCoordinator } from '../lib/sheets';
 import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
+import { useBetaLayout } from '../lib/betaLayout';
 
 export const colors = darkColors;
 export const sans = 'Inter';
@@ -56,7 +57,9 @@ export function ErrorNotice({ error, onRetry }: { error: string | null | undefin
   return <View accessibilityRole="alert" style={styles.error}><Label style={{ color: colors.danger, flex: 1 }}>{error}</Label>{onRetry && <Button title="Retry" compact onPress={onRetry} />}</View>;
 }
 export function Busy() { const { colors } = useTheme(); return <ActivityIndicator style={{ padding: 30 }} color={colors.muted} />; }
-export function Sheet({ visible, title, children, onClose, onDismiss, scroll = true, allowDuringRecovery = false, fitContent = false }: { visible: boolean; title: string; children: React.ReactNode; onClose: () => void; onDismiss?: () => void; scroll?: boolean; allowDuringRecovery?: boolean; fitContent?: boolean }) {
+export function Sheet({ visible, title, children, onClose, onDismiss, scroll = true, allowDuringRecovery = false, fitContent = false, showHeader = true, contentStyle }: { visible: boolean; title: string; children: React.ReactNode; onClose: () => void; onDismiss?: () => void; scroll?: boolean; allowDuringRecovery?: boolean; fitContent?: boolean; showHeader?: boolean; contentStyle?: StyleProp<ViewStyle> }) {
+  const betaLayout = useBetaLayout();
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const reduced = useMotionPreference();
   const { suspended, recoveryPending, presentSheet, dismissSheet } = useSheetCoordinator();
@@ -106,15 +109,15 @@ export function Sheet({ visible, title, children, onClose, onDismiss, scroll = t
     return () => cancelAnimationFrame(frame);
   }, [effectiveVisible, notifyDismissed]);
   const content = <View style={[styles.sheetInner, fitContent && styles.fitInner]}>
-          <View style={styles.sheetHeader}><Heading>{title}</Heading><Button title="Done" compact onPress={onClose} /></View>
+          {showHeader ? <View style={[styles.sheetHeader, betaLayout && styles.betaSheetHeader]}>{betaLayout ? <Label accessibilityRole="header" style={styles.betaSheetTitle}>{title}</Label> : <Heading>{title}</Heading>}<Button title="Done" compact onPress={onClose} /></View> : <Label accessibilityRole="header" style={styles.hiddenHeading}>{title}</Label>}
           {recoveryPending && !allowDuringRecovery && <Label accessibilityRole="alert" style={styles.recoveryNotice}>Close this panel to open the connection wizard.</Label>}
-          {scroll ? <ScrollView style={[styles.sheetScroll, fitContent && styles.fitScroll]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={styles.sheetContent}>{children}</ScrollView> : <View style={[styles.sheetBody, fitContent && styles.fitScroll]}>{children}</View>}
+          {scroll ? <ScrollView style={[styles.sheetScroll, fitContent && styles.fitScroll]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={[styles.sheetContent, betaLayout && styles.betaSheetContent, contentStyle]}>{children}</ScrollView> : <View style={[styles.sheetBody, fitContent && styles.fitScroll, contentStyle]}>{children}</View>}
         </View>;
   return <Modal visible={effectiveVisible} transparent={fitContent} animationType={fitContent || reduced ? 'fade' : 'slide'} presentationStyle={fitContent ? 'overFullScreen' : 'pageSheet'} supportedOrientations={['portrait', 'landscape-left', 'landscape-right']} onRequestClose={onClose} onDismiss={notifyDismissed}>
     <SafeAreaRoot>{fitContent ? <KeyboardAvoidingView style={styles.sheetOverlay} behavior="padding" automaticOffset>
       <Pressable accessibilityRole="button" accessibilityLabel={`Close ${title}`} onPress={onClose} style={styles.sheetScrim} />
-      <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.fitSheet}>{content}</SafeAreaView>
-    </KeyboardAvoidingView> : <SafeAreaView style={styles.sheet}><KeyboardAvoidingView style={styles.sheetLayout} behavior="padding" automaticOffset>{content}</KeyboardAvoidingView></SafeAreaView>}</SafeAreaRoot>
+      <SafeAreaView edges={['bottom', 'left', 'right']} style={[styles.fitSheet, betaLayout && { backgroundColor: colors.bg }]}>{content}</SafeAreaView>
+    </KeyboardAvoidingView> : <SafeAreaView style={[styles.sheet, betaLayout && { backgroundColor: colors.bg }]}><KeyboardAvoidingView style={styles.sheetLayout} behavior="padding" automaticOffset>{content}</KeyboardAvoidingView></SafeAreaView>}</SafeAreaRoot>
   </Modal>;
 }
 export async function confirmAction(title: string, message: string, options: { confirmLabel?: string; destructive?: boolean } = {}): Promise<boolean> {
@@ -142,14 +145,16 @@ function createStyles(colors: ThemeColors) {
   compact: { minHeight: 32, paddingVertical: 5, paddingHorizontal: 10 }, primary: { backgroundColor: colors.primary }, ghost: { backgroundColor: 'transparent', borderColor: 'transparent', borderTopColor: 'transparent', boxShadow: [] }, danger: { backgroundColor: colors.raised },
   selectedButton: { backgroundColor: colors.selected, borderColor: colors.faint, borderTopColor: colors.faint },
   pressed: { borderTopColor: colors.border, boxShadow: inset ? [{ offsetX: 0, offsetY: 1, blurRadius: 1, color: '#00000030', inset: true }] : [] }, ghostPressed: { backgroundColor: colors.raised },
-  buttonText: { color: colors.text, fontFamily: sans, fontWeight: '500', fontSize: 13, lineHeight: 20, letterSpacing: -0.04, fontVariant: ['tabular-nums'] }, input: { color: colors.text, fontFamily: sans, backgroundColor: colors.input, borderWidth: 1, borderColor: colors.border, borderBottomColor: colors.controlTopEdge, borderRadius: 8, padding: 12, fontSize: 16, minHeight: touchTarget, boxShadow: inset ? [{ offsetX: 0, offsetY: 1, blurRadius: 2, color: '#00000020', inset: true }] : [] }, fieldLabel: { fontSize: 13, fontWeight: '500', letterSpacing: 0 },
-  card: { backgroundColor: colors.panel, borderRadius: 8, padding: 14, gap: 10, borderWidth: 1, borderColor: colors.border }, row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }, empty: { padding: 28, gap: 8, alignItems: 'center', justifyContent: 'center', flex: 1 },
+  buttonText: { color: colors.text, fontFamily: sans, fontWeight: '500', fontSize: 13, lineHeight: 20, letterSpacing: -0.04, fontVariant: ['tabular-nums'] }, input: { color: colors.text, fontFamily: sans, backgroundColor: colors.input, borderWidth: 1, borderColor: colors.border, borderBottomColor: colors.controlTopEdge, borderRadius: 8, padding: 12, paddingHorizontal: 15, fontSize: 16, minHeight: touchTarget, boxShadow: inset ? [{ offsetX: 0, offsetY: 1, blurRadius: 2, color: '#00000020', inset: true }] : [] }, fieldLabel: { fontSize: 13, fontWeight: '500', letterSpacing: 0 },
+  card: { backgroundColor: colors.panel, borderRadius: 8, padding: 14, paddingHorizontal: 15, gap: 10, borderWidth: 1, borderColor: colors.border }, row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }, empty: { padding: 28, gap: 8, alignItems: 'center', justifyContent: 'center', flex: 1 },
   error: { padding: 12, borderRadius: 8, backgroundColor: colors.dangerBackground, flexDirection: 'row', alignItems: 'center', gap: 8 },
   sheet: { flex: 1, backgroundColor: colors.panel }, sheetLayout: { flex: 1, minHeight: 0 }, sheetInner: { flex: 1, minHeight: 0, width: '100%', maxWidth: 680, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border },
+  betaSheetHeader: { paddingHorizontal: 14, paddingVertical: 8 }, betaSheetTitle: { fontSize: 17, lineHeight: 23, fontWeight: '600', flexShrink: 1 }, betaSheetContent: { paddingHorizontal: 14, gap: 12 },
   recoveryNotice: { color: colors.muted, fontSize: 12, lineHeight: 18, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: colors.raised },
   sheetScroll: { flex: 1, minHeight: 0 }, sheetContent: { padding: 18, gap: 16, paddingBottom: 24 }, sheetBody: { flex: 1, minHeight: 0 },
-  sheetOverlay: { flex: 1, justifyContent: 'flex-end' }, sheetScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: '#00000070' },
-  fitSheet: { flexShrink: 1, maxHeight: '85%', width: '100%', maxWidth: 680, alignSelf: 'center', backgroundColor: colors.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' }, fitInner: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto' }, fitScroll: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto' },
+  sheetOverlay: { flex: 1, justifyContent: 'flex-end' }, sheetScrim: { ...StyleSheet.absoluteFill, backgroundColor: '#00000070' },
+  hiddenHeading: { position: 'absolute', width: 1, height: 1, overflow: 'hidden' },
+  fitSheet: { flexShrink: 1, maxHeight: '85%', width: '100%', maxWidth: 680, alignSelf: 'center', backgroundColor: colors.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' }, fitInner: { flex: 0, flexShrink: 1 }, fitScroll: { flex: 0, flexShrink: 1 },
   disclosure: { padding: 0, gap: 0 }, disclosureHeader: { minHeight: touchTarget, padding: 14, justifyContent: 'center', borderRadius: 8 }, disclosureBody: { padding: 14, paddingTop: 0, gap: 10 },
 }); }

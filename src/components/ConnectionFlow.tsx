@@ -5,10 +5,12 @@ import * as Clipboard from 'expo-clipboard';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { type Connection, errorMessage, normalizeConnection } from '../lib/client';
 import { parsePairingPayload } from '../lib/pairing';
+import { useBetaLayout } from '../lib/betaLayout';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { Button, Busy, Card, Disclosure, ErrorNotice, Field, Heading, Label, mono, Row, touchTarget } from './ui';
 import { ShellIcon } from './ShellIcon';
 import { MotionContent } from './motion';
+import { OpenCodeLogo } from './OpenCodeLogo';
 
 export type ConnectionForm = { id: string; name: string; url: string; token: string; username?: string };
 type Step = 'home' | 'pair' | 'address' | 'password' | 'scan';
@@ -32,6 +34,7 @@ const blankForm: ConnectionForm = { id: '', name: '', url: '', token: '' };
 export function ConnectionFlow({ form, connections, activeID, unavailableID, connecting, error, pairingLink, onPairingLinkConsumed, onChangeForm, onClearError, onConnect, onRemove }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const beta = useBetaLayout();
   const [navigation, setNavigation] = useState(() => ({ step: (form.id ? 'password' : form.url ? /\/auth\/connect\/[^/]+\/?$/.test(form.url) ? 'pair' : 'address' : 'home') as Step, direction: 0 as -1 | 0 | 1, revision: 0 }));
   const { step } = navigation;
   const [pairingText, setPairingText] = useState(form.id ? '' : form.url);
@@ -187,18 +190,36 @@ export function ConnectionFlow({ form, connections, activeID, unavailableID, con
     }
   }
 
-  const back = step !== 'home' && !submission ? <Button title="‹ Back" compact variant="ghost" disabled={busy} onPress={() => go(step === 'password' ? 'address' : 'home', -1)} /> : null;
+  const betaStart = beta && (step === 'home' || step === 'pair');
+  const back = step !== 'home' && !betaStart && !submission ? <Button title="‹ Back" compact variant="ghost" disabled={busy} onPress={() => go(step === 'password' ? 'address' : 'home', -1)} /> : null;
   const savedServers = !!connections.length && <View style={styles.saved}>
     <Row style={{ justifyContent: 'space-between' }}><Label muted style={styles.instruction}>Your servers</Label><Button title={managing ? 'Done' : 'Manage'} compact variant="ghost" disabled={busy} onPress={() => setManaging(value => !value)} /></Row>
     {connections.map(connection => <View key={connection.id} style={styles.savedItem}><Pressable accessibilityRole="button" accessibilityLabel={`${unavailableID === connection.id ? 'Retry' : 'Connect to'} ${connection.name}${activeID === connection.id ? ', current server' : ''}`} disabled={busy} onPress={() => submit([connection])} style={({ pressed }) => [styles.server, pressed && { backgroundColor: colors.raised }]}><ShellIcon name="server" color={colors.muted} size={20} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{connection.name}</Label><Label muted numberOfLines={1} ellipsizeMode="middle" style={styles.small}>{connection.url}</Label></View>{unavailableID === connection.id ? <Label style={[styles.small, { color: colors.danger }]}>Retry</Label> : activeID === connection.id ? <Label muted style={styles.small}>Current</Label> : <ShellIcon name="chevron" color={colors.faint} size={16} />}</Pressable>{managing && <Row style={styles.manage}><Button title="Edit" compact disabled={busy} onPress={() => { clearError(); onChangeForm({ ...connection, token: connection.token || '' }); setStep('password'); }} /><Button title={removingID === connection.id ? 'Removing server' : 'Remove'} compact variant="ghost" busy={removingID === connection.id} disabled={busy} onPress={() => { void remove(connection); }} /></Row>}</View>)}
   </View>;
 
-  return <MotionContent variant="connection" transitionKey={navigation.revision} direction={navigation.direction} enabled={!busy && step !== 'scan'} style={styles.container}>
+  return <MotionContent variant="connection" transitionKey={navigation.revision} direction={navigation.direction} enabled={!busy && step !== 'scan'} style={[styles.container, beta && styles.betaContainer]}>
     {back && <View style={styles.back}>{back}</View>}
     {unavailableID && step === 'home' && error && !localError ? <Card><Label accessibilityRole="alert">{error}</Label></Card> : <ErrorNotice error={localError || error} />}
     {cameraBlocked && <Button title="Open camera settings" disabled={busy} onPress={() => { void Linking.openSettings().catch(() => setLocalError('Open your device settings and enable camera access for Opencoode.')); }} />}
     {submission || connecting ? <Card><Busy /><Label style={styles.center}>Connecting to {serverName(submission?.[0]?.url || form.url)}</Label><Label muted style={styles.center}>Opening your workspace</Label></Card>
-      : step === 'scan' ? <>
+      : betaStart ? <>
+        <View style={styles.betaIntro}>
+          <View style={styles.betaLogo}><OpenCodeLogo width={160} /></View>
+          <Label accessibilityRole="header" style={styles.betaTitle}>Connect to a server</Label>
+          <Label muted style={styles.betaHint}>Paste the pairing link from the server, or scan its QR code.</Label>
+        </View>
+        <Field label="Pairing link" placeholder="http://192.168.1.2:4096/auth/connect/…" value={pairingText} editable={!busy} onChangeText={value => { clearError(); setPairingText(value); }} keyboardType="url" autoComplete="off" returnKeyType="go" onSubmitEditing={() => acceptPairing(pairingText)} style={styles.betaInput} />
+        <View style={styles.betaActions}>
+          <Button title="Connect" variant="primary" disabled={!pairingText.trim() || busy} onPress={() => acceptPairing(pairingText)} />
+          <Button title="Scan QR code" busy={reading} disabled={busy} onPress={() => { void scan(); }} />
+        </View>
+        <Row style={styles.betaPassword}><Label muted style={styles.betaHint}>No pairing link?</Label><Button title="Use password" variant="ghost" compact disabled={busy} onPress={() => { onChangeForm(blankForm); go('address'); }} /></Row>
+        <View style={styles.betaInstructions}>
+          <Label muted style={styles.betaHint}>Run this command on the server's computer to get a pairing link and QR code.</Label>
+          <View style={styles.betaCommand}><Label selectable style={styles.command}>opencode pair</Label></View>
+        </View>
+        {savedServers}
+      </> : step === 'scan' ? <>
         <Heading>Scan the OpenCode QR code</Heading>
         <Label muted>Point your camera at the code on your computer.</Label>
         <View style={styles.camera}>
@@ -252,8 +273,12 @@ function PairingIcon({ color }: { color: string }) {
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { gap: 16 }, back: { alignSelf: 'flex-start', marginLeft: -10 }, center: { textAlign: 'center' },
+    betaContainer: { width: '100%', maxWidth: 360, alignSelf: 'center' },
+    betaIntro: { alignItems: 'center', gap: 8, marginBottom: 12 }, betaLogo: { marginBottom: 28 }, betaTitle: { fontSize: 18, lineHeight: 24, fontWeight: '500', textAlign: 'center' }, betaHint: { fontSize: 13, lineHeight: 20, textAlign: 'center' },
+    betaInput: { minHeight: 48, paddingVertical: 10, paddingHorizontal: 12, fontSize: 14, borderRadius: 6 }, betaActions: { gap: 8 }, betaPassword: { justifyContent: 'center', gap: 4 },
+    betaInstructions: { alignItems: 'center', gap: 12, paddingTop: 16, marginTop: 4 }, betaCommand: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, backgroundColor: colors.input, paddingHorizontal: 16, paddingVertical: 6 },
     intro: { gap: 12, alignItems: 'center', paddingTop: 8, paddingBottom: 8 }, actions: { gap: 4 }, instruction: { fontWeight: '500', fontSize: 13 }, command: { fontFamily: mono, fontSize: 12, color: colors.text, paddingVertical: 4 }, small: { fontSize: 12, lineHeight: 18 },
     saved: { gap: 4 }, savedItem: { borderBottomWidth: 1, borderColor: colors.border }, server: { minHeight: touchTarget + 16, paddingVertical: 12, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 6 }, serverText: { flex: 1, minWidth: 0, gap: 2 }, serverName: { fontWeight: '500' }, manage: { paddingBottom: 10, paddingLeft: 32 },
-    camera: { width: '100%', aspectRatio: 1, maxHeight: 360, overflow: 'hidden', borderRadius: 12, backgroundColor: '#000000' }, viewfinder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' }, frame: { position: 'absolute', width: '70%', aspectRatio: 1, borderWidth: 1.5, borderColor: '#ffffffbb', borderRadius: 12 }, privacy: { fontSize: 11, lineHeight: 17, textAlign: 'center', paddingTop: 4 },
+    camera: { width: '100%', aspectRatio: 1, maxHeight: 360, overflow: 'hidden', borderRadius: 12, backgroundColor: '#000000' }, viewfinder: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' }, frame: { position: 'absolute', width: '70%', aspectRatio: 1, borderWidth: 1.5, borderColor: '#ffffffbb', borderRadius: 12 }, privacy: { fontSize: 11, lineHeight: 17, textAlign: 'center', paddingTop: 4 },
   });
 }

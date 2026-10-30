@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Alert, AppState, FlatList, Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import type { SessionInfo } from '@opencode/client';
+import type { Project, SessionInfo } from '@opencode/client';
 import { type Client, errorMessage } from '../lib/client';
 import { useNativePresentation } from '../lib/sheets';
 import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
 import { Button, Busy, Card, Empty, ErrorNotice, Field, Label, Row, Sheet, confirmAction } from '../components/ui';
+import { ShellIcon } from '../components/ShellIcon';
+import { pageInset } from '../lib/layout';
 
 type Props = {
   client: Client;
@@ -16,12 +19,27 @@ type Props = {
   revision?: number;
   selectedSessionID?: string;
   compact?: boolean;
+  onOpenNavigation?: () => void;
+  betaLayout?: boolean;
+  projectScope?: { directory: string; revision: number };
+  onChooseDirectory?: () => void;
+  onNewSession?: (directory: string) => void;
 };
 
-export function SessionsScreen({ client, directory, onOpenSession, revision, selectedSessionID, compact = false }: Props) {
+export function SessionsScreen({ client, directory, onOpenSession, revision, selectedSessionID, compact = false, onOpenNavigation, betaLayout = false, projectScope, onChooseDirectory, onNewSession }: Props) {
   const withNativePresentation = useNativePresentation();
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const betaHome = betaLayout && Platform.OS === 'android';
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectDirectory, setProjectDirectory] = useState<string>();
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState<string>();
+  const pendingDirectoryPicker = useRef(false);
+  const pendingListActions = useRef(false);
+  const listDirectory = betaHome ? projectDirectory : directory;
+  const creationDirectory = betaHome ? projectDirectory ?? directory : directory;
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [width, setWidth] = useState(360);
   const [active, setActive] = useState<Set<string>>(new Set());
@@ -35,7 +53,6 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   const [listError, setListError] = useState<string>();
   const [statusError, setStatusError] = useState<string>();
   const [streamError, setStreamError] = useState<string>();
-  const [streamStatus, setStreamStatus] = useState('Connecting');
   const [foreground, setForeground] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
   const [actions, setActions] = useState<'menu' | 'filter' | 'create' | null>(null);
   const lastActions = useRef<'menu' | 'filter' | 'create'>('menu');
@@ -51,8 +68,8 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   const refreshRequest = useRef<AbortController | null>(null);
   const quietRefreshPending = useRef(false);
   const mounted = useRef(true);
-  const scope = useRef({ client, directory });
-  if (scope.current.client !== client || scope.current.directory !== directory) scope.current = { client, directory };
+  const scope = useRef({ client, directory: creationDirectory, listDirectory });
+  if (scope.current.client !== client || scope.current.directory !== creationDirectory || scope.current.listDirectory !== listDirectory) scope.current = { client, directory: creationDirectory, listDirectory };
   const paging = useRef(false);
   const operationPending = useRef(false);
   const pendingImport = useRef<(() => void) | null>(null);
@@ -88,7 +105,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     try {
       const [page, running] = await Promise.race([
         Promise.allSettled([
-          client.session.list({ directory, search: search.trim() || undefined, archived, limit: cursor ? 40 : loadedCount.current, cursor, order: 'desc' }, { signal: controller.signal }),
+          client.session.list({ directory: listDirectory, search: search.trim() || undefined, archived, limit: cursor ? 40 : loadedCount.current, cursor, order: 'desc' }, { signal: controller.signal }),
           client.session.active({ signal: controller.signal }),
         ]),
         cancelled,
@@ -129,7 +146,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
         }
       }
     }
-  }, [client, directory, search, archived]);
+  }, [client, listDirectory, search, archived]);
   refreshRef.current = (quiet, signal) => refresh(undefined, quiet, signal);
 
   useEffect(() => {
@@ -142,12 +159,39 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     return () => { clearTimeout(timer); generation.current += 1; refreshRequest.current?.abort(); };
   }, [refresh, revision]);
 
+  const loadProjects = useCallback(async (signal?: AbortSignal) => {
+    setProjectsLoading(true);
+    setProjectsError(undefined);
+    try {
+      const items = await client.project.list(undefined, { signal });
+      if (!signal?.aborted && mounted.current && scope.current.client === client) setProjects(items);
+    } catch (cause) {
+      if (!signal?.aborted && mounted.current && scope.current.client === client) setProjectsError(errorMessage(cause));
+    } finally {
+      if (!signal?.aborted && mounted.current && scope.current.client === client) setProjectsLoading(false);
+    }
+  }, [client]);
+
+  useEffect(() => {
+    setProjectDirectory(undefined);
+    setProjects([]);
+    setProjectsOpen(false);
+    if (!betaHome) return;
+    const controller = new AbortController();
+    void loadProjects(controller.signal);
+    return () => controller.abort();
+  }, [client, betaHome, loadProjects]);
+
+  useEffect(() => {
+    if (betaHome && projectScope) setProjectDirectory(projectScope.directory);
+  }, [betaHome, projectScope]);
+
   useEffect(() => {
     setSelected(undefined);
     setActions(null);
     setSheetError(undefined);
     pendingImport.current = null;
-  }, [client, directory]);
+  }, [client, creationDirectory, listDirectory]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', state => setForeground(state === 'active'));
@@ -155,7 +199,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   }, []);
 
   useEffect(() => {
-    if (!foreground) { refreshRequest.current?.abort(); quietRefreshPending.current = false; setStreamStatus('Paused'); return; }
+    if (!foreground) { refreshRequest.current?.abort(); quietRefreshPending.current = false; return; }
     const controller = new AbortController();
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -169,7 +213,6 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       void refreshRef.current(true, controller.signal);
       while (!controller.signal.aborted) {
         try {
-          setStreamStatus(attempts ? 'Reconnecting' : 'Connecting');
           const attempt = new AbortController();
           const cancelAttempt = () => attempt.abort();
           controller.signal.addEventListener('abort', cancelAttempt, { once: true });
@@ -190,7 +233,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
               if (result.done || controller.signal.aborted) break;
               clearTimeout(initialTimeout);
               const event = result.value;
-              setStreamStatus('Live'); setStreamError(undefined); attempts = 0;
+              setStreamError(undefined); attempts = 0;
               if (event.type === 'server.connected' || event.type === 'location.shutdown' || sessionListEvents.has(event.type)) scheduleRefresh();
             }
           } finally {
@@ -203,7 +246,6 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
           if (!controller.signal.aborted) throw new Error('The live connection closed');
         } catch (cause) {
           if (controller.signal.aborted) break;
-          setStreamStatus('Reconnecting');
           setStreamError(`Live updates unavailable: ${errorMessage(cause)}`);
           await new Promise<void>(resolve => { releaseRetry = resolve; retryTimer = setTimeout(resolve, Math.min(1000 * 2 ** Math.min(attempts++, 4), 15000)); });
           if (!controller.signal.aborted) await refreshRef.current(true, controller.signal);
@@ -242,7 +284,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     const owner = scope.current;
     setCreating(true);
     try {
-      const created = await client.session.create({ location: { directory }, title: named ? title.trim() || undefined : undefined });
+      const created = await client.session.create({ location: { directory: creationDirectory }, title: named ? title.trim() || undefined : undefined });
       if (scope.current.client !== owner.client || scope.current.directory !== owner.directory || !mounted.current) return;
       setActions(null);
       setTitle('');
@@ -251,6 +293,23 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       if (!archived) await refresh();
     } finally { if (mounted.current) setCreating(false); }
   }, named);
+
+  const startSession = () => {
+    Keyboard.dismiss();
+    if (onNewSession) onNewSession(creationDirectory);
+    else void createSession();
+  };
+
+  const manageSession = (item: SessionInfo) => {
+    Keyboard.dismiss();
+    setSelected(item);
+    setEditTitle(item.title || '');
+    setMoveDirectory(item.location.directory);
+    setSheetError(undefined);
+  };
+
+  const projectName = (item: SessionInfo) => projects.find(project => project.id === item.projectID)?.name
+    || directoryName(projects.find(project => project.id === item.projectID)?.canonical ?? item.location.directory);
 
   const changeSession = (operation: (item: SessionInfo) => Promise<void>) => run(async () => {
     if (!selected) return;
@@ -295,9 +354,9 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     if (!transcript || typeof transcript !== 'object' || !transcript.info || typeof transcript.info !== 'object' || !Array.isArray(transcript.messages)) {
       throw new Error('Choose a JSON transcript exported by OpenCode');
     }
-    if (!await confirmAction('Import session?', `Import this transcript into ${directory}? The server validates its contents.`)) return;
+    if (!await confirmAction('Import session?', `Import this transcript into ${creationDirectory}? The server validates its contents.`)) return;
     if (scope.current.client !== owner.client || scope.current.directory !== owner.directory || !mounted.current) return;
-    const imported = await client.experimental.session.import({ info: transcript.info, messages: transcript.messages, location: { directory } });
+    const imported = await client.experimental.session.import({ info: transcript.info, messages: transcript.messages, location: { directory: creationDirectory } });
     if (scope.current.client !== owner.client || scope.current.directory !== owner.directory || !mounted.current) return;
     await refresh();
     openConversation(imported.id);
@@ -325,19 +384,55 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     void refresh(nextCursor);
   };
 
-  return <View style={styles.screen} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
-    <View style={styles.header}>
-      <Row style={styles.headingRow}>
-        <View style={styles.headingText}><Label accessibilityRole="header" numberOfLines={1} style={[styles.title, compactHeader && styles.compactTitle]}>Your sessions</Label><Label muted style={styles.connection}>{streamStatus}</Label></View>
-        <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={() => { void createSession(); }} style={({ pressed }) => [styles.newButton, compactHeader && styles.compactNew, (pressed || busy) && styles.pressed]}>
-          {creating ? <ActivityIndicator size="small" color={colors.primaryText} /> : <Label style={styles.newText}>{compactHeader ? '＋' : 'New session'}</Label>}
+  const chooseHistory = () => {
+    if (Platform.OS === 'web') { setActions('filter'); return; }
+    const owner = scope.current;
+    void withNativePresentation(() => new Promise<void>(resolve => {
+      const choose = (value: boolean) => {
+        if (mounted.current && scope.current === owner) setArchived(value);
+        resolve();
+      };
+      if (Platform.OS === 'ios') ActionSheetIOS.showActionSheetWithOptions({
+        title: 'Session history',
+        options: ['Recent sessions', 'Archived sessions', 'Cancel'],
+        cancelButtonIndex: 2,
+        userInterfaceStyle: scheme,
+      }, index => { if (index < 2) choose(index === 1); else resolve(); });
+      else Alert.alert('Session history', undefined, [
+        { text: 'Recent sessions', onPress: () => choose(false) },
+        { text: 'Archived sessions', onPress: () => choose(true) },
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve() },
+      ], { cancelable: true, onDismiss: () => resolve() });
+    })).catch(cause => { if (mounted.current && scope.current === owner) setError(errorMessage(cause)); });
+  };
+
+  const newSessionAction = <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={startSession} style={({ pressed }) => [styles.betaNewSession, (pressed || busy) && styles.pressed]}>
+    {creating ? <ActivityIndicator size="small" color={colors.text} /> : <ShellIcon name="compose" color={colors.muted} size={14} />}
+    <Label style={styles.betaNewLabel}>New session</Label>
+  </Pressable>;
+
+  return <View style={[styles.screen, betaHome && styles.betaScreen]} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
+    <View style={[styles.header, compactHeader && styles.compactHeader, betaHome && styles.betaHeader]}>
+      {betaHome ? <Pressable accessibilityRole="button" accessibilityLabel="Select project" accessibilityState={{ expanded: projectsOpen }} onPress={() => { Keyboard.dismiss(); setProjectsOpen(true); void loadProjects(); }} style={({ pressed }) => [styles.projectSelector, pressed && styles.pressed]}>
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden><Path d="M3 5h6l2 3h10v12H3V5Z" stroke={colors.muted} strokeWidth={1.5} strokeLinejoin="round" /></Svg>
+        <Label numberOfLines={1} style={styles.projectSelectorLabel}>{projectDirectory ? projects.find(project => project.canonical === projectDirectory)?.name || directoryName(projectDirectory) : 'All projects'}</Label>
+        <View style={styles.projectChevron}><ShellIcon name="chevron" color={colors.faint} size={10} /></View>
+      </Pressable> : <Row style={styles.headingRow}>
+        {!compact && onOpenNavigation && <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={({ pressed }) => [styles.navigationButton, pressed && styles.pressed]}><ShellIcon name="menu" color={colors.text} /></Pressable>}
+        <View style={styles.headingText}><Label accessibilityRole="header" numberOfLines={1} style={[styles.title, compactHeader && styles.compactTitle, compact && Platform.OS === 'android' && styles.drawerTitle]}>{Platform.OS === 'android' && archived ? 'Archived sessions' : compact ? 'Your sessions' : 'Sessions'}</Label></View>
+        <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={startSession} style={({ pressed }) => [styles.newButton, (pressed || busy) && styles.pressed]}>
+          {creating ? <ActivityIndicator size="small" color={colors.text} /> : <ShellIcon name="compose" color={colors.text} size={20} />}
         </Pressable>
-        <Button title="•••" accessibilityLabel="Session list actions" variant="ghost" compact onPress={() => { setSheetError(undefined); setActions('menu'); }} />
-      </Row>
-      <Row style={styles.searchRow}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Session list actions" onPress={() => { setSheetError(undefined); setActions('menu'); }} style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}><ShellIcon name="more" color={colors.muted} size={18} /></Pressable>
+      </Row>}
+      {Platform.OS === 'android' ? <View style={[styles.androidSearch, betaHome && styles.betaSearch, betaHome && { backgroundColor: scheme === 'dark' ? colors.panel : colors.raised }]}>
+        <ShellIcon name="search" color={colors.faint} size={16} />
+        <Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} containerStyle={styles.searchField} style={[styles.androidSearchInput, betaHome && styles.betaSearchInput]} />
+        {!!search && <Pressable accessibilityRole="button" accessibilityLabel="Clear session search" hitSlop={4} onPress={() => setSearch('')} style={({ pressed }) => [styles.clearSearch, pressed && styles.pressed]}><ShellIcon name="close" color={colors.muted} size={16} /></Pressable>}
+      </View> : <Row style={styles.searchRow}>
         <View style={{ flex: 1, minWidth: 0 }}><Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} clearButtonMode="while-editing" style={styles.search} /></View>
-        {search ? <Button title="Clear" accessibilityLabel="Clear session search" compact variant="ghost" onPress={() => setSearch('')} /> : <Pressable accessibilityRole="button" accessibilityLabel={`Session history: ${archived ? 'Archived' : 'Recent'}`} onPress={() => setActions('filter')} style={styles.filter}><Label muted>{archived ? 'Archived' : 'Recent'} ⌄</Label></Pressable>}
-      </Row>
+        {search ? <Button title="Clear" accessibilityLabel="Clear session search" compact variant="ghost" onPress={() => setSearch('')} /> : <Pressable accessibilityRole="button" accessibilityLabel={`Session history: ${archived ? 'Archived' : 'Recent'}`} onPress={chooseHistory} style={styles.filter}><Label muted style={styles.filterText}>{archived ? 'Archived' : 'Recent'} ⌄</Label></Pressable>}
+      </Row>}
       <ErrorNotice error={listError} onRetry={() => { void refresh(); }} />
       <ErrorNotice error={error} />
       {statusError && <Label muted>{statusError}</Label>}
@@ -346,7 +441,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     <FlatList
       data={sessions}
       keyExtractor={item => item.id}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, betaHome && styles.betaList]}
       keyboardShouldPersistTaps="handled"
       refreshing={loading && sessions.length > 0}
       onRefresh={() => { void refresh(); }}
@@ -355,36 +450,64 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       initialNumToRender={12}
       maxToRenderPerBatch={12}
       windowSize={7}
+      ListHeaderComponent={betaHome ? <View style={styles.betaGroupHeader}>
+        <Label accessibilityRole="header" muted style={styles.betaGroupLabel}>{archived ? 'Archived sessions' : search.trim() ? 'Search results' : sessions.length ? sessionDateGroup(sessions[0].time.updated) : 'Today'}</Label>
+        {newSessionAction}
+      </View> : undefined}
       ListEmptyComponent={loading ? <Busy /> : <Empty title={listUnavailable ? 'Could not load sessions' : search.trim() ? 'No matching sessions' : archived ? 'No archived sessions' : 'Start your first session'} detail={listUnavailable ? 'Use Retry to load your history.' : search.trim() ? 'Try another title or clear the search.' : archived ? 'Sessions appear here after you archive them.' : 'Create a session to work with OpenCode in this directory.'} />}
       ListFooterComponent={sessions.length ? loading ? <Busy /> : nextCursor ? <Button title="Load more" variant="ghost" onPress={loadMore} /> : undefined : undefined}
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
         const status = sessionStatus(item, active.has(item.id));
-        return <View style={[styles.session, selectedSessionID === item.id && styles.selected]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title || 'Untitled session'}`} accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`} onPress={() => openConversation(item.id)} style={styles.sessionMain}>
-            <Row style={{ flexWrap: 'nowrap', gap: 7 }}>{active.has(item.id) && <View accessibilityLabel="Working" style={styles.dot} />}<Label numberOfLines={2} style={styles.sessionTitle}>{item.title || 'Untitled session'}</Label></Row>
-            <Label muted numberOfLines={1} style={styles.metadata}>{status}{item.time.idle && (!item.time.viewed || item.time.viewed < item.time.idle) ? ' · Unread' : ''} · {updatedLabel(item.time.updated)}{item.parentID ? ' · Child session' : ''}</Label>
+        const unread = item.time.idle && (!item.time.viewed || item.time.viewed < item.time.idle);
+        const visibleStatus = status === 'Working' || status === 'Needs attention' || status === 'Stopped' ? status : undefined;
+        const group = sessionDateGroup(item.time.updated);
+        const startsGroup = Platform.OS === 'android' && !search.trim() && (!betaHome || index > 0) && (index === 0 || sessionDateGroup(sessions[index - 1].time.updated) !== group);
+        const name = projectName(item);
+        return <View>
+          {startsGroup && <Label accessibilityRole="header" muted style={[styles.dateGroup, index > 0 && styles.laterDateGroup, betaHome && styles.betaDateGroup]}>{group}</Label>}
+          <View style={[styles.session, betaHome && styles.betaSession, selectedSessionID === item.id && styles.selected]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.title || 'Untitled session'}`} accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`} onPress={() => openConversation(item.id)} onLongPress={betaHome ? () => manageSession(item) : undefined} accessibilityActions={betaHome ? [{ name: 'manage', label: 'Manage session' }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'manage') manageSession(item); }} style={({ pressed }) => [styles.sessionMain, betaHome && styles.betaSessionMain, pressed && styles.sessionPressed]}>
+            {betaHome && <View style={styles.projectBadge}><Label style={styles.projectBadgeLabel}>{name.charAt(0).toUpperCase()}</Label></View>}
+            <View style={[styles.sessionText, betaHome && styles.betaSessionText]}>
+            <Label numberOfLines={1} style={[styles.sessionTitle, betaHome && styles.betaSessionTitle]}>{item.title || 'Untitled session'}</Label>
+            {betaHome ? <View style={styles.betaMetadataRow}>
+              <Label muted numberOfLines={1} style={[styles.betaMetadata, styles.betaProjectName]}>{name}</Label>
+              {(visibleStatus || unread) ? <Label muted numberOfLines={1} style={styles.betaMetadata}> · {[visibleStatus, unread ? 'Unread' : undefined].filter(Boolean).join(' · ')}</Label> : null}
+            </View> : <Label muted numberOfLines={1} style={styles.metadata}>{[visibleStatus, unread ? 'Unread' : undefined, updatedLabel(item.time.updated), item.parentID ? 'Child session' : undefined].filter(Boolean).join(' · ')}</Label>}
+            </View>
           </Pressable>
-          <View style={{ paddingRight: 4 }}><Button title="•••" accessibilityLabel={`Manage ${item.title || 'session'}`} compact variant="ghost" onPress={() => { setSelected(item); setEditTitle(item.title || ''); setMoveDirectory(item.location.directory); setSheetError(undefined); }} /></View>
+          {!betaHome && <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${item.title || 'session'}`} onPress={() => manageSession(item)} style={({ pressed }) => [styles.rowAction, pressed && styles.pressed]}><ShellIcon name="more" color={colors.faint} size={18} /></Pressable>}
+          </View>
         </View>;
       }}
     />
-    <Sheet visible={actions !== null} title={displayedActions === 'create' ? 'Name a new session' : displayedActions === 'filter' ? 'Session history' : 'Session list actions'} onClose={() => { if (!creating) setActions(null); }} onDismiss={finishActionsDismissal}>
+    <Sheet visible={projectsOpen} fitContent={betaHome} contentStyle={betaHome ? styles.projectSheetContent : undefined} title="Projects" onClose={() => { pendingDirectoryPicker.current = false; pendingListActions.current = false; setProjectsOpen(false); }} onDismiss={() => { if (pendingDirectoryPicker.current) { pendingDirectoryPicker.current = false; onChooseDirectory?.(); } else if (pendingListActions.current) { pendingListActions.current = false; setSheetError(undefined); setActions('menu'); } }}>
+      <Pressable accessibilityRole="radio" accessibilityState={{ checked: !projectDirectory }} onPress={() => { setProjectDirectory(undefined); setProjectsOpen(false); }} style={styles.menuRow}><Label>All projects</Label><Label muted>{!projectDirectory ? '✓' : ''}</Label></Pressable>
+      {projectsLoading && <Busy />}
+      <ErrorNotice error={projectsError} onRetry={() => { void loadProjects(); }} />
+      {projects.map(project => <Pressable key={project.id} accessibilityRole="radio" accessibilityState={{ checked: projectDirectory === project.canonical }} onPress={() => { setProjectDirectory(project.canonical); setProjectsOpen(false); }} style={styles.menuRow}><View style={styles.projectOption}><Label numberOfLines={1}>{project.name || directoryName(project.canonical)}</Label><Label muted numberOfLines={1} style={styles.metadata}>{project.canonical}</Label></View><Label muted>{projectDirectory === project.canonical ? '✓' : ''}</Label></Pressable>)}
+      <Button title="Session list actions" variant="ghost" onPress={() => { pendingListActions.current = true; setProjectsOpen(false); }} />
+      {onChooseDirectory && <Button title="Choose a folder" variant="ghost" onPress={() => { pendingDirectoryPicker.current = true; setProjectsOpen(false); }} />}
+    </Sheet>
+    <Sheet visible={actions !== null} fitContent={Platform.OS === 'android'} title={displayedActions === 'create' ? 'Name a new session' : displayedActions === 'filter' ? 'Session history' : 'Session list actions'} onClose={() => { if (!creating) setActions(null); }} onDismiss={finishActionsDismissal}>
       {displayedActions === 'create' ? <>
         <Field label="Session title" placeholder="What do you want to work on?" value={title} onChangeText={setTitle} editable={!creating} />
         <Label muted>You can choose a model and agent in the conversation.</Label>
-        <Card><Label muted>Remote directory</Label><Label selectable>{directory}</Label></Card>
+        <Card><Label muted>Remote directory</Label><Label selectable>{creationDirectory}</Label></Card>
         <ErrorNotice error={sheetError} />
         <Button title="Create session" variant="primary" busy={creating} onPress={() => { void createSession(true); }} />
-      </> : <>
+      </> : <View>
         <View accessibilityRole="radiogroup">
           {[{ title: 'Recent sessions', value: false }, { title: 'Archived sessions', value: true }].map(item => <Pressable key={item.title} accessibilityRole="radio" accessibilityState={{ checked: archived === item.value }} aria-checked={archived === item.value} onPress={() => { setArchived(item.value); setActions(null); }} style={styles.menuRow}><Label>{item.title}</Label><Label muted>{archived === item.value ? '✓' : ''}</Label></Pressable>)}
         </View>
         {displayedActions === 'menu' && <>
-          <Button title="Refresh sessions" variant="ghost" disabled={loading} onPress={() => { setActions(null); void refresh(); }} />
-          <Button title="Create a named session" variant="ghost" disabled={busy} onPress={() => { setTitle(''); setSheetError(undefined); setActions('create'); }} />
-          <Button title="Import session JSON" variant="ghost" disabled={busy} onPress={queueImport} />
+          {[
+            { title: 'Refresh sessions', disabled: loading, onPress: () => { setActions(null); void refresh(); } },
+            { title: 'Create a named session', disabled: busy, onPress: () => { setTitle(''); setSheetError(undefined); setActions('create'); } },
+            { title: 'Import session JSON', disabled: busy, onPress: queueImport },
+          ].map(action => <Pressable key={action.title} accessibilityRole="button" accessibilityState={{ disabled: action.disabled }} disabled={action.disabled} onPress={action.onPress} style={({ pressed }) => [styles.menuRow, (pressed || action.disabled) && styles.pressed]}><Label>{action.title}</Label></Pressable>)}
         </>}
-      </>}
+      </View>}
     </Sheet>
     <Sheet visible={!!selected} title="Manage session" onClose={() => setSelected(undefined)}>
       <Label selectable style={{ fontWeight: '500', fontSize: 16 }}>{selected?.title || 'Untitled session'}</Label>
@@ -412,28 +535,74 @@ const sessionListEvents = new Set([
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { padding: 16, paddingBottom: 10, gap: 12 },
-  headingRow: { flexWrap: 'nowrap', gap: 8 },
+  betaScreen: { backgroundColor: colors.bg },
+  betaHeader: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 0, gap: 8 },
+  projectSelector: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6 },
+  projectSelectorLabel: { flex: 1, fontSize: 13, lineHeight: 18 },
+  projectChevron: { transform: [{ rotate: '90deg' }], marginHorizontal: 8 },
+  projectSheetContent: { gap: 0 },
+  projectOption: { flex: 1, minWidth: 0, gap: 2 },
+  betaSearch: { borderRadius: 6, paddingHorizontal: 14 },
+  betaSearchInput: { fontSize: 13, lineHeight: 18, paddingVertical: 10 },
+  betaList: { paddingHorizontal: 6, paddingBottom: 12, gap: 0 },
+  betaGroupHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingLeft: 12 },
+  betaGroupLabel: { flex: 1, fontSize: 12, lineHeight: 18 },
+  betaNewSession: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
+  betaNewLabel: { fontSize: 13, lineHeight: 18, color: colors.muted },
+  betaDateGroup: { paddingTop: 20, paddingBottom: 12 },
+  betaSession: { minHeight: 48, borderRadius: 6 },
+  betaSessionMain: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingLeft: 12, paddingRight: 12 },
+  sessionText: { gap: 3 },
+  betaSessionText: { flex: 1, minWidth: 0, gap: 0 },
+  betaSessionTitle: { fontSize: 13, lineHeight: 18 },
+  betaMetadata: { fontSize: 12, lineHeight: 16 },
+  betaMetadataRow: { flexDirection: 'row', alignItems: 'center' },
+  betaProjectName: { flexShrink: 1 },
+  projectBadge: { width: 16, height: 16, borderRadius: 3, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.muted },
+  projectBadgeLabel: { fontSize: 10, lineHeight: 14, color: colors.panel, includeFontPadding: false },
+  header: { paddingHorizontal: pageInset, paddingTop: 6, paddingBottom: 10, gap: 8 },
+  compactHeader: { paddingTop: 8 },
+  headingRow: { flexWrap: 'nowrap', gap: Platform.OS === 'android' ? 0 : 8 },
+  navigationButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, marginStart: -16, marginEnd: 16, alignItems: 'center', justifyContent: 'center' },
   headingText: { flex: 1, minWidth: 0, gap: 2 },
-  title: { fontSize: 24, lineHeight: 29, fontWeight: '500', letterSpacing: -0.45 },
+  title: { fontSize: 17, lineHeight: 22, fontWeight: '600', letterSpacing: -0.2 },
   compactTitle: { fontSize: 18, lineHeight: 23, letterSpacing: -0.2 },
-  connection: { fontSize: 11, lineHeight: 15 },
-  newButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
-  compactNew: { paddingHorizontal: 10 },
-  newText: { color: colors.primaryText, fontSize: 13, fontWeight: '500' },
+  drawerTitle: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  newButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center' },
+  actionButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, marginStart: Platform.OS === 'android' ? 0 : 16, marginEnd: -16, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.55 },
   searchRow: { flexWrap: 'nowrap', gap: 8 },
-  search: { borderRadius: 8, backgroundColor: colors.panel },
-  filter: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingHorizontal: 8, paddingBottom: 24, gap: 2, flexGrow: 1 },
-  session: { minHeight: 76, flexDirection: 'row', alignItems: 'center', borderRadius: 10 },
-  sessionMain: { flex: 1, minWidth: 0, gap: 6, paddingVertical: 12, paddingLeft: 16 },
-  sessionTitle: { flex: 1, minWidth: 0, fontWeight: '500', fontSize: 16, lineHeight: 21 },
-  metadata: { fontSize: 12, lineHeight: 17 },
+  androidSearch: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, backgroundColor: colors.panel, borderRadius: 8 },
+  searchField: { flex: 1, minWidth: 0 },
+  androidSearchInput: { minHeight: 40, paddingHorizontal: 0, paddingVertical: 9, borderWidth: 0, backgroundColor: 'transparent', boxShadow: [], fontSize: 14, lineHeight: 20, includeFontPadding: false, textAlignVertical: 'center' },
+  clearSearch: { width: 40, minHeight: 40, marginEnd: -12, alignItems: 'center', justifyContent: 'center' },
+  search: { borderRadius: 8, backgroundColor: colors.panel, minHeight: 40, paddingHorizontal: 15, paddingVertical: 9, fontSize: 14, lineHeight: 20, includeFontPadding: false, textAlignVertical: 'center' },
+  filter: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center' },
+  filterText: { fontSize: 13, lineHeight: 20 },
+  list: { paddingHorizontal: pageInset, paddingBottom: 24, gap: 2, flexGrow: 1 },
+  dateGroup: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6, fontSize: 12, lineHeight: 18 },
+  laterDateGroup: { paddingTop: 16 },
+  session: { minHeight: Platform.OS === 'android' ? 56 : 64, flexDirection: 'row', alignItems: 'center', borderRadius: 10 },
+  sessionMain: { flex: 1, minWidth: 0, gap: 3, paddingVertical: Platform.OS === 'android' ? 8 : 10, paddingLeft: Platform.OS === 'android' ? 12 : 16 },
+  sessionPressed: { opacity: 0.65 },
+  sessionTitle: { minWidth: 0, fontWeight: '500', fontSize: 15, lineHeight: 20 },
+  metadata: { fontSize: 11, lineHeight: 16 },
+  rowAction: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
   menuRow: { minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   selected: { backgroundColor: colors.selected },
-  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
 });
+
+function directoryName(directory: string): string {
+  return directory.split(/[\\/]/).filter(Boolean).pop() || directory;
+}
+
+function sessionDateGroup(time: number): string {
+  const date = new Date(time);
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  today.setDate(today.getDate() - 1);
+  return date.toDateString() === today.toDateString() ? 'Yesterday' : 'Older';
+}
 
 function updatedLabel(time: number): string {
   const date = new Date(time);

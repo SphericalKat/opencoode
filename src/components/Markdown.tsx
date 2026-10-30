@@ -3,11 +3,18 @@ import { Linking, PixelRatio, Platform, ScrollView, StyleSheet, Text, View, type
 import * as Clipboard from 'expo-clipboard';
 import MarkdownIt, { type Token } from 'markdown-it';
 import { Button, mono, sans } from './ui';
-import { type ThemeColors, useThemedStyles } from '../lib/theme';
+import { type ThemeColors, useTheme } from '../lib/theme';
 import { MessageActionsContext } from '../lib/messageActions';
+import { useBetaLayout } from '../lib/betaLayout';
 
 const parser = new MarkdownIt({ html: false, linkify: true, breaks: true, maxNesting: 40 });
 const SelectionContext = createContext(true);
+
+function useMarkdownStyles() {
+  const { colors } = useTheme();
+  const beta = useBetaLayout();
+  return useMemo(() => createStyles(colors, beta), [colors, beta]);
+}
 
 type Node = { token: Token; children: Node[] };
 
@@ -53,7 +60,7 @@ function safeUrl(value: string | number | null): string | undefined {
 }
 
 const Inline = memo(function Inline({ nodes }: { nodes: Node[] }) {
-  const styles = useThemedStyles(createStyles);
+  const styles = useMarkdownStyles();
   const selectable = useContext(SelectionContext);
   const selectMessage = useContext(MessageActionsContext);
   return nodes.map(({ token, children }, index) => {
@@ -73,7 +80,7 @@ const Inline = memo(function Inline({ nodes }: { nodes: Node[] }) {
 }, (previous, next) => sameNodes(previous.nodes, next.nodes));
 
 const Code = memo(function Code({ code, language }: { code: string; language: string }) {
-  const styles = useThemedStyles(createStyles);
+  const styles = useMarkdownStyles();
   const selectable = useContext(SelectionContext);
   const [feedback, setFeedback] = useState<{ code: string; failed: boolean }>();
   const currentFeedback = feedback?.code === code ? feedback : undefined;
@@ -90,8 +97,34 @@ function Blocks({ nodes, muted }: { nodes: Node[]; muted?: boolean }) {
   return nodes.map((node, index) => <Block key={index} node={node} muted={muted} />);
 }
 
+function MarkdownTable({ node, muted }: { node: Node; muted?: boolean }) {
+  const styles = useMarkdownStyles();
+  const selectable = useContext(SelectionContext);
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const rows = node.children.flatMap(section => section.children);
+  const columnCount = Math.max(1, ...rows.map(row => row.children.length));
+  const columnWidth = Math.max(120, Math.floor(((availableWidth || columnCount * 120 + 1) - 1) / columnCount));
+  const contentWidth = columnWidth * columnCount + 1;
+  const renderRow = (row: Node, rowIndex: number) => <View key={rowIndex} style={styles.tableRow}>
+    {row.children.map((cell, cellIndex) => {
+      const isHeader = cell.token.type === 'th_open';
+      const alignment = cell.token.attrGet('style');
+      const textAlign = alignment === 'text-align:right' ? 'right' : alignment === 'text-align:center' ? 'center' : 'left';
+      return <View key={cellIndex} style={[styles.cell, { width: columnWidth }, isHeader && styles.tableHeader]}>
+        <Text selectable={selectable} style={[styles.text, muted && styles.muted, { textAlign }, isHeader && styles.bold]}><Inline nodes={cell.children.flatMap(child => child.children)} /></Text>
+      </View>;
+    })}
+  </View>;
+  return <View style={styles.tableContainer} onLayout={event => setAvailableWidth(event.nativeEvent.layout.width)}>
+    <ScrollView horizontal nestedScrollEnabled directionalLockEnabled persistentScrollbar showsHorizontalScrollIndicator contentContainerStyle={{ width: contentWidth }} style={styles.tableScroll}>
+      <View style={[styles.table, { width: contentWidth }]}>{rows.map(renderRow)}</View>
+    </ScrollView>
+    {contentWidth > availableWidth && availableWidth > 0 && <Text style={[styles.tableHint, muted && styles.muted]}>Swipe to see more columns</Text>}
+  </View>;
+}
+
 const ListItem = memo(function ListItem({ node, marker, markerWidth, muted }: { node: Node; marker: string; markerWidth: number; muted?: boolean }) {
-  const styles = useThemedStyles(createStyles);
+  const styles = useMarkdownStyles();
   const selectable = useContext(SelectionContext);
   return <View style={styles.listItem}>
     <Text selectable={selectable} style={[styles.text, muted && styles.muted, styles.marker, { minWidth: markerWidth }]}>{marker}</Text>
@@ -100,7 +133,7 @@ const ListItem = memo(function ListItem({ node, marker, markerWidth, muted }: { 
 }, (previous, next) => previous.marker === next.marker && previous.markerWidth === next.markerWidth && previous.muted === next.muted && sameNode(previous.node, next.node));
 
 const Block = memo(function Block({ node, muted }: { node: Node; muted?: boolean }) {
-    const styles = useThemedStyles(createStyles);
+    const styles = useMarkdownStyles();
     const selectable = useContext(SelectionContext);
     const { token, children } = node;
     const prose = [styles.text, muted && styles.muted];
@@ -111,7 +144,8 @@ const Block = memo(function Block({ node, muted }: { node: Node; muted?: boolean
         return <View style={styles.paragraph}><Blocks nodes={children} muted={muted} /></View>;
       case 'heading_open': {
         const level = Number(token.tag.slice(1));
-        return <Text selectable={selectable} accessibilityRole="header" style={[prose, styles.heading, { fontSize: 25 - level * 2, lineHeight: 32 - level }]}><Inline nodes={children.flatMap(node => node.children)} /></Text>;
+        const fontSize = styles.headingSizes[level - 1] ?? styles.headingSizes[5];
+        return <Text selectable={selectable} accessibilityRole="header" style={[prose, styles.heading, { fontSize, lineHeight: styles.headingLineHeights[level - 1] ?? styles.headingLineHeights[5] }]}><Inline nodes={children.flatMap(node => node.children)} /></Text>;
       }
       case 'fence':
       case 'code_block':
@@ -127,36 +161,26 @@ const Block = memo(function Block({ node, muted }: { node: Node; muted?: boolean
       case 'hr':
         return <View style={styles.rule} />;
       case 'table_open':
-        return <ScrollView horizontal style={styles.tableScroll}><View style={styles.table}><Blocks nodes={children} muted={muted} /></View></ScrollView>;
-      case 'tr_open':
-        return <View style={styles.tableRow}><Blocks nodes={children} muted={muted} /></View>;
-      case 'thead_open':
-      case 'tbody_open':
-        return <View><Blocks nodes={children} muted={muted} /></View>;
-      case 'th_open':
-      case 'td_open': {
-        const alignment = token.attrGet('style');
-        const textAlign = alignment === 'text-align:right' ? 'right' : alignment === 'text-align:center' ? 'center' : 'left';
-        return <View style={[styles.cell, token.type === 'th_open' && styles.tableHeader]}><Text selectable={selectable} style={[prose, { textAlign }, token.type === 'th_open' && styles.bold]}><Inline nodes={children.flatMap(node => node.children)} /></Text></View>;
-      }
+        return <MarkdownTable node={node} muted={muted} />;
       default:
         return children.length ? <View style={styles.group}><Blocks nodes={children} muted={muted} /></View> : token.content ? <Text selectable={selectable} style={prose}>{token.content}</Text> : null;
     }
 }, (previous, next) => previous.muted === next.muted && sameNode(previous.node, next.node));
 
 export const Markdown = memo(function Markdown({ text, muted, selectable = true }: { text: string; muted?: boolean; selectable?: boolean }) {
-  const styles = useThemedStyles(createStyles);
+  const styles = useMarkdownStyles();
   const nodes = useMemo(() => {
     try { return tree(parser.parse(text, {})); } catch { return null; }
   }, [text]);
   return <SelectionContext.Provider value={selectable}><View style={styles.root}>{nodes ? <Blocks nodes={nodes} muted={muted} /> : <Text selectable={selectable} style={[styles.text, muted && styles.muted]}>{text}</Text>}</View></SelectionContext.Provider>;
 });
 
-const createStyles = (colors: ThemeColors) => StyleSheet.create({
+const createStyles = (colors: ThemeColors, beta: boolean) => ({
+  ...StyleSheet.create({
   root: { minWidth: 0, maxWidth: '100%', gap: 12, flexShrink: 1 },
-  text: { color: colors.text, fontFamily: sans, fontSize: 16, lineHeight: 25, flexShrink: 1, ...Platform.select({ web: { overflowWrap: 'anywhere' } as TextStyle }) },
+  text: { color: colors.text, fontFamily: sans, fontSize: beta ? 14 : 16, lineHeight: beta ? 22 : 25, flexShrink: 1, ...Platform.select({ web: { overflowWrap: 'anywhere' } as TextStyle }) },
   muted: { color: colors.muted },
-  paragraph: { minWidth: 0 },
+  paragraph: { minWidth: 0, gap: beta ? 16 : 0 },
   heading: { fontWeight: '700' },
   bold: { fontWeight: '700' },
   italic: { fontStyle: 'italic' },
@@ -176,9 +200,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   codeContent: { paddingHorizontal: 12, paddingBottom: 12 },
   codeText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
   copyError: { color: colors.danger, fontFamily: sans, fontSize: 12, paddingHorizontal: 12, paddingBottom: 8 },
-  tableScroll: { maxWidth: '100%' },
+  tableContainer: { width: '100%', minWidth: 0 },
+  tableScroll: { width: '100%', minWidth: 0 },
   table: { borderTopWidth: 1, borderLeftWidth: 1, borderColor: colors.border },
-  tableRow: { flexDirection: 'row' },
-  cell: { width: 180, padding: 10, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
+  tableRow: { flexDirection: 'row', alignItems: 'stretch' },
+  cell: { minWidth: 0, flexShrink: 0, padding: 10, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
   tableHeader: { backgroundColor: colors.raised },
+  tableHint: { color: colors.muted, fontFamily: sans, fontSize: 12, lineHeight: 18, paddingTop: 4 },
+  }),
+  headingSizes: beta ? [21, 20, 19, 18, 17, 17] : [23, 21, 19, 17, 15, 13],
+  headingLineHeights: beta ? [26, 25, 24, 23, 22, 22] : [31, 30, 29, 28, 27, 26],
 });
