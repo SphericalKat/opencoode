@@ -24,7 +24,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-15]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/setup@v3.1.2
         with:
           runtime: node@24
