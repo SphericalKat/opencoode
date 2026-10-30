@@ -288,10 +288,8 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
   }, [measureEndDistance, followContent]);
   const updateScrollPosition = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-    const previousOffset = scrollMetrics.current.offset;
     scrollMetrics.current = { content: contentSize.height, viewport: layoutMeasurement.height, offset: contentOffset.y };
     measureEndDistance();
-    if (Platform.OS !== 'web' && contentOffset.y < previousOffset - 1 && !nearEnd.current) setFollowing(false);
     if (Platform.OS === 'web' && userScrolling.current && nearEnd.current && wheelDirection.current >= 0) setFollowing(true);
   }, [setFollowing, measureEndDistance]);
   const beginUserScroll = useCallback(() => {
@@ -372,8 +370,9 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
       frame = requestAnimationFrame(() => { if (alive.current && followingLatestRef.current && !userScrolling.current && transcriptVisible.current) jumpToLatest(); });
     });
     const willHide = KeyboardEvents.addListener('keyboardWillHide', () => { followKeyboard.current = false; if (frame !== undefined) cancelAnimationFrame(frame); });
-    return () => { willShow.remove(); didShow.remove(); willHide.remove(); followKeyboard.current = false; if (frame !== undefined) cancelAnimationFrame(frame); };
-  }, [foreground, visible, panel, jumpToLatest]);
+    const didHide = KeyboardEvents.addListener('keyboardDidHide', followContent);
+    return () => { willShow.remove(); didShow.remove(); willHide.remove(); didHide.remove(); followKeyboard.current = false; if (frame !== undefined) cancelAnimationFrame(frame); };
+  }, [foreground, visible, panel, jumpToLatest, followContent]);
 
   useEffect(() => {
     let cancelled = false;
