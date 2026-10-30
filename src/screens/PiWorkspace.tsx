@@ -17,6 +17,7 @@ import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
 import { ActivityDisclosure } from '../components/AgentActivity';
 import { BetaTabStrip, SheetGrip } from '../components/BetaNavigation';
 import { Markdown } from '../components/Markdown';
+import { UserMessageBubble } from '../components/UserMessageBubble';
 import { ShellIcon } from '../components/ShellIcon';
 import { WorkingIndicator } from '../components/motion';
 import { Button, Busy, Empty, ErrorNotice, Field, Label, Sheet, confirmAction, mono } from '../components/ui';
@@ -495,9 +496,7 @@ const PiMessageRow = memo(function PiMessageRow({ message, tools, active, idle, 
   const { colors } = useTheme();
   const select = useCallback(() => onSelect(message.id), [onSelect, message.id]);
   const label = textOf(message).slice(0, 240) || message.toolName || 'Pi message';
-  return <Pressable accessible={!screenReader && Platform.OS !== 'web'} accessibilityRole={screenReader ? undefined : 'button'} accessibilityLabel={label} accessibilityHint="Long press to select. Copy and fork actions appear in the header." accessibilityState={{ selected }} accessibilityActions={[{ name: 'longpress', label: 'Select message' }]} onAccessibilityAction={select} onLongPress={select} onPress={selectionActive ? select : undefined} style={[styles.message, selected && { backgroundColor: colors.selected }]}>
-    <MessageActionsContext.Provider value={select}>
-      {message.role === 'user' && <Label muted style={styles.role}>You</Label>}
+  const content = <>
       {message.role === 'toolResult' ? <ActivityDisclosure detailsKey={message.id} title={message.toolName || 'Tool result'} failed={message.isError}><RawText text={textOf(message)} />{message.errorMessage && <ErrorNotice error={message.errorMessage} />}</ActivityDisclosure> : message.content.map((part, index) => {
         const key = `${message.id}:${index}`;
         if (part.type === 'text') return <Markdown key={key} text={part.text} selectable={Platform.OS === 'web'} />;
@@ -508,6 +507,10 @@ const PiMessageRow = memo(function PiMessageRow({ message, tools, active, idle, 
         return <ActivityDisclosure key={part.id} detailsKey={part.id} title={part.name} detail={detail} busy={!idle && tool?.status === 'running'} animate={animate} failed={tool?.status === 'error'} complete={tool?.status === 'completed'}><Label muted style={styles.role}>Input</Label><RawText text={formatInput(tool?.input ?? part.arguments)} />{tool?.output !== undefined && <><Label muted style={styles.role}>Output</Label><RawText text={tool.output || 'No output'} /></>}</ActivityDisclosure>;
       })}
       {message.errorMessage && message.role !== 'toolResult' && <ErrorNotice error={message.errorMessage} />}
+  </>;
+  return <Pressable accessible={!screenReader && Platform.OS !== 'web'} accessibilityRole={screenReader ? undefined : 'button'} accessibilityLabel={label} accessibilityHint="Long press to select. Copy and fork actions appear in the header." accessibilityState={{ selected }} accessibilityActions={[{ name: 'longpress', label: 'Select message' }]} onAccessibilityAction={select} onLongPress={select} onPress={selectionActive ? select : undefined} style={[styles.message, selected && { backgroundColor: colors.selected }]}>
+    <MessageActionsContext.Provider value={select}>
+      {message.role === 'user' ? <UserMessageBubble withAttachments={message.content.some(part => part.type === 'image')}>{content}</UserMessageBubble> : content}
     </MessageActionsContext.Provider>
     {screenReader && <Button title="Message actions" compact variant="ghost" onPress={select} />}
   </Pressable>;
