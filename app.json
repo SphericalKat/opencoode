@@ -20,6 +20,10 @@
     },
     "android": {
       "package": "dev.opencoode.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/opencode-adaptive-icon.png",
+        "backgroundColor": "#131010"
+      },
       "predictiveBackGestureEnabled": true,
       "versionCode": 10300
     },
@@ -47,7 +51,8 @@
       ]
     ],
     "web": {
-      "name": "Opencoode"
+      "name": "Opencoode",
+      "favicon": "./assets/opencode-icon.png"
     }
   }
 }
