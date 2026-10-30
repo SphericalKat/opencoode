@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.2.0](https://github.com/SphericalKat/opencoode/compare/v1.1.0...v1.2.0) (2026-10-30)
+
+
+### Features
+
+* adopt the OpenCode beta layout on Android phones ([f04de61](https://github.com/SphericalKat/opencoode/commit/f04de61bd1bf350e03c7751d5d580c2acbdbca7a))
+
+
+### Bug Fixes
+
+* align beta settings and preserve Android navigation intent ([951f21c](https://github.com/SphericalKat/opencoode/commit/951f21c73727b47012d923ebb53a43536f9e28ae))
+* align mobile headers and simplify session controls ([777df6b](https://github.com/SphericalKat/opencoode/commit/777df6ba50829c86d69eddb8ece9cc1611ebe635))
+* allow the approved OpenCode packages during pnpm installs ([66c117d](https://github.com/SphericalKat/opencoode/commit/66c117da5b7e95b299b2d68a564cea852fd372a3))
+* announce failed steps without reporting the agent as ready ([3acf80f](https://github.com/SphericalKat/opencoode/commit/3acf80f613213f65649736151b8e9d0a190734da))
+* clarify mobile navigation and use native settings transitions ([3f487b7](https://github.com/SphericalKat/opencoode/commit/3f487b750f4820e4854b65edc25c2dace66030cb))
+* **deps:** update dependency react-native-safe-area-context to ~5.11.0 ([e05d4df](https://github.com/SphericalKat/opencoode/commit/e05d4df94f041c514ef8da37f3fae6f8991bbb0f))
+* **deps:** update dependency react-native-safe-area-context to ~5.11.0 ([4496fc7](https://github.com/SphericalKat/opencoode/commit/4496fc770cb0e791a71beeb416b6ecc086425dd7))
+* **deps:** update react monorepo to v19.3.1 ([db0b67f](https://github.com/SphericalKat/opencoode/commit/db0b67f4bae71846aa1ba614a04385f45cb8225e))
+* **deps:** update react monorepo to v19.3.1 ([5497f5a](https://github.com/SphericalKat/opencoode/commit/5497f5a123f70130c312fc611f7b100998737d49))
+* fit narrow Markdown tables and expose horizontal scrolling ([b3b6155](https://github.com/SphericalKat/opencoode/commit/b3b61550321c5233b21777fae171c5f8890c9c0e))
+* keep chat controls clear of the response ([860ebe2](https://github.com/SphericalKat/opencoode/commit/860ebe292ac6d13becc88c226f06f97a0af83a3e))
+* keep the Android composer height stable while reading history ([571070d](https://github.com/SphericalKat/opencoode/commit/571070da4e85a6317ca08de2d244c4153547a59d))
+* preserve recycled chat rows and document native UX refinements ([fcae404](https://github.com/SphericalKat/opencoode/commit/fcae40492e3e9682fed5a4fcc9f0b13e801a2d3d))
+* preserve settings navigation and center toolbar controls ([4c1bcd9](https://github.com/SphericalKat/opencoode/commit/4c1bcd9a94fd07ea4ee1dbaadaf75fc41b17ed69))
+* refine Android sessions around the OpenCode beta layout ([a4b268e](https://github.com/SphericalKat/opencoode/commit/a4b268eb82d38884e79dbf332495126e59b5cbf3))
+* refine native chat layout and reading controls ([0f4e6a1](https://github.com/SphericalKat/opencoode/commit/0f4e6a15680f86ad610515d46fe4c01e8e7e3564))
+* refine progress feedback and request navigation ([287a828](https://github.com/SphericalKat/opencoode/commit/287a82879628cb9aec3a4f9478e2037c93492391))
+* share platform insets across mobile screens ([c8c4f12](https://github.com/SphericalKat/opencoode/commit/c8c4f128e1aa9429935e18d4e02d6c4629abd5d9))
+* show accurate agent progress and preserve reading position ([f3925e1](https://github.com/SphericalKat/opencoode/commit/f3925e154bddbe94eded75f6ad7adf091d51263e))
+
 ## [1.1.0](https://github.com/SphericalKat/opencoode/compare/v1.0.0...v1.1.0) (2026-10-30)
 
 
