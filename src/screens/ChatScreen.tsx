@@ -24,15 +24,15 @@ import { useUnsavedChanges } from '../lib/unsaved';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { ShellIcon } from '../components/ShellIcon';
 import { MotionContent, PressFeedback, WorkingIndicator } from '../components/motion';
-import { ActivityDisclosure, AgentActivityBar } from '../components/AgentActivity';
-import { sessionActivity, toolActivityLabel, type AgentActivity } from '../lib/activity';
+import { AgentActivityBar } from '../components/AgentActivity';
+import { AssistantActivityPart as AssistantPart, AssistantTurn, groupTranscriptMessages, type TranscriptItem } from '../components/AssistantTurn';
+import { sessionActivity, type AgentActivity } from '../lib/activity';
 import { createStreamBatch } from '../lib/streamBatch';
 import { BackgroundCommands } from '../components/BackgroundCommands';
 import { ChildSessions } from '../components/ChildSessions';
 import { SessionStats } from '../components/SessionStats';
 import { SideQuestion } from '../components/SideQuestion';
 import { McpResources } from '../components/McpResources';
-import { ArtifactContent } from '../components/ArtifactContent';
 import { modelPreferenceID, useModelPreferences } from '../lib/modelPreferences';
 import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
 import { useNativePresentation } from '../lib/sheets';
@@ -63,9 +63,9 @@ type Attachment = NonNullable<SessionPromptInput['files']>[number];
 type Panel = 'actions' | 'variants' | 'models' | 'agents' | 'commands' | 'mentions' | 'tools' | 'message' | 'selectText' | 'diff' | 'context' | 'instructions' | 'schedules' | 'background' | 'children' | 'stats' | 'btw' | 'resources' | null;
 type SyncScope = 'metadata' | 'history' | 'inbox' | 'requests';
 const providerLabels = new Map([['openai', 'OpenAI'], ['openai-codex', 'OpenAI Codex']]);
-const messageKey = (message: SessionMessageInfo) => message.id;
-const messageType = (message: SessionMessageInfo) => message.type;
-const MessageSeparator = ({ leadingItem, trailingItem }: { leadingItem?: SessionMessageInfo; trailingItem?: SessionMessageInfo }) => <View style={{ height: leadingItem?.type === 'assistant' && trailingItem?.type === 'assistant' ? 10 : 24 }} />;
+const messageKey = (item: TranscriptItem) => item.id;
+const messageType = (item: TranscriptItem) => item.type === 'message' ? item.message.type : item.type;
+const MessageSeparator = () => <View style={{ height: 24 }} />;
 
 export function ChatScreen(props: Props) {
   return <ChatSession key={props.sessionID} {...props} />;
@@ -146,7 +146,8 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
   const [awayFromLatest, setAwayFromLatest] = useState(false);
   const alive = useRef(true);
   const submitting = useRef(false);
-  const list = useRef<FlashListRef<SessionMessageInfo>>(null);
+  const list = useRef<FlashListRef<TranscriptItem>>(null);
+  const previousTranscript = useRef<TranscriptItem[]>([]);
   const nearEnd = useRef(true);
   const scrollMetrics = useRef({ content: 0, viewport: 0, offset: 0 });
   const followingLatestRef = useRef(true);
@@ -231,6 +232,9 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
   }, []);
   const disclosures = useMemo(() => ({
     isOpen: (key: string) => expandedParts.current.has(key),
+    setOpen: (key: string, open: boolean) => {
+      if (open) expandedParts.current.add(key); else expandedParts.current.delete(key);
+    },
     toggle: (key: string) => {
       followKeyboard.current = false;
       setFollowing(false);
@@ -326,13 +330,13 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
       const row = selectedRow(event.target);
       if (!row) return;
       event.preventDefault();
-      selectMessage(row.id.slice('chat-message-'.length));
+      selectMessage(decodeURIComponent(row.id.slice('chat-message-'.length).split(':')[0]));
     };
     const keyboard = (event: KeyboardEvent) => {
       const row = selectedRow(event.target);
       if (!row || event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10') && !(event.target === row && (event.key === 'Enter' || event.key === ' '))) return;
       event.preventDefault();
-      selectMessage(row.id.slice('chat-message-'.length));
+      selectMessage(decodeURIComponent(row.id.slice('chat-message-'.length).split(':')[0]));
     };
     node.addEventListener('wheel', wheel, { passive: true });
     node.addEventListener('touchmove', touch, { passive: true });
@@ -912,8 +916,15 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
     await modelPreferences.recordRecent(model.providerID, model.id);
   }, closePanel);
   const messageDirectory = session?.location.directory || '';
-  const transcriptMessages = useMemo(() => messages.filter(message => message.type !== 'idle' || !!message.error), [messages]);
-  const renderMessage = useCallback(({ item }: { item: SessionMessageInfo }) => <MessageRow message={item} live={item.id === liveMessageID} activityKind={item.id === liveMessageID ? activity.kind : undefined} animate={visible && foreground && streamStatus === 'Live'} onSelect={selectMessage} selected={item.id === selectedMessageID} selectionActive={!!selectedMessageID} screenReader={screenReader} client={opencodeClient} directory={messageDirectory} />, [selectMessage, selectedMessageID, screenReader, opencodeClient, messageDirectory, liveMessageID, activity.kind, visible, foreground, streamStatus]);
+  const transcriptMessages = useMemo(() => {
+    const grouped = groupTranscriptMessages(messages, previousTranscript.current);
+    previousTranscript.current = grouped;
+    return grouped;
+  }, [messages]);
+  const renderSource = useCallback((message: SessionMessageAssistant, sourceKey: string, content: React.ReactNode) => <MessageRow key={sourceKey} sourceKey={sourceKey} message={message} onSelect={selectMessage} selected={message.id === selectedMessageID} selectionActive={!!selectedMessageID} screenReader={screenReader} client={opencodeClient} directory={messageDirectory}>{content}</MessageRow>, [selectMessage, selectedMessageID, screenReader, opencodeClient, messageDirectory]);
+  const renderMessage = useCallback(({ item }: { item: TranscriptItem }) => item.type === 'assistant-turn'
+    ? <AssistantTurn key={item.id} turn={item} liveMessageID={liveMessageID} activityKind={activity.kind} animate={visible && foreground && streamStatus === 'Live'} client={opencodeClient} directory={messageDirectory} renderSource={renderSource} />
+    : <MessageRow message={item.message} animate={visible && foreground && streamStatus === 'Live'} onSelect={selectMessage} selected={item.id === selectedMessageID} selectionActive={!!selectedMessageID} screenReader={screenReader} client={opencodeClient} directory={messageDirectory} />, [renderSource, selectMessage, selectedMessageID, screenReader, opencodeClient, messageDirectory, liveMessageID, activity.kind, visible, foreground, streamStatus]);
   const canCopySelected = actionMessage?.type === 'assistant' ? actionMessage.content.some(part => part.type === 'text' && !!part.text) : !!actionMessage;
   const copySelected = () => { if (actionMessage) { const messageID = actionMessage.id; const text = messageText(actionMessage); if (text) void Clipboard.setStringAsync(text).then(() => { if (alive.current) setSelectedMessageID(current => current === messageID ? null : current); }).catch(showError); } };
 
@@ -1071,15 +1082,15 @@ function messagePreview(message: SessionMessageInfo): string {
   return messageText(message).slice(0, 240);
 }
 
-type MessageRowProps = { message: SessionMessageInfo; live?: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; onSelect?: (id: string) => void; selected?: boolean; selectionActive?: boolean; screenReader?: boolean; client?: Client; directory: string };
-const MessageRow = memo(function MessageRow({ message, live, activityKind, animate, onSelect, selected, selectionActive, screenReader, client, directory }: MessageRowProps) {
+type MessageRowProps = { message: SessionMessageInfo; sourceKey?: string; children?: React.ReactNode; live?: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; onSelect?: (id: string) => void; selected?: boolean; selectionActive?: boolean; screenReader?: boolean; client?: Client; directory: string };
+const MessageRow = memo(function MessageRow({ message, sourceKey, children, live, activityKind, animate, onSelect, selected, selectionActive, screenReader, client, directory }: MessageRowProps) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const select = useCallback(() => onSelect?.(message.id), [onSelect, message.id]);
   const separateContent = screenReader || Platform.OS === 'web';
   if (message.type === 'idle' && !message.error) return null;
-  if (!onSelect) return <MessageContent message={message} client={client} directory={directory} selectable />;
-  return <Pressable nativeID={`chat-message-${message.id}`} accessible={!separateContent}
+  if (!onSelect) return children ?? <MessageContent message={message} client={client} directory={directory} selectable />;
+  return <Pressable nativeID={`chat-message-${encodeURIComponent(message.id)}${sourceKey ? `:${encodeURIComponent(sourceKey)}` : ''}`} accessible={!separateContent}
     accessibilityRole={separateContent ? undefined : 'button'} accessibilityLabel={separateContent ? undefined : messagePreview(message)}
     accessibilityHint={separateContent ? undefined : 'Long press to select this message. Message actions appear in the header.'}
     accessibilityState={separateContent ? undefined : { selected: !!selected }}
@@ -1088,7 +1099,7 @@ const MessageRow = memo(function MessageRow({ message, live, activityKind, anima
     onLongPress={() => onSelect(message.id)} onPress={selectionActive ? () => onSelect(message.id) : undefined}
     style={styles.selectableMessage}>
     {selected && <View pointerEvents="none" aria-hidden style={[styles.selectionMarker, { backgroundColor: colors.muted }]} />}
-    <MessageActionsContext.Provider value={select}><MessageContent message={message} live={live} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={false} /></MessageActionsContext.Provider>
+    <MessageActionsContext.Provider value={select}>{children ?? <MessageContent message={message} live={live} activityKind={activityKind} animate={animate} client={client} directory={directory} selectable={false} />}</MessageActionsContext.Provider>
     {screenReader && <Button title="Message actions" compact variant="ghost" accessibilityLabel={`Message actions: ${messagePreview(message)}`} onPress={() => onSelect(message.id)} />}
   </Pressable>;
 });
@@ -1113,22 +1124,6 @@ function CompletedAssistantFooter({ message }: { message: SessionMessageAssistan
   return <ResponseFooter text={message.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')} elapsedSeconds={elapsed} />;
 }
 
-const AssistantPart = memo(function AssistantPart({ part, detailsKey, live, activityKind, animate, client, directory, selectable }: { part: SessionMessageAssistant['content'][number]; detailsKey: string; live: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; client?: Client; directory: string; selectable: boolean }) {
-  const styles = useThemedStyles(createStyles);
-  if (part.type === 'text') return <MessageText text={part.text} selectable={selectable} />;
-  const waiting = activityKind === 'approval' || activityKind === 'question' || activityKind === 'retry';
-  if (part.type === 'reasoning') {
-    const thinking = live && !waiting && part.time?.completed === undefined;
-    const duration = part.time?.completed === undefined ? undefined : Math.max(1, Math.round((part.time.completed - part.time.created) / 1000));
-    return <ActivityDisclosure detailsKey={detailsKey} title={thinking ? 'Thinking' : duration ? `Thought for ${duration}s` : 'Thought process'} busy={thinking} animate={animate} thought><MessageText text={part.text} muted selectable={selectable} /></ActivityDisclosure>;
-  }
-  const pendingTool = part.state.status === 'streaming' || part.state.status === 'running';
-  const busy = live && pendingTool && !waiting;
-  const title = part.state.status === 'error' ? `Failed · ${part.name}` : part.state.status === 'completed' || busy ? toolActivityLabel(part) : live && waiting ? activityKind === 'approval' ? 'Waiting for approval' : activityKind === 'question' ? 'Waiting for your answer' : 'Waiting to retry' : `Unfinished · ${part.name}`;
-  const input = part.state.status === 'streaming' ? undefined : part.state.input;
-  const detail = input && [input.command, input.filePath, input.path, input.pattern, input.url].find(value => typeof value === 'string');
-  return <ActivityDisclosure detailsKey={detailsKey} title={title} detail={typeof detail === 'string' ? detail : undefined} busy={busy} animate={animate} failed={part.state.status === 'error'} complete={part.state.status === 'completed'}><Label muted>Input</Label>{part.state.status === 'streaming' ? <CodeBlock code={part.state.input} selectable={selectable} /> : <Text selectable={selectable} style={styles.jsonText}>{JSON.stringify(part.state.input, null, 2)}</Text>}{'content' in part.state && part.state.content?.map((content, index) => content.type === 'text' ? <MessageText key={index} text={content.text} selectable={selectable} /> : <ArtifactContent key={index} content={content} client={client} directory={directory} />)}{part.state.status === 'running' && typeof part.state.metadata.output === 'string' && <MessageText text={part.state.metadata.output} selectable={selectable} />}{part.state.status === 'error' && <ErrorNotice error={part.state.error.message} />}</ActivityDisclosure>;
-});
 
 function MessageText({ text, muted, selectable = true }: { text: string; muted?: boolean; selectable?: boolean }) {
   return <Markdown text={text} muted={muted} selectable={selectable} />;
@@ -1160,7 +1155,7 @@ function ChatIconButton({ name, label, onPress, raised, disabled, busy, selected
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
   frame: { flex: 1, minHeight: 0 }, container: { flex: 1, minHeight: 0, backgroundColor: colors.bg }, header: { minHeight: 56, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border }, headerLeading: { marginStart: pageInset - 24, marginEnd: 24 - pageInset }, headerTrailing: { marginStart: 24 - pageInset, marginEnd: pageInset - 24 }, selectionHeader: { backgroundColor: colors.panel }, selectionCount: { flex: 1, minWidth: 0, fontSize: 14, paddingStart: pageInset - 4 }, selectableMessage: { position: 'relative' }, selectionMarker: { position: 'absolute', start: -8, top: 0, bottom: 0, width: 2, borderRadius: 1 },
   headerTitle: { flex: 1, minWidth: 0, gap: 1, paddingHorizontal: 4, paddingStart: pageInset - 8 }, headerTitleWithNavigation: { paddingStart: pageInset - 4 }, sessionTitle: { fontSize: 16, fontWeight: '500', lineHeight: 21 }, headerSubtitle: { flexDirection: 'row', alignItems: 'center', gap: 6 }, projectLabel: { fontSize: 12, lineHeight: 16, flexShrink: 1 }, dot: { width: 5, height: 5, borderRadius: 3 }, transcriptFrame: { flex: 1, minHeight: 0, paddingBottom: 8 }, transcript: { flex: 1, minHeight: 0, width: '100%', maxWidth: 760, alignSelf: 'center' }, messages: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 24, flexGrow: 1 },
-  assistant: { gap: 6 }, jsonText: { color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 },
+  assistant: { gap: 6 },
   eyebrow: { fontFamily: mono, fontSize: 10, color: colors.muted, letterSpacing: 1.2 }, notice: { fontFamily: mono, fontSize: 11 },
   composerDock: { padding: 12, paddingHorizontal: pageInset, paddingTop: 4, alignItems: 'center' }, composer: { width: '100%', maxWidth: 736, paddingHorizontal: 8, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, borderRadius: 18, backgroundColor: colors.panel }, composerInput: { minHeight: 44, maxHeight: 120, borderWidth: 0, borderRadius: 0, boxShadow: [], backgroundColor: colors.panel, paddingHorizontal: 7, paddingVertical: 6, fontSize: 16, lineHeight: 24 }, composerToolbar: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }, modelTrigger: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8 }, modelTriggerText: { flexShrink: 1, fontSize: 12, color: colors.muted },
   betaLatestOverlay: { position: 'absolute', bottom: 12, right: 16 },

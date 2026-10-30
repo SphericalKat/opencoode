@@ -1,11 +1,10 @@
-import React, { memo, useContext, useEffect, useRef, useState } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import type { AgentActivity } from '../lib/activity';
-import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { Label } from './ui';
-import { MotionDisclosureBody, MotionDisclosureChevron, WorkingIndicator } from './motion';
+import { WorkingIndicator } from './motion';
 
 export const AgentActivityBar = memo(function AgentActivityBar({ activity, connectionStatus, sending, stopping, animate, show, onReview }: {
   activity: AgentActivity; connectionStatus: string; sending: boolean; stopping: boolean; animate: boolean; show: boolean; onReview: () => void;
@@ -51,26 +50,6 @@ export const AgentActivityBar = memo(function AgentActivityBar({ activity, conne
   </>;
 });
 
-export function ActivityDisclosure({ detailsKey, title, detail, busy, animate, failed, complete = true, thought, children }: {
-  detailsKey: string; title: string; detail?: string; busy?: boolean; animate?: boolean; failed?: boolean; complete?: boolean; thought?: boolean; children: React.ReactNode;
-}) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const actions = useContext(MessageActionsContext);
-  const disclosures = useContext(MessageDisclosureContext);
-  const [open, setOpen] = useState(() => disclosures?.isOpen(detailsKey) ?? false);
-  return <View>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${title}${detail ? `, ${detail}` : ''}`} accessibilityState={{ expanded: open, busy: !!busy }} aria-expanded={open}
-      onPress={() => setOpen(disclosures ? disclosures.toggle(detailsKey) : !open)} onLongPress={Platform.OS === 'web' ? undefined : actions}
-      style={({ pressed }) => [styles.disclosureHeader, pressed && { backgroundColor: colors.raised }]}>
-      {busy ? <WorkingIndicator active={!!animate} color={colors.muted} size={14} /> : <Svg width={14} height={14} viewBox="0 0 16 16" fill="none" aria-hidden><Path d={thought ? 'M4 4.5h8M4 8h6m-6 3.5h8' : failed ? 'm4 4 8 8m0-8-8 8' : complete ? 'm3.5 8 3 3 6-6' : 'M5 4v8m6-8v8'} stroke={failed ? colors.danger : colors.muted} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg>}
-      <View style={styles.disclosureTitle}><Label muted style={styles.label}>{title}</Label>{!!detail && <Label muted numberOfLines={1} style={styles.detail}>{detail}</Label>}</View>
-      <MotionDisclosureChevron open={open}><Svg width={12} height={12} viewBox="0 0 16 16" fill="none" aria-hidden><Path d="m6 4 4 4-4 4" stroke={colors.faint} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg></MotionDisclosureChevron>
-    </Pressable>
-    <MotionDisclosureBody open={open} style={styles.disclosureBody}>{children}</MotionDisclosureBody>
-  </View>;
-}
-
 function createStyles(colors: ThemeColors) { return StyleSheet.create({
   lane: { width: '100%', maxWidth: 736, minHeight: 28 },
   bar: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6 },
@@ -80,8 +59,4 @@ function createStyles(colors: ThemeColors) { return StyleSheet.create({
   action: { minHeight: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 8, justifyContent: 'center' },
   actionText: { fontSize: 12, fontWeight: '500' },
   retryError: { color: colors.danger, fontSize: 12, lineHeight: 18, paddingHorizontal: 6, paddingBottom: 10 },
-  disclosureHeader: { minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 6, paddingHorizontal: 4, paddingVertical: 6 },
-  disclosureTitle: { flex: 1, minWidth: 0 },
-  detail: { fontSize: 11, lineHeight: 16, fontFamily: 'IBMPlexMono' },
-  disclosureBody: { marginLeft: 10, paddingLeft: 14, paddingVertical: 8, borderLeftWidth: 1, borderLeftColor: colors.border, gap: 10 },
 }); }
