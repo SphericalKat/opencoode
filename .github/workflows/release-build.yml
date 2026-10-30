@@ -109,8 +109,13 @@ jobs:
         run: ./gradlew --no-daemon --max-workers=2 --init-script ../.github/android-signing.gradle assembleRelease bundleRelease
 
       - name: Publish Android artifacts
+        shell: bash
         run: |
-          signer="$(rg --files "$ANDROID_HOME/build-tools" -g apksigner | sort -V | tail -1)"
+          signer="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          if [[ ! -x "$signer" ]]; then
+            echo 'No executable apksigner was found in the Android SDK build tools' >&2
+            exit 1
+          fi
           expected="$(keytool -exportcert -keystore "$RELEASE_KEYSTORE_PATH" -storepass:env RELEASE_STORE_PASSWORD -alias "$RELEASE_KEY_ALIAS" -rfc | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           actual="$("$signer" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
           if [[ -z "$expected" || "$expected" != "$actual" ]]; then
