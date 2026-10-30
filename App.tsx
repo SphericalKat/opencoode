@@ -22,6 +22,7 @@ import { ShellIcon } from './src/components/ShellIcon';
 import { MotionDrawer, MotionScreen } from './src/components/motion';
 import { ConnectionFlow, type ConnectionForm } from './src/components/ConnectionFlow';
 import { SheetCoordinatorProvider, useSheetCoordinator } from './src/lib/sheets';
+import { pageInset } from './src/lib/layout';
 
 type Tab = 'sessions' | 'workspace' | 'settings';
 const destinations: { id: Tab; label: string }[] = [
@@ -556,11 +557,11 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   iconButton: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
   body: { flex: 1, flexDirection: 'row', minHeight: 0 }, full: { flex: 1, minWidth: 0, minHeight: 0 },
   sidebar: { width: 288, borderRightWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
-  navigationBrand: { height: 64, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  projectChoice: { marginHorizontal: 16, paddingHorizontal: 15, paddingVertical: 10, minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border },
+  navigationBrand: { height: 64, paddingHorizontal: pageInset, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  projectChoice: { marginHorizontal: pageInset, paddingHorizontal: 15, paddingVertical: 10, minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border },
   contextText: { flex: 1, minWidth: 0, gap: 1 }, projectName: { fontSize: 13, fontWeight: '500' }, contextDetail: { fontSize: 10, lineHeight: 15 },
   navigationSessions: { flex: 1, minHeight: 0, marginTop: 8 },
-  navigationFooter: { borderTopWidth: 1, borderColor: colors.border, paddingHorizontal: 16, paddingTop: 8, gap: 4 },
+  navigationFooter: { borderTopWidth: 1, borderColor: colors.border, paddingHorizontal: pageInset, paddingTop: 8, gap: 4 },
   navigationLinks: { flexDirection: 'row', gap: 4 }, navigationLink: { flex: 1, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 8 },
   navigationLinkText: { fontFamily: sans, color: colors.muted, fontSize: 12, lineHeight: 18 }, selectedDestination: { backgroundColor: colors.panel },
   serverChoice: { minHeight: 48, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8 }, serverName: { fontSize: 12, fontWeight: '500' },

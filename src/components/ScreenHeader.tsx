@@ -3,6 +3,7 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-
 import { Label } from './ui';
 import { ShellIcon } from './ShellIcon';
 import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
+import { pageInset } from '../lib/layout';
 
 export function ScreenHeader({ title, backLabel, onBack, onOpenNavigation, onRefresh, refreshing }: {
   title: string;
@@ -25,7 +26,7 @@ export function ScreenHeader({ title, backLabel, onBack, onOpenNavigation, onRef
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
-  header: { minHeight: 56, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  header: { minHeight: 56, paddingHorizontal: pageInset, flexDirection: 'row', alignItems: 'center', gap: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   back: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, marginStart: -16, marginEnd: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
   title: { fontSize: 17, lineHeight: 23, fontWeight: '600', flex: 1 },
   menu: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, marginEnd: -16, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },

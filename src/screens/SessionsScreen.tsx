@@ -9,6 +9,7 @@ import { useNativePresentation } from '../lib/sheets';
 import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
 import { Button, Busy, Card, Empty, ErrorNotice, Field, Label, Row, Sheet, confirmAction } from '../components/ui';
 import { ShellIcon } from '../components/ShellIcon';
+import { pageInset } from '../lib/layout';
 
 type Props = {
   client: Client;
@@ -436,7 +437,7 @@ const sessionListEvents = new Set([
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 8 },
+  header: { paddingHorizontal: pageInset, paddingTop: 6, paddingBottom: 10, gap: 8 },
   compactHeader: { paddingTop: 8 },
   headingRow: { flexWrap: 'nowrap', gap: 8 },
   navigationButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, marginStart: -16, marginEnd: 16, alignItems: 'center', justifyContent: 'center' },
@@ -447,10 +448,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   actionButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, marginStart: 16, marginEnd: -16, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.55 },
   searchRow: { flexWrap: 'nowrap', gap: 8 },
-  search: { borderRadius: 8, backgroundColor: colors.panel, minHeight: 40, height: 40, paddingHorizontal: 15, paddingVertical: 9, fontSize: 14, lineHeight: 20, includeFontPadding: false, textAlignVertical: 'center' },
+  search: { borderRadius: 8, backgroundColor: colors.panel, minHeight: 40, paddingHorizontal: 15, paddingVertical: 9, fontSize: 14, lineHeight: 20, includeFontPadding: false, textAlignVertical: 'center' },
   filter: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center' },
   filterText: { fontSize: 13, lineHeight: 20 },
-  list: { paddingHorizontal: 16, paddingBottom: 24, gap: 2, flexGrow: 1 },
+  list: { paddingHorizontal: pageInset, paddingBottom: 24, gap: 2, flexGrow: 1 },
   session: { minHeight: 64, flexDirection: 'row', alignItems: 'center', borderRadius: 10 },
   sessionMain: { flex: 1, minWidth: 0, gap: 3, paddingVertical: 10, paddingLeft: 16 },
   sessionPressed: { opacity: 0.65 },

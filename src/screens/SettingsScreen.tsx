@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { BaseNavigationContainer, DefaultTheme, usePreventRemove, useNavigationContainerRef, type NavigationAction } from '@react-navigation/native';
 import { createNativeStackNavigator, type NativeStackScreenProps } from '@react-navigation/native-stack';
 import { HeaderBackButton } from '@react-navigation/elements';
@@ -18,6 +18,7 @@ import { ShellIcon } from '../components/ShellIcon';
 import { useMotionPreference } from '../components/motion';
 import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
 import { useHasUnsavedChanges, useUnsavedChanges, useUnsavedGuard } from '../lib/unsaved';
+import { pageInset } from '../lib/layout';
 
 type Section = 'Accounts' | 'Models' | 'MCP' | 'Config' | 'Skills' | 'Plugins' | 'Permissions' | 'Advanced' | 'Appearance';
 const sectionDescriptions: Record<Section, string> = {
@@ -43,8 +44,8 @@ const HeaderRefreshContext = createContext<React.Dispatch<React.SetStateAction<H
 type SettingsStackParams = { Index: undefined; Section: { section: Section } };
 const SettingsStack = createNativeStackNavigator<SettingsStackParams>();
 const zeroInsets = { top: 0, bottom: 0, left: 0, right: 0 };
-// The native toolbar supplies its inset before the shared Android back control applies its margins.
-const nativeBackInsets = Platform.OS === 'android' ? { marginStart: -7, marginEnd: 33 } : undefined;
+// The native toolbar supplies its inset before the shared back control applies its own margins.
+const nativeBackInsets = Platform.select<ViewStyle>({ android: { marginStart: -7, marginEnd: 33 }, ios: { minWidth: 44, height: 44, justifyContent: 'flex-start' } });
 
 export function SettingsScreen({ client, directory, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation }: { client: Client; directory: string; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void }) {
   const { colors, scheme } = useTheme();
@@ -110,12 +111,12 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
     }}>
       <SettingsStack.Screen name="Index" options={{
         title: 'Settings',
-        headerLeft: onBack ? () => <HeaderBackButton displayMode="minimal" accessibilityLabel={`Back to ${backLabel || 'Sessions'}`} onPress={onBack} tintColor={colors.text} style={nativeBackInsets} /> : undefined,
-        headerRight: onOpenNavigation ? () => <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={{ width: 44, height: 44, marginEnd: Platform.OS === 'android' ? -16 : 0, alignItems: 'center', justifyContent: 'center' }}><ShellIcon name="menu" color={colors.text} /></Pressable> : undefined,
+        headerLeft: onBack ? () => <SettingsBackButton label={backLabel || 'Sessions'} onPress={onBack} /> : undefined,
+        headerRight: onOpenNavigation ? () => <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={{ width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}><ShellIcon name="menu" color={colors.text} /></Pressable> : undefined,
       }}>
         {renderIndex}
       </SettingsStack.Screen>
-      <SettingsStack.Screen name="Section" options={({ route }) => ({ title: route.params.section, headerBackTitle: 'Settings', headerBackButtonDisplayMode: 'minimal' })}>
+      <SettingsStack.Screen name="Section" options={({ route, navigation: screenNavigation }) => ({ title: route.params.section, headerBackVisible: false, headerLeft: () => <SettingsBackButton label="Settings" onPress={() => screenNavigation.goBack()} /> })}>
         {({ route, navigation: screenNavigation }) => <NativeSettingsSection client={client} directory={directory} section={route.params.section} navigation={screenNavigation} />}
       </SettingsStack.Screen>
     </SettingsStack.Navigator>
@@ -130,6 +131,11 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
       </View></HeaderRefreshContext.Provider>
     </> : <SafeAreaInsetsContext.Provider value={zeroInsets}><View style={styles.nativeNavigation}>{navigation}</View></SafeAreaInsetsContext.Provider>}
   </View>;
+}
+
+function SettingsBackButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const { colors } = useTheme();
+  return <HeaderBackButton displayMode="minimal" accessibilityLabel={`Back to ${label}`} onPress={onPress} tintColor={colors.text} style={nativeBackInsets} backImage={Platform.OS === 'ios' ? ({ tintColor }) => <ShellIcon name="back" color={tintColor} size={24} /> : undefined} />;
 }
 
 function SettingsIndex({ onSelect, selected, wide }: { onSelect: (section: Section) => void; selected: Section | null; wide: boolean }) {
@@ -180,7 +186,7 @@ function NativeSettingsSection({ client, directory, section, navigation }: { cli
     if (pendingAction) navigation.dispatch(pendingAction);
   }, [navigation, pendingAction]);
   useEffect(() => {
-    navigation.setOptions({ headerRight: headerRefresh?.refresh ? () => <Pressable accessibilityRole="button" accessibilityLabel="Refresh" accessibilityState={{ disabled: headerRefresh.loading, busy: headerRefresh.loading }} disabled={headerRefresh.loading} onPress={() => headerRefresh.refresh?.()} style={{ width: 44, height: 44, marginEnd: Platform.OS === 'android' ? -16 : 0, alignItems: 'center', justifyContent: 'center' }}>{headerRefresh.loading ? <ActivityIndicator size="small" color={colors.muted} /> : <ShellIcon name="refresh" color={colors.text} />}</Pressable> : undefined });
+    navigation.setOptions({ headerRight: headerRefresh?.refresh ? () => <Pressable accessibilityRole="button" accessibilityLabel="Refresh" accessibilityState={{ disabled: headerRefresh.loading, busy: headerRefresh.loading }} disabled={headerRefresh.loading} onPress={() => headerRefresh.refresh?.()} style={{ width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center' }}>{headerRefresh.loading ? <ActivityIndicator size="small" color={colors.muted} /> : <ShellIcon name="refresh" color={colors.text} />}</Pressable> : undefined });
   }, [colors, headerRefresh, navigation]);
   return <HeaderRefreshContext.Provider value={setHeaderRefresh}><SettingsSection client={client} directory={directory} section={section} /></HeaderRefreshContext.Provider>;
 }
@@ -523,7 +529,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, flexDirection: 'row', minHeight: 0, backgroundColor: colors.bg }, nativeNavigation: { flex: 1, minHeight: 0 },
   narrowScreen: { flexDirection: 'column' }, content: { flex: 1, flexDirection: 'row', minHeight: 0 }, narrowContent: { flexDirection: 'column' },
   sidebar: { width: 220, flexGrow: 0, borderRightWidth: 1, borderRightColor: colors.border },
-  index: { padding: 16, paddingBottom: 32, gap: 24 },
+  index: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 32, gap: 24 },
   indexHeader: { gap: 5 }, group: { gap: 8 }, groupTitle: { fontSize: 11, fontWeight: '600', letterSpacing: 0.8, paddingHorizontal: 16 },
   groupPanel: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border, borderRadius: 10, overflow: 'hidden' },
   sectionRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 15, paddingVertical: 12 },
@@ -531,6 +537,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   sectionName: { fontFamily: sans, fontSize: 16, fontWeight: '500' }, sectionDescription: { fontSize: 12, lineHeight: 18 }, chevron: { fontSize: 24 },
   detail: { flex: 1, minWidth: 0 }, detailHeader: { minHeight: 64, paddingHorizontal: 12, paddingVertical: 6, flexWrap: 'nowrap', borderBottomWidth: 1, borderBottomColor: colors.border },
   detailTitle: { fontFamily: sans, fontSize: 24, lineHeight: 30, fontWeight: '500', flex: 1, flexShrink: 1 },
-  page: { padding: 16, paddingBottom: 32, gap: 16 },
+  page: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 32, gap: 16 },
   name: { fontFamily: sans, fontSize: 16, fontWeight: '600' }, sectionLabel: { fontFamily: sans, color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 8 },
 });
