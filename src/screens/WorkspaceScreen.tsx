@@ -11,6 +11,7 @@ import { TerminalPanel } from '../components/TerminalPanel';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { useUnsavedChanges } from '../lib/unsaved';
 import { useNativePresentation } from '../lib/sheets';
+import { ScreenHeader } from '../components/ScreenHeader';
 
 type Props = {
   client: Client;
@@ -20,19 +21,22 @@ type Props = {
   onAttachFile?: (path: string, contextText?: string) => void | Promise<boolean | void>;
   visible?: boolean;
   sessionID?: string;
+  onBack?: () => void;
+  backLabel?: string;
+  onOpenNavigation?: () => void;
 };
 
 export function WorkspaceScreen(props: Props) {
   return <Workspace key={`${props.connection.id}:${props.directory}`} {...props} />;
 }
 
-function Workspace({ client, connection, directory, onDirectoryChange, onAttachFile, visible = true, sessionID }: Props) {
+function Workspace({ client, connection, directory, onDirectoryChange, onAttachFile, visible = true, sessionID, onBack, backLabel, onOpenNavigation }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [tab, setTab] = useState<'Files' | 'Changes' | 'Worktrees' | 'Terminal'>('Files');
   return <View style={styles.screen}>
-    <View style={styles.header}><Label accessibilityRole="header" style={styles.title}>Workspace</Label></View>
-    <View accessibilityRole="tablist" accessibilityLabel="Workspace sections" style={styles.tabs}>
+    {onBack ? <ScreenHeader title="Workspace" backLabel={backLabel} onBack={onBack} onOpenNavigation={onOpenNavigation} /> : <View style={styles.header}><Label accessibilityRole="header" style={styles.title}>Workspace</Label></View>}
+    <View accessibilityRole="tablist" accessibilityLabel="Workspace sections" style={[styles.tabs, onBack && { marginTop: 12 }]}>
       {(['Files', 'Changes', 'Worktrees', 'Terminal'] as const).map(item => <Pressable key={item} accessibilityRole="tab" accessibilityLabel={item} accessibilityState={{ selected: tab === item }} aria-selected={tab === item} style={({ pressed }) => [styles.workspaceTab, tab === item && styles.selectedTab, pressed && { opacity: 0.65 }]} onPress={() => setTab(item)}><Label style={{ textAlign: 'center', fontSize: 13, color: tab === item ? colors.text : colors.muted }}>{item}</Label></Pressable>)}
     </View>
     <View style={[styles.screen, tab !== 'Files' && { display: 'none' }]}><Files client={client} directory={directory} onAttachFile={onAttachFile} /></View>

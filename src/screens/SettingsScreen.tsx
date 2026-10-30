@@ -1,5 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { BaseNavigationContainer, DefaultTheme, usePreventRemove, useNavigationContainerRef, type NavigationAction } from '@react-navigation/native';
+import { createNativeStackNavigator, type NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { CredentialEntry, IntegrationAttempt, IntegrationCommandAttempt, IntegrationInfo, IntegrationMethod, ModelInfo, PermissionSavedInfo } from '@opencode/client';
 import { isFileNotFoundError } from '@opencode/client';
 import { type Client, errorMessage } from '../lib/client';
@@ -9,8 +12,11 @@ import { DynamicFields } from '../components/SessionForms';
 import { initialFormValues, prepareFormAnswer, type FormValues } from '../lib/forms';
 import { AdvancedSettings } from '../components/AdvancedSettings';
 import { GlobalForms } from '../components/GlobalForms';
+import { ScreenHeader } from '../components/ScreenHeader';
+import { ShellIcon } from '../components/ShellIcon';
+import { useMotionPreference } from '../components/motion';
 import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
-import { useUnsavedChanges, useUnsavedGuard } from '../lib/unsaved';
+import { useHasUnsavedChanges, useUnsavedChanges, useUnsavedGuard } from '../lib/unsaved';
 
 type Section = 'Accounts' | 'Models' | 'MCP' | 'Config' | 'Skills' | 'Plugins' | 'Permissions' | 'Advanced' | 'Appearance';
 const sectionDescriptions: Record<Section, string> = {
@@ -31,14 +37,23 @@ const sectionGroups: { title: string; items: Section[] }[] = [
   { title: 'Advanced', items: ['Advanced'] },
 ];
 
-export function SettingsScreen({ client, directory, visible = true, onBackStateChange }: { client: Client; directory: string; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void }) {
-  const { colors } = useTheme();
+type HeaderRefresh = { refresh?: () => void; loading?: boolean } | null;
+const HeaderRefreshContext = createContext<React.Dispatch<React.SetStateAction<HeaderRefresh>> | null>(null);
+type SettingsStackParams = { Index: undefined; Section: { section: Section } };
+const SettingsStack = createNativeStackNavigator<SettingsStackParams>();
+const zeroInsets = { top: 0, bottom: 0, left: 0, right: 0 };
+
+export function SettingsScreen({ client, directory, visible = true, onBackStateChange, onBack, backLabel, onOpenNavigation }: { client: Client; directory: string; visible?: boolean; onBackStateChange?: (canGoBack: boolean) => void; onBack?: () => void; backLabel?: string; onOpenNavigation?: () => void }) {
+  const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
+  const reducedMotion = useMotionPreference();
   const wide = width >= 920;
   const [section, setSection] = useState<Section | null>(null);
-  const confirmNavigation = useUnsavedGuard();
+  const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
+  const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
   const mounted = useRef(true);
+  const navigationRef = useNavigationContainerRef<SettingsStackParams>();
   const selected = section ?? (wide ? 'Accounts' : null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const changeSection = useCallback(async (next: Section | null) => {
@@ -55,33 +70,116 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => { void changeSection(null); return true; });
     return () => subscription.remove();
   }, [visible, wide, section, changeSection]);
+  const updateNativeBackState = useCallback(() => {
+    const canGoBack = navigationRef.current?.canGoBack() ?? false;
+    onBackStateChange?.(visible && !wide && canGoBack);
+  }, [navigationRef, onBackStateChange, visible, wide]);
+  useEffect(() => {
+    updateNativeBackState();
+    return () => onBackStateChange?.(false);
+  }, [updateNativeBackState, onBackStateChange]);
+  useEffect(() => {
+    if (!visible || wide || Platform.OS === 'web') return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!navigationRef.current?.canGoBack()) return false;
+      navigationRef.current.goBack();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [navigationRef, visible, wide]);
 
-  return <View style={styles.screen}>
-    {(wide || section === null) && <ScrollView style={wide ? styles.sidebar : undefined} contentContainerStyle={styles.index}>
-      <View style={styles.indexHeader}><Heading>Settings</Heading><Label muted>Preferences, connections, and tools</Label></View>
-      {sectionGroups.map(group => <View key={group.title} style={styles.group}>
-        {!(group.items.length === 1 && group.items[0] === group.title) && <Label muted style={styles.groupTitle}>{group.title.toUpperCase()}</Label>}
-        <View style={styles.groupPanel}>{group.items.map((item, index) => <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Open ${item}. ${sectionDescriptions[item]}`} accessibilityState={{ selected: selected === item }} aria-current={selected === item ? 'page' : undefined} onPress={() => { void changeSection(item); }} style={({ pressed }) => [styles.sectionRow, index > 0 && styles.sectionDivider, wide && selected === item && styles.currentSection, pressed && { backgroundColor: colors.raised }]}>
-          <View style={{ flex: 1, minWidth: 0 }}><Label style={styles.sectionName}>{item}</Label><Label muted numberOfLines={1} style={styles.sectionDescription}>{sectionDescriptions[item]}</Label></View>
-          <Label muted accessibilityElementsHidden style={styles.chevron}>›</Label>
-        </Pressable>)}</View>
-      </View>)}
-    </ScrollView>}
-    {selected && <View style={styles.detail}>
-      <Row style={styles.detailHeader}>{!wide && <Button title="‹ Settings" accessibilityLabel="Back to Settings" compact variant="ghost" onPress={() => { void changeSection(null); }} />}<Label accessibilityRole="header" style={styles.detailTitle}>{selected}</Label></Row>
-      <View key={`${directory}:${selected}`} style={{ flex: 1 }}>
-        {selected === 'Accounts' && <Accounts client={client} directory={directory} />}
-        {selected === 'Models' && <Models client={client} directory={directory} />}
-        {selected === 'MCP' && <Mcp client={client} directory={directory} />}
-        {selected === 'Config' && <Configuration client={client} directory={directory} />}
-        {selected === 'Skills' && <Skills client={client} directory={directory} />}
-        {selected === 'Plugins' && <Plugins client={client} directory={directory} />}
-        {selected === 'Permissions' && <Permissions client={client} directory={directory} />}
-        {selected === 'Advanced' && <AdvancedSettings client={client} directory={directory} />}
-        {selected === 'Appearance' && <AppearanceSettings />}
-      </View>
-    </View>}
+  const renderIndex = () => <SettingsIndex onSelect={next => {
+    if (wide || Platform.OS === 'web') { void changeSection(next); return; }
+    navigationRef.navigate('Section', { section: next });
+  }} selected={selected} wide={wide} />;
+  const renderSection = (value: Section) => <SettingsSection client={client} directory={directory} section={value} />;
+
+  const navigationTheme = useMemo(() => ({ ...DefaultTheme, dark: scheme === 'dark', colors: { ...DefaultTheme.colors, primary: colors.accent, background: colors.bg, card: colors.panel, text: colors.text, border: colors.border, notification: colors.danger } }), [colors, scheme]);
+  const navigation = <BaseNavigationContainer ref={navigationRef} theme={navigationTheme} onReady={updateNativeBackState} onStateChange={updateNativeBackState}>
+    <SettingsStack.Navigator screenOptions={{
+      headerStyle: { backgroundColor: colors.bg },
+      headerTintColor: colors.text,
+      headerTitleStyle: { color: colors.text, fontFamily: 'Inter', fontSize: 17, fontWeight: '600' },
+      headerBackTitleStyle: { fontFamily: 'Inter', fontSize: 14 },
+      headerShadowVisible: false,
+      contentStyle: { backgroundColor: colors.bg },
+      animation: reducedMotion ? 'fade' : 'default',
+    }}>
+      <SettingsStack.Screen name="Index" options={{
+        title: 'Settings',
+        headerLeft: onBack ? () => <Pressable accessibilityRole="button" accessibilityLabel={`Back to ${backLabel || 'Sessions'}`} onPress={onBack} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 3, paddingRight: 8 }}><View style={{ transform: [{ rotate: '180deg' }] }}><ShellIcon name="chevron" color={colors.text} size={16} /></View><Label numberOfLines={1} style={{ fontSize: 14, maxWidth: 112 }}>{backLabel || 'Sessions'}</Label></Pressable> : undefined,
+        headerRight: onOpenNavigation ? () => <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><ShellIcon name="menu" color={colors.text} /></Pressable> : undefined,
+      }}>
+        {renderIndex}
+      </SettingsStack.Screen>
+      <SettingsStack.Screen name="Section" options={({ route }) => ({ title: route.params.section, headerBackTitle: 'Settings' })}>
+        {({ route, navigation: screenNavigation }) => <NativeSettingsSection client={client} directory={directory} section={route.params.section} navigation={screenNavigation} />}
+      </SettingsStack.Screen>
+    </SettingsStack.Navigator>
+  </BaseNavigationContainer>;
+
+  return <View style={[styles.screen, !wide && styles.narrowScreen]}>
+    {wide || Platform.OS === 'web' ? <>
+      {!wide && <ScreenHeader title={selected ?? 'Settings'} backLabel={section !== null ? 'Settings' : backLabel} onBack={section !== null ? () => { void changeSection(null); } : onBack} onOpenNavigation={section === null ? onOpenNavigation : undefined} onRefresh={section !== null ? headerRefresh?.refresh : undefined} refreshing={headerRefresh?.loading} />}
+      <HeaderRefreshContext.Provider value={wide ? null : setHeaderRefresh}><View style={[styles.content, !wide && styles.narrowContent]}>
+        {(wide || section === null) && renderIndex()}
+        {selected && (wide || section !== null) && <View style={styles.detail}>{wide && <Row style={styles.detailHeader}><Label accessibilityRole="header" style={styles.detailTitle}>{selected}</Label></Row>}{renderSection(selected)}</View>}
+      </View></HeaderRefreshContext.Provider>
+    </> : <SafeAreaInsetsContext.Provider value={zeroInsets}><View style={styles.nativeNavigation}>{navigation}</View></SafeAreaInsetsContext.Provider>}
   </View>;
+}
+
+function SettingsIndex({ onSelect, selected, wide }: { onSelect: (section: Section) => void; selected: Section | null; wide: boolean }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return <ScrollView style={wide ? styles.sidebar : undefined} contentContainerStyle={styles.index}>
+    {wide && <View style={styles.indexHeader}><Heading>Settings</Heading><Label muted>Preferences, connections, and tools</Label></View>}
+    {sectionGroups.map(group => <View key={group.title} style={styles.group}>
+      {!(group.items.length === 1 && group.items[0] === group.title) && <Label muted style={styles.groupTitle}>{group.title.toUpperCase()}</Label>}
+      <View style={styles.groupPanel}>{group.items.map((item, index) => <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Open ${item}. ${sectionDescriptions[item]}`} accessibilityState={{ selected: selected === item }} aria-current={selected === item ? 'page' : undefined} onPress={() => onSelect(item)} style={({ pressed }) => [styles.sectionRow, index > 0 && styles.sectionDivider, wide && selected === item && styles.currentSection, pressed && { backgroundColor: colors.raised }]}>
+        <View style={{ flex: 1, minWidth: 0 }}><Label style={styles.sectionName}>{item}</Label><Label muted numberOfLines={1} style={styles.sectionDescription}>{sectionDescriptions[item]}</Label></View>
+        <Label muted accessibilityElementsHidden style={styles.chevron}>›</Label>
+      </Pressable>)}</View>
+    </View>)}
+  </ScrollView>;
+}
+
+function SettingsSection({ client, directory, section }: { client: Client; directory: string; section: Section }) {
+  return <View key={`${directory}:${section}`} style={{ flex: 1 }}>
+      {section === 'Accounts' && <Accounts client={client} directory={directory} />}
+      {section === 'Models' && <Models client={client} directory={directory} />}
+      {section === 'MCP' && <Mcp client={client} directory={directory} />}
+      {section === 'Config' && <Configuration client={client} directory={directory} />}
+      {section === 'Skills' && <Skills client={client} directory={directory} />}
+      {section === 'Plugins' && <Plugins client={client} directory={directory} />}
+      {section === 'Permissions' && <Permissions client={client} directory={directory} />}
+      {section === 'Advanced' && <AdvancedSettings client={client} directory={directory} />}
+      {section === 'Appearance' && <AppearanceSettings />}
+  </View>;
+}
+
+function NativeSettingsSection({ client, directory, section, navigation }: { client: Client; directory: string; section: Section; navigation: NativeStackScreenProps<SettingsStackParams, 'Section'>['navigation'] }) {
+  const { colors } = useTheme();
+  const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
+  const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
+  const hasUnsavedConfiguration = useHasUnsavedChanges(`configuration:${directory}`);
+  const [pendingAction, setPendingAction] = useState<NavigationAction | null>(null);
+  const prompting = useRef(false);
+  usePreventRemove(section === 'Config' && hasUnsavedConfiguration && !pendingAction, ({ data }) => {
+    if (prompting.current) return;
+    prompting.current = true;
+    void confirmNavigation().then(leave => {
+      prompting.current = false;
+      if (leave) setPendingAction(data.action);
+    });
+  });
+  useEffect(() => {
+    if (pendingAction) navigation.dispatch(pendingAction);
+  }, [navigation, pendingAction]);
+  useEffect(() => {
+    navigation.setOptions({ headerRight: headerRefresh?.refresh ? () => <Pressable accessibilityRole="button" accessibilityLabel="Refresh" accessibilityState={{ disabled: headerRefresh.loading, busy: headerRefresh.loading }} disabled={headerRefresh.loading} onPress={() => headerRefresh.refresh?.()} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>{headerRefresh.loading ? <ActivityIndicator size="small" color={colors.muted} /> : <ShellIcon name="refresh" color={colors.text} />}</Pressable> : undefined });
+  }, [colors, headerRefresh, navigation]);
+  return <HeaderRefreshContext.Provider value={setHeaderRefresh}><SettingsSection client={client} directory={directory} section={section} /></HeaderRefreshContext.Provider>;
 }
 
 function useResource<T>(client: Client, directory: string, load: (signal: AbortSignal) => Promise<T>) {
@@ -116,10 +214,14 @@ function useResource<T>(client: Client, directory: string, load: (signal: AbortS
 }
 
 function Page({ children, error, loading, refresh }: { children: React.ReactNode; error?: string | null; loading?: boolean; refresh?: () => void }) {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const setHeaderRefresh = useContext(HeaderRefreshContext);
+  useEffect(() => {
+    setHeaderRefresh?.({ refresh, loading });
+    return () => setHeaderRefresh?.(null);
+  }, [setHeaderRefresh, refresh, loading]);
   return <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
-    <Row style={{ justifyContent: 'flex-end' }}>{refresh && <Button title="Refresh" compact variant="ghost" onPress={() => refresh()} />}</Row>
+    {!setHeaderRefresh && refresh && <Row style={{ justifyContent: 'flex-end' }}><Button title="Refresh" compact variant="ghost" onPress={() => refresh()} /></Row>}
     <ErrorNotice error={error} onRetry={refresh ? () => refresh() : undefined} />{loading && <Busy />}{children}
   </ScrollView>;
 }
@@ -415,7 +517,8 @@ function Permissions({ client, directory }: { client: Client; directory: string 
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
-  screen: { flex: 1, flexDirection: 'row', minHeight: 0, backgroundColor: colors.bg },
+  screen: { flex: 1, flexDirection: 'row', minHeight: 0, backgroundColor: colors.bg }, nativeNavigation: { flex: 1, minHeight: 0 },
+  narrowScreen: { flexDirection: 'column' }, content: { flex: 1, flexDirection: 'row', minHeight: 0 }, narrowContent: { flexDirection: 'column' },
   sidebar: { width: 220, flexGrow: 0, borderRightWidth: 1, borderRightColor: colors.border },
   index: { padding: 18, paddingBottom: 32, gap: 22 },
   indexHeader: { gap: 5 }, group: { gap: 8 }, groupTitle: { fontSize: 11, fontWeight: '600', letterSpacing: 0.8, paddingHorizontal: 8 },

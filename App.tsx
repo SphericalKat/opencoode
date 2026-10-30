@@ -19,13 +19,12 @@ import { OpenCodeLogo } from './src/components/OpenCodeLogo';
 import { NavIcon } from './src/components/Icons';
 import { ProjectDirectoryBrowser } from './src/components/ProjectDirectoryBrowser';
 import { ShellIcon } from './src/components/ShellIcon';
-import { MotionDrawer } from './src/components/motion';
+import { MotionDrawer, MotionScreen } from './src/components/motion';
 import { ConnectionFlow, type ConnectionForm } from './src/components/ConnectionFlow';
 import { SheetCoordinatorProvider, useSheetCoordinator } from './src/lib/sheets';
 
 type Tab = 'sessions' | 'workspace' | 'settings';
-const tabs: { id: Tab; label: string }[] = [
-  { id: 'sessions', label: 'Sessions' },
+const destinations: { id: Tab; label: string }[] = [
   { id: 'workspace', label: 'Workspace' },
   { id: 'settings', label: 'Settings' },
 ];
@@ -298,6 +297,12 @@ function MobileApp() {
   }, [active, client, confirmNavigation, syncSelectedLocation]);
 
   async function changeTab(next: Tab) {
+    if (next === 'sessions' || next === tab) {
+      setTab(next);
+      setNavigationOpen(false);
+      if (next === 'sessions' && selectedSessionRef.current) void syncSelectedLocation();
+      return;
+    }
     const owner = active;
     const request = epoch.current;
     const navigation = selection.current;
@@ -498,7 +503,8 @@ function MobileApp() {
   const serverForm = <ConnectionFlow key={flowRevision} form={form} connections={connections} activeID={active?.id} unavailableID={unavailableID ?? undefined} connecting={connecting} error={connectionError ?? (!active ? error : null)} pairingLink={pairingLink} onPairingLinkConsumed={() => setPairingLink(null)} onChangeForm={setForm} onClearError={() => setConnectionError(null)} onConnect={(connection, alternatives) => selectServer(connection, undefined, alternatives, !!form.name.trim())} onRemove={removeConnection} />;
 
   const projectLabel = directory.split('/').filter(Boolean).pop() || 'Project';
-  const showConversation = tab === 'sessions' && !!sessionID;
+  const returnLabel = sessionID ? 'Chat' : 'Sessions';
+  const returnToSessions = () => { void changeTab('sessions'); };
   const openServers = () => { setConnectionError(null); showNavigationSheet('servers'); };
   const navigation = client && active ? <>
     <View style={styles.navigationBrand}><OpenCodeLogo width={136} />{!wide && <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={() => setNavigationOpen(false)} style={styles.iconButton}><ShellIcon name="close" color={colors.muted} /></Pressable>}</View>
@@ -508,7 +514,7 @@ function MobileApp() {
     <View style={styles.navigationSessions}><SessionsScreen compact key={`${active.id}:${connectionRevision}:navigation`} client={client} directory={directory} selectedSessionID={sessionID ?? undefined} revision={revision} onOpenSession={openSession} /></View>
     <View style={styles.navigationFooter}>
       <Pressable accessibilityRole="button" accessibilityLabel="Switch server" onPress={openServers} style={({ pressed }) => [styles.serverChoice, pressed && styles.pressed]}><ShellIcon name="server" color={colors.muted} size={18} /><View style={styles.contextText}><Label numberOfLines={1} style={styles.serverName}>{active.name}</Label><Label muted style={styles.contextDetail}>OpenCode {info?.version ? `· v${info.version}` : ''}</Label></View><ShellIcon name="chevron" size={14} color={colors.faint} /></Pressable>
-      <View style={styles.navigationTabs}>{tabs.map(item => <Pressable key={item.id} accessibilityRole="tab" accessibilityLabel={item.label} accessibilityState={{ selected: tab === item.id }} aria-selected={tab === item.id} onPress={() => { void changeTab(item.id); }} style={({ pressed }) => [styles.navigationTab, tab === item.id && styles.selectedTab, pressed && styles.pressed]}><NavIcon name={item.id} color={tab === item.id ? colors.text : colors.muted} size={18} /><Label style={[styles.navigationTabText, tab === item.id && { color: colors.text }]}>{item.label}</Label></Pressable>)}</View>
+      <View style={styles.navigationLinks}>{destinations.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Open ${item.label}`} aria-current={tab === item.id ? 'page' : undefined} onPress={() => { void changeTab(item.id); }} style={({ pressed }) => [styles.navigationLink, tab === item.id && styles.selectedDestination, pressed && styles.pressed]}><NavIcon name={item.id} color={colors.muted} size={16} /><Label style={styles.navigationLinkText}>{item.label}</Label></Pressable>)}</View>
     </View>
   </> : null;
 
@@ -521,20 +527,15 @@ function MobileApp() {
     </ScrollView></KeyboardAvoidingView> : <View style={styles.shell}>
       {wide && <View style={styles.sidebar}>{navigation}</View>}
       <View style={styles.main}>
-      {!showConversation && !wide && <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={openNavigation} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><ShellIcon name="menu" color={colors.text} /></Pressable>
-        <OpenCodeLogo width={118} />
-        <Pressable accessibilityRole="button" accessibilityLabel="Switch project directory" onPress={() => void openProjects()} style={({ pressed }) => [styles.headerProject, pressed && styles.pressed]}><Label numberOfLines={1} style={styles.headerProjectText}>{projectLabel}</Label><ShellIcon name="chevron" color={colors.faint} size={12} /></Pressable>
-      </View>}
       {error && <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><ErrorNotice error={error} /></View>}
       {pendingLocation?.sessionID === sessionID && <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><ErrorNotice error={`This session uses ${pendingLocation.directory}. Update the workspace before you attach files or open its terminal.`} onRetry={() => { void syncSelectedLocation(); }} /></View>}
       <View style={styles.body}>
-        <View style={[styles.full, { flexDirection: 'row' }, tab !== 'sessions' && { display: 'none' }]}>
-          {!wide && !sessionID && <View style={styles.full}><SessionsScreen key={`${active.id}:${connectionRevision}`} client={client} directory={directory} selectedSessionID={sessionID ?? undefined} revision={revision} onOpenSession={openSession} /></View>}
+        <MotionScreen visible={tab === 'sessions'} style={[styles.full, { flexDirection: 'row' }, tab !== 'sessions' && { display: 'none' }]}>
+          {!wide && !sessionID && <View style={styles.full}><SessionsScreen key={`${active.id}:${connectionRevision}`} client={client} directory={directory} selectedSessionID={sessionID ?? undefined} revision={revision} onOpenSession={openSession} onOpenNavigation={openNavigation} /></View>}
           {(wide || sessionID) && <View style={styles.full}>{sessionID ? <ChatScreen key={`${active.id}:${connectionRevision}:${sessionID}`} client={client} sessionID={sessionID} serverID={active.id} draftKey={`${active.id}:${sessionID}`} visible={tab === 'sessions'} projectLabel={projectLabel} onOpenNavigation={wide ? undefined : openNavigation} onSessionChanged={() => { setRevision(value => value + 1); void syncSelectedLocation(); }} onOpenSession={id => { openSession(id); setRevision(value => value + 1); }} attachmentPath={attachmentPath} attachmentContext={attachmentContext} onAttachmentConsumed={() => { setAttachmentPath(undefined); setAttachmentContext(undefined); }} /> : <View style={styles.welcome}><OpenCodeLogo width={160} /><Heading>Start a session</Heading><Label muted style={styles.welcomeDetail}>Choose a conversation, or create a new session in {projectLabel}.</Label></View>}</View>}
-        </View>
-        {visited.workspace && <View style={[styles.full, tab !== 'workspace' && { display: 'none' }]}><WorkspaceScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} connection={active} directory={directory} sessionID={sessionID ?? undefined} visible={tab === 'workspace'} onDirectoryChange={changeDirectory} onAttachFile={attachFile} /></View>}
-        {visited.settings && <View style={[styles.full, tab !== 'settings' && { display: 'none' }]}><SettingsScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} directory={directory} visible={tab === 'settings'} onBackStateChange={setSettingsBackState} /></View>}
+        </MotionScreen>
+        {visited.workspace && <MotionScreen visible={tab === 'workspace'} style={[styles.full, tab !== 'workspace' && { display: 'none' }]}><WorkspaceScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} connection={active} directory={directory} sessionID={sessionID ?? undefined} visible={tab === 'workspace'} onDirectoryChange={changeDirectory} onAttachFile={attachFile} onBack={wide ? undefined : returnToSessions} backLabel={returnLabel} onOpenNavigation={wide ? undefined : openNavigation} /></MotionScreen>}
+        {visited.settings && <MotionScreen visible={tab === 'settings'} style={[styles.full, tab !== 'settings' && { display: 'none' }]}><SettingsScreen key={`${active.id}:${connectionRevision}:${directory}`} client={client} directory={directory} visible={tab === 'settings'} onBackStateChange={setSettingsBackState} onBack={wide ? undefined : returnToSessions} backLabel={returnLabel} onOpenNavigation={wide ? undefined : openNavigation} /></MotionScreen>}
       </View>
       </View>
     </View>}
@@ -552,20 +553,17 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg }, boot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   onboarding: { flexGrow: 1, padding: 24, paddingVertical: 40, maxWidth: 520, width: '100%', alignSelf: 'center', gap: 16 },
   shell: { flex: 1, flexDirection: 'row', minHeight: 0 }, main: { flex: 1, minWidth: 0, minHeight: 0 },
-  header: { height: 56, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 10 },
   iconButton: { width: Platform.OS === 'android' ? 48 : 44, height: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
-  headerProject: { flex: 1, minWidth: 0, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6, paddingHorizontal: 8, borderRadius: 8 },
-  headerProjectText: { fontSize: 12, color: colors.muted, flexShrink: 1 },
   body: { flex: 1, flexDirection: 'row', minHeight: 0 }, full: { flex: 1, minWidth: 0, minHeight: 0 },
   sidebar: { width: 288, borderRightWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
-  navigationBrand: { height: 64, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  navigationBrand: { height: 64, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   projectChoice: { marginHorizontal: 12, paddingHorizontal: 12, paddingVertical: 10, minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border },
   contextText: { flex: 1, minWidth: 0, gap: 1 }, projectName: { fontSize: 13, fontWeight: '500' }, contextDetail: { fontSize: 10, lineHeight: 15 },
   navigationSessions: { flex: 1, minHeight: 0, marginTop: 8 },
-  navigationFooter: { borderTopWidth: 1, borderColor: colors.border, padding: 12, gap: 8 },
-  navigationTabs: { flexDirection: 'row', gap: 4 }, navigationTab: { flex: 1, minHeight: Platform.OS === 'android' ? 56 : 52, alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 8 },
-  navigationTabText: { fontFamily: sans, color: colors.muted, fontSize: 10, lineHeight: 15 }, selectedTab: { backgroundColor: colors.panel },
-  serverChoice: { minHeight: 48, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8 }, serverName: { fontSize: 12, fontWeight: '500' },
+  navigationFooter: { borderTopWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingTop: 8, gap: 4 },
+  navigationLinks: { flexDirection: 'row', gap: 4 }, navigationLink: { flex: 1, minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 8 },
+  navigationLinkText: { fontFamily: sans, color: colors.muted, fontSize: 12, lineHeight: 18 }, selectedDestination: { backgroundColor: colors.panel },
+  serverChoice: { minHeight: 48, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8 }, serverName: { fontSize: 12, fontWeight: '500' },
   drawer: { height: '100%', backgroundColor: colors.bg, borderRightWidth: 1, borderColor: colors.border },
   pressed: { backgroundColor: colors.selected }, welcome: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 20 }, welcomeDetail: { maxWidth: 320, textAlign: 'center', lineHeight: 23 },
 });

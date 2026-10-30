@@ -34,6 +34,39 @@ export function PressFeedback({ pressed, disabled, children, style }: { pressed:
   }]}>{children}</Animated.View>;
 }
 
+export function MotionScreen({ visible, children, style }: { visible: boolean; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const reduced = useMotionPreference();
+  const progress = useSharedValue(0);
+  const previousVisible = useRef(false);
+
+  useLayoutEffect(() => {
+    const wasVisible = previousVisible.current;
+    previousVisible.current = visible;
+    cancelAnimation(progress);
+    if (!visible) {
+      progress.set(0);
+    } else if (!wasVisible) {
+      progress.set(0);
+      progress.set(withTiming(1, { duration: reduced ? 100 : 170, easing: easeContent, reduceMotion: ReduceMotion.Never }));
+    } else {
+      progress.set(1);
+    }
+  }, [visible, reduced, progress]);
+  useEffect(() => () => cancelAnimation(progress), [progress]);
+
+  const entry = useAnimatedStyle(() => ({
+    opacity: visible ? progress.get() : 0,
+    transform: [{ translateX: visible && !reduced ? 8 * (1 - progress.get()) : 0 }],
+  }), Platform.OS === 'web' ? [reduced, visible] : undefined);
+
+  return <Animated.View
+    accessibilityElementsHidden={!visible}
+    importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
+    pointerEvents={visible ? 'auto' : 'none'}
+    style={[styles.screen, style, entry]}
+  >{children}</Animated.View>;
+}
+
 export function MotionContent({ transitionKey, variant, direction = 1, enabled = true, children, style }: {
   transitionKey: string | number | boolean;
   variant: 'context' | 'connection';
@@ -142,6 +175,7 @@ export function MotionDrawer({ visible, width, onClose, onDismiss, children, pan
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, minWidth: 0, minHeight: 0 },
   pressContent: { alignItems: 'center', justifyContent: 'center' },
   indicator: { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   drawerRoot: { flex: 1, flexDirection: 'row' },

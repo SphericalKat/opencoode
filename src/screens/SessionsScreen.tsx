@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Alert, AppState, FlatList, Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -8,6 +8,7 @@ import { type Client, errorMessage } from '../lib/client';
 import { useNativePresentation } from '../lib/sheets';
 import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
 import { Button, Busy, Card, Empty, ErrorNotice, Field, Label, Row, Sheet, confirmAction } from '../components/ui';
+import { ShellIcon } from '../components/ShellIcon';
 
 type Props = {
   client: Client;
@@ -16,11 +17,12 @@ type Props = {
   revision?: number;
   selectedSessionID?: string;
   compact?: boolean;
+  onOpenNavigation?: () => void;
 };
 
-export function SessionsScreen({ client, directory, onOpenSession, revision, selectedSessionID, compact = false }: Props) {
+export function SessionsScreen({ client, directory, onOpenSession, revision, selectedSessionID, compact = false, onOpenNavigation }: Props) {
   const withNativePresentation = useNativePresentation();
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [width, setWidth] = useState(360);
@@ -35,7 +37,6 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   const [listError, setListError] = useState<string>();
   const [statusError, setStatusError] = useState<string>();
   const [streamError, setStreamError] = useState<string>();
-  const [streamStatus, setStreamStatus] = useState('Connecting');
   const [foreground, setForeground] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
   const [actions, setActions] = useState<'menu' | 'filter' | 'create' | null>(null);
   const lastActions = useRef<'menu' | 'filter' | 'create'>('menu');
@@ -155,7 +156,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
   }, []);
 
   useEffect(() => {
-    if (!foreground) { refreshRequest.current?.abort(); quietRefreshPending.current = false; setStreamStatus('Paused'); return; }
+    if (!foreground) { refreshRequest.current?.abort(); quietRefreshPending.current = false; return; }
     const controller = new AbortController();
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -169,7 +170,6 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       void refreshRef.current(true, controller.signal);
       while (!controller.signal.aborted) {
         try {
-          setStreamStatus(attempts ? 'Reconnecting' : 'Connecting');
           const attempt = new AbortController();
           const cancelAttempt = () => attempt.abort();
           controller.signal.addEventListener('abort', cancelAttempt, { once: true });
@@ -190,7 +190,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
               if (result.done || controller.signal.aborted) break;
               clearTimeout(initialTimeout);
               const event = result.value;
-              setStreamStatus('Live'); setStreamError(undefined); attempts = 0;
+              setStreamError(undefined); attempts = 0;
               if (event.type === 'server.connected' || event.type === 'location.shutdown' || sessionListEvents.has(event.type)) scheduleRefresh();
             }
           } finally {
@@ -203,7 +203,6 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
           if (!controller.signal.aborted) throw new Error('The live connection closed');
         } catch (cause) {
           if (controller.signal.aborted) break;
-          setStreamStatus('Reconnecting');
           setStreamError(`Live updates unavailable: ${errorMessage(cause)}`);
           await new Promise<void>(resolve => { releaseRetry = resolve; retryTimer = setTimeout(resolve, Math.min(1000 * 2 ** Math.min(attempts++, 4), 15000)); });
           if (!controller.signal.aborted) await refreshRef.current(true, controller.signal);
@@ -325,10 +324,33 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
     void refresh(nextCursor);
   };
 
+  const chooseHistory = () => {
+    if (Platform.OS === 'web') { setActions('filter'); return; }
+    const owner = scope.current;
+    void withNativePresentation(() => new Promise<void>(resolve => {
+      const choose = (value: boolean) => {
+        if (mounted.current && scope.current === owner) setArchived(value);
+        resolve();
+      };
+      if (Platform.OS === 'ios') ActionSheetIOS.showActionSheetWithOptions({
+        title: 'Session history',
+        options: ['Recent sessions', 'Archived sessions', 'Cancel'],
+        cancelButtonIndex: 2,
+        userInterfaceStyle: scheme,
+      }, index => { if (index < 2) choose(index === 1); else resolve(); });
+      else Alert.alert('Session history', undefined, [
+        { text: 'Recent sessions', onPress: () => choose(false) },
+        { text: 'Archived sessions', onPress: () => choose(true) },
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve() },
+      ], { cancelable: true, onDismiss: () => resolve() });
+    })).catch(cause => { if (mounted.current && scope.current === owner) setError(errorMessage(cause)); });
+  };
+
   return <View style={styles.screen} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
     <View style={styles.header}>
       <Row style={styles.headingRow}>
-        <View style={styles.headingText}><Label accessibilityRole="header" numberOfLines={1} style={[styles.title, compactHeader && styles.compactTitle]}>Your sessions</Label><Label muted style={styles.connection}>{streamStatus}</Label></View>
+        {!compact && onOpenNavigation && <Pressable accessibilityRole="button" accessibilityLabel="Open navigation" onPress={onOpenNavigation} style={({ pressed }) => [styles.navigationButton, pressed && styles.pressed]}><ShellIcon name="menu" color={colors.text} /></Pressable>}
+        <View style={styles.headingText}><Label accessibilityRole="header" numberOfLines={1} style={[styles.title, compactHeader && styles.compactTitle]}>{compact ? 'Your sessions' : 'Sessions'}</Label></View>
         <Pressable accessibilityRole="button" accessibilityLabel="New session" accessibilityState={{ disabled: busy, busy: creating }} disabled={busy} onPress={() => { void createSession(); }} style={({ pressed }) => [styles.newButton, compactHeader && styles.compactNew, (pressed || busy) && styles.pressed]}>
           {creating ? <ActivityIndicator size="small" color={colors.primaryText} /> : <Label style={styles.newText}>{compactHeader ? '＋' : 'New session'}</Label>}
         </Pressable>
@@ -336,7 +358,7 @@ export function SessionsScreen({ client, directory, onOpenSession, revision, sel
       </Row>
       <Row style={styles.searchRow}>
         <View style={{ flex: 1, minWidth: 0 }}><Field accessibilityLabel="Search sessions" placeholder={archived ? 'Search archived sessions' : 'Search sessions'} value={search} onChangeText={setSearch} clearButtonMode="while-editing" style={styles.search} /></View>
-        {search ? <Button title="Clear" accessibilityLabel="Clear session search" compact variant="ghost" onPress={() => setSearch('')} /> : <Pressable accessibilityRole="button" accessibilityLabel={`Session history: ${archived ? 'Archived' : 'Recent'}`} onPress={() => setActions('filter')} style={styles.filter}><Label muted>{archived ? 'Archived' : 'Recent'} ⌄</Label></Pressable>}
+        {search ? <Button title="Clear" accessibilityLabel="Clear session search" compact variant="ghost" onPress={() => setSearch('')} /> : <Pressable accessibilityRole="button" accessibilityLabel={`Session history: ${archived ? 'Archived' : 'Recent'}`} onPress={chooseHistory} style={styles.filter}><Label muted>{archived ? 'Archived' : 'Recent'} ⌄</Label></Pressable>}
       </Row>
       <ErrorNotice error={listError} onRetry={() => { void refresh(); }} />
       <ErrorNotice error={error} />
@@ -412,12 +434,12 @@ const sessionListEvents = new Set([
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { padding: 16, paddingBottom: 10, gap: 12 },
+  header: { paddingHorizontal: 12, paddingTop: 16, paddingBottom: 10, gap: 12 },
   headingRow: { flexWrap: 'nowrap', gap: 8 },
+  navigationButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, alignItems: 'center', justifyContent: 'center' },
   headingText: { flex: 1, minWidth: 0, gap: 2 },
   title: { fontSize: 24, lineHeight: 29, fontWeight: '500', letterSpacing: -0.45 },
   compactTitle: { fontSize: 18, lineHeight: 23, letterSpacing: -0.2 },
-  connection: { fontSize: 11, lineHeight: 15 },
   newButton: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
   compactNew: { paddingHorizontal: 10 },
   newText: { color: colors.primaryText, fontSize: 13, fontWeight: '500' },
@@ -425,9 +447,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   searchRow: { flexWrap: 'nowrap', gap: 8 },
   search: { borderRadius: 8, backgroundColor: colors.panel },
   filter: { minHeight: Platform.OS === 'android' ? 48 : 44, minWidth: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingHorizontal: 8, paddingBottom: 24, gap: 2, flexGrow: 1 },
+  list: { paddingHorizontal: 12, paddingBottom: 24, gap: 2, flexGrow: 1 },
   session: { minHeight: 76, flexDirection: 'row', alignItems: 'center', borderRadius: 10 },
-  sessionMain: { flex: 1, minWidth: 0, gap: 6, paddingVertical: 12, paddingLeft: 16 },
+  sessionMain: { flex: 1, minWidth: 0, gap: 6, paddingVertical: 12, paddingLeft: 12 },
   sessionTitle: { flex: 1, minWidth: 0, fontWeight: '500', fontSize: 16, lineHeight: 21 },
   metadata: { fontSize: 12, lineHeight: 17 },
   menuRow: { minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
