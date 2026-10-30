@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { CredentialEntry, IntegrationAttempt, IntegrationCommandAttempt, IntegrationInfo, IntegrationMethod, ModelInfo, PermissionSavedInfo } from '@opencode/client';
 import { isFileNotFoundError } from '@opencode/client';
@@ -84,24 +84,35 @@ export function SettingsScreen({ client, directory, visible = true, onBackStateC
   </View>;
 }
 
-function useResource<T>(load: (signal: AbortSignal) => Promise<T>) {
+function useResource<T>(client: Client, directory: string, load: (signal: AbortSignal) => Promise<T>) {
+  const scope = useMemo(() => ({ client, directory }), [client, directory]);
   const [data, setData] = useState<T>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [resourceScope, setResourceScope] = useState(scope);
   const active = useRef(true);
-  const latest = useRef(load);
-  latest.current = load;
+  const latest = useRef({ scope, load });
+  latest.current = { scope, load };
   const sequence = useRef(0);
   const refresh = useCallback(async (signal?: AbortSignal) => {
+    const { scope: owner, load: read } = latest.current;
     const current = ++sequence.current;
+    const isCurrent = () => active.current && current === sequence.current && latest.current.scope === owner;
+    setResourceScope(owner);
     setLoading(true);
     setError(null);
-    try { const result = await withSettingsRequest(requestSignal => latest.current(requestSignal), signal); if (active.current && current === sequence.current) setData(result); }
-    catch (e) { if (active.current && current === sequence.current) setError(errorMessage(e)); }
-    finally { if (active.current && current === sequence.current) setLoading(false); }
+    try { const result = await withSettingsRequest(read, signal); if (isCurrent()) setData(result); }
+    catch (e) { if (isCurrent()) setError(errorMessage(e)); }
+    finally { if (isCurrent()) setLoading(false); }
   }, []);
-  useEffect(() => { active.current = true; void refresh(); return () => { active.current = false; sequence.current++; }; }, [refresh]);
-  return { data, error, loading, refresh };
+  useEffect(() => {
+    const controller = new AbortController();
+    active.current = true;
+    setData(undefined);
+    void refresh(AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]));
+    return () => { active.current = false; sequence.current++; controller.abort(); };
+  }, [scope, refresh]);
+  return { data: resourceScope === scope ? data : undefined, error: resourceScope === scope ? error : null, loading: resourceScope !== scope || loading, refresh };
 }
 
 function Page({ children, error, loading, refresh }: { children: React.ReactNode; error?: string | null; loading?: boolean; refresh?: () => void }) {
@@ -130,7 +141,7 @@ function AppearanceSettings() {
 function Accounts({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async signal => {
+  const { data, error, loading, refresh } = useResource(client, directory, async signal => {
     const [integrations, credentials] = await Promise.all([client.integration.list({ location: { directory } }, { signal }), client.credential.list({ signal })]);
     return { integrations: integrations.data, credentials };
   });
@@ -250,7 +261,7 @@ function ConnectIntegration({ client, directory, integration, onClose }: { clien
 function Models({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async signal => {
+  const { data, error, loading, refresh } = useResource(client, directory, async signal => {
     const [models, providers] = await Promise.all([client.model.list({ location: { directory }, types: ['chat', 'image', 'decision'] }, { signal }), client.provider.list({ location: { directory } }, { signal })]);
     return { models: models.data, providers: providers.data };
   });
@@ -276,7 +287,7 @@ function Models({ client, directory }: { client: Client; directory: string }) {
 function Mcp({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async signal => (await client.mcp.list({ location: { directory } }, { signal })).data);
+  const { data, error, loading, refresh } = useResource(client, directory, async signal => (await client.mcp.list({ location: { directory } }, { signal })).data);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'remote' | 'local'>('remote');
@@ -315,7 +326,7 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
 function Configuration({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async signal => {
+  const { data, error, loading, refresh } = useResource(client, directory, async signal => {
     const [entries, shells] = await Promise.all([client.config.get({ location: { directory } }, { signal }), client.config.shells({ signal })]);
     return { entries, shells };
   });
@@ -349,7 +360,7 @@ function Configuration({ client, directory }: { client: Client; directory: strin
 function Skills({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async signal => {
+  const { data, error, loading, refresh } = useResource(client, directory, async signal => {
     const [skills, commands] = await Promise.all([client.skill.list({ location: { directory } }, { signal }), client.command.list({ location: { directory } }, { signal })]); return { skills: skills.data, commands: commands.data };
   });
   const [query, setQuery] = useState('');
@@ -369,7 +380,7 @@ function Skills({ client, directory }: { client: Client; directory: string }) {
 function Plugins({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async signal => (await client.plugin.list({ location: { directory } }, { signal })).data);
+  const { data, error, loading, refresh } = useResource(client, directory, async signal => (await client.plugin.list({ location: { directory } }, { signal })).data);
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -388,7 +399,7 @@ function Plugins({ client, directory }: { client: Client; directory: string }) {
 function Permissions({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { data, error, loading, refresh } = useResource(async signal => { const location = await client.location.get({ location: { directory } }, { signal }); return client.permission.saved.list({ projectID: location.project.id }, { signal }); });
+  const { data, error, loading, refresh } = useResource(client, directory, async signal => { const location = await client.location.get({ location: { directory } }, { signal }); return client.permission.saved.list({ projectID: location.project.id }, { signal }); });
   const [selected, setSelected] = useState<PermissionSavedInfo>();
   const [action, setAction] = useState('');
   const [resource, setResource] = useState('');

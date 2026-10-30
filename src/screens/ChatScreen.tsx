@@ -28,6 +28,8 @@ import { SideQuestion } from '../components/SideQuestion';
 import { McpResources } from '../components/McpResources';
 import { ArtifactContent } from '../components/ArtifactContent';
 import { modelPreferenceID, useModelPreferences } from '../lib/modelPreferences';
+import { MessageActionsContext } from '../lib/messageActions';
+import { useNativePresentation } from '../lib/sheets';
 
 type Props = {
   client: Client;
@@ -58,6 +60,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const modelPreferences = useModelPreferences(serverID || '');
+  const withNativePresentation = useNativePresentation();
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [messages, setMessages] = useState<SessionMessageInfo[]>([]);
   const [cursor, setCursor] = useState<string | undefined>();
@@ -133,6 +136,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const onSessionChangedRef = useRef(onSessionChanged);
   const consumedAttachment = useRef<{ path: string; context?: string } | null>(null);
   const queuedDevicePicker = useRef(false);
+  const queuedMessagePanel = useRef<'selectText' | 'background' | null>(null);
   const devicePickerActive = useRef(false);
   onSessionChangedRef.current = onSessionChanged;
   const draftRef = useRef({ text: draft, files: attachments, skillIDs: selectedSkills.map(skill => skill.id), agentIDs: selectedAgentIDs, delivery });
@@ -172,6 +176,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
   const setFollowing = useCallback((follow: boolean) => {
     followingLatestRef.current = follow;
     if (!follow && followFrame.current !== undefined) { cancelAnimationFrame(followFrame.current); followFrame.current = undefined; }
+    setAwayFromLatest(follow ? false : !nearEnd.current);
     setFollowingLatest(current => current === follow ? current : follow);
   }, []);
   const selectMessage = useCallback((id: string) => {
@@ -195,6 +200,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     if (visible) followContent();
   }, [visible, followContent]);
   const jumpToLatest = useCallback(() => {
+    userScrolling.current = false;
+    wheelDirection.current = 0;
     setFollowing(true);
     nearEnd.current = true;
     setAwayFromLatest(false);
@@ -206,7 +213,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     const nextNearEnd = content - offset - viewport <= 48;
     if (nextNearEnd !== nearEnd.current) {
       nearEnd.current = nextNearEnd;
-      setAwayFromLatest(!nextNearEnd);
+      if (!followingLatestRef.current) setAwayFromLatest(!nextNearEnd);
     }
   }, []);
   const contentSizeChanged = useCallback((_width: number, height: number) => {
@@ -235,14 +242,18 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     userScrolling.current = false;
     setFollowing(nearEnd.current);
   }, [updateScrollPosition, setFollowing]);
-  const listLoaded = useCallback(() => {
-    if (followingLatestRef.current && !userScrolling.current) list.current?.scrollToEnd({ animated: false });
+  const attachWebScroll = useCallback(() => {
     if (Platform.OS !== 'web') return;
     const node = list.current?.getScrollableNode();
     if (!(node instanceof HTMLElement)) return;
     webScrollCleanup.current();
     const wheel = (event: WheelEvent) => {
       if (!event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      if (event.deltaY > 0 && nearEnd.current) {
+        userScrolling.current = false;
+        setFollowing(true);
+        return;
+      }
       userScrolling.current = true;
       wheelDirection.current = event.deltaY;
       followKeyboard.current = false;
@@ -265,12 +276,18 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     };
     node.addEventListener('wheel', wheel, { passive: true });
     node.addEventListener('touchmove', touch, { passive: true });
+    node.addEventListener('touchend', end, { passive: true });
+    node.addEventListener('touchcancel', end, { passive: true });
     node.addEventListener('scrollend', end);
     node.addEventListener('contextmenu', context);
     node.addEventListener('keydown', keyboard);
-    webScrollCleanup.current = () => { node.removeEventListener('wheel', wheel); node.removeEventListener('touchmove', touch); node.removeEventListener('scrollend', end); node.removeEventListener('contextmenu', context); node.removeEventListener('keydown', keyboard); };
+    webScrollCleanup.current = () => { node.removeEventListener('wheel', wheel); node.removeEventListener('touchmove', touch); node.removeEventListener('touchend', end); node.removeEventListener('touchcancel', end); node.removeEventListener('scrollend', end); node.removeEventListener('contextmenu', context); node.removeEventListener('keydown', keyboard); };
   }, [beginUserScroll, setFollowing, selectMessage]);
-  useEffect(() => () => webScrollCleanup.current(), []);
+  const listLoaded = useCallback(() => {
+    if (followingLatestRef.current && !userScrolling.current) list.current?.scrollToEnd({ animated: false });
+    attachWebScroll();
+  }, [attachWebScroll]);
+  useEffect(() => { attachWebScroll(); return () => webScrollCleanup.current(); }, [attachWebScroll]);
   const maintainPosition = useMemo(() => ({ disabled: followingLatest }), [followingLatest]);
   const applyMessageSnapshot = useCallback((snapshot: SessionMessageInfo[], reset = false) => {
     setMessages(current => {
@@ -636,7 +653,7 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     if (!draftLoaded || !alive.current || devicePickerActive.current) return;
     devicePickerActive.current = true;
     try {
-      const result = await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true });
+      const result = await withNativePresentation(() => DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true }));
       if (result.canceled) return;
       const files: Attachment[] = [];
       for (const asset of result.assets) {
@@ -734,8 +751,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     } else {
       const file = new File(Paths.cache, filename);
       await file.write(content);
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: session?.title || 'OpenCode session' });
-      else await Share.share({ title: session?.title || 'OpenCode session', message: content });
+      if (await Sharing.isAvailableAsync()) await withNativePresentation(() => Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: session?.title || 'OpenCode session' }));
+      else await withNativePresentation(() => Share.share({ title: session?.title || 'OpenCode session', message: content }));
     }
   });
 
@@ -811,8 +828,12 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
     </Sheet>
     <Sheet visible={panel === 'agents'} title="Choose agent" onClose={() => setPanel(null)}><ErrorNotice error={error} />{agents.filter(agent => !agent.hidden && agent.mode !== 'subagent').map(agent => <Card key={agent.id}><Label style={{ fontWeight: '600' }}>{agent.name}</Label>{agent.description && <Label muted>{agent.description}</Label>}<Button title={session.agent === agent.id ? 'Selected' : 'Use agent'} selected={session.agent === agent.id} disabled={pending} onPress={() => { void run(() => client.session.switchAgent({ sessionID, agent: agent.id }), true); }} /></Card>)}</Sheet>
     <Sheet visible={panel === 'tools'} title="Message tools" onClose={() => setPanel(null)} onDismiss={toolsDismissed}><Button title="Attach from device" disabled={!draftLoaded} onPress={queueDevicePicker} /><Button title="Files & agents" disabled={!draftLoaded} onPress={() => setPanel('mentions')} /><Button title="MCP resource references" disabled={!draftLoaded} onPress={() => setPanel('resources')} /><Button title="Commands & skills" disabled={!draftLoaded} onPress={() => setPanel('commands')} /><Button title="Ask a side question · /btw" onPress={() => { setSideQuestion(undefined); setPanel('btw'); }} /><Button title={`Agent: ${agents.find(agent => agent.id === session.agent)?.name || session.agent || 'Choose agent'}`} onPress={() => setPanel('agents')} /><Label muted>Message delivery</Label><Row><Button title="Steer current work" selected={delivery === 'steer'} onPress={() => setDelivery('steer')} /><Button title="Queue after current work" selected={delivery === 'queue'} onPress={() => setDelivery('queue')} /></Row><Label muted>Start a message with ! to run a shell command on the server.</Label></Sheet>
-    <Sheet visible={panel === 'message'} title="Message" onClose={() => setPanel(null)}><ErrorNotice error={error} />{actionMessage && <>
-      <Button title="Select text" onPress={() => { setTextSelectionMessage(actionMessage); setPanel('selectText'); }} />
+    <Sheet visible={panel === 'message'} title="Message" fitContent onClose={() => { queuedMessagePanel.current = null; setPanel(null); }} onDismiss={() => {
+      const target = queuedMessagePanel.current;
+      queuedMessagePanel.current = null;
+      if (target && alive.current && panel === null && selectedMessageID) setPanel(target);
+    }}><ErrorNotice error={error} />{actionMessage && <>
+      <Button title="Select text" onPress={() => { setTextSelectionMessage(actionMessage); queuedMessagePanel.current = 'selectText'; setPanel(null); }} />
       {'text' in actionMessage && <Button title="Copy message" onPress={() => { void Clipboard.setStringAsync(actionMessage.text).then(() => setPanel(null)).catch(showError); }} />}
       {actionMessage.type === 'assistant' && <Button title="Copy response" onPress={() => { void Clipboard.setStringAsync(actionMessage.content.filter(part => part.type === 'text').map(part => part.text).join('\n\n')).then(() => setPanel(null)).catch(showError); }} />}
       {actionMessage.type === 'user' && <Button title="Edit & resend" disabled={!draftLoaded} onPress={() => { void editMessage(actionMessage); }} />}
@@ -821,7 +842,8 @@ function ChatSession({ client, sessionID, onSessionChanged, onOpenSession, attac
         const nextMove = messages.slice(index + 1).find((message): message is Extract<SessionMessageInfo, { type: 'location-switched' }> => message.type === 'location-switched');
         setBackgroundShellID(actionMessage.shellID);
         setBackgroundDirectory(nextMove?.previous?.location.directory ?? session.location.directory);
-        setPanel('background');
+        queuedMessagePanel.current = 'background';
+        setPanel(null);
       }} />}
       <Button title="Fork before this message" disabled={pending} onPress={() => { void run(async () => { const next = await client.session.fork({ sessionID, before: actionMessage.id }); onOpenSession(next.id); }, true); }} />
       {actionMessage.type === 'user' && <Button title="Undo from this message" disabled={pending || active} onPress={() => { void run(async () => { if (await confirmAction('Undo from this message?', 'The server will stage a revert of later messages and file changes. You can restore the staged changes.')) await client.session.revert.stage({ sessionID, messageID: actionMessage.id, files: true }); }, true); }} />}
@@ -870,6 +892,7 @@ type MessageRowProps = { message: SessionMessageInfo; onSelect?: (id: string) =>
 const MessageRow = memo(function MessageRow({ message, onSelect, selected, selectionActive, screenReader, client, directory }: MessageRowProps) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const select = useCallback(() => onSelect?.(message.id), [onSelect, message.id]);
   const separateContent = screenReader || Platform.OS === 'web';
   if (message.type === 'idle' && !message.error) return null;
   if (!onSelect) return <MessageContent message={message} client={client} directory={directory} selectable />;
@@ -881,7 +904,7 @@ const MessageRow = memo(function MessageRow({ message, onSelect, selected, selec
     onAccessibilityAction={separateContent ? undefined : () => onSelect(message.id)} focusable={!screenReader}
     onLongPress={() => onSelect(message.id)} onPress={selectionActive ? () => onSelect(message.id) : undefined}
     style={[styles.selectableMessage, selected && { backgroundColor: colors.selected }]}>
-    <MessageContent message={message} client={client} directory={directory} selectable={false} />
+    <MessageActionsContext.Provider value={select}><MessageContent message={message} client={client} directory={directory} selectable={false} /></MessageActionsContext.Provider>
     {screenReader && <Button title="Message actions" compact variant="ghost" accessibilityLabel={`Message actions: ${messagePreview(message)}`} onPress={() => onSelect(message.id)} />}
   </Pressable>;
 });

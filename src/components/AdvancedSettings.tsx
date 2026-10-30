@@ -8,6 +8,7 @@ import { ClientError } from '@opencode/client';
 import { type Client, errorMessage } from '../lib/client';
 import { externalURL } from '../lib/settings';
 import { useTheme } from '../lib/theme';
+import { useNativePresentation } from '../lib/sheets';
 import { Button, Busy, Card, Empty, ErrorNotice, Field, Label, Row, sans } from './ui';
 
 async function openLink(url: string) { await Linking.openURL(externalURL(url)); }
@@ -87,6 +88,7 @@ function WebSearch({ client, directory }: { client: Client; directory: string })
 
 function Generate({ client, directory }: { client: Client; directory: string }) {
   const { colors } = useTheme();
+  const withNativePresentation = useNativePresentation();
   const [kind, setKind] = useState<'text' | 'image'>('text');
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [model, setModel] = useState<ModelInfo>();
@@ -130,7 +132,7 @@ function Generate({ client, directory }: { client: Client; directory: string }) 
       } else {
         if (!await Sharing.isAvailableAsync()) throw new Error('File sharing is unavailable on this device');
         const file = new File(Paths.cache, filename);
-        try { await file.write(image.data, { encoding: 'base64' }); await Sharing.shareAsync(file.uri, { mimeType: image.mime, dialogTitle: 'Save or share image' }); }
+        try { await file.write(image.data, { encoding: 'base64' }); await withNativePresentation(() => Sharing.shareAsync(file.uri, { mimeType: image.mime, dialogTitle: 'Save or share image' })); }
         finally { if (file.exists) await file.delete(); }
       }
     } catch (e) { setError(errorMessage(e)); }

@@ -1,9 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle, type TextProps } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { darkColors, type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
 import { PressFeedback, useMotionPreference } from './motion';
+import { useSheetCoordinator } from '../lib/sheets';
+import { MessageActionsContext } from '../lib/messageActions';
 
 export const colors = darkColors;
 export const sans = 'Inter';
@@ -54,25 +56,46 @@ export function ErrorNotice({ error, onRetry }: { error: string | null | undefin
   return <View accessibilityRole="alert" style={styles.error}><Label style={{ color: colors.danger, flex: 1 }}>{error}</Label>{onRetry && <Button title="Retry" compact onPress={onRetry} />}</View>;
 }
 export function Busy() { const { colors } = useTheme(); return <ActivityIndicator style={{ padding: 30 }} color={colors.muted} />; }
-export function Sheet({ visible, title, children, onClose, onDismiss, scroll = true }: { visible: boolean; title: string; children: React.ReactNode; onClose: () => void; onDismiss?: () => void; scroll?: boolean }) {
+export function Sheet({ visible, title, children, onClose, onDismiss, scroll = true, allowDuringRecovery = false, fitContent = false }: { visible: boolean; title: string; children: React.ReactNode; onClose: () => void; onDismiss?: () => void; scroll?: boolean; allowDuringRecovery?: boolean; fitContent?: boolean }) {
   const styles = useThemedStyles(createStyles);
   const reduced = useMotionPreference();
+  const { suspended, recoveryPending, presentSheet, dismissSheet } = useSheetCoordinator();
+  const id = useId();
+  const effectiveVisible = visible && (allowDuringRecovery || !suspended);
   const SafeAreaRoot = Platform.OS === 'web' ? React.Fragment : SafeAreaProvider;
-  const requested = useRef(visible);
-  requested.current = visible;
-  const previousVisible = useRef(visible);
+  const requested = useRef(effectiveVisible);
+  requested.current = effectiveVisible;
+  const logicalVisible = useRef(visible);
+  logicalVisible.current = visible;
+  const previousVisible = useRef(effectiveVisible);
   const pendingDismiss = useRef(false);
+  const pendingAppDismiss = useRef(false);
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
   const notifyDismissed = useCallback(() => {
     if (requested.current || !pendingDismiss.current) return;
     pendingDismiss.current = false;
-    dismissRef.current?.();
-  }, []);
+    const deferActions = dismissSheet(id);
+    if (!logicalVisible.current) {
+      if (deferActions && !allowDuringRecovery) pendingAppDismiss.current = true;
+      else dismissRef.current?.();
+    }
+  }, [dismissSheet, id, allowDuringRecovery]);
+  useLayoutEffect(() => {
+    if (effectiveVisible && !allowDuringRecovery) presentSheet(id);
+  }, [effectiveVisible, allowDuringRecovery, presentSheet, id]);
+  useEffect(() => () => { dismissSheet(id); }, [dismissSheet, id]);
+  useEffect(() => {
+    if (visible) { pendingAppDismiss.current = false; return; }
+    if (!suspended && !recoveryPending && pendingAppDismiss.current) {
+      pendingAppDismiss.current = false;
+      dismissRef.current?.();
+    }
+  }, [suspended, recoveryPending, visible]);
   useEffect(() => {
     const wasVisible = previousVisible.current;
-    previousVisible.current = visible;
-    if (visible) {
+    previousVisible.current = effectiveVisible;
+    if (effectiveVisible) {
       pendingDismiss.current = false;
       return;
     }
@@ -81,18 +104,17 @@ export function Sheet({ visible, title, children, onClose, onDismiss, scroll = t
     if (Platform.OS !== 'android') return;
     const frame = requestAnimationFrame(notifyDismissed);
     return () => cancelAnimationFrame(frame);
-  }, [visible, notifyDismissed]);
-  return <Modal visible={visible} animationType={reduced ? 'fade' : 'slide'} presentationStyle="pageSheet" supportedOrientations={['portrait', 'landscape-left', 'landscape-right']} onRequestClose={onClose} onDismiss={notifyDismissed}>
-    <SafeAreaRoot>
-    <SafeAreaView style={styles.sheet}>
-      <KeyboardAvoidingView style={styles.sheetLayout} behavior="padding" automaticOffset>
-        <View style={styles.sheetInner}>
+  }, [effectiveVisible, notifyDismissed]);
+  const content = <View style={[styles.sheetInner, fitContent && styles.fitInner]}>
           <View style={styles.sheetHeader}><Heading>{title}</Heading><Button title="Done" compact onPress={onClose} /></View>
-          {scroll ? <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={styles.sheetContent}>{children}</ScrollView> : <View style={styles.sheetBody}>{children}</View>}
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-    </SafeAreaRoot>
+          {recoveryPending && !allowDuringRecovery && <Label accessibilityRole="alert" style={styles.recoveryNotice}>Close this panel to open the connection wizard.</Label>}
+          {scroll ? <ScrollView style={[styles.sheetScroll, fitContent && styles.fitScroll]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={styles.sheetContent}>{children}</ScrollView> : <View style={[styles.sheetBody, fitContent && styles.fitScroll]}>{children}</View>}
+        </View>;
+  return <Modal visible={effectiveVisible} transparent={fitContent} animationType={fitContent || reduced ? 'fade' : 'slide'} presentationStyle={fitContent ? 'overFullScreen' : 'pageSheet'} supportedOrientations={['portrait', 'landscape-left', 'landscape-right']} onRequestClose={onClose} onDismiss={notifyDismissed}>
+    <SafeAreaRoot>{fitContent ? <KeyboardAvoidingView style={styles.sheetOverlay} behavior="padding" automaticOffset>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Close ${title}`} onPress={onClose} style={styles.sheetScrim} />
+      <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.fitSheet}>{content}</SafeAreaView>
+    </KeyboardAvoidingView> : <SafeAreaView style={styles.sheet}><KeyboardAvoidingView style={styles.sheetLayout} behavior="padding" automaticOffset>{content}</KeyboardAvoidingView></SafeAreaView>}</SafeAreaRoot>
   </Modal>;
 }
 export async function confirmAction(title: string, message: string, options: { confirmLabel?: string; destructive?: boolean } = {}): Promise<boolean> {
@@ -105,8 +127,9 @@ export function JsonView({ value }: { value: unknown }) {
 }
 export function Disclosure({ title, children }: { title: string; children: React.ReactNode }) {
   const styles = useThemedStyles(createStyles);
+  const openMessageActions = useContext(MessageActionsContext);
   const [open, setOpen] = useState(false);
-  return <Card style={styles.disclosure}><Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(!open)} style={({ pressed }) => [styles.disclosureHeader, pressed && styles.ghostPressed]}><Label style={{ fontWeight: '500' }}>{open ? '−' : '+'}  {title}</Label></Pressable>{open && <View style={styles.disclosureBody}>{children}</View>}</Card>;
+  return <Card style={styles.disclosure}><Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(!open)} onLongPress={Platform.OS === 'web' ? undefined : openMessageActions} style={({ pressed }) => [styles.disclosureHeader, pressed && styles.ghostPressed]}><Label style={{ fontWeight: '500' }}>{open ? '−' : '+'}  {title}</Label></Pressable>{open && <View style={styles.disclosureBody}>{children}</View>}</Card>;
 }
 function createStyles(colors: ThemeColors) {
   const inset = Platform.OS !== 'android' || Number(Platform.Version) >= 29;
@@ -122,6 +145,9 @@ function createStyles(colors: ThemeColors) {
   error: { padding: 12, borderRadius: 8, backgroundColor: colors.dangerBackground, flexDirection: 'row', alignItems: 'center', gap: 8 },
   sheet: { flex: 1, backgroundColor: colors.panel }, sheetLayout: { flex: 1, minHeight: 0 }, sheetInner: { flex: 1, minHeight: 0, width: '100%', maxWidth: 680, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border },
+  recoveryNotice: { color: colors.muted, fontSize: 12, lineHeight: 18, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: colors.raised },
   sheetScroll: { flex: 1, minHeight: 0 }, sheetContent: { padding: 18, gap: 16, paddingBottom: 24 }, sheetBody: { flex: 1, minHeight: 0 },
+  sheetOverlay: { flex: 1, justifyContent: 'flex-end' }, sheetScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: '#00000070' },
+  fitSheet: { flexShrink: 1, maxHeight: '85%', width: '100%', maxWidth: 680, alignSelf: 'center', backgroundColor: colors.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' }, fitInner: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto' }, fitScroll: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto' },
   disclosure: { padding: 0, gap: 0 }, disclosureHeader: { minHeight: touchTarget, padding: 14, justifyContent: 'center', borderRadius: 8 }, disclosureBody: { padding: 14, paddingTop: 0, gap: 10 },
 }); }
