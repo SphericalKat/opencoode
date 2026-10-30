@@ -46,6 +46,7 @@ Pi does not install dependencies for local packages, so the separate dependency 
 | --- | --- |
 | Conversation | Shows the active branch, live responses, model reasoning, tool input, and tool output |
 | Send | Submits a message to the active terminal session |
+| Images | Adds PNG, JPEG, WebP, or GIF images, with draft previews and removal |
 | Steer | Adds a message at Pi's next interruption point |
 | Queue | Adds a follow-up after the current work |
 | Stop | Aborts the current work |
@@ -116,5 +117,11 @@ Durable fits a separate server that owns conversations and must recover interrup
 
 ## Verification boundary
 
-This guide describes the source implementation and primary project documentation.
-It does not claim device, network, or model execution results.
+I paired Android Expo Go with Pi 1.4 through the shared connection screen.
+I sent a prompt from Android, opened its real bash output, and read the response.
+I created a session from Android and reopened the original without another pair step.
+I opened the long-press action bar on a message.
+I received a terminal prompt and its live tool status on Android, then used Jump to latest after the response.
+
+I did not run automated tests, typechecks, linters, or builds.
+I did not verify image uploads or iOS on a device.
