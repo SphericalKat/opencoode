@@ -55,8 +55,9 @@ export function SheetGrip({ onClose }: { onClose: () => void }) {
   return <View accessible={false} style={styles.gripTarget} {...pan.panHandlers}><View style={styles.grip} /></View>;
 }
 
-export function BetaTabsSheet({ visible, tabs, recent = [], selectedID, onClose, onDismiss, onSelect, onCloseTab, onNew, onHome, onSettings, onHelp }: {
+export function BetaTabsSheet({ visible, tabs, recent = [], selectedID, serverLabel, onServer, onClose, onDismiss, onSelect, onCloseTab, onNew, onHome, onSettings, onHelp }: {
   visible: boolean; tabs: OpenSessionTab[]; selectedID?: string; onClose: () => void; onDismiss: () => void;
+  serverLabel: string; onServer: () => void;
   recent?: OpenSessionTab[];
   onSelect: (id: string) => void; onCloseTab?: (id: string) => void; onNew: () => void; onHome?: () => void; onSettings: () => void; onHelp: () => void;
 }) {
@@ -72,6 +73,7 @@ export function BetaTabsSheet({ visible, tabs, recent = [], selectedID, onClose,
     <Pressable accessibilityRole="button" onPress={onNew} style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}><ShellIcon name="compose" size={16} color={colors.muted} /><Label style={styles.menuText}>New session</Label></Pressable>
     <View style={styles.divider} />
     {onHome && <Pressable accessibilityRole="button" onPress={onHome} style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}><HomeIcon color={colors.muted} /><Label style={styles.menuText}>Home</Label></Pressable>}
+    <Pressable accessibilityRole="button" accessibilityLabel={`Switch server. Current server: ${serverLabel}`} onPress={onServer} style={({ pressed }) => [styles.serverRow, pressed && styles.pressed]}><ShellIcon name="server" size={16} color={colors.muted} /><View style={styles.serverText}><Label numberOfLines={1} style={styles.serverName}>{serverLabel}</Label><Label muted style={styles.serverDetail}>Current server</Label></View><ShellIcon name="chevron" size={14} color={colors.muted} /></Pressable>
     <View style={styles.footer}>
       <Pressable accessibilityRole="button" onPress={onSettings} style={({ pressed }) => [styles.footerButton, pressed && styles.pressed]}><NavIcon name="settings" color={colors.muted} size={16} /><Label style={styles.menuText}>Settings</Label></Pressable>
       <Pressable accessibilityRole="button" onPress={onHelp} style={({ pressed }) => [styles.footerButton, pressed && styles.pressed]}><Label muted style={styles.menuText}>ⓘ</Label><Label style={styles.menuText}>Help</Label></Pressable>
@@ -108,6 +110,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   openTabMain: { flex: 1, minWidth: 0, minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingLeft: 8, gap: 8 }, openTabTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
   closeTab: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
   menuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 8 }, menuText: { fontSize: 14, lineHeight: 19, color: colors.muted },
+  serverRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 8 }, serverText: { flex: 1, minWidth: 0 }, serverName: { fontSize: 14, lineHeight: 19 }, serverDetail: { fontSize: 12, lineHeight: 17 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border }, footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, footerButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 8 },
   moreRow: { minHeight: 48, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, moreText: { fontSize: 14, lineHeight: 19 },
   pressed: { opacity: 0.6 },
