@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@v3.2.0
+        with:
+          runtime: node@26
+          cache: true
+          install: false
+      - run: pnpm install --frozen-lockfile
+      - name: Ultracite check
+        run: pnpm check --format github
+
+  checks:
+    name: Tests and typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@v3.2.0
+        with:
+          runtime: node@26
+          cache: true
+          install: false
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
