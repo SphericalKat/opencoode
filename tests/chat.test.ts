@@ -68,7 +68,7 @@ test("chat displays text and reasoning deltas with independent fragment ordinals
   }
   const message = messages[0] as SessionMessageAssistant;
   assert.deepEqual(message.content, [
-    { text: "Think", type: "reasoning" },
+    { text: "Think", time: { created: 1 }, type: "reasoning" },
     { text: "Hello world!", type: "text" },
   ]);
   assert.equal(

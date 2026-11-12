@@ -97,6 +97,11 @@ test("pairing redeems the code as JSON and authenticates the next request under 
         path: "/proxy/auth/connect/one-use-code",
       },
       {
+        accept: "application/json",
+        authorization: undefined,
+        path: "/proxy/opencoode/info",
+      },
+      {
         accept: "*/*",
         authorization: `Basic ${Buffer.from("opencode:paired-token").toString("base64")}`,
         path: "/proxy/api/info",
@@ -138,8 +143,8 @@ test("connection recovery distinguishes rejected passwords, expired links, and i
     const cases = [
       ["", /rejected this password/u],
       ["/auth/connect/expired-code", /pairing link expired/u],
-      ["/old", /did not return an OpenCode 2 API/u],
-      ["/missing", /did not return an OpenCode 2 API/u],
+      ["/old", /did not return a supported server/u],
+      ["/missing", /did not return a supported server/u],
     ] as const;
     await Promise.all(
       cases.map(([path, expected]) => {
