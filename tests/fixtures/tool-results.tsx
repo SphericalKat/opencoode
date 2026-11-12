@@ -6,6 +6,8 @@ import { View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import IBMPlexMono from "../../assets/fonts/IBMPlexMono-Text.ttf";
+import Inter from "../../assets/fonts/Inter.ttf";
 import { AssistantTurn } from "../../src/components/assistant-turn";
 import { projectLiveEvent } from "../../src/lib/chat";
 import { makeOpenCodeChatBackend } from "../../src/lib/chat-backend";
@@ -26,8 +28,6 @@ Object.assign(globalThis, {
 const png =
   (globalThis as typeof globalThis & { fixtureImage?: string }).fixtureImage ||
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
-const IBMPlexMono = require("../../assets/fonts/IBMPlexMono-Text.ttf");
-const Inter = require("../../assets/fonts/Inter.ttf");
 
 const fonts = { IBMPlexMono, Inter };
 const Demo = () => {

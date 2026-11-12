@@ -52,15 +52,17 @@ interface Poll {
   address: string;
 }
 
-class RequestError extends Error {
-  readonly status: number;
+const requestStatuses = new WeakMap<Error, number>();
 
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = "RequestError";
-    this.status = status;
-  }
-}
+const requestError = (status: number, message: string): Error => {
+  const error = new Error(message);
+  error.name = "RequestError";
+  requestStatuses.set(error, status);
+  return error;
+};
+
+const requestStatus = (error: unknown): number | undefined =>
+  error instanceof Error ? requestStatuses.get(error) : undefined;
 
 type PromptCommand = Extract<PiCommand, { type: "prompt" }>;
 type BranchEntry = ReturnType<
@@ -84,7 +86,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
 
 const text = (value: unknown, key: string, limit = 100_000): string => {
   if (typeof value !== "string" || !value.trim() || value.length > limit) {
-    throw new RequestError(400, `Invalid ${key}`);
+    throw requestError(400, `Invalid ${key}`);
   }
   return value;
 };
@@ -102,11 +104,11 @@ const promptImage = (
   image: unknown
 ): NonNullable<PromptCommand["images"]>[number] => {
   if (!object(image) || !imageMimeTypes.has(String(image.mimeType))) {
-    throw new RequestError(400, "Invalid image type");
+    throw requestError(400, "Invalid image type");
   }
   const data = text(image.data, "image data", maxBody);
   if (data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(data)) {
-    throw new RequestError(400, "Invalid image data");
+    throw requestError(400, "Invalid image data");
   }
   return { data, mimeType: image.mimeType as string };
 };
@@ -116,7 +118,7 @@ const promptImages = (raw: unknown): PromptCommand["images"] => {
     return undefined;
   }
   if (!Array.isArray(raw) || raw.length > 16) {
-    throw new RequestError(400, "Invalid images");
+    throw requestError(400, "Invalid images");
   }
   return raw.map((image) => promptImage(image));
 };
@@ -127,18 +129,18 @@ const promptCommand = (value: Record<string, unknown>): PromptCommand => {
       ? value.text
       : undefined;
   if (prompt === undefined) {
-    throw new RequestError(400, "Invalid prompt text");
+    throw requestError(400, "Invalid prompt text");
   }
   if (
     value.delivery !== undefined &&
     value.delivery !== "steer" &&
     value.delivery !== "followUp"
   ) {
-    throw new RequestError(400, "Invalid prompt delivery");
+    throw requestError(400, "Invalid prompt delivery");
   }
   const images = promptImages(value.images);
   if (!prompt.trim() && !images?.length) {
-    throw new RequestError(400, "The prompt is empty");
+    throw requestError(400, "The prompt is empty");
   }
   return { delivery: value.delivery, images, text: prompt, type: "prompt" };
 };
@@ -187,14 +189,14 @@ const commandPayload = (value: Record<string, unknown>): PiCommand => {
       return { entryID: text(value.entryID, "entry ID", 128), type: "fork" };
     }
     default: {
-      throw new RequestError(400, "Unknown command");
+      throw requestError(400, "Unknown command");
     }
   }
 };
 
 const command = (value: unknown): PiCommand => {
   if (!object(value)) {
-    throw new RequestError(400, "Expected a command");
+    throw requestError(400, "Expected a command");
   }
   const expectedSessionID =
     value.expectedSessionID === undefined
@@ -323,60 +325,36 @@ const equalSecret = (actual: string, expected: string): boolean => {
   return left.length === right.length && timingSafeEqual(left, right);
 };
 
-const readJson = (request: IncomingMessage): Promise<unknown> => {
+const readJson = async (request: IncomingMessage): Promise<unknown> => {
   if (
     request.headers["content-type"]?.split(";")[0].trim().toLowerCase() !==
     "application/json"
   ) {
-    return Promise.reject(new RequestError(415, "Use application/json"));
+    throw requestError(415, "Use application/json");
   }
   if (Number(request.headers["content-length"] ?? 0) > maxBody) {
-    return Promise.reject(new RequestError(413, "The request exceeds 5 MB"));
+    throw requestError(413, "The request exceeds 5 MB");
   }
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    const listeners: {
-      event: string;
-      handler: (...args: Buffer[]) => void;
-    }[] = [];
-    let size = 0;
-    const listen = (event: string, handler: (...args: Buffer[]) => void) => {
-      request.on(event, handler);
-      listeners.push({ event, handler });
-    };
-    const cleanup = () => {
-      for (const { event, handler } of listeners) {
-        request.off(event, handler);
-      }
-    };
-    const onError = () => {
-      cleanup();
-      reject(new RequestError(400, "The request did not complete"));
-    };
-    const onAborted = () => onError();
-    const onData = (chunk: Buffer) => {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  try {
+    for await (const chunk of request) {
       size += chunk.length;
-      if (size > maxBody) {
-        cleanup();
-        request.resume();
-        reject(new RequestError(413, "The request exceeds 5 MB"));
-      } else {
+      if (size <= maxBody) {
         chunks.push(chunk);
       }
-    };
-    const onEnd = () => {
-      cleanup();
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
-      } catch {
-        reject(new RequestError(400, "Invalid JSON"));
-      }
-    };
-    listen("data", onData);
-    listen("end", onEnd);
-    listen("error", onError);
-    listen("aborted", onAborted);
-  });
+    }
+  } catch {
+    throw requestError(400, "The request did not complete");
+  }
+  if (size > maxBody) {
+    throw requestError(413, "The request exceeds 5 MB");
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+  } catch {
+    throw requestError(400, "Invalid JSON");
+  }
 };
 
 const toolStatus = (
@@ -493,7 +471,7 @@ class MobileBridge {
 
   private current(): ExtensionContext {
     if (!this.context) {
-      throw new RequestError(409, "Pi is changing sessions. Try again");
+      throw requestError(409, "Pi is changing sessions. Try again");
     }
     return this.context;
   }
@@ -761,26 +739,32 @@ class MobileBridge {
     };
   }
 
+  private async handleRequest(
+    request: IncomingMessage,
+    response: ServerResponse
+  ) {
+    try {
+      await this.request(request, response);
+    } catch (error) {
+      if (!response.headersSent && !response.destroyed) {
+        const status = requestStatus(error);
+        reply(response, status ?? 500, {
+          error:
+            status === undefined
+              ? "Pi could not complete the request"
+              : (error as Error).message,
+        });
+      }
+    }
+  }
+
   async start(context: ExtensionCommandContext) {
     this.attach(context);
     this.commandContext = context;
     this.addresses = localAddresses();
     if (!this.server) {
       const server = createServer((request, response) => {
-        void this.request(request, response).catch((error) => {
-          if (!response.headersSent && !response.destroyed) {
-            reply(
-              response,
-              error instanceof RequestError ? error.status : 500,
-              {
-                error:
-                  error instanceof RequestError
-                    ? error.message
-                    : "Pi could not complete the request",
-              }
-            );
-          }
-        });
+        void this.handleRequest(request, response);
       });
       this.server = server;
       server.maxConnections = 64;
@@ -840,7 +824,7 @@ class MobileBridge {
 
   private assertReachable(request: IncomingMessage) {
     if (this.closed) {
-      throw new RequestError(503, "The mobile listener is stopped");
+      throw requestError(503, "The mobile listener is stopped");
     }
     const address = request.socket.remoteAddress ?? "";
     if (
@@ -848,7 +832,7 @@ class MobileBridge {
       request.headers.origin !== undefined ||
       request.headers["sec-fetch-site"] !== undefined
     ) {
-      throw new RequestError(
+      throw requestError(
         403,
         "Use the OpenCoode mobile app on the private network"
       );
@@ -857,7 +841,7 @@ class MobileBridge {
       (host) => `${host}:${this.port}`
     );
     if (!allowedHosts.includes(request.headers.host ?? "")) {
-      throw new RequestError(403, "Invalid server address");
+      throw requestError(403, "Invalid server address");
     }
   }
 
@@ -880,7 +864,7 @@ class MobileBridge {
       this.pairing.expires <= Date.now() ||
       !equalSecret(pairingCode, this.pairing.code)
     ) {
-      throw new RequestError(
+      throw requestError(
         401,
         "The pairing code expired or was already used. Run /mobile in Pi"
       );
@@ -896,7 +880,7 @@ class MobileBridge {
   private assertAuthorized(request: IncomingMessage) {
     const expected = `Basic ${Buffer.from(`opencode:${this.token}`).toString("base64")}`;
     if (!equalSecret(request.headers.authorization ?? "", expected)) {
-      throw new RequestError(401, "Pair the phone with /mobile in Pi");
+      throw requestError(401, "Pair the phone with /mobile in Pi");
     }
   }
 
@@ -956,7 +940,7 @@ class MobileBridge {
         break;
       }
       default: {
-        throw new RequestError(404, "Unknown Pi endpoint");
+        throw requestError(404, "Unknown Pi endpoint");
       }
     }
   }
@@ -974,7 +958,7 @@ class MobileBridge {
       !/^\d+$/u.test(rawAfter) ||
       !Number.isSafeInteger(after)
     ) {
-      throw new RequestError(400, "Invalid event cursor");
+      throw requestError(400, "Invalid event cursor");
     }
     if (url.searchParams.get("instance") !== this.instanceID) {
       reply(response, 200, {
@@ -994,7 +978,7 @@ class MobileBridge {
       this.polls.size >= 16 ||
       [...this.polls].filter((poll) => poll.address === address).length >= 4
     ) {
-      throw new RequestError(429, "Too many event requests");
+      throw requestError(429, "Too many event requests");
     }
     const poll: Poll = {
       address,
@@ -1031,13 +1015,13 @@ class MobileBridge {
   private async runCommand(request: IncomingMessage, response: ServerResponse) {
     const parsed = command(await readJson(request));
     if (this.closed) {
-      throw new RequestError(503, "The mobile listener is stopped");
+      throw requestError(503, "The mobile listener is stopped");
     }
     if (
       parsed.expectedSessionID !== undefined &&
       this.current().sessionManager.getSessionId() !== parsed.expectedSessionID
     ) {
-      throw new RequestError(
+      throw requestError(
         409,
         "The active Pi session changed. Send the command again"
       );
@@ -1052,13 +1036,13 @@ class MobileBridge {
 
   private enqueue(value: PiCommand): Promise<void> {
     if (this.queued >= 16) {
-      throw new RequestError(429, "Too many commands");
+      throw requestError(429, "Too many commands");
     }
     const sessionID = this.current().sessionManager.getSessionId();
     this.queued += 1;
     const result = this.queue.then(() => {
       if (this.current().sessionManager.getSessionId() !== sessionID) {
-        throw new RequestError(
+        throw requestError(
           409,
           "The active Pi session changed. Send the command again"
         );
@@ -1083,13 +1067,13 @@ class MobileBridge {
       const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
       authenticated = auth.ok;
     } catch {
-      throw new RequestError(
+      throw requestError(
         400,
         "Pi could not authenticate the selected model. Check its provider credentials in the terminal"
       );
     }
     if (this.closed) {
-      throw new RequestError(503, "The mobile listener is stopped");
+      throw requestError(503, "The mobile listener is stopped");
     }
     const current = this.current();
     if (
@@ -1098,28 +1082,28 @@ class MobileBridge {
       current.model?.provider !== model.provider ||
       current.model?.id !== model.id
     ) {
-      throw new RequestError(
+      throw requestError(
         409,
         "The Pi session or model changed. Send the prompt again"
       );
     }
     if (!authenticated) {
-      throw new RequestError(
+      throw requestError(
         400,
         "Pi could not authenticate the selected model. Check its provider credentials in the terminal"
       );
     }
     if (this.prompts.length) {
-      throw new RequestError(
+      throw requestError(
         409,
         "Pi needs a response in the terminal. Complete the terminal dialog first"
       );
     }
     if (this.compacting) {
-      throw new RequestError(409, "Wait for compaction to finish");
+      throw requestError(409, "Wait for compaction to finish");
     }
     if (!this.session().idle && !value.delivery) {
-      throw new RequestError(409, "Pi is busy. Choose steer or follow-up");
+      throw requestError(409, "Pi is busy. Choose steer or follow-up");
     }
   }
 
@@ -1129,18 +1113,18 @@ class MobileBridge {
     value: PromptCommand
   ) {
     if (this.compacting) {
-      throw new RequestError(409, "Wait for compaction to finish");
+      throw requestError(409, "Wait for compaction to finish");
     }
     const wasIdle = this.session().idle;
     if (!wasIdle && !value.delivery) {
-      throw new RequestError(409, "Pi is busy. Choose steer or follow-up");
+      throw requestError(409, "Pi is busy. Choose steer or follow-up");
     }
     const { model } = ctx;
     if (!model) {
-      throw new RequestError(400, "Select a model in Pi before a prompt");
+      throw requestError(400, "Select a model in Pi before a prompt");
     }
     if (value.images?.length && !model.input.includes("image")) {
-      throw new RequestError(400, "The selected model does not accept images");
+      throw requestError(400, "The selected model does not accept images");
     }
     if (wasIdle) {
       await this.confirmIdlePrompt(ctx, sessionID, model, value);
@@ -1182,10 +1166,10 @@ class MobileBridge {
           candidate.provider === value.provider && candidate.id === value.id
       );
     if (!model) {
-      throw new RequestError(400, "The model is unavailable");
+      throw requestError(400, "The model is unavailable");
     }
     if (!(await this.pi.setModel(model))) {
-      throw new RequestError(400, "Pi has no authentication for this model");
+      throw requestError(400, "Pi has no authentication for this model");
     }
   }
 
@@ -1199,10 +1183,7 @@ class MobileBridge {
         (candidate) => candidate === value.level
       );
     if (!level) {
-      throw new RequestError(
-        400,
-        "The model does not support this thinking level"
-      );
+      throw requestError(400, "The model does not support this thinking level");
     }
     this.pi.setThinkingLevel(level);
   }
@@ -1222,13 +1203,13 @@ class MobileBridge {
       (session) => session.id === target && session.cwd === ctx.cwd
     );
     if (!found) {
-      throw new RequestError(404, "The session does not exist in this project");
+      throw requestError(404, "The session does not exist in this project");
     }
     if (
       this.current().sessionManager.getSessionId() !== sessionID ||
       !this.session().idle
     ) {
-      throw new RequestError(
+      throw requestError(
         409,
         "The Pi session changed or started a response. Send the command again"
       );
@@ -1251,10 +1232,7 @@ class MobileBridge {
           this.entryAliases.get(candidate.id) === entryID
       );
     if (!entry || entry.type !== "message" || entry.message.role !== "user") {
-      throw new RequestError(
-        400,
-        "Fork from a user message in the active session"
-      );
+      throw requestError(400, "Fork from a user message in the active session");
     }
     return commandCtx.fork(entry.id, { withSession });
   }
@@ -1266,7 +1244,7 @@ class MobileBridge {
   ) {
     const commandCtx = this.commandContext;
     if (!commandCtx) {
-      throw new RequestError(
+      throw requestError(
         409,
         "Run /mobile in this Pi session before session controls"
       );
@@ -1301,13 +1279,13 @@ class MobileBridge {
       );
     }
     if (result.cancelled) {
-      throw new RequestError(409, "Pi cancelled the session change");
+      throw requestError(409, "Pi cancelled the session change");
     }
   }
 
   private async execute(value: PiCommand) {
     if (this.closed) {
-      throw new RequestError(503, "The mobile listener is stopped");
+      throw requestError(503, "The mobile listener is stopped");
     }
     const ctx = this.current();
     const sessionID = ctx.sessionManager.getSessionId();
@@ -1315,13 +1293,13 @@ class MobileBridge {
       value.expectedSessionID !== undefined &&
       sessionID !== value.expectedSessionID
     ) {
-      throw new RequestError(
+      throw requestError(
         409,
         "The active Pi session changed. Send the command again"
       );
     }
     if (this.prompts.length) {
-      throw new RequestError(
+      throw requestError(
         409,
         "Pi needs a response in the terminal. Complete the terminal dialog first"
       );
@@ -1331,7 +1309,7 @@ class MobileBridge {
       return;
     }
     if (!this.session().idle) {
-      throw new RequestError(409, "Wait for Pi to finish the current response");
+      throw requestError(409, "Wait for Pi to finish the current response");
     }
     switch (value.type) {
       case "compact": {
@@ -1402,10 +1380,10 @@ class MobileBridge {
       Reflect.deleteProperty(processState, bridgeKey);
     }
     if (server) {
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
-        server.closeAllConnections();
-      });
+      const closed = server.listening ? once(server, "close") : undefined;
+      server.close();
+      server.closeAllConnections();
+      await closed;
     }
   }
 }

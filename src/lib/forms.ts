@@ -17,7 +17,7 @@ type TextField = Exclude<
 
 const matchesPattern = (value: string, pattern: string): boolean => {
   try {
-    return new RegExp(pattern).test(value);
+    return new RegExp(pattern, "u").test(value);
   } catch {
     return false;
   }

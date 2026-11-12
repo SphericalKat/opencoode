@@ -365,8 +365,9 @@ export const createPiClient = (
           "Pi requires a valid event cursor and server identity."
         );
       }
-      let position = after;
-      while (!signal.aborted) {
+      const pollOnce = async function* pollOnce(
+        position: number
+      ): AsyncGenerator<PiEventBatch, number | undefined> {
         const query = new URLSearchParams({
           after: String(position),
           instance: instanceID,
@@ -388,10 +389,15 @@ export const createPiClient = (
           );
         }
         yield result;
-        if (reset) {
+        return reset ? undefined : result.cursor;
+      };
+      let position = after;
+      while (!signal.aborted) {
+        const next = yield* pollOnce(position);
+        if (next === undefined) {
           return;
         }
-        position = result.cursor;
+        position = next;
       }
     },
     info: (signal?: AbortSignal) => request("/pi/info", serverInfo, signal),

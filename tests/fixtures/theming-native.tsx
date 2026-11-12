@@ -6,6 +6,8 @@ import { ScrollView, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import IBMPlexMono from "../../assets/fonts/IBMPlexMono-Text.ttf";
+import Inter from "../../assets/fonts/Inter.ttf";
 import { Markdown } from "../../src/components/markdown";
 import { Patch } from "../../src/components/patch";
 import { Button } from "../../src/components/ui";
@@ -16,9 +18,6 @@ import { ThemeProvider, useTheme } from "../../src/lib/theme";
 import { UnsavedProvider } from "../../src/lib/unsaved";
 import { ChatScreen } from "../../src/screens/chat-screen";
 import { AppearanceSettings } from "../../src/screens/settings-screen";
-
-const IBMPlexMono = require("../../assets/fonts/IBMPlexMono-Text.ttf");
-const Inter = require("../../assets/fonts/Inter.ttf");
 
 const noop = () => {
   // The fixture ignores session navigation.
@@ -60,13 +59,15 @@ const backend = {
   },
   kind: "pi",
   async *subscribe({ signal }: { signal?: AbortSignal }) {
-    await new Promise<void>((resolve) => {
-      if (signal?.aborted) {
-        resolve();
-      } else {
-        signal?.addEventListener("abort", () => resolve(), { once: true });
-      }
-    });
+    const { promise, resolve } = Promise.withResolvers<undefined>();
+    if (signal?.aborted) {
+      resolve(undefined);
+    } else {
+      signal?.addEventListener("abort", () => resolve(undefined), {
+        once: true,
+      });
+    }
+    await promise;
     yield* [];
   },
 } as unknown as ChatBackend;

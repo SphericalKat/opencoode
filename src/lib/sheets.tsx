@@ -60,16 +60,15 @@ export const SheetCoordinatorProvider = ({
   }, []);
   const suspendSheets = useCallback(() => {
     suspensionRequested.current = true;
-    return new Promise<void>((resolve) => {
-      if (presented.current.size) {
-        setRecoveryPending(true);
-        waiting.current.add(resolve);
-      } else {
-        setRecoveryPending(false);
-        setSuspended(true);
-        resolve();
-      }
-    });
+    if (presented.current.size) {
+      setRecoveryPending(true);
+      const { promise, resolve } = Promise.withResolvers<undefined>();
+      waiting.current.add(() => resolve(undefined));
+      return promise;
+    }
+    setRecoveryPending(false);
+    setSuspended(true);
+    return Promise.resolve();
   }, []);
   const resumeSheets = useCallback(() => {
     suspensionRequested.current = false;

@@ -7,6 +7,7 @@ interface Preferences {
   recentIDs: string[];
 }
 type State = Preferences & {
+  revision: number;
   serverID: string;
   loading: boolean;
   saving: boolean;
@@ -113,7 +114,9 @@ const updatePreferences = (
 const failureMessage = (reason: unknown, action: string): string =>
   `Cannot ${action} model preferences${reason instanceof Error ? `: ${reason.message}` : ""}`;
 
-const emptyState = (loading: boolean): Omit<State, "serverID"> => ({
+const emptyState = (
+  loading: boolean
+): Omit<State, "revision" | "serverID"> => ({
   error: null,
   favoriteIDs: [],
   loading,
@@ -121,15 +124,24 @@ const emptyState = (loading: boolean): Omit<State, "serverID"> => ({
   saving: false,
 });
 
+// Brings stored state in line with the requested server and reload revision,
+// so a change of either shows as loading without an effect resetting state.
+const settle = (state: State, serverID: string, revision: number): State => {
+  if (state.serverID !== serverID) {
+    return { ...emptyState(true), revision, serverID };
+  }
+  if (state.revision !== revision) {
+    return { ...state, ...emptyState(true), revision };
+  }
+  return state;
+};
+
 const resolveCurrent = (
   serverID: string,
+  revision: number,
   state: State
-): Omit<State, "serverID"> => {
-  if (!serverID.trim()) {
-    return emptyState(false);
-  }
-  return state.serverID === serverID ? state : emptyState(true);
-};
+): Omit<State, "revision" | "serverID"> =>
+  serverID.trim() ? settle(state, serverID, revision) : emptyState(false);
 
 export const useModelPreferences = (serverID: string) => {
   const [state, setState] = useState<State>({
@@ -137,6 +149,7 @@ export const useModelPreferences = (serverID: string) => {
     favoriteIDs: [],
     loading: true,
     recentIDs: [],
+    revision: 0,
     saving: false,
     serverID,
   });
@@ -164,24 +177,8 @@ export const useModelPreferences = (serverID: string) => {
     requestRef.current += 1;
     const version = requestRef.current;
     if (!serverID.trim()) {
-      setState({
-        error: null,
-        favoriteIDs: [],
-        loading: false,
-        recentIDs: [],
-        saving: false,
-        serverID,
-      });
       return;
     }
-    setState((current) => ({
-      error: null,
-      favoriteIDs: current.serverID === serverID ? current.favoriteIDs : [],
-      loading: true,
-      recentIDs: current.serverID === serverID ? current.recentIDs : [],
-      saving: false,
-      serverID,
-    }));
     const isCurrent = () =>
       mounted.current &&
       scope.current === serverID &&
@@ -194,6 +191,7 @@ export const useModelPreferences = (serverID: string) => {
             error: null,
             ...preferences,
             loading: false,
+            revision,
             saving: false,
             serverID,
           });
@@ -201,7 +199,7 @@ export const useModelPreferences = (serverID: string) => {
       } catch (error) {
         if (isCurrent()) {
           setState((current) => ({
-            ...current,
+            ...settle(current, serverID, revision),
             error: failureMessage(error, "load"),
             loading: false,
           }));
@@ -221,7 +219,11 @@ export const useModelPreferences = (serverID: string) => {
       }
       request.current += 1;
       const version = request.current;
-      setState((current) => ({ ...current, error: null, saving: true }));
+      setState((current) => ({
+        ...settle(current, serverID, revision),
+        error: null,
+        saving: true,
+      }));
       try {
         const preferences = await updatePreferences(serverID, update);
         if (
@@ -233,6 +235,7 @@ export const useModelPreferences = (serverID: string) => {
             error: null,
             ...preferences,
             loading: false,
+            revision,
             saving: false,
             serverID,
           });
@@ -244,7 +247,7 @@ export const useModelPreferences = (serverID: string) => {
           version === request.current
         ) {
           setState((current) => ({
-            ...current,
+            ...settle(current, serverID, revision),
             error: failureMessage(error, "save"),
             loading: false,
             saving: false,
@@ -252,7 +255,7 @@ export const useModelPreferences = (serverID: string) => {
         }
       }
     },
-    [serverID]
+    [revision, serverID]
   );
 
   const toggleFavorite = useCallback(
@@ -288,7 +291,7 @@ export const useModelPreferences = (serverID: string) => {
   );
 
   const reload = useCallback(() => setRevision((value) => value + 1), []);
-  const current = resolveCurrent(serverID, state);
+  const current = resolveCurrent(serverID, revision, state);
   return {
     error: current.error,
     favoriteIDs: current.favoriteIDs,

@@ -788,41 +788,47 @@ export const makePiChatBackend = (
       } else {
         signal?.addEventListener("abort", abort, { once: true });
       }
-      try {
-        while (!controller.signal.aborted) {
-          let value = await load(controller.signal, true);
+      const cycle = async function* cycle(): AsyncGenerator<
+        ReturnType<typeof normalized>,
+        void
+      > {
+        let value = await load(controller.signal, true);
+        if (controller.signal.aborted) {
+          return;
+        }
+        yield normalized(value);
+        for await (const batch of pi.events(
+          value.cursor,
+          value.instanceID,
+          controller.signal
+        )) {
           if (controller.signal.aborted) {
             return;
           }
-          yield normalized(value);
-          for await (const batch of pi.events(
-            value.cursor,
-            value.instanceID,
-            controller.signal
-          )) {
-            if (controller.signal.aborted) {
-              return;
-            }
-            if (isResetBatch(batch, value)) {
-              break;
-            }
-            if (
-              snapshot?.instanceID === batch.instanceID &&
-              snapshot.cursor > value.cursor
-            ) {
-              value = snapshot;
-            }
-            if (value.cursor > batch.cursor) {
-              continue;
-            }
-            value = applyBatch(value, batch);
-            snapshot = value;
-            received = Date.now();
-            version += 1;
-            if (batch.events.length) {
-              yield normalized(value);
-            }
+          if (isResetBatch(batch, value)) {
+            return;
           }
+          if (
+            snapshot?.instanceID === batch.instanceID &&
+            snapshot.cursor > value.cursor
+          ) {
+            value = snapshot;
+          }
+          if (value.cursor > batch.cursor) {
+            continue;
+          }
+          value = applyBatch(value, batch);
+          snapshot = value;
+          received = Date.now();
+          version += 1;
+          if (batch.events.length) {
+            yield normalized(value);
+          }
+        }
+      };
+      try {
+        while (!controller.signal.aborted) {
+          yield* cycle();
         }
       } finally {
         controller.abort();

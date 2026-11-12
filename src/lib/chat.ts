@@ -13,9 +13,11 @@ export const mergeMessages = (
       messages.set(message.id, message);
     }
   }
-  return [...messages.values()].sort(
+  const sorted = [...messages.values()];
+  sorted.sort(
     (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id)
   );
+  return sorted;
 };
 
 export type ComposerSubmission =
