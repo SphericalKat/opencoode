@@ -650,6 +650,7 @@ function MobileApp() {
     setForm({ id: '', name: '', url: '', token: '' });
     setPairingLink(null);
     setFlowRevision(value => value + 1);
+    // Use the latest coordinator because queued tab actions retain stale navigation state.
     showServerSheet.current();
   };
   const navigation = client && active ? <>
