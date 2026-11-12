@@ -2,11 +2,11 @@ import React, { memo, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Svg, { Path, Rect } from 'react-native-svg';
-import type { JsonValue, SessionMessageAssistantTool } from '@opencode/client';
+import type { JsonValue, SessionMessageAssistantTool, ToolContent } from '@opencode/client';
 import { type Client, errorMessage } from '../lib/client';
 import { MessageActionsContext } from '../lib/messageActions';
 import { type ThemeColors, useTheme, useThemedStyles } from '../lib/theme';
-import { ArtifactContent } from './ArtifactContent';
+import { ArtifactContent, isImageArtifact } from './ArtifactContent';
 import { Disclosure, ErrorNotice, Label, mono, touchTarget } from './ui';
 
 type Arguments = Record<string, JsonValue>;
@@ -133,11 +133,11 @@ export const ToolCallDetails = memo(function ToolCallDetails({ tool, client, dir
   const metadata = 'metadata' in state ? state.metadata : undefined;
   const sections = useMemo(() => input ? inputSections(tool.name, input, metadata) : [], [tool.name, input, metadata]);
   const argumentsText = useMemo(() => state.status === 'streaming' ? state.input : JSON.stringify(state.input, null, 2), [state.input, state.status]);
-  const content = 'content' in state ? state.content ?? [] : [];
+  const content: ToolContent[] = 'content' in state ? state.content ?? [] : [];
   const outputs = content.filter(item => item.type === 'text').map(item => item.text);
   if (state.status === 'running' && typeof state.metadata.output === 'string') outputs.push(state.metadata.output);
   const output = outputs.join('\n\n');
-  const files = content.filter(item => item.type === 'file');
+  const files = content.filter(item => item.type === 'file').filter(item => !isImageArtifact(item));
   const fallback = !!input && !sections.length;
   return <View style={styles.body}>
     <View style={styles.panel}>
@@ -145,7 +145,7 @@ export const ToolCallDetails = memo(function ToolCallDetails({ tool, client, dir
       {fallback && <CodeSection section={{ label: 'Arguments', text: argumentsText }} selectable={selectable} />}
       {state.status === 'streaming' && <Label muted style={styles.pending}>Receiving tool arguments</Label>}
       {!!output && <CodeSection section={{ label: 'Output', text: output }} output divided={sections.length > 0 || fallback} selectable={selectable} />}
-      {!output && !files.length && state.status === 'completed' && <Label muted style={[styles.pending, styles.divider]}>No output</Label>}
+      {!output && !content.length && state.status === 'completed' && <Label muted style={[styles.pending, styles.divider]}>No output</Label>}
     </View>
     {files.map((file, index) => <ArtifactContent key={`${file.uri}:${index}`} content={file} client={client} directory={directory} />)}
     {state.status === 'error' && <ErrorNotice error={state.error.message} />}

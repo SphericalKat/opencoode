@@ -57,6 +57,7 @@ function message(value: unknown): value is PiMessage {
 function tool(value: unknown): value is PiToolActivity {
   return object(value) && typeof value.id === 'string' && typeof value.name === 'string' && object(value.input)
     && (value.output === undefined || typeof value.output === 'string')
+    && (value.content === undefined || Array.isArray(value.content) && value.content.every(content))
     && typeof value.status === 'string' && ['running', 'completed', 'error'].includes(value.status);
 }
 

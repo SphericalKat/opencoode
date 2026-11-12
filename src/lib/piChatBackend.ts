@@ -1,6 +1,6 @@
 import type { JsonValue, ModelInfo, SessionInfo, SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo, ToolContent } from '@opencode/client';
 import { File } from 'expo-file-system';
-import type { PiCommand, PiEventBatch, PiMessage, PiModel, PiSnapshot, PiToolActivity } from '../../packages/pi-mobile/protocol';
+import type { PiContent, PiCommand, PiEventBatch, PiMessage, PiModel, PiSnapshot, PiToolActivity } from '../../packages/pi-mobile/protocol';
 import type { ChatBackend, ChatBackendSnapshot, ChatCore } from './chatBackend';
 import type { Connection } from './client';
 import { createPiClient, type PiClient } from './piClient';
@@ -30,8 +30,8 @@ function activityNotice(snapshot: PiSnapshot): string | undefined {
   return snapshot.waiting ? `${snapshot.waiting.title || 'Pi needs input'}. Continue in the Pi terminal.` : undefined;
 }
 
-function resultContent(message?: PiMessage, output?: string): [ToolContent, ...ToolContent[]] {
-  const parts: ToolContent[] = message?.content.flatMap((part): ToolContent[] => {
+function resultContent(content?: PiContent[], output?: string): [ToolContent, ...ToolContent[]] {
+  const parts: ToolContent[] = content?.flatMap((part): ToolContent[] => {
     if (part.type === 'text') return [{ type: 'text', text: part.text }];
     if (part.type === 'image') return [{ type: 'file', uri: `data:${part.mimeType};base64,${part.data}`, mime: part.mimeType }];
     return [];
@@ -46,7 +46,7 @@ function resultContent(message?: PiMessage, output?: string): [ToolContent, ...T
 
 function toolPart(id: string, name: string, input: Record<string, unknown>, created: number, activity?: PiToolActivity, result?: PiMessage): SessionMessageAssistantTool {
   const argumentsValue = jsonObject(activity?.input ?? input);
-  const content = resultContent(result, activity?.output);
+  const content = resultContent(result?.content ?? activity?.content, activity?.output);
   const failed = activity?.status === 'error' || result?.isError;
   return {
     type: 'tool', id, name, time: { created },
