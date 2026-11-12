@@ -41,3 +41,9 @@ The captured image used by the fixture is the existing `docs/screenshots/chat-we
 - [Expanded viewer](screenshots/tool-result-expanded.png)
 - [Loading](screenshots/tool-result-loading.png)
 - [Unavailable image with retry](screenshots/tool-result-unavailable.png)
+
+## Recorded validation (2026-11-12)
+
+The browser integration check passed all scenarios above in Chromium, using the production components with synthetic tool results. The five screenshots were visually inspected. No native simulator or physical-device validation was performed.
+
+The existing Node suite reported **31 passed, 4 failed**, matching the baseline before this change. The failures concern reasoning timestamps and three connection/pairing recovery expectations. TypeScript reported **3 existing errors**, all in `ChatScreen.tsx` (scroll ref typing, an unsupported event type, and an action argument). The three existing tool-content narrowing errors in `ToolCallDetails.tsx` were resolved by this change. The full repository test suite and typecheck therefore remain failing despite the targeted browser checks passing.
