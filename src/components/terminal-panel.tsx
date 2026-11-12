@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -59,6 +60,11 @@ type ConnectionStatus = "connecting" | "connected" | "disconnected";
 type ControlMessage = object & Record<"type", unknown>;
 const ModalSafeAreaRoot =
   Platform.OS === "web" ? React.Fragment : SafeAreaProvider;
+
+const newAttachmentID = (): string =>
+  `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const binaryBytes = (data: string): Uint8Array<ArrayBuffer> =>
+  Uint8Array.from(data, (char) => char.codePointAt(0) ?? 0);
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
@@ -175,20 +181,16 @@ const TerminalSession = ({
     useSheetCoordinator();
   const modalID = useId();
   const suspendedRef = useRef(suspended);
-  suspendedRef.current = suspended;
   const renderer = useRef<TerminalRendererHandle>(null);
   const socket = useRef<WebSocket | null>(null);
   const cursor = useRef<number | undefined>(undefined);
-  const attachmentID = useRef(
-    `${Date.now()}-${Math.random().toString(36).slice(2)}`
-  ).current;
+  const attachmentID = useMemo(() => newAttachmentID(), []);
   const restored = useRef(false);
   const controllerRef = useRef(false);
   const sizeRef = useRef({ cols: 80, rows: 24 });
   const pending = useRef<string[]>([]);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onExitRef = useRef(onExit);
-  onExitRef.current = onExit;
   const [ready, setReady] = useState(false);
   const [rendererEpoch, setRendererEpoch] = useState(0);
   const [rendererBroken, setRendererBroken] = useState(false);
@@ -196,9 +198,11 @@ const TerminalSession = ({
     AppState.currentState !== "background" &&
       AppState.currentState !== "inactive"
   );
-  const [status, setStatus] = useState<ConnectionStatus>("connecting");
+  const [connectionStatus, setConnectionStatus] =
+    useState<ConnectionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const connectedRevision = useRef(revision);
   const [size, setSize] = useState({ cols: 80, rows: 24 });
   const [controller, setController] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -211,10 +215,16 @@ const TerminalSession = ({
   const [privateInput, setPrivateInput] = useState(false);
   const nativeInput = useRef<React.ComponentRef<typeof TextInput>>(null);
   const rendererGeneration = useRef(0);
-  sizeRef.current = size;
   const effectiveFullscreen = fullscreen && !suspended;
+  const status: ConnectionStatus =
+    ready && active && !suspended ? connectionStatus : "disconnected";
   const requestedModal = useRef(effectiveFullscreen);
-  requestedModal.current = effectiveFullscreen;
+  useLayoutEffect(() => {
+    suspendedRef.current = suspended;
+    onExitRef.current = onExit;
+    sizeRef.current = size;
+    requestedModal.current = effectiveFullscreen;
+  }, [suspended, onExit, size, effectiveFullscreen]);
   const previousModalVisible = useRef(effectiveFullscreen);
   const pendingModalDismiss = useRef(false);
   const previousSuspended = useRef(suspended);
@@ -275,7 +285,7 @@ const TerminalSession = ({
     setReady(false);
     setRendererBroken(false);
     setController(false);
-    setStatus("connecting");
+    setConnectionStatus("connecting");
     setRendererEpoch((value) => value + 1);
   }, []);
 
@@ -287,7 +297,6 @@ const TerminalSession = ({
     resetTerminalView();
     if (suspended) {
       nativeInput.current?.blur();
-      setStatus("disconnected");
     }
   }, [suspended, resetTerminalView]);
 
@@ -319,7 +328,7 @@ const TerminalSession = ({
       },
       type: "theme",
     });
-  }, [colors, ready, rendererEpoch]);
+  }, [colors, ready]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) =>
@@ -337,13 +346,13 @@ const TerminalSession = ({
       setError("The terminal view did not start. Tap Reconnect to reload it.");
     }, 10_000);
     return () => clearTimeout(timer);
-  }, [ready, rendererEpoch, rendererBroken, suspended]);
+  }, [ready, rendererBroken, suspended]);
 
   useEffect(() => {
     if (!ready || !active || suspended) {
-      setStatus("disconnected");
       return;
     }
+    connectedRevision.current = revision;
     let disposed = false;
     let retries = 0;
     let exited = false;
@@ -368,7 +377,7 @@ const TerminalSession = ({
         if (disposed || suspendedRef.current || retryTimer) {
           return;
         }
-        setStatus("disconnected");
+        setConnectionStatus("disconnected");
         const delay = Math.min(30_000, 1000 * 2 ** Math.min(retries, 5));
         retries += 1;
         retryTimer = setTimeout(() => {
@@ -379,7 +388,7 @@ const TerminalSession = ({
       if (disposed || suspendedRef.current) {
         return;
       }
-      setStatus("connecting");
+      setConnectionStatus("connecting");
       restored.current = false;
       controllerRef.current = false;
       setController(false);
@@ -403,7 +412,7 @@ const TerminalSession = ({
           cursor.current = snapshot.info.output.tail;
           if (snapshot.info.status === "exited") {
             exited = true;
-            setStatus("disconnected");
+            setConnectionStatus("disconnected");
             setError(
               `Shell exited with code ${snapshot.info.exitCode ?? "unknown"}`
             );
@@ -498,7 +507,7 @@ const TerminalSession = ({
         const handleReplayComplete = (message: ControlMessage) => {
           restored.current = true;
           clearTimeout(connectTimer);
-          setStatus("connected");
+          setConnectionStatus("connected");
           if ("endOffset" in message && typeof message.endOffset === "number") {
             cursor.current = message.endOffset;
           }
@@ -524,7 +533,7 @@ const TerminalSession = ({
         };
         const handleExited = (message: ControlMessage) => {
           exited = true;
-          setStatus("disconnected");
+          setConnectionStatus("disconnected");
           setError(
             `Shell exited with code ${"exitCode" in message ? message.exitCode : "unknown"}`
           );
@@ -590,7 +599,7 @@ const TerminalSession = ({
           setError(null);
           if (mode === "workspace") {
             clearTimeout(connectTimer);
-            setStatus("connected");
+            setConnectionStatus("connected");
           }
         };
         const onMessage = (event: MessageEvent) => {
@@ -679,7 +688,7 @@ const TerminalSession = ({
     if (mode === "desktop") {
       if (
         !suspendedRef.current &&
-        controllerRef.current &&
+        controller &&
         restored.current &&
         socket.current?.readyState === WebSocket.OPEN
       ) {
@@ -740,15 +749,11 @@ const TerminalSession = ({
     try {
       if (mode === "desktop") {
         const bytes = binary
-          ? Uint8Array.from(data, (char) => char.charCodeAt(0))
+          ? binaryBytes(data)
           : new TextEncoder().encode(data);
         ws.send(persistentInputFrame(sizeRef.current, bytes));
       } else {
-        ws.send(
-          binary
-            ? Uint8Array.from(data, (char) => char.charCodeAt(0)).buffer
-            : data
-        );
+        ws.send(binary ? binaryBytes(data).buffer : data);
       }
       return true;
     } catch (error_) {
@@ -1026,6 +1031,116 @@ const TerminalSession = ({
   );
 };
 
+type ClientEvent =
+  ReturnType<Client["event"]["subscribe"]> extends AsyncIterable<infer E>
+    ? E
+    : never;
+interface InventorySync {
+  abortRequest: () => void;
+  client: Client;
+  directory: string;
+  mode: Mode;
+  onError: (message: string) => void;
+  refresh: () => Promise<void>;
+  sessionID?: string;
+}
+
+const REFRESH_DEBOUNCE_MS = 250;
+const MAX_INVENTORY_RETRY_MS = 15_000;
+const MAX_INVENTORY_BACKOFF_STEP = 4;
+
+const shouldRefreshInventory = (
+  event: ClientEvent,
+  { directory, mode, sessionID }: InventorySync
+): boolean => {
+  if (event.type === "server.connected") {
+    return true;
+  }
+  if (
+    mode === "desktop" &&
+    (event.type === "persistent-pty.added" ||
+      event.type === "persistent-pty.removed") &&
+    event.data.sessionID === sessionID
+  ) {
+    return true;
+  }
+  return (
+    mode === "workspace" &&
+    (event.type === "pty.created" ||
+      event.type === "pty.updated" ||
+      event.type === "pty.deleted" ||
+      event.type === "pty.exited") &&
+    (!event.location || event.location.directory === directory)
+  );
+};
+
+const consumeInventoryEvents = async (
+  client: Client,
+  signal: AbortSignal,
+  onEvent: (event: ClientEvent) => void
+): Promise<void> => {
+  for await (const event of client.event.subscribe({ signal })) {
+    if (signal.aborted) {
+      return;
+    }
+    onEvent(event);
+  }
+};
+
+const startInventorySync = (options: InventorySync): (() => void) => {
+  const controller = new AbortController();
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let attempts = 0;
+  const reportError = (error_: unknown) => {
+    if (!controller.signal.aborted) {
+      options.onError(errorMessage(error_));
+    }
+  };
+  const scheduleRefresh = () => {
+    if (refreshTimer) {
+      return;
+    }
+    refreshTimer = setTimeout(() => {
+      refreshTimer = undefined;
+      void options.refresh();
+    }, REFRESH_DEBOUNCE_MS);
+  };
+  const cycle = async (refreshFirst: boolean): Promise<void> => {
+    if (refreshFirst) {
+      await options.refresh();
+    }
+    if (controller.signal.aborted) {
+      return;
+    }
+    await consumeInventoryEvents(options.client, controller.signal, (event) => {
+      attempts = 0;
+      if (shouldRefreshInventory(event, options)) {
+        scheduleRefresh();
+      }
+    }).catch(() => null);
+    if (controller.signal.aborted) {
+      return;
+    }
+    const delay = Math.min(
+      1000 * 2 ** Math.min(attempts, MAX_INVENTORY_BACKOFF_STEP),
+      MAX_INVENTORY_RETRY_MS
+    );
+    attempts += 1;
+    retryTimer = setTimeout(() => {
+      retryTimer = undefined;
+      cycle(true).catch(reportError);
+    }, delay);
+  };
+  cycle(true).catch(reportError);
+  return () => {
+    controller.abort();
+    options.abortRequest();
+    clearTimeout(refreshTimer);
+    clearTimeout(retryTimer);
+  };
+};
+
 const TerminalList = ({
   client,
   connection,
@@ -1096,7 +1211,7 @@ const TerminalList = ({
       mounted.current = false;
       request.current?.abort();
     };
-  }, [refresh]);
+  }, []);
 
   useEffect(() => {
     const listener = AppState.addEventListener("change", (state) =>
@@ -1109,86 +1224,15 @@ const TerminalList = ({
     if (!foreground || suspended) {
       return;
     }
-    const controller = new AbortController();
-    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let retryResolve: (() => void) | undefined;
-    const scheduleRefresh = () => {
-      if (refreshTimer) {
-        return;
-      }
-      refreshTimer = setTimeout(() => {
-        refreshTimer = undefined;
-        void refresh();
-      }, 250);
-    };
-    const waitForRetry = (delay: number) =>
-      new Promise<void>((resolve) => {
-        retryResolve = resolve;
-        retryTimer = setTimeout(resolve, delay);
-      });
-    void (async () => {
-      await refresh();
-      let attempts = 0;
-      while (!controller.signal.aborted) {
-        try {
-          for await (const event of client.event.subscribe({
-            signal: controller.signal,
-          })) {
-            if (controller.signal.aborted) {
-              break;
-            }
-            attempts = 0;
-            if (event.type === "server.connected") {
-              scheduleRefresh();
-              continue;
-            }
-            if (
-              mode === "desktop" &&
-              (event.type === "persistent-pty.added" ||
-                event.type === "persistent-pty.removed") &&
-              event.data.sessionID === sessionID
-            ) {
-              scheduleRefresh();
-            }
-            if (
-              mode === "workspace" &&
-              (event.type === "pty.created" ||
-                event.type === "pty.updated" ||
-                event.type === "pty.deleted" ||
-                event.type === "pty.exited") &&
-              (!event.location || event.location.directory === directory)
-            ) {
-              scheduleRefresh();
-            }
-          }
-          if (!controller.signal.aborted) {
-            throw new Error("The terminal inventory connection closed");
-          }
-        } catch {
-          if (controller.signal.aborted) {
-            break;
-          }
-          const delay = Math.min(1000 * 2 ** Math.min(attempts, 4), 15_000);
-          attempts += 1;
-          await waitForRetry(delay);
-          if (!controller.signal.aborted) {
-            await refresh();
-          }
-        }
-      }
-    })().catch((error_) => {
-      if (!controller.signal.aborted) {
-        setError(errorMessage(error_));
-      }
+    return startInventorySync({
+      abortRequest: () => request.current?.abort(),
+      client,
+      directory,
+      mode,
+      onError: setError,
+      refresh,
+      sessionID,
     });
-    return () => {
-      controller.abort();
-      request.current?.abort();
-      clearTimeout(refreshTimer);
-      clearTimeout(retryTimer);
-      retryResolve?.();
-    };
   }, [client, directory, mode, sessionID, foreground, refresh, suspended]);
 
   const create = async () => {
@@ -1405,42 +1449,52 @@ const Terminals = (props: Props) => {
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [checkRevision, setCheckRevision] = useState(0);
+  const retryCheck = useRef<AbortController | null>(null);
   const mounted = useRef(true);
 
-  useEffect(() => {
+  const [previousSessionID, setPreviousSessionID] = useState(props.sessionID);
+  if (previousSessionID !== props.sessionID) {
+    setPreviousSessionID(props.sessionID);
     setSessionID(props.sessionID);
-  }, [props.sessionID]);
+  }
+  const checkServer = useCallback(
+    (signal: AbortSignal) => {
+      void props.client.server
+        .info({ signal })
+        .then((info) => {
+          if (signal.aborted) {
+            return null;
+          }
+          const supported = info.capabilities?.persistentPty === true;
+          setPersistent(supported);
+          if (!supported || !capabilityKnown.current) {
+            setMode(supported ? "desktop" : "workspace");
+          }
+          capabilityKnown.current = true;
+          return null;
+        })
+        .catch((error_) => {
+          if (!signal.aborted) {
+            setError(errorMessage(error_));
+          }
+        });
+    },
+    [props.client]
+  );
+
   useEffect(() => {
     if (suspended) {
       return;
     }
     mounted.current = true;
     const controller = new AbortController();
-    void props.client.server
-      .info({ signal: controller.signal })
-      .then((info) => {
-        if (controller.signal.aborted) {
-          return null;
-        }
-        const supported = info.capabilities?.persistentPty === true;
-        setPersistent(supported);
-        if (!supported || !capabilityKnown.current) {
-          setMode(supported ? "desktop" : "workspace");
-        }
-        capabilityKnown.current = true;
-        return null;
-      })
-      .catch((error_) => {
-        if (!controller.signal.aborted) {
-          setError(errorMessage(error_));
-        }
-      });
+    checkServer(controller.signal);
     return () => {
       mounted.current = false;
       controller.abort();
+      retryCheck.current?.abort();
     };
-  }, [props.client, checkRevision, suspended]);
+  }, [checkServer, suspended]);
 
   const pickSession = async (cursor?: string) => {
     setSessionPicker(true);
@@ -1548,7 +1602,9 @@ const Terminals = (props: Props) => {
             error={error}
             onRetry={() => {
               setError(null);
-              setCheckRevision((value) => value + 1);
+              retryCheck.current?.abort();
+              retryCheck.current = new AbortController();
+              checkServer(retryCheck.current.signal);
             }}
           />
         </View>
