@@ -4,7 +4,6 @@ import { registerRootComponent } from "expo";
 import React, { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 
-import "../../src/lib/polyfills";
 import { Markdown } from "../../src/components/markdown";
 import { UserMessageBubble } from "../../src/components/user-message-bubble";
 import { BetaLayoutContext } from "../../src/lib/beta-layout";
