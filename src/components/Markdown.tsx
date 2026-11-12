@@ -191,7 +191,8 @@ const createStyles = (colors: ThemeColors, beta: boolean) => ({
   list: { gap: 6, minWidth: 0 },
   listItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, minWidth: 0 },
   marker: { textAlign: 'right', flexShrink: 0, fontVariant: ['tabular-nums'] },
-  listContent: { flex: 1, minWidth: 0, gap: 6 },
+  // Keep an auto flex basis so native layout measures wrapped list text at its final width.
+  listContent: { flexGrow: 1, flexShrink: 1, minWidth: 0, gap: 6 },
   rule: { height: 1, backgroundColor: colors.border, marginVertical: 4 },
   group: { gap: 8, minWidth: 0 },
   code: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 10, overflow: 'hidden', minWidth: 0 },
