@@ -401,5 +401,4 @@ function createStyles(colors: ThemeColors) { return StyleSheet.create({
   fileIcon: { fontFamily: mono, fontSize: 23, color: colors.muted },
   editor: { flex: 1, minHeight: 0, padding: 16, gap: 12 },
   mediaPreview: { flex: 1, minHeight: 0, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  code: { color: colors.text, fontFamily: mono, fontSize: 13, lineHeight: 20 },
 }); }

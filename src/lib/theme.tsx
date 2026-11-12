@@ -7,7 +7,7 @@ import upstreamThemes from './upstreamThemes.json';
 
 export type Appearance = 'system' | 'light' | 'dark';
 export type ThemeColors = {
-  bg: string; panel: string; raised: string; border: string; text: string; muted: string; faint: string;
+  frame: string; bg: string; panel: string; raised: string; border: string; text: string; muted: string; faint: string;
   accent: string; accentText: string; primary: string; primaryText: string; selected: string;
   danger: string; dangerBackground: string; dangerBorder: string; blue: string; success: string;
   successBackground: string; focus: string;
@@ -16,7 +16,7 @@ export type ThemeColors = {
 };
 
 export const darkColors: ThemeColors = {
-  bg: '#171717', panel: '#242424', raised: '#333333', border: '#ffffff12', text: '#f0f0f0',
+  frame: '#171717', bg: '#171717', panel: '#242424', raised: '#333333', border: '#ffffff12', text: '#f0f0f0',
   muted: '#aeaeae', faint: '#858585', accent: '#a2bcff', accentText: '#ffffff', primary: '#333333',
   primaryText: '#f0f0f0', selected: '#303030', danger: '#f17471', dangerBackground: '#461516',
   dangerBorder: '#97252b', blue: '#a2bcff', success: '#6bd586', successBackground: '#14361d', focus: '#7698fd',
@@ -25,7 +25,7 @@ export const darkColors: ThemeColors = {
 };
 
 export const lightColors: ThemeColors = {
-  bg: '#fafafa', panel: '#ffffff', raised: '#f2f2f2', border: '#0000001a', text: '#161616',
+  frame: '#fafafa', bg: '#fafafa', panel: '#ffffff', raised: '#f2f2f2', border: '#0000001a', text: '#161616',
   muted: '#5c5c5c', faint: '#808080', accent: '#3b5cf6', accentText: '#ffffff', primary: '#242424',
   primaryText: '#ffffff', selected: '#eeeeee', danger: '#b82d35', dangerBackground: '#fceceb',
   dangerBorder: '#f2bbb7', blue: '#3b5cf6', success: '#198b43', successBackground: '#e7f9ea', focus: '#7698fd',
@@ -98,7 +98,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return <Context.Provider value={theme}>{children}</Context.Provider>;
 }
 
-const betaDarkColors: ThemeColors = { ...darkColors, bg: '#161616', text: '#fafafa', border: '#ffffff1a' };
+const betaDarkColors: ThemeColors = { ...darkColors, frame: '#080808', bg: '#161616', text: '#fafafa', border: '#ffffff1a' };
 const betaLightColors: ThemeColors = { ...lightColors, bg: '#ffffff', panel: '#fafafa', input: '#fafafa', selected: '#f2f2f2' };
 
 export function useTheme() { return useContext(Context); }
@@ -111,7 +111,7 @@ export function useThemedStyles<T>(factory: (colors: ThemeColors) => T): T {
 function mapPreset(t: Record<string, string>, fallback: ThemeColors): ThemeColors {
   const color = (key: string, otherwise: string) => t[key]?.startsWith('#') ? t[key] : otherwise;
   return { ...fallback,
-    bg: color('background-base', fallback.bg), panel: color('surface-base', fallback.panel), raised: color('surface-raised-stronger-non-alpha', fallback.raised), border: color('border-base', fallback.border),
+    frame: color('background-base', fallback.bg), bg: color('background-base', fallback.bg), panel: color('surface-base', fallback.panel), raised: color('surface-raised-stronger-non-alpha', fallback.raised), border: color('border-base', fallback.border),
     text: color('text-base', fallback.text), muted: color('text-weak', fallback.muted), faint: color('text-weaker', fallback.faint),
     accent: color('text-interactive-base', fallback.accent), accentText: color('text-on-interactive-base', fallback.accentText), primary: color('button-primary-base', fallback.primary), primaryText: color('background-base', fallback.primaryText), selected: color('surface-interactive-weak', fallback.selected),
     danger: color('text-diff-delete-base', fallback.danger), dangerBackground: color('surface-critical-weak', fallback.dangerBackground), dangerBorder: color('border-critical-base', fallback.dangerBorder), blue: color('text-interactive-base', fallback.blue), success: color('text-diff-add-base', fallback.success), successBackground: color('surface-success-weak', fallback.successBackground), focus: color('border-focus', fallback.focus), input: color('input-base', fallback.input),
@@ -120,5 +120,5 @@ function mapPreset(t: Record<string, string>, fallback: ThemeColors): ThemeColor
 }
 
 function dynamicColors(t: Material3Scheme, fallback: ThemeColors): ThemeColors {
-  return { ...fallback, bg: t.background, panel: t.surface, raised: t.surfaceContainerHigh, border: t.outlineVariant, text: t.onBackground, muted: t.onSurfaceVariant, faint: t.outline, accent: t.primary, accentText: t.onPrimary, blue: t.primary, focus: t.primary, primary: t.primary, primaryText: t.onPrimary, selected: t.secondaryContainer, input: t.surfaceContainer, danger: t.error, dangerBackground: t.errorContainer, dangerBorder: t.error, syntaxKeyword: t.primary, syntaxProperty: t.secondary, syntaxConstant: t.tertiary };
+  return { ...fallback, frame: t.background, bg: t.background, panel: t.surface, raised: t.surfaceContainerHigh, border: t.outlineVariant, text: t.onBackground, muted: t.onSurfaceVariant, faint: t.outline, accent: t.primary, accentText: t.onPrimary, blue: t.primary, focus: t.primary, primary: t.primary, primaryText: t.onPrimary, selected: t.secondaryContainer, input: t.surfaceContainer, danger: t.error, dangerBackground: t.errorContainer, dangerBorder: t.error, syntaxKeyword: t.primary, syntaxProperty: t.secondary, syntaxConstant: t.tertiary };
 }
