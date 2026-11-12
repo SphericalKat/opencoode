@@ -5,9 +5,10 @@ This fixture mounts the production bubble and Markdown components on Android, th
 Run from a **disposable copy** of the repository; instrumentation modifies two source files. Start a dedicated Android emulator, build a release APK from the same revision, and set `ANDROID_SERIAL` to the emulator serial. The commands below reuse that APK's native runtime with the fixture's JavaScript bundle. The APK must be signed with a key accepted by the installed app; the example uses the development key. This installs and launches the app on the selected emulator.
 
 ```sh
-cp tests/native-message-layout/index.tsx index.tsx
+cp tests/native-message-layout/index.tsx fixture-index.tsx
+sed -i "s|../../src/|./src/|g" fixture-index.tsx
 python tests/native-message-layout/instrument.py
-./node_modules/.bin/expo export:embed --platform android --dev false --entry-file index.tsx --bundle-output /tmp/message-layout.bundle --assets-dest /tmp/message-layout-assets
+./node_modules/.bin/expo export:embed --platform android --dev false --entry-file fixture-index.tsx --bundle-output /tmp/message-layout.bundle --assets-dest /tmp/message-layout-assets
 export SOURCE_APK="$PWD/android/app/build/outputs/apk/release/app-release.apk"
 python - <<'PY'
 import os, zipfile

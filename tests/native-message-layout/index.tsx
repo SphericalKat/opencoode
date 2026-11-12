@@ -1,10 +1,10 @@
 import React, {useState, useEffect} from 'react';
 import {registerRootComponent} from 'expo';
 import {View, Pressable, Text} from 'react-native';
-import {UserMessageBubble} from './src/components/UserMessageBubble';
-import {Markdown} from './src/components/Markdown';
-import {ThemeProvider} from './src/lib/theme';
-import {BetaLayoutContext} from './src/lib/betaLayout';
+import {UserMessageBubble} from '../../src/components/UserMessageBubble';
+import {Markdown} from '../../src/components/Markdown';
+import {ThemeProvider} from '../../src/lib/theme';
+import {BetaLayoutContext} from '../../src/lib/betaLayout';
 const text = `Initial set of feedback:
 
 1. add a header that says "Latest models" in a row with a refresh button on the right
