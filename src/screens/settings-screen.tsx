@@ -15,7 +15,10 @@ import {
   usePreventRemove,
   useNavigationContainerRef,
 } from "@react-navigation/native";
-import type { NavigationAction } from "@react-navigation/native";
+import type {
+  NavigationAction,
+  NavigationContainerRefWithCurrent,
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, {
@@ -25,6 +28,7 @@ import React, {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
@@ -119,10 +123,8 @@ type HeaderRefresh = { refresh?: () => void; loading?: boolean } | null;
 const HeaderRefreshContext = createContext<React.Dispatch<
   React.SetStateAction<HeaderRefresh>
 > | null>(null);
-type SettingsStackParams = {
-  Index: undefined;
-  Section: { section: Section };
-};
+type SettingsStackParams = Record<"Index", undefined> &
+  Record<"Section", { section: Section }>;
 const SettingsStack = createNativeStackNavigator<SettingsStackParams>();
 const zeroInsets = { bottom: 0, left: 0, right: 0, top: 0 };
 // The native toolbar supplies its inset before the shared back control applies its own margins.
@@ -273,13 +275,28 @@ const createStyles = (colors: ThemeColors) =>
     },
   });
 
+const runBusy = async (
+  setBusy: (busy: boolean) => void,
+  setError: (message: string) => void,
+  task: () => Promise<void>
+) => {
+  setBusy(true);
+  try {
+    await task();
+  } catch (error_) {
+    setError(errorMessage(error_));
+  } finally {
+    setBusy(false);
+  }
+};
+
 const useResource = <T,>(
   source: object,
   directory: string,
   load: (signal: AbortSignal) => Promise<T>
 ) => {
   const scope = useMemo(() => ({ directory, source }), [source, directory]);
-  const [data, setData] = useState<T>();
+  const [stored, setStored] = useState<{ scope: object; value: T }>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [resourceScope, setResourceScope] = useState(scope);
@@ -289,21 +306,23 @@ const useResource = <T,>(
     latest.current = { load, scope };
   });
   const sequence = useRef(0);
-  const refresh = useCallback(async (signal?: AbortSignal) => {
-    const { scope: owner, load: read } = latest.current;
+  if (resourceScope !== scope) {
+    setResourceScope(scope);
+    setLoading(true);
+    setError(null);
+  }
+  const run = useCallback(async (owner: object, signal?: AbortSignal) => {
+    const { load: read } = latest.current;
     sequence.current += 1;
     const { current } = sequence;
     const isCurrent = () =>
       active.current &&
       current === sequence.current &&
       latest.current.scope === owner;
-    setResourceScope(owner);
-    setLoading(true);
-    setError(null);
     try {
       const result = await withSettingsRequest(read, signal);
       if (isCurrent()) {
-        setData(result);
+        setStored({ scope: owner, value: result });
       }
     } catch (error_) {
       if (isCurrent()) {
@@ -314,11 +333,21 @@ const useResource = <T,>(
       setLoading(false);
     }
   }, []);
+  const refresh = useCallback(
+    (signal?: AbortSignal) => {
+      const owner = latest.current.scope;
+      setResourceScope(owner);
+      setLoading(true);
+      setError(null);
+      return run(owner, signal);
+    },
+    [run]
+  );
   useEffect(() => {
     const controller = new AbortController();
     active.current = true;
-    setData(undefined);
-    void refresh(
+    void run(
+      scope,
       AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)])
     );
     return () => {
@@ -326,9 +355,9 @@ const useResource = <T,>(
       sequence.current += 1;
       controller.abort();
     };
-  }, [scope, refresh]);
+  }, [scope, run]);
   return {
-    data: resourceScope === scope ? data : undefined,
+    data: stored?.scope === scope ? stored.value : undefined,
     error: resourceScope === scope ? error : null,
     loading: resourceScope !== scope || loading,
     refresh,
@@ -633,11 +662,16 @@ const ConnectIntegration = ({
     if (!attempt || ["complete", "expired", "failed"].includes(status)) {
       return;
     }
-    void check();
+    const first = setTimeout(() => {
+      void check();
+    }, 0);
     const timer = setInterval(() => {
       void check();
     }, 3000);
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
   }, [attempt, status, check]);
   const open = async (url: string) => {
     try {
@@ -907,18 +941,13 @@ const Accounts = ({
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const run = async (action: (signal: AbortSignal) => Promise<unknown>) => {
-    setBusy(true);
     setActionError(null);
-    try {
+    await runBusy(setBusy, setActionError, async () => {
       await withSettingsRequest(async (signal) => {
         await action(signal);
         await refresh(signal);
       });
-    } catch (error_) {
-      setActionError(errorMessage(error_));
-    } finally {
-      setBusy(false);
-    }
+    });
   };
   const search = query.trim().toLowerCase();
   const integrations =
@@ -1123,6 +1152,137 @@ const Accounts = ({
   );
 };
 
+const ModelCard = ({
+  item,
+  onSelect,
+}: {
+  item: ModelInfo;
+  onSelect: (item: ModelInfo) => void;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <Card>
+      <Row style={{ justifyContent: "space-between" }}>
+        <View style={{ flex: 1 }}>
+          <BodyText style={styles.name}>{item.name}</BodyText>
+          <BodyText muted>
+            {item.providerID} · {item.enabled ? "Available" : "Not connected"}
+          </BodyText>
+        </View>
+        <Button title="Details" compact onPress={() => onSelect(item)} />
+      </Row>
+    </Card>
+  );
+};
+
+const ModelsStatus = ({
+  hasModels,
+  loaded,
+  matches,
+  onClear,
+  search,
+}: {
+  hasModels: boolean;
+  loaded: boolean;
+  matches: number;
+  onClear: () => void;
+  search: string;
+}) => {
+  if (!loaded) {
+    return null;
+  }
+  if (!hasModels) {
+    return (
+      <Empty
+        title="No models available"
+        detail="Your server did not publish a model catalog for this project."
+      />
+    );
+  }
+  if (!search || matches) {
+    return null;
+  }
+  return (
+    <Card>
+      <Empty
+        title="No matching models"
+        detail="Try a model name, provider, or model ID, or clear the search to see all models."
+      />
+      <Button title="Clear search" onPress={onClear} />
+    </Card>
+  );
+};
+
+const ProvidersDisclosure = ({
+  providers,
+}: {
+  providers?: readonly { id: string; name: string; activation: string }[];
+}) => (
+  <Disclosure title={`Providers (${providers?.length ?? 0})`}>
+    {providers?.map((item) => (
+      <View key={item.id} style={{ gap: 4 }}>
+        <BodyText>{item.name}</BodyText>
+        <BodyText muted>
+          {item.id} · {item.activation}
+        </BodyText>
+      </View>
+    ))}
+  </Disclosure>
+);
+
+const ModelDetails = ({
+  client,
+  selected,
+}: {
+  client: boolean;
+  selected: ModelInfo;
+}) => {
+  const details = client
+    ? selected
+    : {
+        contextWindow: selected.limit.context,
+        id: selected.id,
+        name: selected.name,
+        providerID: selected.providerID,
+        thinkingLevels: selected.variants.map((item) => item.id),
+      };
+  return (
+    <>
+      <BodyText muted>
+        {selected.providerID}/{selected.id}
+      </BodyText>
+      <BodyText>
+        Context: {selected.limit.context.toLocaleString()} tokens
+        {client
+          ? ` · Output: ${selected.limit.output.toLocaleString()} tokens`
+          : ""}
+      </BodyText>
+      <BodyText>
+        Variants:{" "}
+        {selected.variants.map((item) => item.id).join(", ") ||
+          (client ? "Default" : "Unavailable")}
+      </BodyText>
+      {client ? (
+        <>
+          <Disclosure title="Capabilities">
+            <JsonView value={selected.capabilities} />
+          </Disclosure>
+          <Disclosure title="Prices">
+            <JsonView value={selected.cost} />
+          </Disclosure>
+        </>
+      ) : (
+        <BodyText muted>
+          Output limits and prices are unavailable from this server.
+        </BodyText>
+      )}
+      <Disclosure title="Details">
+        <JsonView value={details} />
+      </Disclosure>
+    </>
+  );
+};
+
 const Models = ({
   catalog,
   client,
@@ -1163,17 +1323,6 @@ const Models = ({
         .toLowerCase()
         .includes(search)
     ) ?? [];
-  const details =
-    selected &&
-    (client
-      ? selected
-      : {
-          contextWindow: selected.limit.context,
-          id: selected.id,
-          name: selected.name,
-          providerID: selected.providerID,
-          thinkingLevels: selected.variants.map((item) => item.id),
-        });
   return (
     <Page error={error} loading={loading} refresh={refresh}>
       <Row style={{ alignItems: "flex-end", flexWrap: "nowrap" }}>
@@ -1202,18 +1351,11 @@ const Models = ({
       </BodyText>
       <BodyText style={styles.sectionLabel}>{models.length} MODELS</BodyText>
       {models.slice(0, limit).map((item) => (
-        <Card key={`${item.providerID}/${item.id}`}>
-          <Row style={{ justifyContent: "space-between" }}>
-            <View style={{ flex: 1 }}>
-              <BodyText style={styles.name}>{item.name}</BodyText>
-              <BodyText muted>
-                {item.providerID} ·{" "}
-                {item.enabled ? "Available" : "Not connected"}
-              </BodyText>
-            </View>
-            <Button title="Details" compact onPress={() => setSelected(item)} />
-          </Row>
-        </Card>
+        <ModelCard
+          key={`${item.providerID}/${item.id}`}
+          item={item}
+          onSelect={setSelected}
+        />
       ))}
       {models.length > limit && (
         <>
@@ -1226,77 +1368,20 @@ const Models = ({
           />
         </>
       )}
-      {data &&
-        !loading &&
-        !!data.models.length &&
-        !!search &&
-        !models.length && (
-          <Card>
-            <Empty
-              title="No matching models"
-              detail="Try a model name, provider, or model ID, or clear the search to see all models."
-            />
-            <Button title="Clear search" onPress={() => changeQuery("")} />
-          </Card>
-        )}
-      {data && !loading && !data.models.length && (
-        <Empty
-          title="No models available"
-          detail="Your server did not publish a model catalog for this project."
-        />
-      )}
-      {client && (
-        <Disclosure title={`Providers (${data?.providers?.length ?? 0})`}>
-          {data?.providers?.map((item) => (
-            <View key={item.id} style={{ gap: 4 }}>
-              <BodyText>{item.name}</BodyText>
-              <BodyText muted>
-                {item.id} · {item.activation}
-              </BodyText>
-            </View>
-          ))}
-        </Disclosure>
-      )}
+      <ModelsStatus
+        hasModels={!!data?.models.length}
+        loaded={!!data && !loading}
+        matches={models.length}
+        search={search}
+        onClear={() => changeQuery("")}
+      />
+      {client && <ProvidersDisclosure providers={data?.providers} />}
       <Sheet
         visible={!!selected}
         title={selected?.name || "Model"}
         onClose={() => setSelected(undefined)}
       >
-        {selected && (
-          <>
-            <BodyText muted>
-              {selected.providerID}/{selected.id}
-            </BodyText>
-            <BodyText>
-              Context: {selected.limit.context.toLocaleString()} tokens
-              {client
-                ? ` · Output: ${selected.limit.output.toLocaleString()} tokens`
-                : ""}
-            </BodyText>
-            <BodyText>
-              Variants:{" "}
-              {selected.variants.map((item) => item.id).join(", ") ||
-                (client ? "Default" : "Unavailable")}
-            </BodyText>
-            {client ? (
-              <>
-                <Disclosure title="Capabilities">
-                  <JsonView value={selected.capabilities} />
-                </Disclosure>
-                <Disclosure title="Prices">
-                  <JsonView value={selected.cost} />
-                </Disclosure>
-              </>
-            ) : (
-              <BodyText muted>
-                Output limits and prices are unavailable from this server.
-              </BodyText>
-            )}
-            <Disclosure title="Details">
-              <JsonView value={details} />
-            </Disclosure>
-          </>
-        )}
+        {selected && <ModelDetails selected={selected} client={!!client} />}
       </Sheet>
     </Page>
   );
@@ -1325,18 +1410,13 @@ const Mcp = ({ client, directory }: { client: Client; directory: string }) => {
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const run = async (action: (signal: AbortSignal) => Promise<void>) => {
-    setBusy(true);
     setErrorAction(null);
-    try {
+    await runBusy(setBusy, setErrorAction, async () => {
       await withSettingsRequest(async (signal) => {
         await action(signal);
         await refresh(signal);
       });
-    } catch (error_) {
-      setErrorAction(errorMessage(error_));
-    } finally {
-      setBusy(false);
-    }
+    });
   };
   return (
     <Page error={error} loading={loading} refresh={refresh}>
@@ -1574,16 +1654,11 @@ const Configuration = ({
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const run = async (action: (signal: AbortSignal) => Promise<void>) => {
-    setBusy(true);
     setErrorAction(null);
     setNotice(null);
-    try {
+    await runBusy(setBusy, setErrorAction, async () => {
       await withSettingsRequest(action);
-    } catch (error_) {
-      setErrorAction(errorMessage(error_));
-    } finally {
-      setBusy(false);
-    }
+    });
   };
   return (
     <Page error={error} loading={loading} refresh={refresh}>
@@ -1902,16 +1977,11 @@ const Plugins = ({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const run = async (action: () => Promise<void>) => {
-    setBusy(true);
     setErrorAction(null);
-    try {
+    await runBusy(setBusy, setErrorAction, async () => {
       await action();
       await refresh();
-    } catch (error_) {
-      setErrorAction(errorMessage(error_));
-    } finally {
-      setBusy(false);
-    }
+    });
   };
   return (
     <Page error={error} loading={loading} refresh={refresh}>
@@ -2029,18 +2099,13 @@ const Permissions = ({
   const [busy, setBusy] = useState(false);
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const run = async (task: (signal: AbortSignal) => Promise<void>) => {
-    setBusy(true);
     setErrorAction(null);
-    try {
+    await runBusy(setBusy, setErrorAction, async () => {
       await withSettingsRequest(async (signal) => {
         await task(signal);
         await refresh(signal);
       });
-    } catch (error_) {
-      setErrorAction(errorMessage(error_));
-    } finally {
-      setBusy(false);
-    }
+    });
   };
   return (
     <Page error={error} loading={loading} refresh={refresh}>
@@ -2287,6 +2352,10 @@ const NativeSettingsSection = ({
   );
 };
 
+const SettingsBackImage = ({ tintColor }: { tintColor: string }) => (
+  <ShellIcon name="back" color={tintColor} size={22} />
+);
+
 const SettingsBackButton = ({
   label,
   onPress,
@@ -2303,13 +2372,7 @@ const SettingsBackButton = ({
       onPress={onPress}
       tintColor={colors.text}
       style={nativeBackInsets}
-      backImage={
-        Platform.OS === "ios"
-          ? ({ tintColor }) => (
-              <ShellIcon name="back" color={tintColor} size={22} />
-            )
-          : undefined
-      }
+      backImage={Platform.OS === "ios" ? SettingsBackImage : undefined}
     />
   );
 };
@@ -2415,105 +2478,217 @@ const SettingsIndex = ({
   );
 };
 
-export const SettingsScreen = ({
-  client,
-  modelCatalog = client?.model,
-  directory,
-  sections = allSections,
-  visible = true,
-  onBackStateChange,
-  onBack,
+type SettingsNavigationRef =
+  NavigationContainerRefWithCurrent<SettingsStackParams>;
+type SectionScreenProps = NativeStackScreenProps<
+  SettingsStackParams,
+  "Section"
+>;
+
+const renderBackButton = (label: string, onPress: () => void) => (
+  <SettingsBackButton label={label} onPress={onPress} />
+);
+
+const renderMenuButton = (color: string, onPress: () => void) => (
+  <Pressable
+    accessibilityRole="button"
+    accessibilityLabel="Open navigation"
+    onPress={onPress}
+    style={{
+      alignItems: "center",
+      height: 44,
+      justifyContent: "center",
+      marginEnd: Platform.OS === "android" ? -16 : 0,
+      width: 44,
+    }}
+  >
+    <ShellIcon name="menu" color={color} />
+  </Pressable>
+);
+
+const indexScreenOptions = ({
   backLabel,
+  betaLayout,
+  color,
+  onBack,
   onOpenNavigation,
-  betaLayout = false,
-  onManageServers,
-  serverLabel,
 }: {
-  client?: Client;
-  modelCatalog?: ModelCatalog;
-  directory: string;
-  sections?: Section[];
-  visible?: boolean;
-  onBackStateChange?: (canGoBack: boolean) => void;
-  onBack?: () => void;
   backLabel?: string;
+  betaLayout: boolean;
+  color: string;
+  onBack?: () => void;
   onOpenNavigation?: () => void;
-  betaLayout?: boolean;
-  onManageServers?: () => void;
-  serverLabel?: string;
+}) => ({
+  headerLeft: onBack
+    ? () => renderBackButton(backLabel || "Sessions", onBack)
+    : undefined,
+  headerRight:
+    !betaLayout && onOpenNavigation
+      ? () => renderMenuButton(color, onOpenNavigation)
+      : undefined,
+  title: "Settings",
+});
+
+const sectionScreenOptions = ({
+  route,
+  navigation,
+}: Pick<SectionScreenProps, "navigation" | "route">) => ({
+  headerBackButtonDisplayMode: "minimal" as const,
+  title: route.params.section,
+  ...(Platform.OS === "android"
+    ? {
+        headerBackVisible: false,
+        headerLeft: () =>
+          renderBackButton("Settings", () => navigation.goBack()),
+      }
+    : {}),
+});
+
+const SettingsNativeStack = ({
+  availableSections,
+  backLabel,
+  betaLayout,
+  client,
+  directory,
+  modelCatalog,
+  navigationRef,
+  onBack,
+  onOpenNavigation,
+  onReady,
+  renderIndex,
+}: {
+  availableSections: Section[];
+  backLabel?: string;
+  betaLayout: boolean;
+  client?: Client;
+  directory: string;
+  modelCatalog?: ModelCatalog;
+  navigationRef: SettingsNavigationRef;
+  onBack?: () => void;
+  onOpenNavigation?: () => void;
+  onReady: () => void;
+  renderIndex: () => React.ReactElement;
 }) => {
   const { colors, scheme } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const { width } = useWindowDimensions();
   const reducedMotion = useMotionPreference();
-  // A resize must not replace the navigator and discard an open editor.
-  const [nativeStackEnabled] = useState(
-    () => Platform.OS !== "web" && width < 920
+  const navigationTheme = useMemo(
+    () => ({
+      ...DefaultTheme,
+      colors: {
+        ...DefaultTheme.colors,
+        background: colors.bg,
+        border: colors.border,
+        card: colors.panel,
+        notification: colors.danger,
+        primary: colors.accent,
+        text: colors.text,
+      },
+      dark: scheme === "dark",
+    }),
+    [colors, scheme]
   );
-  const wide = !betaLayout && !nativeStackEnabled && width >= 920;
-  const [section, setSection] = useState<Section | null>(null);
-  const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
-  const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
-  const mounted = useRef(true);
-  const navigationRef = useNavigationContainerRef<SettingsStackParams>();
-  const availableSections = useMemo(
-    () =>
-      sections.filter(
-        (value) =>
-          !!client ||
-          value === "Appearance" ||
-          (value === "Models" && !!modelCatalog)
-      ),
-    [client, modelCatalog, sections]
+  return (
+    <BaseNavigationContainer
+      ref={navigationRef}
+      theme={navigationTheme}
+      onReady={onReady}
+      onStateChange={onReady}
+    >
+      <SettingsStack.Navigator
+        screenOptions={{
+          animation: reducedMotion ? "fade" : "default",
+          contentStyle: { backgroundColor: colors.bg },
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: colors.bg },
+          headerTintColor: colors.text,
+          headerTitleStyle: {
+            color: colors.text,
+            fontFamily: "Inter",
+            fontSize: 18,
+            fontWeight: "600",
+          },
+        }}
+      >
+        <SettingsStack.Screen
+          name="Index"
+          options={indexScreenOptions({
+            backLabel,
+            betaLayout,
+            color: colors.text,
+            onBack,
+            onOpenNavigation,
+          })}
+        >
+          {renderIndex}
+        </SettingsStack.Screen>
+        <SettingsStack.Screen name="Section" options={sectionScreenOptions}>
+          {({ route, navigation: screenNavigation }) =>
+            availableSections.includes(route.params.section) ? (
+              <NativeSettingsSection
+                client={client}
+                modelCatalog={modelCatalog}
+                directory={directory}
+                section={route.params.section}
+                navigation={screenNavigation}
+              />
+            ) : null
+          }
+        </SettingsStack.Screen>
+      </SettingsStack.Navigator>
+    </BaseNavigationContainer>
   );
-  const defaultSection = availableSections.includes("Accounts")
+};
+
+const filterSections = (
+  sections: Section[],
+  hasClient: boolean,
+  hasModelCatalog: boolean
+) =>
+  sections.filter(
+    (value) =>
+      hasClient ||
+      value === "Appearance" ||
+      (value === "Models" && hasModelCatalog)
+  );
+
+const resolveSelected = (
+  section: Section | null,
+  availableSections: Section[],
+  wide: boolean
+) => {
+  if (section !== null && availableSections.includes(section)) {
+    return section;
+  }
+  if (!wide) {
+    return null;
+  }
+  return availableSections.includes("Accounts")
     ? "Accounts"
     : (availableSections[0] ?? null);
-  let selected: Section | null = null;
-  if (section !== null && availableSections.includes(section)) {
-    selected = section;
-  } else if (wide) {
-    selected = defaultSection;
-  }
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  const changeSection = useCallback(
-    async (next: Section | null) => {
-      if (next !== null && !availableSections.includes(next)) {
-        return false;
-      }
-      if (next === section) {
-        return true;
-      }
-      if (section !== null && !(await confirmNavigation())) {
-        return false;
-      }
-      if (!mounted.current) {
-        return false;
-      }
-      setSection(next);
-      return true;
-    },
-    [section, availableSections, confirmNavigation]
-  );
+};
+
+const useInlineBackHandling = ({
+  changeSection,
+  nativeStackEnabled,
+  onBackStateChange,
+  section,
+  visible,
+  wide,
+}: {
+  changeSection: (next: Section | null) => Promise<boolean>;
+  nativeStackEnabled: boolean;
+  onBackStateChange?: (canGoBack: boolean) => void;
+  section: Section | null;
+  visible: boolean;
+  wide: boolean;
+}) => {
   useEffect(() => {
     if (nativeStackEnabled) {
       return;
     }
     onBackStateChange?.(visible && !wide && section !== null);
     return () => onBackStateChange?.(false);
-  }, [
-    betaLayout,
-    nativeStackEnabled,
-    onBackStateChange,
-    visible,
-    wide,
-    section,
-  ]);
+  }, [nativeStackEnabled, onBackStateChange, visible, wide, section]);
   useEffect(() => {
     if (nativeStackEnabled || !visible || wide || section === null) {
       return;
@@ -2526,7 +2701,22 @@ export const SettingsScreen = ({
       }
     );
     return () => subscription.remove();
-  }, [betaLayout, nativeStackEnabled, visible, wide, section, changeSection]);
+  }, [nativeStackEnabled, visible, wide, section, changeSection]);
+};
+
+const useNativeStackBackHandling = ({
+  nativeStackEnabled,
+  navigationRef,
+  onBackStateChange,
+  visible,
+  wide,
+}: {
+  nativeStackEnabled: boolean;
+  navigationRef: SettingsNavigationRef;
+  onBackStateChange?: (canGoBack: boolean) => void;
+  visible: boolean;
+  wide: boolean;
+}) => {
   const updateNativeBackState = useCallback(() => {
     if (!nativeStackEnabled) {
       return;
@@ -2554,6 +2744,163 @@ export const SettingsScreen = ({
     );
     return () => subscription.remove();
   }, [nativeStackEnabled, navigationRef, visible]);
+  return updateNativeBackState;
+};
+
+const SettingsInlineLayout = ({
+  backLabel,
+  changeSection,
+  onBack,
+  onOpenNavigation,
+  renderIndex,
+  renderSection,
+  section,
+  selected,
+  wide,
+}: {
+  backLabel?: string;
+  changeSection: (next: Section | null) => Promise<boolean>;
+  onBack?: () => void;
+  onOpenNavigation?: () => void;
+  renderIndex: () => React.ReactElement;
+  renderSection: (value: Section) => React.ReactElement;
+  section: Section | null;
+  selected: Section | null;
+  wide: boolean;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
+  const atIndex = section === null;
+  return (
+    <>
+      {!wide && (
+        <ScreenHeader
+          title={selected ?? "Settings"}
+          backLabel={atIndex ? backLabel : "Settings"}
+          onBack={
+            atIndex
+              ? onBack
+              : () => {
+                  void changeSection(null);
+                }
+          }
+          onOpenNavigation={atIndex ? onOpenNavigation : undefined}
+          onRefresh={atIndex ? undefined : headerRefresh?.refresh}
+          refreshing={headerRefresh?.loading}
+        />
+      )}
+      <HeaderRefreshContext.Provider value={wide ? null : setHeaderRefresh}>
+        <View style={[styles.content, !wide && styles.narrowContent]}>
+          {(wide || atIndex) && renderIndex()}
+          {selected && (wide || !atIndex) && (
+            <View style={styles.detail}>
+              {wide && (
+                <Row style={styles.detailHeader}>
+                  <BodyText
+                    accessibilityRole="header"
+                    style={styles.detailTitle}
+                  >
+                    {selected}
+                  </BodyText>
+                </Row>
+              )}
+              {renderSection(selected)}
+            </View>
+          )}
+        </View>
+      </HeaderRefreshContext.Provider>
+    </>
+  );
+};
+
+const keepState = (state: boolean) => state;
+const isNativeStackWidth = (width: number) =>
+  Platform.OS !== "web" && width < 920;
+
+export const SettingsScreen = ({
+  client,
+  modelCatalog: modelCatalogProp,
+  directory,
+  sections = allSections,
+  visible = true,
+  onBackStateChange,
+  onBack,
+  backLabel,
+  onOpenNavigation,
+  betaLayout = false,
+  onManageServers,
+  serverLabel,
+}: {
+  client?: Client;
+  modelCatalog?: ModelCatalog;
+  directory: string;
+  sections?: Section[];
+  visible?: boolean;
+  onBackStateChange?: (canGoBack: boolean) => void;
+  onBack?: () => void;
+  backLabel?: string;
+  onOpenNavigation?: () => void;
+  betaLayout?: boolean;
+  onManageServers?: () => void;
+  serverLabel?: string;
+}) => {
+  const modelCatalog = modelCatalogProp ?? client?.model;
+  const styles = useThemedStyles(createStyles);
+  const { width } = useWindowDimensions();
+  // A resize must not replace the navigator and discard an open editor.
+  const [nativeStackEnabled] = useReducer(keepState, width, isNativeStackWidth);
+  const wide = !betaLayout && !nativeStackEnabled && width >= 920;
+  const [section, setSection] = useState<Section | null>(null);
+  const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
+  const mounted = useRef(true);
+  const navigationRef = useNavigationContainerRef<SettingsStackParams>();
+  const hasClient = !!client;
+  const hasModelCatalog = !!modelCatalog;
+  const availableSections = useMemo(
+    () => filterSections(sections, hasClient, hasModelCatalog),
+    [hasClient, hasModelCatalog, sections]
+  );
+  const selected = resolveSelected(section, availableSections, wide);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const changeSection = useCallback(
+    async (next: Section | null) => {
+      if (next !== null && !availableSections.includes(next)) {
+        return false;
+      }
+      if (next === section) {
+        return true;
+      }
+      if (section !== null && !(await confirmNavigation())) {
+        return false;
+      }
+      if (!mounted.current) {
+        return false;
+      }
+      setSection(next);
+      return true;
+    },
+    [section, availableSections, confirmNavigation]
+  );
+  useInlineBackHandling({
+    changeSection,
+    nativeStackEnabled,
+    onBackStateChange,
+    section,
+    visible,
+    wide,
+  });
+  const updateNativeBackState = useNativeStackBackHandling({
+    nativeStackEnabled,
+    navigationRef,
+    onBackStateChange,
+    visible,
+    wide,
+  });
 
   const renderIndex = () => (
     <SettingsIndex
@@ -2580,158 +2927,38 @@ export const SettingsScreen = ({
     />
   );
 
-  const navigationTheme = useMemo(
-    () => ({
-      ...DefaultTheme,
-      colors: {
-        ...DefaultTheme.colors,
-        background: colors.bg,
-        border: colors.border,
-        card: colors.panel,
-        notification: colors.danger,
-        primary: colors.accent,
-        text: colors.text,
-      },
-      dark: scheme === "dark",
-    }),
-    [colors, scheme]
-  );
-  const navigation = (
-    <BaseNavigationContainer
-      ref={navigationRef}
-      theme={navigationTheme}
-      onReady={updateNativeBackState}
-      onStateChange={updateNativeBackState}
-    >
-      <SettingsStack.Navigator
-        screenOptions={{
-          animation: reducedMotion ? "fade" : "default",
-          contentStyle: { backgroundColor: colors.bg },
-          headerShadowVisible: false,
-          headerStyle: { backgroundColor: colors.bg },
-          headerTintColor: colors.text,
-          headerTitleStyle: {
-            color: colors.text,
-            fontFamily: "Inter",
-            fontSize: 18,
-            fontWeight: "600",
-          },
-        }}
-      >
-        <SettingsStack.Screen
-          name="Index"
-          options={{
-            headerLeft: onBack
-              ? () => (
-                  <SettingsBackButton
-                    label={backLabel || "Sessions"}
-                    onPress={onBack}
-                  />
-                )
-              : undefined,
-            headerRight:
-              !betaLayout && onOpenNavigation
-                ? () => (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Open navigation"
-                      onPress={onOpenNavigation}
-                      style={{
-                        alignItems: "center",
-                        height: 44,
-                        justifyContent: "center",
-                        marginEnd: Platform.OS === "android" ? -16 : 0,
-                        width: 44,
-                      }}
-                    >
-                      <ShellIcon name="menu" color={colors.text} />
-                    </Pressable>
-                  )
-                : undefined,
-            title: "Settings",
-          }}
-        >
-          {renderIndex}
-        </SettingsStack.Screen>
-        <SettingsStack.Screen
-          name="Section"
-          options={({ route, navigation: screenNavigation }) => ({
-            headerBackButtonDisplayMode: "minimal",
-            title: route.params.section,
-            ...(Platform.OS === "android"
-              ? {
-                  headerBackVisible: false,
-                  headerLeft: () => (
-                    <SettingsBackButton
-                      label="Settings"
-                      onPress={() => screenNavigation.goBack()}
-                    />
-                  ),
-                }
-              : {}),
-          })}
-        >
-          {({ route, navigation: screenNavigation }) =>
-            availableSections.includes(route.params.section) ? (
-              <NativeSettingsSection
-                client={client}
-                modelCatalog={modelCatalog}
-                directory={directory}
-                section={route.params.section}
-                navigation={screenNavigation}
-              />
-            ) : null
-          }
-        </SettingsStack.Screen>
-      </SettingsStack.Navigator>
-    </BaseNavigationContainer>
-  );
-
   return (
     <View style={[styles.screen, !wide && styles.narrowScreen]}>
       {nativeStackEnabled ? (
         <SafeAreaInsetsContext.Provider value={zeroInsets}>
-          <View style={styles.nativeNavigation}>{navigation}</View>
+          <View style={styles.nativeNavigation}>
+            <SettingsNativeStack
+              availableSections={availableSections}
+              backLabel={backLabel}
+              betaLayout={betaLayout}
+              client={client}
+              directory={directory}
+              modelCatalog={modelCatalog}
+              navigationRef={navigationRef}
+              onBack={onBack}
+              onOpenNavigation={onOpenNavigation}
+              onReady={updateNativeBackState}
+              renderIndex={renderIndex}
+            />
+          </View>
         </SafeAreaInsetsContext.Provider>
       ) : (
-        <>
-          {!wide && (
-            <ScreenHeader
-              title={selected ?? "Settings"}
-              backLabel={section === null ? backLabel : "Settings"}
-              onBack={
-                section === null
-                  ? onBack
-                  : () => {
-                      void changeSection(null);
-                    }
-              }
-              onOpenNavigation={section === null ? onOpenNavigation : undefined}
-              onRefresh={section === null ? undefined : headerRefresh?.refresh}
-              refreshing={headerRefresh?.loading}
-            />
-          )}
-          <HeaderRefreshContext.Provider value={wide ? null : setHeaderRefresh}>
-            <View style={[styles.content, !wide && styles.narrowContent]}>
-              {(wide || section === null) && renderIndex()}
-              {selected && (wide || section !== null) && (
-                <View style={styles.detail}>
-                  {wide && (
-                    <Row style={styles.detailHeader}>
-                      <BodyText
-                        accessibilityRole="header"
-                        style={styles.detailTitle}
-                      >
-                        {selected}
-                      </BodyText>
-                    </Row>
-                  )}
-                  {renderSection(selected)}
-                </View>
-              )}
-            </View>
-          </HeaderRefreshContext.Provider>
-        </>
+        <SettingsInlineLayout
+          backLabel={backLabel}
+          changeSection={changeSection}
+          onBack={onBack}
+          onOpenNavigation={onOpenNavigation}
+          renderIndex={renderIndex}
+          renderSection={renderSection}
+          section={section}
+          selected={selected}
+          wide={wide}
+        />
       )}
     </View>
   );
