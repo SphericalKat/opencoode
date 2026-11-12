@@ -255,7 +255,7 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
     followFrame.current = requestAnimationFrame(() => {
       followFrame.current = undefined;
       if (!alive.current || !followingLatestRef.current || userScrolling.current || !transcriptVisible.current) return;
-      list.current?.getNativeScrollRef()?.scrollToEnd({ animated: false });
+      list.current?.scrollToEnd({ animated: false });
     });
   }, []);
   useEffect(() => () => { if (followFrame.current !== undefined) cancelAnimationFrame(followFrame.current); }, []);
@@ -644,8 +644,7 @@ function ChatSession({ backend, onConnectionLost, sessionID, onSessionChanged, o
                 case 'session.shell.ended':
                 case 'session.compaction.started':
                 case 'session.compaction.ended':
-                case 'session.compaction.failed':
-                case 'session.message.content.updated': scheduleScope('history'); break;
+                case 'session.compaction.failed': scheduleScope('history'); break;
               }
             } else if (event.type === 'location.shutdown') scheduleRefresh();
             const formSession = event.type === 'form.created' ? event.data.form.sessionID : event.type === 'form.replied' || event.type === 'form.cancelled' ? event.data.sessionID : undefined;
