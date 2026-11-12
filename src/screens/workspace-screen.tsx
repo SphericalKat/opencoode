@@ -62,7 +62,7 @@ interface Props {
   onAttachFile?: (
     path: string,
     contextText?: string
-  ) => void | Promise<boolean | void>;
+  ) => Promise<boolean | undefined> | undefined;
   visible?: boolean;
   sessionID?: string;
   onBack?: () => void;
@@ -72,116 +72,71 @@ interface Props {
   hideChrome?: boolean;
 }
 
-export function WorkspaceScreen(props: Props) {
-  return (
-    <Workspace key={`${props.connection.id}:${props.directory}`} {...props} />
-  );
-}
-
-function Workspace({
-  client,
-  connection,
-  directory,
-  onDirectoryChange,
-  onAttachFile,
-  visible = true,
-  sessionID,
-  onBack,
-  backLabel,
-  onOpenNavigation,
-  section,
-  hideChrome = false,
-}: Props) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const [tab, setTab] = useState<WorkspaceSection>("Files");
-  const activeTab = section ?? tab;
-  return (
-    <View style={styles.screen}>
-      {!hideChrome &&
-        (onBack ? (
-          <ScreenHeader
-            title="Workspace"
-            backLabel={backLabel}
-            onBack={onBack}
-            onOpenNavigation={onOpenNavigation}
-          />
-        ) : (
-          <View style={styles.header}>
-            <BodyText accessibilityRole="header" style={styles.title}>
-              Workspace
-            </BodyText>
-          </View>
-        ))}
-      {!hideChrome && (
-        <View
-          accessibilityRole="tablist"
-          accessibilityLabel="Workspace sections"
-          style={[styles.tabs, onBack && { marginTop: 12 }]}
-        >
-          {(["Files", "Changes", "Worktrees", "Terminal"] as const).map(
-            (item) => (
-              <Pressable
-                key={item}
-                accessibilityRole="tab"
-                accessibilityLabel={item}
-                accessibilityState={{ selected: activeTab === item }}
-                aria-selected={activeTab === item}
-                style={({ pressed }) => [
-                  styles.workspaceTab,
-                  activeTab === item && styles.selectedTab,
-                  pressed && { opacity: 0.65 },
-                ]}
-                onPress={() => setTab(item)}
-              >
-                <BodyText
-                  style={{
-                    color: activeTab === item ? colors.text : colors.muted,
-                    fontSize: 14,
-                    textAlign: "center",
-                  }}
-                >
-                  {item}
-                </BodyText>
-              </Pressable>
-            )
-          )}
-        </View>
-      )}
-      <View
-        style={[styles.screen, activeTab !== "Files" && { display: "none" }]}
-      >
-        <Files
-          client={client}
-          directory={directory}
-          onAttachFile={onAttachFile}
-        />
-      </View>
-      {activeTab === "Changes" && (
-        <Changes
-          client={client}
-          directory={directory}
-          onAttachFile={onAttachFile}
-        />
-      )}
-      {activeTab === "Worktrees" && (
-        <Worktrees
-          client={client}
-          directory={directory}
-          onDirectoryChange={onDirectoryChange}
-        />
-      )}
-      {visible && activeTab === "Terminal" && (
-        <TerminalPanel
-          client={client}
-          connection={connection}
-          directory={directory}
-          sessionID={sessionID}
-        />
-      )}
-    </View>
-  );
-}
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    content: {
+      gap: 16,
+      padding: 16,
+      paddingBottom: 32,
+      paddingHorizontal: pageInset,
+    },
+    controls: { gap: 8, paddingBottom: 10, paddingHorizontal: pageInset },
+    editor: { flex: 1, gap: 12, minHeight: 0, padding: 16 },
+    fileIcon: { color: colors.muted, fontFamily: mono, fontSize: 23 },
+    fileRow: {
+      alignItems: "center",
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 58,
+      paddingVertical: 12,
+    },
+    header: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 4,
+      justifyContent: "space-between",
+      paddingBottom: 12,
+      paddingHorizontal: pageInset,
+      paddingTop: 12,
+    },
+    list: { flexGrow: 1, paddingBottom: 24, paddingHorizontal: pageInset },
+    mediaPreview: {
+      alignItems: "center",
+      flex: 1,
+      gap: 12,
+      justifyContent: "center",
+      minHeight: 0,
+    },
+    screen: { backgroundColor: colors.bg, flex: 1, minHeight: 0 },
+    selectedTab: { backgroundColor: colors.panel },
+    tabs: {
+      backgroundColor: colors.raised,
+      borderRadius: 14,
+      flexDirection: "row",
+      gap: 2,
+      marginBottom: 12,
+      marginHorizontal: pageInset,
+      padding: 4,
+    },
+    title: {
+      fontSize: 25,
+      fontWeight: "500",
+      letterSpacing: -0.5,
+      lineHeight: 31,
+    },
+    workspaceTab: {
+      alignItems: "center",
+      borderRadius: 10,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: Platform.OS === "android" ? 48 : 44,
+      minWidth: 0,
+      paddingHorizontal: 4,
+      paddingVertical: 9,
+    },
+  });
 
 interface OpenFile {
   path: string;
@@ -195,58 +150,56 @@ interface OpenFile {
   error?: string;
 }
 
-function imageMime(bytes: Uint8Array): string | undefined {
-  if (
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a
-  ) {
+const startsWith = (
+  bytes: Uint8Array,
+  signature: readonly number[],
+  offset = 0
+): boolean => {
+  for (const [index, byte] of signature.entries()) {
+    if (bytes[offset + index] !== byte) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const JPEG_SIGNATURE = [0xff, 0xd8, 0xff];
+const GIF_SIGNATURE = [0x47, 0x49, 0x46, 0x38];
+const GIF_VERSIONS = new Set([0x37, 0x39]);
+const GIF_TRAILER = 0x61;
+const RIFF_SIGNATURE = [0x52, 0x49, 0x46, 0x46];
+const WEBP_SIGNATURE = [0x57, 0x45, 0x42, 0x50];
+const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d];
+
+const imageMime = (bytes: Uint8Array): string | undefined => {
+  if (startsWith(bytes, PNG_SIGNATURE)) {
     return "image/png";
   }
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+  if (startsWith(bytes, JPEG_SIGNATURE)) {
     return "image/jpeg";
   }
   if (
-    bytes[0] === 0x47 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x38 &&
-    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
-    bytes[5] === 0x61
+    startsWith(bytes, GIF_SIGNATURE) &&
+    GIF_VERSIONS.has(bytes[4]) &&
+    bytes[5] === GIF_TRAILER
   ) {
     return "image/gif";
   }
   if (
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
+    startsWith(bytes, RIFF_SIGNATURE) &&
+    startsWith(bytes, WEBP_SIGNATURE, 8)
   ) {
     return "image/webp";
   }
-}
+};
 
-function fileMime(path: string, bytes: Uint8Array): string {
+const fileMime = (path: string, bytes: Uint8Array): string => {
   const image = imageMime(bytes);
   if (image) {
     return image;
   }
-  if (
-    bytes[0] === 0x25 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x44 &&
-    bytes[3] === 0x46 &&
-    bytes[4] === 0x2d
-  ) {
+  if (startsWith(bytes, PDF_SIGNATURE)) {
     return "application/pdf";
   }
   const extension = path.split(".").pop()?.toLowerCase();
@@ -265,30 +218,410 @@ function fileMime(path: string, bytes: Uint8Array): string {
       } as Record<string, string>
     )[extension || ""] || "application/octet-stream"
   );
-}
+};
 
-function base64(bytes: Uint8Array): string {
+const base64 = (bytes: Uint8Array): string => {
   const chunks: string[] = [];
   for (let index = 0; index < bytes.length; index += 0x80_00) {
-    chunks.push(String.fromCharCode(...bytes.subarray(index, index + 0x80_00)));
+    chunks.push(
+      String.fromCodePoint(...bytes.subarray(index, index + 0x80_00))
+    );
   }
   return btoa(chunks.join(""));
-}
+};
 
-function quotedText(text: string, language = ""): string {
+const quotedText = (text: string, language = ""): string => {
   let longest = 2;
-  for (const match of text.matchAll(/`+/g)) {
+  for (const match of text.matchAll(/`+/gu)) {
     longest = Math.max(longest, match[0].length);
   }
   const fence = "`".repeat(longest + 1);
   return `${fence}${language}\n${text}\n${fence}`;
-}
+};
 
-function Files({
+const MAX_PREVIEW_BYTES = 8 * 1024 * 1024;
+
+const loadedFile = (path: string, bytes: Uint8Array): OpenFile => {
+  const mime = fileMime(path, bytes);
+  if (imageMime(bytes)) {
+    const preview =
+      bytes.length <= MAX_PREVIEW_BYTES
+        ? `data:${mime};base64,${base64(bytes)}`
+        : undefined;
+    return {
+      bytes,
+      initialText: "",
+      mime,
+      original: null,
+      path,
+      preview,
+      text: "",
+    };
+  }
+  try {
+    const text = decodeEditableFile(bytes);
+    return {
+      bytes,
+      initialText: text,
+      mime,
+      original: bytes,
+      path,
+      text,
+    };
+  } catch (error_) {
+    return {
+      bytes,
+      initialText: "",
+      mime,
+      notice: errorMessage(error_),
+      original: null,
+      path,
+      text: "",
+    };
+  }
+};
+
+const compareEntries = (a: FileSystemEntry, b: FileSystemEntry): number => {
+  if (a.type === b.type) {
+    return a.path.localeCompare(b.path);
+  }
+  return a.type === "directory" ? -1 : 1;
+};
+
+const emptyFilesText = (
+  error: string | null,
+  searching: boolean
+): { detail: string; title: string } => {
+  if (error) {
+    return {
+      detail: "Retry the request or check your server connection.",
+      title: "Files unavailable",
+    };
+  }
+  if (searching) {
+    return { detail: "Try a different file name.", title: "No matches" };
+  }
+  return { detail: "This folder is empty.", title: "No files" };
+};
+
+const selectionContext = (
+  file: OpenFile,
+  selection: { end: number; start: number },
+  directory: string
+): string | undefined => {
+  if (selection.end <= selection.start) {
+    return;
+  }
+  const start = Math.max(0, Math.min(selection.start, file.text.length));
+  const end = Math.max(start, Math.min(selection.end, file.text.length));
+  if (end <= start) {
+    return;
+  }
+  const firstLine = file.text.slice(0, start).split("\n").length;
+  const lastLine = file.text
+    .slice(0, file.text[end - 1] === "\n" ? end - 1 : end)
+    .split("\n").length;
+  const serverPath = serverFilePath(directory, file.path);
+  return `Selected text from ${serverPath}, lines ${firstLine}–${lastLine}${file.text === file.initialText ? "" : " (unsaved editor text)"}:\n\n${quotedText(file.text.slice(start, end))}`;
+};
+
+const downloadInBrowser = (bytes: Uint8Array, name: string, mime: string) => {
+  const url = URL.createObjectURL(
+    new Blob([new Uint8Array(bytes)], { type: mime })
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const shareNatively = async (
+  bytes: Uint8Array,
+  name: string,
+  mime: string,
+  presentNative: ReturnType<typeof useNativePresentation>
+) => {
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error("File sharing is unavailable on this device");
+  }
+  const exported = new File(Paths.cache, `opencoode-${Date.now()}-${name}`);
+  try {
+    await exported.write(bytes);
+    await presentNative(() =>
+      Sharing.shareAsync(exported.uri, {
+        dialogTitle: "Save or share file",
+        mimeType: mime,
+      })
+    );
+  } finally {
+    if (exported.exists) {
+      await exported.delete();
+    }
+  }
+};
+
+const loadEntries = async (
+  client: Props["client"],
+  {
+    directory,
+    path,
+    query,
+  }: { directory: string; path: string; query: string },
+  signal: AbortSignal
+): Promise<FileSystemEntry[]> => {
+  const result = query.trim()
+    ? await client.file.find(
+        { limit: 200, location: { directory }, query: query.trim() },
+        { signal }
+      )
+    : await client.file.list({ location: { directory }, path }, { signal });
+  return result.data.toSorted(compareEntries);
+};
+
+const shareTitle = () =>
+  Platform.OS === "web" ? "Download file" : "Save or share";
+
+const FileHeaderRow = ({
+  file,
+  fileActionsOpen,
+  fileBusy,
+  saved,
+  sharing,
+  showAttach,
+  onAttach,
+  onSave,
+  onToggleActions,
+}: {
+  file: OpenFile;
+  fileActionsOpen: boolean;
+  fileBusy: boolean;
+  saved: boolean;
+  sharing: boolean;
+  showAttach: boolean;
+  onAttach: () => void;
+  onSave: () => void;
+  onToggleActions: () => void;
+}) => (
+  <Row style={{ flexWrap: "nowrap", justifyContent: "space-between" }}>
+    {file.original && (
+      <Button
+        title={saved && file.text === file.initialText ? "Saved" : "Save file"}
+        compact
+        variant="primary"
+        disabled={file.text === file.initialText || sharing}
+        busy={fileBusy}
+        onPress={onSave}
+      />
+    )}
+    {file.bytes && !file.original && showAttach && (
+      <Button
+        title="Attach to prompt"
+        compact
+        variant="primary"
+        disabled={fileBusy || sharing}
+        onPress={onAttach}
+      />
+    )}
+    <Button
+      title={fileActionsOpen ? "Hide actions" : "More actions"}
+      compact
+      variant="ghost"
+      disabled={fileBusy || sharing}
+      onPress={onToggleActions}
+    />
+  </Row>
+);
+
+const FileActionRows = ({
+  copied,
+  file,
+  fileBusy,
+  selection,
+  sharing,
+  showAttach,
+  onAttach,
+  onAttachSelection,
+  onCopied,
+  onCopyError,
+  onOpen,
+  onShare,
+}: {
+  copied: boolean;
+  file: OpenFile;
+  fileBusy: boolean;
+  selection: { end: number; start: number };
+  sharing: boolean;
+  showAttach: boolean;
+  onAttach: () => void;
+  onAttachSelection: () => void;
+  onCopied: () => void;
+  onCopyError: (error: unknown) => void;
+  onOpen: (path: string) => Promise<void>;
+  onShare: () => void;
+}) => (
+  <>
+    <Row>
+      {showAttach && (
+        <Button
+          title="Attach to prompt"
+          compact
+          disabled={fileBusy || sharing}
+          onPress={onAttach}
+        />
+      )}
+      {showAttach && file.original && (
+        <Button
+          title="Attach selection"
+          compact
+          disabled={fileBusy || sharing || selection.end <= selection.start}
+          onPress={onAttachSelection}
+        />
+      )}
+      <Button
+        title="Reload"
+        compact
+        disabled={fileBusy || sharing}
+        onPress={() => {
+          if (file.text === file.initialText) {
+            void onOpen(file.path);
+          } else {
+            void confirmAction(
+              "Reload the file?",
+              "Your unsaved edits will be lost."
+            ).then((yes) => {
+              if (yes) {
+                void onOpen(file.path);
+              }
+              return yes;
+            });
+          }
+        }}
+      />
+      {file.original && (
+        <Button
+          title={copied ? "Copied" : "Copy text"}
+          compact
+          onPress={() => {
+            void Clipboard.setStringAsync(file.text)
+              .then(onCopied)
+              .catch(onCopyError);
+          }}
+        />
+      )}
+      {file.bytes && (
+        <Button
+          title={shareTitle()}
+          compact
+          busy={sharing}
+          disabled={fileBusy}
+          onPress={onShare}
+        />
+      )}
+    </Row>
+    {file.original && selection.end > selection.start && (
+      <BodyText muted style={{ fontSize: 12 }}>
+        Selected text: {selection.end - selection.start} characters
+      </BodyText>
+    )}
+  </>
+);
+
+const FileBody = ({
+  file,
+  fileBusy,
+  setCopied,
+  setFile,
+  setSaved,
+  setSelection,
+  sharing,
+  onShare,
+}: {
+  file: OpenFile;
+  fileBusy: boolean;
+  setCopied: (value: boolean) => void;
+  setFile: (update: (current: OpenFile | null) => OpenFile | null) => void;
+  setSaved: (value: boolean) => void;
+  setSelection: (value: { end: number; start: number }) => void;
+  sharing: boolean;
+  onShare: () => void;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  if (fileBusy && !file.bytes) {
+    return <Busy />;
+  }
+  if (file.preview) {
+    return (
+      <View style={styles.mediaPreview}>
+        <Image
+          accessibilityLabel={fileName(file.path)}
+          source={{ uri: file.preview }}
+          resizeMode="contain"
+          style={{ height: "100%", width: "100%" }}
+          onError={() =>
+            setFile((current) =>
+              current?.path === file.path
+                ? {
+                    ...current,
+                    notice:
+                      "This device cannot display this image. Save or share the file to open it in another app.",
+                    preview: undefined,
+                  }
+                : current
+            )
+          }
+        />
+      </View>
+    );
+  }
+  if (file.original) {
+    return (
+      <Field
+        accessibilityLabel={`Edit ${file.path}`}
+        multiline
+        scrollEnabled
+        value={file.text}
+        onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
+        onChangeText={(text) => {
+          setFile((current) => current && { ...current, text });
+          setSaved(false);
+          setCopied(false);
+          setSelection({ end: 0, start: 0 });
+        }}
+        editable={!fileBusy && !sharing}
+        containerStyle={{ flex: 1, minHeight: 0 }}
+        style={{
+          flex: 1,
+          fontFamily: mono,
+          fontSize: 14,
+          lineHeight: 21,
+          minHeight: 0,
+        }}
+      />
+    );
+  }
+  if (!file.bytes) {
+    return null;
+  }
+  const fallbackNotice = imageMime(file.bytes)
+    ? "This image exceeds the 8 MiB preview limit."
+    : "Save or share this file to open it in a compatible app.";
+  return (
+    <View style={styles.mediaPreview}>
+      <BodyText>
+        {file.mime} · {(file.bytes.length / 1024).toFixed(1)} KiB
+      </BodyText>
+      <BodyText muted>{file.notice || fallbackNotice}</BodyText>
+      <Button title={shareTitle()} busy={sharing} onPress={onShare} />
+    </View>
+  );
+};
+
+const Files = ({
   client,
   directory,
   onAttachFile,
-}: Pick<Props, "client" | "directory" | "onAttachFile">) {
+}: Pick<Props, "client" | "directory" | "onAttachFile">) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const presentNative = useNativePresentation();
@@ -321,25 +654,13 @@ function Files({
     const timer = setTimeout(
       async () => {
         try {
-          const result = query.trim()
-            ? await client.file.find(
-                { limit: 200, location: { directory }, query: query.trim() },
-                { signal: controller.signal }
-              )
-            : await client.file.list(
-                { location: { directory }, path },
-                { signal: controller.signal }
-              );
+          const sorted = await loadEntries(
+            client,
+            { directory, path, query },
+            controller.signal
+          );
           if (!controller.signal.aborted) {
-            setEntries(
-              [...result.data].sort((a, b) =>
-                a.type === b.type
-                  ? a.path.localeCompare(b.path)
-                  : a.type === "directory"
-                    ? -1
-                    : 1
-              )
-            );
+            setEntries(sorted);
           }
         } catch (error_) {
           if (!controller.signal.aborted) {
@@ -360,7 +681,7 @@ function Files({
     };
   }, [client, directory, path, query, revision]);
 
-  async function openFile(nextPath: string) {
+  const openFile = async (nextPath: string) => {
     setFile({
       bytes: null,
       initialText: "",
@@ -376,56 +697,8 @@ function Files({
     setSelection({ end: 0, start: 0 });
     try {
       const bytes = await client.file.read({ location, path: nextPath });
-      const mime = fileMime(nextPath, bytes);
-      if (imageMime(bytes)) {
-        const preview =
-          bytes.length <= 8 * 1024 * 1024
-            ? `data:${mime};base64,${base64(bytes)}`
-            : undefined;
-        setFile((current) =>
-          current?.path === nextPath
-            ? {
-                bytes,
-                initialText: "",
-                mime,
-                original: null,
-                path: nextPath,
-                preview,
-                text: "",
-              }
-            : current
-        );
-      } else {
-        try {
-          const text = decodeEditableFile(bytes);
-          setFile((current) =>
-            current?.path === nextPath
-              ? {
-                  bytes,
-                  initialText: text,
-                  mime,
-                  original: bytes,
-                  path: nextPath,
-                  text,
-                }
-              : current
-          );
-        } catch (error_) {
-          setFile((current) =>
-            current?.path === nextPath
-              ? {
-                  bytes,
-                  initialText: "",
-                  mime,
-                  notice: errorMessage(error_),
-                  original: null,
-                  path: nextPath,
-                  text: "",
-                }
-              : current
-          );
-        }
-      }
+      const loaded = loadedFile(nextPath, bytes);
+      setFile((current) => (current?.path === nextPath ? loaded : current));
     } catch (error_) {
       setFile((current) =>
         current?.path === nextPath
@@ -435,9 +708,9 @@ function Files({
     } finally {
       setFileBusy(false);
     }
-  }
+  };
 
-  async function closeFile() {
+  const closeFile = async () => {
     if (fileBusy || sharing) {
       return false;
     }
@@ -453,10 +726,11 @@ function Files({
     }
     setFile(null);
     return true;
-  }
+  };
 
-  async function save() {
-    if (!file?.original) {
+  const save = async () => {
+    const original = file?.original;
+    if (!file || !original) {
       return;
     }
     const editing = file;
@@ -473,7 +747,7 @@ function Files({
               payload,
             }),
         },
-        editing.original!,
+        original,
         editing.text
       );
       setFile((current) =>
@@ -488,9 +762,9 @@ function Files({
     } finally {
       setFileBusy(false);
     }
-  }
+  };
 
-  async function attach(contextText?: string) {
+  const attach = async (contextText?: string) => {
     if (!file || !onAttachFile) {
       return;
     }
@@ -514,28 +788,20 @@ function Files({
       setFile(editing);
       setSaveError(errorMessage(error_));
     }
-  }
+  };
 
-  async function attachSelection() {
-    if (!file || selection.end <= selection.start) {
+  const attachSelection = async () => {
+    if (!file) {
       return;
     }
-    const start = Math.max(0, Math.min(selection.start, file.text.length));
-    const end = Math.max(start, Math.min(selection.end, file.text.length));
-    if (end <= start) {
+    const context = selectionContext(file, selection, directory);
+    if (context === undefined) {
       return;
     }
-    const firstLine = file.text.slice(0, start).split("\n").length;
-    const lastLine = file.text
-      .slice(0, file.text[end - 1] === "\n" ? end - 1 : end)
-      .split("\n").length;
-    const path = serverFilePath(directory, file.path);
-    await attach(
-      `Selected text from ${path}, lines ${firstLine}–${lastLine}${file.text === file.initialText ? "" : " (unsaved editor text)"}:\n\n${quotedText(file.text.slice(start, end))}`
-    );
-  }
+    await attach(context);
+  };
 
-  async function shareFile() {
+  const shareFile = async () => {
     if (!file?.bytes) {
       return;
     }
@@ -549,42 +815,16 @@ function Files({
         fileName(file.path).replaceAll(/[^\p{L}\p{N}._-]/gu, "_") || "download";
       const mime = file.mime || "application/octet-stream";
       if (Platform.OS === "web") {
-        const url = URL.createObjectURL(
-          new Blob([new Uint8Array(bytes)], { type: mime })
-        );
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = name;
-        anchor.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadInBrowser(bytes, name, mime);
       } else {
-        if (!(await Sharing.isAvailableAsync())) {
-          throw new Error("File sharing is unavailable on this device");
-        }
-        const exported = new File(
-          Paths.cache,
-          `opencoode-${Date.now()}-${name}`
-        );
-        try {
-          await exported.write(bytes);
-          await presentNative(() =>
-            Sharing.shareAsync(exported.uri, {
-              dialogTitle: "Save or share file",
-              mimeType: mime,
-            })
-          );
-        } finally {
-          if (exported.exists) {
-            await exported.delete();
-          }
-        }
+        await shareNatively(bytes, name, mime, presentNative);
       }
     } catch (error_) {
       setSaveError(errorMessage(error_));
     } finally {
       setSharing(false);
     }
-  }
+  };
 
   return (
     <View style={styles.screen}>
@@ -629,24 +869,7 @@ function Files({
           data={entries}
           keyExtractor={(entry) => entry.path}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <Empty
-              title={
-                error
-                  ? "Files unavailable"
-                  : searching
-                    ? "No matches"
-                    : "No files"
-              }
-              detail={
-                error
-                  ? "Retry the request or check your server connection."
-                  : searching
-                    ? "Try a different file name."
-                    : "This folder is empty."
-              }
-            />
-          }
+          ListEmptyComponent={<Empty {...emptyFilesText(error, searching)} />}
           renderItem={({ item }) => (
             <Pressable
               accessibilityRole="button"
@@ -704,197 +927,56 @@ function Files({
             >
               {file.path}
             </BodyText>
-            <Row
-              style={{ flexWrap: "nowrap", justifyContent: "space-between" }}
-            >
-              {file.original && (
-                <Button
-                  title={
-                    saved && file.text === file.initialText
-                      ? "Saved"
-                      : "Save file"
-                  }
-                  compact
-                  variant="primary"
-                  disabled={file.text === file.initialText || sharing}
-                  busy={fileBusy}
-                  onPress={() => {
-                    void save();
-                  }}
-                />
-              )}
-              {file.bytes && !file.original && onAttachFile && (
-                <Button
-                  title="Attach to prompt"
-                  compact
-                  variant="primary"
-                  disabled={fileBusy || sharing}
-                  onPress={() => {
-                    void attach();
-                  }}
-                />
-              )}
-              <Button
-                title={fileActionsOpen ? "Hide actions" : "More actions"}
-                compact
-                variant="ghost"
-                disabled={fileBusy || sharing}
-                onPress={() => setFileActionsOpen((open) => !open)}
-              />
-            </Row>
+            <FileHeaderRow
+              file={file}
+              fileActionsOpen={fileActionsOpen}
+              fileBusy={fileBusy}
+              saved={saved}
+              sharing={sharing}
+              onAttach={() => {
+                void attach();
+              }}
+              onSave={() => {
+                void save();
+              }}
+              onToggleActions={() => setFileActionsOpen((open) => !open)}
+              showAttach={!!onAttachFile}
+            />
             {fileActionsOpen && (
-              <>
-                <Row>
-                  {onAttachFile && (
-                    <Button
-                      title="Attach to prompt"
-                      compact
-                      disabled={fileBusy || sharing}
-                      onPress={() => {
-                        void attach();
-                      }}
-                    />
-                  )}
-                  {onAttachFile && file.original && (
-                    <Button
-                      title="Attach selection"
-                      compact
-                      disabled={
-                        fileBusy || sharing || selection.end <= selection.start
-                      }
-                      onPress={() => {
-                        void attachSelection();
-                      }}
-                    />
-                  )}
-                  <Button
-                    title="Reload"
-                    compact
-                    disabled={fileBusy || sharing}
-                    onPress={() => {
-                      if (file.text === file.initialText) {
-                        void openFile(file.path);
-                      } else {
-                        void confirmAction(
-                          "Reload the file?",
-                          "Your unsaved edits will be lost."
-                        ).then((yes) => {
-                          if (yes) {
-                            void openFile(file.path);
-                          }
-                        });
-                      }
-                    }}
-                  />
-                  {file.original && (
-                    <Button
-                      title={copied ? "Copied" : "Copy text"}
-                      compact
-                      onPress={() => {
-                        void Clipboard.setStringAsync(file.text)
-                          .then(() => setCopied(true))
-                          .catch((error_) =>
-                            setSaveError(errorMessage(error_))
-                          );
-                      }}
-                    />
-                  )}
-                  {file.bytes && (
-                    <Button
-                      title={
-                        Platform.OS === "web"
-                          ? "Download file"
-                          : "Save or share"
-                      }
-                      compact
-                      busy={sharing}
-                      disabled={fileBusy}
-                      onPress={() => {
-                        void shareFile();
-                      }}
-                    />
-                  )}
-                </Row>
-                {file.original && selection.end > selection.start && (
-                  <BodyText muted style={{ fontSize: 12 }}>
-                    Selected text: {selection.end - selection.start} characters
-                  </BodyText>
-                )}
-              </>
+              <FileActionRows
+                copied={copied}
+                file={file}
+                fileBusy={fileBusy}
+                selection={selection}
+                sharing={sharing}
+                showAttach={!!onAttachFile}
+                onAttach={() => {
+                  void attach();
+                }}
+                onAttachSelection={() => {
+                  void attachSelection();
+                }}
+                onCopied={() => setCopied(true)}
+                onCopyError={(error_) => setSaveError(errorMessage(error_))}
+                onOpen={openFile}
+                onShare={() => {
+                  void shareFile();
+                }}
+              />
             )}
             <ErrorNotice error={file.error || saveError} />
-            {fileBusy && !file.bytes ? (
-              <Busy />
-            ) : file.preview ? (
-              <View style={styles.mediaPreview}>
-                <Image
-                  accessibilityLabel={fileName(file.path)}
-                  source={{ uri: file.preview }}
-                  resizeMode="contain"
-                  style={{ height: "100%", width: "100%" }}
-                  onError={() =>
-                    setFile((current) =>
-                      current?.path === file.path
-                        ? {
-                            ...current,
-                            notice:
-                              "This device cannot display this image. Save or share the file to open it in another app.",
-                            preview: undefined,
-                          }
-                        : current
-                    )
-                  }
-                />
-              </View>
-            ) : file.original ? (
-              <Field
-                accessibilityLabel={`Edit ${file.path}`}
-                multiline
-                scrollEnabled
-                value={file.text}
-                onSelectionChange={(event) =>
-                  setSelection(event.nativeEvent.selection)
-                }
-                onChangeText={(text) => {
-                  setFile((current) => current && { ...current, text });
-                  setSaved(false);
-                  setCopied(false);
-                  setSelection({ end: 0, start: 0 });
-                }}
-                editable={!fileBusy && !sharing}
-                containerStyle={{ flex: 1, minHeight: 0 }}
-                style={{
-                  flex: 1,
-                  fontFamily: mono,
-                  fontSize: 14,
-                  lineHeight: 21,
-                  minHeight: 0,
-                }}
-              />
-            ) : (
-              file.bytes && (
-                <View style={styles.mediaPreview}>
-                  <BodyText>
-                    {file.mime} · {(file.bytes.length / 1024).toFixed(1)} KiB
-                  </BodyText>
-                  <BodyText muted>
-                    {file.notice ||
-                      (imageMime(file.bytes)
-                        ? "This image exceeds the 8 MiB preview limit."
-                        : "Save or share this file to open it in a compatible app.")}
-                  </BodyText>
-                  <Button
-                    title={
-                      Platform.OS === "web" ? "Download file" : "Save or share"
-                    }
-                    busy={sharing}
-                    onPress={() => {
-                      void shareFile();
-                    }}
-                  />
-                </View>
-              )
-            )}
+            <FileBody
+              file={file}
+              fileBusy={fileBusy}
+              setCopied={setCopied}
+              setFile={setFile}
+              setSaved={setSaved}
+              setSelection={setSelection}
+              sharing={sharing}
+              onShare={() => {
+                void shareFile();
+              }}
+            />
             {file.original && (
               <BodyText muted style={{ fontSize: 12 }}>
                 If the server file changes, copy your edits before you reload
@@ -906,13 +988,13 @@ function Files({
       </Sheet>
     </View>
   );
-}
+};
 
-function Changes({
+const Changes = ({
   client,
   directory,
   onAttachFile,
-}: Pick<Props, "client" | "directory" | "onAttachFile">) {
+}: Pick<Props, "client" | "directory" | "onAttachFile">) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [info, setInfo] = useState<VcsInfo | null>(null);
@@ -953,7 +1035,7 @@ function Changes({
     ])
       .then(([vcs, status]) => {
         if (controller.signal.aborted) {
-          return;
+          return false;
         }
         if (vcs.status === "fulfilled") {
           setInfo(vcs.value.data);
@@ -969,6 +1051,7 @@ function Changes({
             failures.map((result) => errorMessage(result.reason)).join("\n")
           );
         }
+        return true;
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -977,7 +1060,7 @@ function Changes({
       });
     return () => controller.abort();
   }, [client, directory, revision]);
-  async function loadDiff(file?: string) {
+  const loadDiff = async (file?: string) => {
     setBusy(true);
     setError(null);
     try {
@@ -995,8 +1078,8 @@ function Changes({
     } finally {
       setBusy(false);
     }
-  }
-  async function loadBranches() {
+  };
+  const loadBranches = async () => {
     setBusy(true);
     setError(null);
     try {
@@ -1011,8 +1094,8 @@ function Changes({
     } finally {
       setBusy(false);
     }
-  }
-  async function closeDiff() {
+  };
+  const closeDiff = async () => {
     if (addingReview) {
       return;
     }
@@ -1029,8 +1112,8 @@ function Changes({
     setReviewVisible(false);
     setReviewComment("");
     setDiff(null);
-  }
-  async function openReview(file: FileDiffInfo) {
+  };
+  const openReview = async (file: FileDiffInfo) => {
     if (review?.file !== file.file) {
       if (
         reviewComment.trim() &&
@@ -1046,8 +1129,8 @@ function Changes({
     setReview(file);
     setReviewVisible(true);
     setError(null);
-  }
-  async function addReview() {
+  };
+  const addReview = async () => {
     if (!review || !onAttachFile || !reviewComment.trim()) {
       return;
     }
@@ -1073,7 +1156,7 @@ function Changes({
     } finally {
       setAddingReview(false);
     }
-  }
+  };
   return (
     <View style={styles.screen}>
       <View style={styles.controls}>
@@ -1275,13 +1358,13 @@ function Changes({
       </Sheet>
     </View>
   );
-}
+};
 
-function Worktrees({
+const Worktrees = ({
   client,
   directory,
   onDirectoryChange,
-}: Pick<Props, "client" | "directory" | "onDirectoryChange">) {
+}: Pick<Props, "client" | "directory" | "onDirectoryChange">) => {
   const styles = useThemedStyles(createStyles);
   const [location, setLocation] = useState<LocationPublicInfo | null>(null);
   const [trees, setTrees] = useState<WorktreeDirectory[]>([]);
@@ -1308,6 +1391,7 @@ function Worktrees({
           setLocation(result);
           setTrees(list);
         }
+        return list;
       })
       .catch((error_) => {
         if (!controller.signal.aborted) {
@@ -1321,7 +1405,7 @@ function Worktrees({
       });
     return () => controller.abort();
   }, [client, directory, revision]);
-  async function create() {
+  const create = async () => {
     if (!location) {
       return;
     }
@@ -1341,8 +1425,8 @@ function Worktrees({
     } finally {
       setBusy(false);
     }
-  }
-  async function remove(tree: WorktreeDirectory) {
+  };
+  const remove = async (tree: WorktreeDirectory) => {
     if (
       !location ||
       tree.directory === location.project.directory ||
@@ -1367,7 +1451,7 @@ function Worktrees({
     } finally {
       setBusy(false);
     }
-  }
+  };
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Row>
@@ -1497,71 +1581,113 @@ function Worktrees({
       </Sheet>
     </ScrollView>
   );
-}
+};
 
-function createStyles(colors: ThemeColors) {
-  return StyleSheet.create({
-    content: {
-      gap: 16,
-      padding: 16,
-      paddingBottom: 32,
-      paddingHorizontal: pageInset,
-    },
-    controls: { gap: 8, paddingBottom: 10, paddingHorizontal: pageInset },
-    editor: { flex: 1, gap: 12, minHeight: 0, padding: 16 },
-    fileIcon: { color: colors.muted, fontFamily: mono, fontSize: 23 },
-    fileRow: {
-      alignItems: "center",
-      borderBottomWidth: 1,
-      borderColor: colors.border,
-      flexDirection: "row",
-      gap: 12,
-      minHeight: 58,
-      paddingVertical: 12,
-    },
-    header: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 4,
-      justifyContent: "space-between",
-      paddingBottom: 12,
-      paddingHorizontal: pageInset,
-      paddingTop: 12,
-    },
-    list: { flexGrow: 1, paddingBottom: 24, paddingHorizontal: pageInset },
-    mediaPreview: {
-      alignItems: "center",
-      flex: 1,
-      gap: 12,
-      justifyContent: "center",
-      minHeight: 0,
-    },
-    screen: { backgroundColor: colors.bg, flex: 1, minHeight: 0 },
-    selectedTab: { backgroundColor: colors.panel },
-    tabs: {
-      backgroundColor: colors.raised,
-      borderRadius: 14,
-      flexDirection: "row",
-      gap: 2,
-      marginBottom: 12,
-      marginHorizontal: pageInset,
-      padding: 4,
-    },
-    title: {
-      fontSize: 25,
-      fontWeight: "500",
-      letterSpacing: -0.5,
-      lineHeight: 31,
-    },
-    workspaceTab: {
-      alignItems: "center",
-      borderRadius: 10,
-      flex: 1,
-      justifyContent: "center",
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: 0,
-      paddingHorizontal: 4,
-      paddingVertical: 9,
-    },
-  });
-}
+const Workspace = ({
+  client,
+  connection,
+  directory,
+  onDirectoryChange,
+  onAttachFile,
+  visible = true,
+  sessionID,
+  onBack,
+  backLabel,
+  onOpenNavigation,
+  section,
+  hideChrome = false,
+}: Props) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const [tab, setTab] = useState<WorkspaceSection>("Files");
+  const activeTab = section ?? tab;
+  return (
+    <View style={styles.screen}>
+      {!hideChrome &&
+        (onBack ? (
+          <ScreenHeader
+            title="Workspace"
+            backLabel={backLabel}
+            onBack={onBack}
+            onOpenNavigation={onOpenNavigation}
+          />
+        ) : (
+          <View style={styles.header}>
+            <BodyText accessibilityRole="header" style={styles.title}>
+              Workspace
+            </BodyText>
+          </View>
+        ))}
+      {!hideChrome && (
+        <View
+          accessibilityRole="tablist"
+          accessibilityLabel="Workspace sections"
+          style={[styles.tabs, onBack && { marginTop: 12 }]}
+        >
+          {(["Files", "Changes", "Worktrees", "Terminal"] as const).map(
+            (item) => (
+              <Pressable
+                key={item}
+                accessibilityRole="tab"
+                accessibilityLabel={item}
+                accessibilityState={{ selected: activeTab === item }}
+                aria-selected={activeTab === item}
+                style={({ pressed }) => [
+                  styles.workspaceTab,
+                  activeTab === item && styles.selectedTab,
+                  pressed && { opacity: 0.65 },
+                ]}
+                onPress={() => setTab(item)}
+              >
+                <BodyText
+                  style={{
+                    color: activeTab === item ? colors.text : colors.muted,
+                    fontSize: 14,
+                    textAlign: "center",
+                  }}
+                >
+                  {item}
+                </BodyText>
+              </Pressable>
+            )
+          )}
+        </View>
+      )}
+      <View
+        style={[styles.screen, activeTab !== "Files" && { display: "none" }]}
+      >
+        <Files
+          client={client}
+          directory={directory}
+          onAttachFile={onAttachFile}
+        />
+      </View>
+      {activeTab === "Changes" && (
+        <Changes
+          client={client}
+          directory={directory}
+          onAttachFile={onAttachFile}
+        />
+      )}
+      {activeTab === "Worktrees" && (
+        <Worktrees
+          client={client}
+          directory={directory}
+          onDirectoryChange={onDirectoryChange}
+        />
+      )}
+      {visible && activeTab === "Terminal" && (
+        <TerminalPanel
+          client={client}
+          connection={connection}
+          directory={directory}
+          sessionID={sessionID}
+        />
+      )}
+    </View>
+  );
+};
+
+export const WorkspaceScreen = (props: Props) => (
+  <Workspace key={`${props.connection.id}:${props.directory}`} {...props} />
+);

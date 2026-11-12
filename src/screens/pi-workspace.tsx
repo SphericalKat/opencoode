@@ -2,6 +2,7 @@ import type { SessionInfo } from "@opencode/client";
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -36,21 +37,12 @@ interface Props {
 }
 const settingsSections: Section[] = ["Appearance", "Models"];
 
-export function PiWorkspace(props: Props) {
-  return (
-    <PiWorkspaceSession
-      key={`${props.connection.id}:${props.connection.url}`}
-      {...props}
-    />
-  );
-}
-
-function PiWorkspaceSession({
+const PiWorkspaceSession = ({
   connection,
   foreground,
   onManageServers,
   onConnectionLost,
-}: Props) {
+}: Props) => {
   const betaLayout = useBetaLayout();
   const client = useMemo(() => createPiClient(connection), [connection]);
   const backend = useMemo(
@@ -73,13 +65,15 @@ function PiWorkspaceSession({
   }>();
   const alive = useRef(true);
   const sessionRef = useRef(session);
-  sessionRef.current = session;
   const pendingNavigation = useRef<(() => void) | null>(null);
   const operation = useRef(false);
   const requestID = useRef(0);
   const settingsCanGoBack = useRef(false);
   const lostConnection = useRef(onConnectionLost);
-  lostConnection.current = onConnectionLost;
+  useLayoutEffect(() => {
+    sessionRef.current = session;
+    lostConnection.current = onConnectionLost;
+  });
   const confirmNavigation = useUnsavedGuard();
 
   useEffect(() => {
@@ -166,6 +160,7 @@ function PiWorkspaceSession({
             }))
           );
         }
+        return null;
       })
       .catch((error_) => {
         if (!controller.signal.aborted) {
@@ -204,7 +199,7 @@ function PiWorkspaceSession({
     operation.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const runCommand = async () => {
       const { current } = sessionRef;
       if (!current) {
         return;
@@ -213,15 +208,17 @@ function PiWorkspaceSession({
       if (alive.current) {
         await refreshSession();
       }
+    };
+    try {
+      await runCommand();
     } catch (error_) {
       if (alive.current) {
         setError(errorMessage(error_));
       }
-    } finally {
-      operation.current = false;
-      if (alive.current) {
-        setBusy(false);
-      }
+    }
+    operation.current = false;
+    if (alive.current) {
+      setBusy(false);
     }
   };
 
@@ -265,8 +262,9 @@ function PiWorkspaceSession({
   const showDetails = () => {
     const { current } = sessionRef;
     if (current) {
+      requestID.current += 1;
       setPanelRequest({
-        id: ++requestID.current,
+        id: requestID.current,
         panel: "actions",
         sessionID: current.id,
       });
@@ -334,9 +332,8 @@ function PiWorkspaceSession({
                 betaLayout={betaLayout}
                 visible={foreground && !settingsOpen}
                 projectLabel={session.location.directory
-                  .split(/[\\/]/)
-                  .filter(Boolean)
-                  .pop()}
+                  .split(/[\\/]/u)
+                  .findLast(Boolean)}
                 onOpenNavigation={() => setNavigationOpen(true)}
                 onSelectionChange={setSelected}
                 onSessionInfo={recordSession}
@@ -401,4 +398,11 @@ function PiWorkspaceSession({
       />
     </View>
   );
-}
+};
+
+export const PiWorkspace = (props: Props) => (
+  <PiWorkspaceSession
+    key={`${props.connection.id}:${props.connection.url}`}
+    {...props}
+  />
+);

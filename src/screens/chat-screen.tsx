@@ -184,12 +184,901 @@ const messageKey = (item: TranscriptItem) => item.id;
 const messageType = (item: TranscriptItem) =>
   item.type === "message" ? item.message.type : item.type;
 const MessageSeparator = () => <View style={{ height: 24 }} />;
+const noop = () => {
+  // Intentionally does nothing.
+};
 
-export function ChatScreen(props: Props) {
-  return <ChatSession key={props.sessionID} {...props} />;
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    assistant: { gap: 6 },
+    betaComposer: {
+      backgroundColor: colors.panel,
+      borderRadius: 12,
+      borderTopColor: colors.border,
+      paddingHorizontal: 4,
+      paddingVertical: 2,
+    },
+    betaComposerDock: { paddingBottom: 10, paddingHorizontal: 12 },
+    betaComposerInput: {
+      backgroundColor: colors.panel,
+      fontSize: 14,
+      lineHeight: 23,
+      paddingHorizontal: 11,
+      paddingVertical: 10,
+    },
+    betaComposerToolbar: { gap: 0 },
+    betaLatestOverlay: { bottom: 12, position: "absolute", right: 16 },
+    betaMessages: { flexGrow: 1, padding: 16, paddingBottom: 24 },
+    betaModelName: { flex: 1, minWidth: 0 },
+    betaModelTrigger: { gap: 3, minWidth: 0, paddingHorizontal: 4 },
+    betaProviderLabel: { maxWidth: 80 },
+    betaRaisedFace: {
+      backgroundColor: colors.text,
+      borderColor: colors.text,
+      borderTopColor: colors.text,
+    },
+    betaTriggerText: { color: colors.muted, flexShrink: 1, fontSize: 14 },
+    betaVariantTrigger: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexShrink: 0,
+      gap: 3,
+      maxWidth: "38%",
+      minHeight: 48,
+      minWidth: 48,
+      paddingHorizontal: 4,
+    },
+    code: {
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    codeText: {
+      color: colors.text,
+      fontFamily: mono,
+      fontSize: 13,
+      lineHeight: 20,
+      padding: 12,
+      paddingTop: 4,
+    },
+    composer: {
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 18,
+      borderTopColor: colors.controlTopEdge,
+      borderWidth: 1,
+      gap: 4,
+      maxWidth: 736,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      width: "100%",
+    },
+    composerDock: {
+      alignItems: "center",
+      padding: 12,
+      paddingHorizontal: pageInset,
+      paddingTop: 4,
+    },
+    composerInput: {
+      backgroundColor: colors.panel,
+      borderRadius: 0,
+      borderWidth: 0,
+      boxShadow: [],
+      fontSize: 17,
+      lineHeight: 25,
+      maxHeight: 120,
+      minHeight: 44,
+      paddingHorizontal: 7,
+      paddingVertical: 6,
+    },
+    composerToolbar: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "nowrap",
+      gap: 4,
+    },
+    container: { backgroundColor: colors.bg, flex: 1, minHeight: 0 },
+    dot: { borderRadius: 3, height: 5, width: 5 },
+    errorBanner: { gap: 4, paddingHorizontal: 12, paddingTop: 8 },
+    eyebrow: {
+      color: colors.muted,
+      fontFamily: mono,
+      fontSize: 11,
+      letterSpacing: 1.2,
+    },
+    frame: { flex: 1, minHeight: 0 },
+    header: {
+      alignItems: "center",
+      borderBottomColor: colors.border,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 4,
+      minHeight: 56,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    headerLeading: { marginEnd: 24 - pageInset, marginStart: pageInset - 24 },
+    headerSubtitle: { alignItems: "center", flexDirection: "row", gap: 6 },
+    headerTitle: {
+      flex: 1,
+      gap: 1,
+      minWidth: 0,
+      paddingHorizontal: 4,
+      paddingStart: pageInset - 8,
+    },
+    headerTitleWithNavigation: { paddingStart: pageInset - 4 },
+    headerTrailing: { marginEnd: pageInset - 24, marginStart: 24 - pageInset },
+    iconFace: {
+      alignItems: "center",
+      borderRadius: 18,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    iconTarget: {
+      alignItems: "center",
+      flexShrink: 0,
+      height: Platform.OS === "android" ? 48 : 44,
+      justifyContent: "center",
+      width: Platform.OS === "android" ? 48 : 44,
+    },
+    messages: {
+      flexGrow: 1,
+      padding: 16,
+      paddingBottom: 24,
+      paddingHorizontal: pageInset,
+    },
+    modelList: { paddingBottom: 24, paddingHorizontal: 12 },
+    modelRow: {
+      alignItems: "center",
+      borderRadius: 8,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 66,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    modelSearch: { gap: 8, padding: 16, paddingBottom: 10 },
+    modelTrigger: {
+      alignItems: "center",
+      flex: 1,
+      flexDirection: "row",
+      gap: 6,
+      minHeight: Platform.OS === "android" ? 48 : 44,
+      minWidth: 0,
+      paddingHorizontal: 8,
+    },
+    modelTriggerText: { color: colors.muted, flexShrink: 1, fontSize: 13 },
+    notice: { fontFamily: mono, fontSize: 12 },
+    projectLabel: { flexShrink: 1, fontSize: 13, lineHeight: 17 },
+    radio: {
+      alignItems: "center",
+      borderColor: colors.muted,
+      borderRadius: 9,
+      borderWidth: 1,
+      height: 18,
+      justifyContent: "center",
+      width: 18,
+    },
+    radioDot: {
+      backgroundColor: colors.text,
+      borderRadius: 4,
+      height: 8,
+      width: 8,
+    },
+    raisedFace: {
+      backgroundColor: colors.primary,
+      borderColor: colors.border,
+      borderTopColor: colors.controlTopEdge,
+      borderWidth: 1,
+      elevation: 2,
+      shadowColor: "#000000",
+      shadowOffset: { height: 1, width: 0 },
+      shadowOpacity: 0.2,
+      shadowRadius: 1,
+    },
+    revert: {
+      backgroundColor: colors.raised,
+      borderRadius: 10,
+      gap: 8,
+      margin: 12,
+      padding: 14,
+    },
+    selectableMessage: { position: "relative" },
+    selectionCount: {
+      flex: 1,
+      fontSize: 15,
+      minWidth: 0,
+      paddingStart: pageInset - 4,
+    },
+    selectionHeader: { backgroundColor: colors.panel },
+    selectionMarker: {
+      borderRadius: 1,
+      bottom: 0,
+      position: "absolute",
+      start: -8,
+      top: 0,
+      width: 2,
+    },
+    sessionTitle: { fontSize: 17, fontWeight: "500", lineHeight: 22 },
+    transcript: {
+      alignSelf: "center",
+      flex: 1,
+      maxWidth: 760,
+      minHeight: 0,
+      width: "100%",
+    },
+    transcriptFrame: { flex: 1, minHeight: 0, paddingBottom: 8 },
+    variants: { gap: 8, paddingBottom: 16, paddingHorizontal: 4 },
+  });
+
+type ChatIconName =
+  | "menu"
+  | "more"
+  | "plus"
+  | "up"
+  | "down"
+  | "star"
+  | "stop"
+  | "close"
+  | "copy"
+  | "check";
+
+const ChatGlyph = ({
+  name,
+  color,
+  size = 20,
+  selected,
+}: {
+  name: ChatIconName;
+  color: string;
+  size?: number;
+  selected?: boolean;
+}) => {
+  if (name === "menu") {
+    return <ShellIcon name="menu" size={size} color={color} />;
+  }
+  const path = {
+    check: "m5 12 4 4L19 6",
+    close: "M6 6l12 12M18 6 6 18",
+    copy: "M8 8h12v13H8Z M16 8V3H3v13h5",
+    down: "M6 9l6 6 6-6",
+    more: "M5 12h.01M12 12h.01M19 12h.01",
+    plus: "M12 5v14M5 12h14",
+    star: "m12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.3l-5.6 3 1.1-6.3L3 9.6l6.2-.9Z",
+    stop: "M7 7h10v10H7Z",
+    up: "M12 19V5M6 11l6-6 6 6",
+  }[name];
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <Path
+        d={path}
+        stroke={color}
+        strokeWidth={name === "more" ? 3 : 1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill={name === "stop" || (name === "star" && selected) ? color : "none"}
+      />
+    </Svg>
+  );
+};
+
+const ChatIconButton = ({
+  name,
+  label,
+  onPress,
+  raised,
+  disabled,
+  busy,
+  selected,
+  compactFace,
+}: {
+  name: ChatIconName;
+  label: string;
+  onPress: () => void;
+  raised?: boolean;
+  disabled?: boolean;
+  busy?: boolean;
+  selected?: boolean;
+  compactFace?: boolean;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  let glyphColor = colors.muted;
+  if (raised) {
+    glyphColor = compactFace ? colors.bg : colors.primaryText;
+  } else if (selected) {
+    glyphColor = colors.text;
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{
+        busy: !!busy,
+        disabled: !!disabled || !!busy,
+        selected,
+      }}
+      aria-pressed={selected}
+      disabled={disabled || busy}
+      onPress={(event) => {
+        event.stopPropagation();
+        onPress();
+      }}
+      style={styles.iconTarget}
+    >
+      {({ pressed }) => (
+        <PressFeedback
+          pressed={pressed}
+          disabled={disabled || busy}
+          style={[
+            styles.iconFace,
+            compactFace && {
+              borderRadius: raised ? 6 : 14,
+              height: 28,
+              width: 28,
+            },
+            raised && styles.raisedFace,
+            raised && compactFace && styles.betaRaisedFace,
+            (disabled || busy) && { opacity: 0.4 },
+          ]}
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color={colors.primaryText} />
+          ) : (
+            <ChatGlyph name={name} selected={selected} color={glyphColor} />
+          )}
+        </PressFeedback>
+      )}
+    </Pressable>
+  );
+};
+
+const PanelLink = ({
+  title,
+  onPress,
+}: {
+  title: string;
+  onPress: () => void;
+}) => {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 12,
+        minHeight: Platform.OS === "android" ? 48 : 44,
+        opacity: pressed ? 0.6 : 1,
+        paddingVertical: 10,
+      })}
+    >
+      <BodyText style={{ flex: 1 }}>{title}</BodyText>
+      <ShellIcon name="chevron" size={16} color={colors.muted} />
+    </Pressable>
+  );
+};
+
+const CodeBlock = ({
+  code,
+  language,
+  selectable = true,
+}: {
+  code: string;
+  language?: string;
+  selectable?: boolean;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <View style={styles.code}>
+      <Row style={{ justifyContent: "space-between", paddingHorizontal: 12 }}>
+        <BodyText muted style={{ fontSize: 12 }}>
+          {language || "TEXT"}
+        </BodyText>
+        <Button
+          title={copied ? "Copied" : "Copy"}
+          compact
+          variant="ghost"
+          onPress={() => {
+            void Clipboard.setStringAsync(code)
+              .then(() => setCopied(true))
+              .catch((error_) => setError(errorMessage(error_)));
+          }}
+        />
+      </Row>
+      {error && <ErrorNotice error={error} />}
+      <ScrollView horizontal>
+        <Text selectable={selectable} style={styles.codeText}>
+          {code}
+        </Text>
+      </ScrollView>
+    </View>
+  );
+};
+
+const MessageText = ({
+  text,
+  muted,
+  selectable = true,
+}: {
+  text: string;
+  muted?: boolean;
+  selectable?: boolean;
+}) => <Markdown text={text} muted={muted} selectable={selectable} />;
+
+const CompletedAssistantFooter = ({
+  message,
+}: {
+  message: SessionMessageAssistant;
+}) => {
+  const elapsed =
+    message.time.completed === undefined
+      ? undefined
+      : Math.max(
+          0,
+          Math.round((message.time.completed - message.time.created) / 1000)
+        );
+  return (
+    <ResponseFooter
+      text={message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n\n")}
+      elapsedSeconds={elapsed}
+    />
+  );
+};
+
+const ChatKeyboardView = ({
+  enabled,
+  children,
+}: {
+  enabled: boolean;
+  children: React.ReactNode;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const { height } = useReanimatedKeyboardAnimation();
+  const { bottom } = useSafeAreaInsets();
+  const keyboardPadding = useAnimatedStyle(
+    () => ({
+      paddingBottom: enabled ? Math.max(0, -height.value - bottom) : 0,
+    }),
+    [enabled, bottom]
+  );
+  if (Platform.OS === "android") {
+    return (
+      <Animated.View style={[styles.container, keyboardPadding]}>
+        {children}
+      </Animated.View>
+    );
+  }
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior="padding"
+      automaticOffset
+      enabled={enabled}
+    >
+      {children}
+    </KeyboardAvoidingView>
+  );
+};
+
+const messageText = (message: SessionMessageInfo): string => {
+  if ("text" in message) {
+    return message.text;
+  }
+  if (message.type === "assistant") {
+    return message.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n\n");
+  }
+  if (message.type === "shell") {
+    return `$ ${message.command}${message.output?.output ? `\n${message.output.output}` : ""}`;
+  }
+  if (message.type === "compaction") {
+    if ("summary" in message) {
+      return message.summary;
+    }
+    return "error" in message ? message.error.message : "Context compaction";
+  }
+  if (message.type === "agent-switched") {
+    return `Agent: ${message.agent}`;
+  }
+  if (message.type === "model-switched") {
+    return `Model: ${message.model.id}`;
+  }
+  if (message.type === "location-switched") {
+    return `Directory: ${message.location.directory}`;
+  }
+  return message.error?.message || message.outcome;
+};
+
+const messagePreview = (message: SessionMessageInfo): string => {
+  if (message.type === "assistant") {
+    const first = message.content.find((part) => part.type === "text");
+    return first?.type === "text" && first.text
+      ? first.text.slice(0, 240)
+      : "Assistant message";
+  }
+  return messageText(message).slice(0, 240);
+};
+
+const renderAssistantMessage = ({
+  message,
+  live,
+  activityKind,
+  animate,
+  client,
+  directory,
+  selectable,
+  styles,
+  betaLayout,
+}: {
+  message: SessionMessageAssistant;
+  live?: boolean;
+  activityKind?: AgentActivity["kind"];
+  animate?: boolean;
+  client?: Client;
+  directory: string;
+  selectable: boolean;
+  styles: ReturnType<typeof createStyles>;
+  betaLayout: boolean;
+}) => (
+  <View style={styles.assistant}>
+    {message.content.map((part, index) => (
+      <AssistantPart
+        key={`${message.id}:${part.type === "tool" ? part.id : index}`}
+        detailsKey={`${message.id}:${part.type === "tool" ? part.id : index}`}
+        part={part}
+        live={
+          !!live &&
+          (part.type === "tool" || index === message.content.length - 1)
+        }
+        activityKind={activityKind}
+        animate={animate}
+        client={client}
+        directory={directory}
+        selectable={selectable}
+      />
+    ))}
+    {message.error && <ErrorNotice error={message.error.message} />}
+    {betaLayout &&
+      !live &&
+      message.content.some(
+        (part) => part.type === "text" && !!part.text.trim()
+      ) && <CompletedAssistantFooter key={message.id} message={message} />}
+  </View>
+);
+
+const renderUserMessage = (
+  message: Extract<SessionMessageInfo, { type: "user" }>,
+  selectable: boolean
+) => (
+  <UserMessageBubble withAttachments={!!message.files?.length}>
+    <MessageText text={message.text} selectable={selectable} />
+    {message.files?.map((file, index) => (
+      <View key={index} style={{ gap: 8 }}>
+        <BodyText muted style={{ fontFamily: mono, fontSize: 13 }}>
+          ↳ {file.name || file.mime}
+        </BodyText>
+        {file.mime.startsWith("image/") && (
+          <Image
+            source={{ uri: `data:${file.mime};base64,${file.data}` }}
+            style={{ borderRadius: 10, height: 180, width: "100%" }}
+            resizeMode="contain"
+            accessibilityLabel={file.name || "Attached image"}
+          />
+        )}
+      </View>
+    ))}
+    {message.skills?.map((skill) => (
+      <BodyText key={skill.id} muted>
+        Skill: {skill.name}
+      </BodyText>
+    ))}
+  </UserMessageBubble>
+);
+
+const MessageContentBody = ({
+  message,
+  live,
+  activityKind,
+  animate,
+  client,
+  directory,
+  selectable,
+}: {
+  message: SessionMessageInfo;
+  live?: boolean;
+  activityKind?: AgentActivity["kind"];
+  animate?: boolean;
+  client?: Client;
+  directory: string;
+  selectable: boolean;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const betaLayout = useBetaLayout();
+  if (message.type === "idle") {
+    return message.error ? <ErrorNotice error={message.error.message} /> : null;
+  }
+  if (message.type === "assistant") {
+    return renderAssistantMessage({
+      activityKind,
+      animate,
+      betaLayout,
+      client,
+      directory,
+      live,
+      message,
+      selectable,
+      styles,
+    });
+  }
+  if (message.type === "user") {
+    return renderUserMessage(message, selectable);
+  }
+  if (message.type === "shell") {
+    return (
+      <Disclosure
+        disclosureKey={message.id}
+        title={`$ ${message.command} · ${message.status}`}
+      >
+        <CodeBlock
+          code={message.output?.output || "No output"}
+          selectable={selectable}
+        />
+        {message.output?.truncated && (
+          <BodyText muted>Output truncated by the server</BodyText>
+        )}
+      </Disclosure>
+    );
+  }
+  if (message.type === "compaction") {
+    return (
+      <Disclosure
+        disclosureKey={message.id}
+        title={`Context compaction · ${message.status}`}
+      >
+        {"summary" in message && (
+          <MessageText text={message.summary} selectable={selectable} />
+        )}
+        {"error" in message && <ErrorNotice error={message.error.message} />}
+      </Disclosure>
+    );
+  }
+  if (message.type === "agent-switched") {
+    return (
+      <BodyText muted style={styles.notice}>
+        Agent → {message.agent}
+      </BodyText>
+    );
+  }
+  if (message.type === "model-switched") {
+    return (
+      <BodyText muted style={styles.notice}>
+        Model → {message.model.id}
+        {message.model.variant ? ` · ${message.model.variant}` : ""}
+      </BodyText>
+    );
+  }
+  if (message.type === "location-switched") {
+    return (
+      <BodyText muted style={styles.notice}>
+        Directory → {message.location.directory}
+      </BodyText>
+    );
+  }
+  if (message.type === "skill") {
+    return (
+      <Disclosure disclosureKey={message.id} title={`Skill · ${message.name}`}>
+        <MessageText text={message.text} selectable={selectable} />
+      </Disclosure>
+    );
+  }
+  return (
+    <Disclosure
+      disclosureKey={message.id}
+      title={message.description || message.type}
+    >
+      <MessageText text={message.text} selectable={selectable} />
+    </Disclosure>
+  );
+};
+const MessageContent = memo(MessageContentBody);
+
+interface MessageRowProps {
+  message: SessionMessageInfo;
+  sourceKey?: string;
+  children?: React.ReactNode;
+  live?: boolean;
+  activityKind?: AgentActivity["kind"];
+  animate?: boolean;
+  onSelect?: (id: string) => void;
+  selected?: boolean;
+  selectionActive?: boolean;
+  screenReader?: boolean;
+  client?: Client;
+  directory: string;
 }
+const MessageRowBody = ({
+  message,
+  sourceKey,
+  children,
+  live,
+  activityKind,
+  animate,
+  onSelect,
+  selected,
+  selectionActive,
+  screenReader,
+  client,
+  directory,
+}: MessageRowProps) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const select = useCallback(
+    () => onSelect?.(message.id),
+    [onSelect, message.id]
+  );
+  const separateContent = screenReader || Platform.OS === "web";
+  if (message.type === "idle" && !message.error) {
+    return null;
+  }
+  if (!onSelect) {
+    return (
+      children ?? (
+        <MessageContent
+          message={message}
+          client={client}
+          directory={directory}
+          selectable
+        />
+      )
+    );
+  }
+  return (
+    <Pressable
+      nativeID={`chat-message-${encodeURIComponent(message.id)}${sourceKey ? `:${encodeURIComponent(sourceKey)}` : ""}`}
+      accessible={!separateContent}
+      accessibilityRole={separateContent ? undefined : "button"}
+      accessibilityLabel={separateContent ? undefined : messagePreview(message)}
+      accessibilityHint={
+        separateContent
+          ? undefined
+          : "Long press to select this message. Message actions appear in the header."
+      }
+      accessibilityState={
+        separateContent ? undefined : { selected: !!selected }
+      }
+      accessibilityActions={
+        separateContent
+          ? undefined
+          : [
+              { label: "Select message", name: "activate" },
+              { label: "Select message", name: "longpress" },
+            ]
+      }
+      onAccessibilityAction={
+        separateContent ? undefined : () => onSelect(message.id)
+      }
+      focusable={!screenReader}
+      onLongPress={() => onSelect(message.id)}
+      onPress={selectionActive ? () => onSelect(message.id) : undefined}
+      style={styles.selectableMessage}
+    >
+      {selected && (
+        <View
+          pointerEvents="none"
+          aria-hidden
+          style={[styles.selectionMarker, { backgroundColor: colors.muted }]}
+        />
+      )}
+      <MessageActionsContext.Provider value={select}>
+        {children ?? (
+          <MessageContent
+            message={message}
+            live={live}
+            activityKind={activityKind}
+            animate={animate}
+            client={client}
+            directory={directory}
+            selectable={false}
+          />
+        )}
+      </MessageActionsContext.Provider>
+      {screenReader && (
+        <Button
+          title="Message actions"
+          compact
+          variant="ghost"
+          accessibilityLabel={`Message actions: ${messagePreview(message)}`}
+          onPress={() => onSelect(message.id)}
+        />
+      )}
+    </Pressable>
+  );
+};
+const MessageRow = memo(MessageRowBody);
 
-function ChatSession({
+const inboxItemText = (item: SessionInboxInfo) => {
+  if (item.type === "user") {
+    return item.payload.text;
+  }
+  if (item.type === "compaction") {
+    return "Compact context";
+  }
+  return "Move session";
+};
+
+const sendButtonLabel = (
+  active: boolean,
+  hasPrompt: boolean,
+  delivery: "steer" | "queue"
+) => {
+  if (active && !hasPrompt) {
+    return "Stop generation";
+  }
+  if (active && delivery === "queue") {
+    return "Queue message";
+  }
+  return "Send message";
+};
+
+const emptyModelsTitle = (
+  hasEnabled: boolean,
+  modelFilter: string,
+  hasScoped: boolean
+) => {
+  if (!hasEnabled) {
+    return "No connected models";
+  }
+  if (modelFilter !== "all" && !hasScoped) {
+    return modelFilter === "favorites"
+      ? "No favorite models"
+      : "No recent models";
+  }
+  return "No models match";
+};
+
+const emptyModelsDetail = (
+  hasEnabled: boolean,
+  modelFilter: string,
+  hasScoped: boolean
+) => {
+  if (!hasEnabled) {
+    return "Connect a provider in Settings, then refresh this list.";
+  }
+  if (modelFilter === "favorites" && !hasScoped) {
+    return "Tap the star beside a model to save it here.";
+  }
+  if (modelFilter === "recent" && !hasScoped) {
+    return "Models appear here after you select them.";
+  }
+  return "Try a model name or provider.";
+};
+
+const readWebFileBase64 = (file: Blob, name: string) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("error", () =>
+      reject(new Error(`Cannot read ${name}`))
+    );
+    reader.addEventListener("load", () =>
+      resolve(String(reader.result).split(",")[1] || "")
+    );
+    reader.readAsDataURL(file);
+  });
+
+const ChatSession = ({
   backend,
   onConnectionLost,
   sessionID,
@@ -207,7 +1096,7 @@ function ChatSession({
   onSelectionChange,
   onSessionInfo,
   sessionPanelRequest,
-}: Props) {
+}: Props) => {
   const client = backend.core;
   const { opencodeClient } = backend;
   const { capabilities } = backend;
@@ -270,7 +1159,7 @@ function ChatSession({
   const connectionLost = useRef(onConnectionLost);
   connectionLost.current = onConnectionLost;
   const reportConnectionFailure = useCallback((reason: unknown) => {
-    connectionFailures.current++;
+    connectionFailures.current += 1;
     if (isConnectionUnauthorized(reason) || connectionFailures.current >= 2) {
       connectionLost.current?.(reason);
     }
@@ -308,15 +1197,15 @@ function ChatSession({
   const followingLatestRef = useRef(true);
   const userScrolling = useRef(false);
   const wheelDirection = useRef(0);
-  const webScrollCleanup = useRef<() => void>(() => {});
+  const webScrollCleanup = useRef<() => void>(noop);
   const followKeyboard = useRef(false);
   const followFrame = useRef<number | undefined>(undefined);
   const transcriptVisible = useRef(visible);
   transcriptVisible.current = visible;
   const screenReaderEnabled = useRef(screenReader);
   screenReaderEnabled.current = screenReader;
-  const refreshRef = useRef<() => void>(() => {});
-  const flushStream = useRef<() => void>(() => {});
+  const refreshRef = useRef<() => void>(noop);
+  const flushStream = useRef<() => void>(noop);
   const requestVersion = useRef(0);
   const sessionDirectory = useRef<string | undefined>(undefined);
   const liveMessages = useRef(new Map<string, SessionMessageAssistant>());
@@ -369,7 +1258,7 @@ function ChatSession({
     alive.current = true;
     return () => {
       alive.current = false;
-      requestVersion.current++;
+      requestVersion.current += 1;
     };
   }, []);
   const showError = useCallback((reason: unknown) => {
@@ -403,8 +1292,9 @@ function ChatSession({
         if (current) {
           setScreenReader(enabled);
         }
+        return enabled;
       })
-      .catch(() => {});
+      .catch(noop);
     const subscription = AccessibilityInfo.addEventListener(
       "screenReaderChanged",
       setScreenReader
@@ -667,7 +1557,7 @@ function ChatSession({
       target instanceof Element
         ? target.closest<HTMLElement>('[id^="chat-message-"]')
         : null;
-    const context = (event: MouseEvent) => {
+    const openContextMenu = (event: MouseEvent) => {
       const row = selectedRow(event.target);
       if (!row) {
         return;
@@ -700,7 +1590,7 @@ function ChatSession({
     node.addEventListener("touchend", end, { passive: true });
     node.addEventListener("touchcancel", end, { passive: true });
     node.addEventListener("scrollend", end);
-    node.addEventListener("contextmenu", context);
+    node.addEventListener("contextmenu", openContextMenu);
     node.addEventListener("keydown", keyboard);
     webScrollCleanup.current = () => {
       node.removeEventListener("wheel", wheel);
@@ -708,7 +1598,7 @@ function ChatSession({
       node.removeEventListener("touchend", end);
       node.removeEventListener("touchcancel", end);
       node.removeEventListener("scrollend", end);
-      node.removeEventListener("contextmenu", context);
+      node.removeEventListener("contextmenu", openContextMenu);
       node.removeEventListener("keydown", keyboard);
     };
   }, [beginUserScroll, setFollowing, selectMessage]);
@@ -800,7 +1690,7 @@ function ChatSession({
     void loadDraft(draftKey)
       .then((value) => {
         if (cancelled) {
-          return;
+          return value;
         }
         if (value) {
           setDraft(value.text);
@@ -811,6 +1701,7 @@ function ChatSession({
         }
         didLoadDraft.current = true;
         setDraftLoaded(true);
+        return value;
       })
       .catch((error_) => {
         if (!cancelled) {
@@ -891,6 +1782,7 @@ function ChatSession({
           if (!controller.signal.aborted) {
             setFileResults(value.data);
           }
+          return value;
         })
         .catch((error_) => {
           if (!controller.signal.aborted) {
@@ -924,7 +1816,8 @@ function ChatSession({
         return refreshing.current;
       }
       const work = async () => {
-        const version = ++requestVersion.current;
+        requestVersion.current += 1;
+        const version = requestVersion.current;
         const historyVersion = historyEpoch.current;
         const activityVersion = activityRevision.current;
         const reset = historyVersion !== appliedHistoryEpoch.current;
@@ -1170,14 +2063,14 @@ function ChatSession({
           if (!opencodeClient || !capabilities.inbox) {
             return;
           }
-          const pending = await opencodeClient.session.inbox.list(
+          const inboxItems = await opencodeClient.session.inbox.list(
             { sessionID },
             options
           );
           if (!current()) {
             return;
           }
-          setInbox(pending);
+          setInbox(inboxItems);
         } else {
           if (!opencodeClient) {
             return;
@@ -1187,7 +2080,7 @@ function ChatSession({
             scheduleRefresh();
             return;
           }
-          const [own, permissions, global] = await Promise.allSettled([
+          const [own, permissionResult, global] = await Promise.allSettled([
             capabilities.forms
               ? opencodeClient.session.form.list({ sessionID }, options)
               : undefined,
@@ -1201,8 +2094,11 @@ function ChatSession({
           if (!current()) {
             return;
           }
-          if (permissions.status === "fulfilled" && permissions.value) {
-            setPermissions(permissions.value);
+          if (
+            permissionResult.status === "fulfilled" &&
+            permissionResult.value
+          ) {
+            setPermissions(permissionResult.value);
           }
           if (capabilities.forms) {
             setForms((previous) => [
@@ -1216,7 +2112,7 @@ function ChatSession({
                 : previous.filter((form) => form.sessionID === "global")),
             ]);
           }
-          const failure = [own, permissions, global].find(
+          const failure = [own, permissionResult, global].find(
             (result) => result.status === "rejected"
           );
           if (failure?.status === "rejected") {
@@ -1228,8 +2124,7 @@ function ChatSession({
             if (!previous[scope]) {
               return previous;
             }
-            const next = { ...previous };
-            delete next[scope];
+            const { [scope]: _cleared, ...next } = previous;
             return next;
           });
         }
@@ -1294,14 +2189,14 @@ function ChatSession({
                 liveMessages.current.clear();
                 return current;
               });
-              historyEpoch.current++;
+              historyEpoch.current += 1;
               scheduleRefresh();
               continue;
             }
             const data = event.data as Record<string, unknown>;
             if (
               event.type === "location.shutdown" ||
-              /^(model|provider|agent|command|skill|credential|config)\./.test(
+              /^(?:model|provider|agent|command|skill|credential|config)\./u.test(
                 event.type
               )
             ) {
@@ -1309,7 +2204,7 @@ function ChatSession({
             }
             if (data.sessionID === sessionID) {
               if (event.type === "session.status") {
-                activityRevision.current++;
+                activityRevision.current += 1;
                 setSessionStatus(event.data.status);
                 setActive(event.data.status.type !== "idle");
                 if (event.data.status.type === "idle") {
@@ -1318,7 +2213,7 @@ function ChatSession({
                 continue;
               }
               if (event.type === "session.retry.scheduled") {
-                activityRevision.current++;
+                activityRevision.current += 1;
                 setSessionStatus({
                   attempt: event.data.attempt,
                   message: event.data.error.message,
@@ -1347,7 +2242,7 @@ function ChatSession({
               }
               switch (event.type) {
                 case "session.execution.started": {
-                  activityRevision.current++;
+                  activityRevision.current += 1;
                   setActive(true);
                   setSessionStatus({ type: "busy" });
                   break;
@@ -1367,14 +2262,14 @@ function ChatSession({
                 case "session.execution.succeeded":
                 case "session.execution.failed":
                 case "session.execution.interrupted": {
-                  activityRevision.current++;
+                  activityRevision.current += 1;
                   setActive(false);
                   setSessionStatus({ type: "idle" });
                   scheduleRefresh();
                   break;
                 }
                 case "session.revert.committed": {
-                  historyEpoch.current++;
+                  historyEpoch.current += 1;
                   setMessages((current) => {
                     liveMessages.current.clear();
                     return current;
@@ -1390,7 +2285,7 @@ function ChatSession({
                   break;
                 }
                 case "session.idle": {
-                  activityRevision.current++;
+                  activityRevision.current += 1;
                   setActive(false);
                   setSessionStatus({ type: "idle" });
                   scheduleRefresh();
@@ -1440,17 +2335,22 @@ function ChatSession({
                   scheduleScope("history");
                   break;
                 }
+                default: {
+                  break;
+                }
               }
             } else if (event.type === "location.shutdown") {
               scheduleRefresh();
             }
-            const formSession =
-              event.type === "form.created"
-                ? event.data.form.sessionID
-                : event.type === "form.replied" ||
-                    event.type === "form.cancelled"
-                  ? event.data.sessionID
-                  : undefined;
+            let formSession;
+            if (event.type === "form.created") {
+              formSession = event.data.form.sessionID;
+            } else if (
+              event.type === "form.replied" ||
+              event.type === "form.cancelled"
+            ) {
+              formSession = event.data.sessionID;
+            }
             if (
               formSession === sessionID ||
               (formSession === "global" &&
@@ -1473,12 +2373,11 @@ function ChatSession({
           if (attempts > 1) {
             setFetchError(errorMessage(error_));
           }
+          const delay = Math.min(1000 * 2 ** attempts, 15_000);
+          attempts += 1;
           await new Promise<void>((resolve) => {
             retryResolve = resolve;
-            retryTimer = setTimeout(
-              resolve,
-              Math.min(1000 * 2 ** attempts++, 15_000)
-            );
+            retryTimer = setTimeout(resolve, delay);
           });
           if (!controller.signal.aborted) {
             await refresh(controller.signal);
@@ -1491,12 +2390,12 @@ function ChatSession({
       stream.clear();
       snapshots.clear();
       if (flushStream.current === flushPending) {
-        flushStream.current = () => {};
+        flushStream.current = noop;
       }
       clearTimeout(timer);
       clearTimeout(retryTimer);
-      for (const pending of scopeTimers.values()) {
-        clearTimeout(pending);
+      for (const scopeTimer of scopeTimers.values()) {
+        clearTimeout(scopeTimer);
       }
       retryResolve?.();
     };
@@ -1528,6 +2427,7 @@ function ChatSession({
               if (!controller.signal.aborted) {
                 setProviders(value.data);
               }
+              return value;
             })
         : Promise.resolve(),
       client.model
@@ -1536,6 +2436,7 @@ function ChatSession({
           if (!controller.signal.aborted) {
             setModels(value.data);
           }
+          return value;
         }),
       opencodeClient && capabilities.agents
         ? opencodeClient.agent
@@ -1544,6 +2445,7 @@ function ChatSession({
               if (!controller.signal.aborted) {
                 setAgents(value.data);
               }
+              return value;
             })
         : Promise.resolve(),
       opencodeClient && capabilities.commands
@@ -1553,6 +2455,7 @@ function ChatSession({
               if (!controller.signal.aborted) {
                 setCommands(value.data);
               }
+              return value;
             })
         : Promise.resolve(),
       opencodeClient && capabilities.skills
@@ -1562,6 +2465,7 @@ function ChatSession({
               if (!controller.signal.aborted) {
                 setSkills(value.data);
               }
+              return value;
             })
         : Promise.resolve(),
     ]).then((results) => {
@@ -1571,6 +2475,7 @@ function ChatSession({
           failed?.status === "rejected" ? errorMessage(failed.reason) : null
         );
       }
+      return results;
     });
     return () => controller.abort();
   }, [
@@ -1597,10 +2502,11 @@ function ChatSession({
         { idle: session.time.idle, sessionID },
         { signal: controller.signal }
       )
-      .then(() => {
+      .then((result) => {
         if (!controller.signal.aborted) {
           onSessionChangedRef.current();
         }
+        return result;
       })
       .catch((error_) => {
         if (!controller.signal.aborted) {
@@ -1643,12 +2549,10 @@ function ChatSession({
             ? current
             : [...current, { name: attachmentPath.split("/").pop(), uri }]
         );
-      } else {
-        if (attachmentContext) {
-          setDraft((current) =>
-            current ? `${current}\n\n${attachmentContext}` : attachmentContext
-          );
-        }
+      } else if (attachmentContext) {
+        setDraft((current) =>
+          current ? `${current}\n\n${attachmentContext}` : attachmentContext
+        );
       }
       consumedAttachment.current = {
         context: attachmentContext,
@@ -1708,7 +2612,7 @@ function ChatSession({
     ) {
       return;
     }
-    const btw = /^\/btw(?:\s+([\s\S]*))?$/.exec(draft.trim());
+    const btw = /^\/btw(?:\s+(?<text>[\s\S]*))?$/u.exec(draft.trim());
     if (btw && capabilities.sideQuestion && opencodeClient) {
       if (
         attachments.length ||
@@ -1875,19 +2779,11 @@ function ChatSession({
         if (asset.size && asset.size > 10 * 1024 * 1024) {
           throw new Error(`${asset.name} exceeds the 10 MB attachment limit`);
         }
-        let base64: string;
-        if (Platform.OS === "web" && asset.file) {
-          base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onerror = () =>
-              reject(new Error(`Cannot read ${asset.name}`));
-            reader.onload = () =>
-              resolve(String(reader.result).split(",")[1] || "");
-            reader.readAsDataURL(asset.file!);
-          });
-        } else {
-          base64 = await new File(asset.uri).base64();
-        }
+        const webFile =
+          Platform.OS === "web" && asset.file ? asset.file : undefined;
+        const base64 = webFile
+          ? await readWebFileBase64(webFile, asset.name)
+          : await new File(asset.uri).base64();
         if (base64.length > 14 * 1024 * 1024) {
           throw new Error(`${asset.name} exceeds the 10 MB attachment limit`);
         }
@@ -2097,7 +2993,7 @@ function ChatSession({
         sessionID,
       });
       const content = JSON.stringify(value, null, 2);
-      const filename = `${sessionID.replaceAll(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+      const filename = `${sessionID.replaceAll(/[^a-zA-Z0-9_-]/gu, "_")}.json`;
       if (Platform.OS === "web") {
         const url = URL.createObjectURL(
           new Blob([content], { type: "application/json" })
@@ -2110,21 +3006,19 @@ function ChatSession({
       } else {
         const file = new File(Paths.cache, filename);
         await file.write(content);
-        if (await Sharing.isAvailableAsync()) {
-          await withNativePresentation(() =>
-            Sharing.shareAsync(file.uri, {
-              dialogTitle: session?.title || "OpenCode session",
-              mimeType: "application/json",
-            })
-          );
-        } else {
-          await withNativePresentation(() =>
-            Share.share({
-              message: content,
-              title: session?.title || "OpenCode session",
-            })
-          );
-        }
+        await ((await Sharing.isAvailableAsync())
+          ? withNativePresentation(() =>
+              Sharing.shareAsync(file.uri, {
+                dialogTitle: session?.title || "OpenCode session",
+                mimeType: "application/json",
+              })
+            )
+          : withNativePresentation(() =>
+              Share.share({
+                message: content,
+                title: session?.title || "OpenCode session",
+              })
+            ));
       }
     });
 
@@ -2142,8 +3036,8 @@ function ChatSession({
     providers.find((provider) => provider.id === providerID)?.name ||
     (providerID ? providerLabels.get(providerID) : undefined) ||
     providerID
-      ?.replaceAll(/[-_]/g, " ")
-      .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
+      ?.replaceAll(/[-_]/gu, " ")
+      .replaceAll(/\b\w/gu, (letter) => letter.toUpperCase());
   const actionMessage = selectedMessageID
     ? messages.find((message) => message.id === selectedMessageID)
     : undefined;
@@ -2165,7 +3059,7 @@ function ChatSession({
                 modelPreferenceID(model.providerID, model.id)
               )
             )
-            .sort(
+            .toSorted(
               (a, b) =>
                 preferredIDs.indexOf(modelPreferenceID(a.providerID, a.id)) -
                 preferredIDs.indexOf(modelPreferenceID(b.providerID, b.id))
@@ -2345,12 +3239,13 @@ function ChatSession({
       const text = messageText(actionMessage);
       if (text) {
         void Clipboard.setStringAsync(text)
-          .then(() => {
+          .then((copied) => {
             if (alive.current) {
               setSelectedMessageID((current) =>
                 current === messageID ? null : current
               );
             }
+            return copied;
           })
           .catch(showError);
       }
@@ -2432,7 +3327,7 @@ function ChatSession({
                   disabled={!canCopySelected}
                   onPress={copySelected}
                 />
-                {actionMessage.type === "user" ? (
+                {actionMessage.type === "user" && (
                   <Button
                     title="Edit"
                     compact
@@ -2442,25 +3337,27 @@ function ChatSession({
                       void editMessage(actionMessage);
                     }}
                   />
-                ) : capabilities.forkMessage &&
+                )}
+                {actionMessage.type !== "user" &&
+                  capabilities.forkMessage &&
                   (!backend.canForkMessage ||
-                    backend.canForkMessage(actionMessage)) ? (
-                  <Button
-                    title="Fork"
-                    compact
-                    variant="ghost"
-                    disabled={pending}
-                    onPress={() => {
-                      void run(async () => {
-                        const next = await client.session.fork({
-                          before: actionMessage.id,
-                          sessionID,
+                    backend.canForkMessage(actionMessage)) && (
+                    <Button
+                      title="Fork"
+                      compact
+                      variant="ghost"
+                      disabled={pending}
+                      onPress={() => {
+                        void run(async () => {
+                          const next = await client.session.fork({
+                            before: actionMessage.id,
+                            sessionID,
+                          });
+                          onOpenSession(next.id);
                         });
-                        onOpenSession(next.id);
-                      });
-                    }}
-                  />
-                ) : null}
+                      }}
+                    />
+                  )}
                 <View style={styles.headerTrailing}>
                   <ChatIconButton
                     name="more"
@@ -2511,8 +3408,7 @@ function ChatSession({
                         : projectLabel ||
                           session.location.directory
                             .split("/")
-                            .filter(Boolean)
-                            .pop() ||
+                            .findLast(Boolean) ||
                           session.location.directory}
                     </BodyText>
                   </View>
@@ -2580,7 +3476,7 @@ function ChatSession({
                       )
                     ) {
                       await opencodeClient.session.revert.commit({ sessionID });
-                      historyEpoch.current++;
+                      historyEpoch.current += 1;
                       liveMessages.current.clear();
                     }
                   });
@@ -2656,11 +3552,7 @@ function ChatSession({
                             </Disclosure>
                           ) : (
                             <BodyText numberOfLines={3}>
-                              {item.type === "user"
-                                ? item.payload.text
-                                : item.type === "compaction"
-                                  ? "Compact context"
-                                  : "Move session"}
+                              {inboxItemText(item)}
                             </BodyText>
                           )}
                           <Row>
@@ -2947,7 +3839,7 @@ function ChatSession({
                           }
                         />
                       )}
-                      {active && hasPrompt ? (
+                      {active && hasPrompt && (
                         <ChatIconButton
                           name="stop"
                           label="Stop generation"
@@ -2956,24 +3848,19 @@ function ChatSession({
                             void interrupt();
                           }}
                         />
-                      ) : showLatestControl ? (
+                      )}
+                      {!(active && hasPrompt) && showLatestControl && (
                         <ChatIconButton
                           name="down"
                           label="Jump to latest"
                           onPress={jumpToLatest}
                         />
-                      ) : null}
+                      )}
                     </>
                   )}
                   <ChatIconButton
                     name={active && !hasPrompt ? "stop" : "up"}
-                    label={
-                      active && !hasPrompt
-                        ? "Stop generation"
-                        : active && delivery === "queue"
-                          ? "Queue message"
-                          : "Send message"
-                    }
+                    label={sendButtonLabel(active, hasPrompt, delivery)}
                     raised
                     compactFace={betaLayout}
                     busy={pending}
@@ -3193,7 +4080,10 @@ function ChatSession({
                 title="Open source session"
                 onPress={() => {
                   setPanel(null);
-                  onOpenSession(session.parentID || session.fork!.sessionID);
+                  const target = session.parentID || session.fork?.sessionID;
+                  if (target) {
+                    onOpenSession(target);
+                  }
                 }}
               />
             )}
@@ -3432,24 +4322,16 @@ function ChatSession({
                 ListEmptyComponent={
                   <View style={{ gap: 12, padding: 20 }}>
                     <Empty
-                      title={
-                        enabledModels.length
-                          ? modelFilter !== "all" && !scopedModels.length
-                            ? modelFilter === "favorites"
-                              ? "No favorite models"
-                              : "No recent models"
-                            : "No models match"
-                          : "No connected models"
-                      }
-                      detail={
-                        enabledModels.length
-                          ? modelFilter === "favorites" && !scopedModels.length
-                            ? "Tap the star beside a model to save it here."
-                            : modelFilter === "recent" && !scopedModels.length
-                              ? "Models appear here after you select them."
-                              : "Try a model name or provider."
-                          : "Connect a provider in Settings, then refresh this list."
-                      }
+                      title={emptyModelsTitle(
+                        Boolean(enabledModels.length),
+                        modelFilter,
+                        Boolean(scopedModels.length)
+                      )}
+                      detail={emptyModelsDetail(
+                        Boolean(enabledModels.length),
+                        modelFilter,
+                        Boolean(scopedModels.length)
+                      )}
                     />
                     {enabledModels.length ? (
                       <Row>
@@ -3841,7 +4723,7 @@ function ChatSession({
               key={file.path}
               title={file.path}
               onPress={() => {
-                const path = `${session.location.directory.replace(/\/$/, "")}/${file.path}`;
+                const path = `${session.location.directory.replace(/\/$/u, "")}/${file.path}`;
                 const uri = serverFileUri(path);
                 setAttachments((current) =>
                   current.some((item) => item.uri === uri)
@@ -3881,9 +4763,9 @@ function ChatSession({
           title="Session changes"
           onClose={() => setPanel(null)}
         >
-          {panelLoading ? (
-            <Busy />
-          ) : diffs.length ? (
+          {panelLoading && <Busy />}
+          {!panelLoading &&
+            diffs.length > 0 &&
             diffs.map((diff) => (
               <Card key={diff.file}>
                 <BodyText style={{ fontFamily: mono }}>{diff.file}</BodyText>
@@ -3901,8 +4783,8 @@ function ChatSession({
                   <BodyText muted>The server truncated this diff.</BodyText>
                 )}
               </Card>
-            ))
-          ) : (
+            ))}
+          {!panelLoading && diffs.length === 0 && (
             <Empty title="No file changes" />
           )}
         </Sheet>
@@ -4030,800 +4912,8 @@ function ChatSession({
       </ChatKeyboardView>
     </View>
   );
-}
+};
 
-function ChatKeyboardView({
-  enabled,
-  children,
-}: {
-  enabled: boolean;
-  children: React.ReactNode;
-}) {
-  const styles = useThemedStyles(createStyles);
-  const { height } = useReanimatedKeyboardAnimation();
-  const { bottom } = useSafeAreaInsets();
-  const keyboardPadding = useAnimatedStyle(
-    () => ({
-      paddingBottom: enabled ? Math.max(0, -height.value - bottom) : 0,
-    }),
-    [enabled, bottom]
-  );
-  if (Platform.OS === "android") {
-    return (
-      <Animated.View style={[styles.container, keyboardPadding]}>
-        {children}
-      </Animated.View>
-    );
-  }
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior="padding"
-      automaticOffset
-      enabled={enabled}
-    >
-      {children}
-    </KeyboardAvoidingView>
-  );
-}
-
-function messageText(message: SessionMessageInfo): string {
-  if ("text" in message) {
-    return message.text;
-  }
-  if (message.type === "assistant") {
-    return message.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n\n");
-  }
-  if (message.type === "shell") {
-    return `$ ${message.command}${message.output?.output ? `\n${message.output.output}` : ""}`;
-  }
-  if (message.type === "compaction") {
-    return "summary" in message
-      ? message.summary
-      : "error" in message
-        ? message.error.message
-        : "Context compaction";
-  }
-  if (message.type === "agent-switched") {
-    return `Agent: ${message.agent}`;
-  }
-  if (message.type === "model-switched") {
-    return `Model: ${message.model.id}`;
-  }
-  if (message.type === "location-switched") {
-    return `Directory: ${message.location.directory}`;
-  }
-  return message.error?.message || message.outcome;
-}
-
-function messagePreview(message: SessionMessageInfo): string {
-  if (message.type === "assistant") {
-    const first = message.content.find((part) => part.type === "text");
-    return first?.type === "text" && first.text
-      ? first.text.slice(0, 240)
-      : "Assistant message";
-  }
-  return messageText(message).slice(0, 240);
-}
-
-interface MessageRowProps {
-  message: SessionMessageInfo;
-  sourceKey?: string;
-  children?: React.ReactNode;
-  live?: boolean;
-  activityKind?: AgentActivity["kind"];
-  animate?: boolean;
-  onSelect?: (id: string) => void;
-  selected?: boolean;
-  selectionActive?: boolean;
-  screenReader?: boolean;
-  client?: Client;
-  directory: string;
-}
-const MessageRow = memo(
-  ({
-    message,
-    sourceKey,
-    children,
-    live,
-    activityKind,
-    animate,
-    onSelect,
-    selected,
-    selectionActive,
-    screenReader,
-    client,
-    directory,
-  }: MessageRowProps) => {
-    const { colors } = useTheme();
-    const styles = useThemedStyles(createStyles);
-    const select = useCallback(
-      () => onSelect?.(message.id),
-      [onSelect, message.id]
-    );
-    const separateContent = screenReader || Platform.OS === "web";
-    if (message.type === "idle" && !message.error) {
-      return null;
-    }
-    if (!onSelect) {
-      return (
-        children ?? (
-          <MessageContent
-            message={message}
-            client={client}
-            directory={directory}
-            selectable
-          />
-        )
-      );
-    }
-    return (
-      <Pressable
-        nativeID={`chat-message-${encodeURIComponent(message.id)}${sourceKey ? `:${encodeURIComponent(sourceKey)}` : ""}`}
-        accessible={!separateContent}
-        accessibilityRole={separateContent ? undefined : "button"}
-        accessibilityLabel={
-          separateContent ? undefined : messagePreview(message)
-        }
-        accessibilityHint={
-          separateContent
-            ? undefined
-            : "Long press to select this message. Message actions appear in the header."
-        }
-        accessibilityState={
-          separateContent ? undefined : { selected: !!selected }
-        }
-        accessibilityActions={
-          separateContent
-            ? undefined
-            : [
-                { label: "Select message", name: "activate" },
-                { label: "Select message", name: "longpress" },
-              ]
-        }
-        onAccessibilityAction={
-          separateContent ? undefined : () => onSelect(message.id)
-        }
-        focusable={!screenReader}
-        onLongPress={() => onSelect(message.id)}
-        onPress={selectionActive ? () => onSelect(message.id) : undefined}
-        style={styles.selectableMessage}
-      >
-        {selected && (
-          <View
-            pointerEvents="none"
-            aria-hidden
-            style={[styles.selectionMarker, { backgroundColor: colors.muted }]}
-          />
-        )}
-        <MessageActionsContext.Provider value={select}>
-          {children ?? (
-            <MessageContent
-              message={message}
-              live={live}
-              activityKind={activityKind}
-              animate={animate}
-              client={client}
-              directory={directory}
-              selectable={false}
-            />
-          )}
-        </MessageActionsContext.Provider>
-        {screenReader && (
-          <Button
-            title="Message actions"
-            compact
-            variant="ghost"
-            accessibilityLabel={`Message actions: ${messagePreview(message)}`}
-            onPress={() => onSelect(message.id)}
-          />
-        )}
-      </Pressable>
-    );
-  }
+export const ChatScreen = (props: Props) => (
+  <ChatSession key={props.sessionID} {...props} />
 );
-
-const MessageContent = memo(
-  ({
-    message,
-    live,
-    activityKind,
-    animate,
-    client,
-    directory,
-    selectable,
-  }: {
-    message: SessionMessageInfo;
-    live?: boolean;
-    activityKind?: AgentActivity["kind"];
-    animate?: boolean;
-    client?: Client;
-    directory: string;
-    selectable: boolean;
-  }) => {
-    const styles = useThemedStyles(createStyles);
-    const betaLayout = useBetaLayout();
-    if (message.type === "idle") {
-      return message.error ? (
-        <ErrorNotice error={message.error.message} />
-      ) : null;
-    }
-    if (message.type === "assistant") {
-      return (
-        <View style={styles.assistant}>
-          {message.content.map((part, index) => (
-            <AssistantPart
-              key={`${message.id}:${part.type === "tool" ? part.id : index}`}
-              detailsKey={`${message.id}:${part.type === "tool" ? part.id : index}`}
-              part={part}
-              live={
-                !!live &&
-                (part.type === "tool" || index === message.content.length - 1)
-              }
-              activityKind={activityKind}
-              animate={animate}
-              client={client}
-              directory={directory}
-              selectable={selectable}
-            />
-          ))}
-          {message.error && <ErrorNotice error={message.error.message} />}
-          {betaLayout &&
-            !live &&
-            message.content.some(
-              (part) => part.type === "text" && !!part.text.trim()
-            ) && (
-              <CompletedAssistantFooter key={message.id} message={message} />
-            )}
-        </View>
-      );
-    }
-    if (message.type === "user") {
-      return (
-        <UserMessageBubble withAttachments={!!message.files?.length}>
-          <MessageText text={message.text} selectable={selectable} />
-          {message.files?.map((file, index) => (
-            <View key={index} style={{ gap: 8 }}>
-              <BodyText muted style={{ fontFamily: mono, fontSize: 13 }}>
-                ↳ {file.name || file.mime}
-              </BodyText>
-              {file.mime.startsWith("image/") && (
-                <Image
-                  source={{ uri: `data:${file.mime};base64,${file.data}` }}
-                  style={{ borderRadius: 10, height: 180, width: "100%" }}
-                  resizeMode="contain"
-                  accessibilityLabel={file.name || "Attached image"}
-                />
-              )}
-            </View>
-          ))}
-          {message.skills?.map((skill) => (
-            <BodyText key={skill.id} muted>
-              Skill: {skill.name}
-            </BodyText>
-          ))}
-        </UserMessageBubble>
-      );
-    }
-    if (message.type === "shell") {
-      return (
-        <Disclosure
-          disclosureKey={message.id}
-          title={`$ ${message.command} · ${message.status}`}
-        >
-          <CodeBlock
-            code={message.output?.output || "No output"}
-            selectable={selectable}
-          />
-          {message.output?.truncated && (
-            <BodyText muted>Output truncated by the server</BodyText>
-          )}
-        </Disclosure>
-      );
-    }
-    if (message.type === "compaction") {
-      return (
-        <Disclosure
-          disclosureKey={message.id}
-          title={`Context compaction · ${message.status}`}
-        >
-          {"summary" in message && (
-            <MessageText text={message.summary} selectable={selectable} />
-          )}
-          {"error" in message && <ErrorNotice error={message.error.message} />}
-        </Disclosure>
-      );
-    }
-    if (message.type === "agent-switched") {
-      return (
-        <BodyText muted style={styles.notice}>
-          Agent → {message.agent}
-        </BodyText>
-      );
-    }
-    if (message.type === "model-switched") {
-      return (
-        <BodyText muted style={styles.notice}>
-          Model → {message.model.id}
-          {message.model.variant ? ` · ${message.model.variant}` : ""}
-        </BodyText>
-      );
-    }
-    if (message.type === "location-switched") {
-      return (
-        <BodyText muted style={styles.notice}>
-          Directory → {message.location.directory}
-        </BodyText>
-      );
-    }
-    if (message.type === "skill") {
-      return (
-        <Disclosure
-          disclosureKey={message.id}
-          title={`Skill · ${message.name}`}
-        >
-          <MessageText text={message.text} selectable={selectable} />
-        </Disclosure>
-      );
-    }
-    return (
-      <Disclosure
-        disclosureKey={message.id}
-        title={message.description || message.type}
-      >
-        <MessageText text={message.text} selectable={selectable} />
-      </Disclosure>
-    );
-  }
-);
-
-function CompletedAssistantFooter({
-  message,
-}: {
-  message: SessionMessageAssistant;
-}) {
-  const elapsed =
-    message.time.completed === undefined
-      ? undefined
-      : Math.max(
-          0,
-          Math.round((message.time.completed - message.time.created) / 1000)
-        );
-  return (
-    <ResponseFooter
-      text={message.content
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join("\n\n")}
-      elapsedSeconds={elapsed}
-    />
-  );
-}
-
-function MessageText({
-  text,
-  muted,
-  selectable = true,
-}: {
-  text: string;
-  muted?: boolean;
-  selectable?: boolean;
-}) {
-  return <Markdown text={text} muted={muted} selectable={selectable} />;
-}
-function CodeBlock({
-  code,
-  language,
-  selectable = true,
-}: {
-  code: string;
-  language?: string;
-  selectable?: boolean;
-}) {
-  const styles = useThemedStyles(createStyles);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <View style={styles.code}>
-      <Row style={{ justifyContent: "space-between", paddingHorizontal: 12 }}>
-        <BodyText muted style={{ fontSize: 12 }}>
-          {language || "TEXT"}
-        </BodyText>
-        <Button
-          title={copied ? "Copied" : "Copy"}
-          compact
-          variant="ghost"
-          onPress={() => {
-            void Clipboard.setStringAsync(code)
-              .then(() => setCopied(true))
-              .catch((error_) => setError(errorMessage(error_)));
-          }}
-        />
-      </Row>
-      {error && <ErrorNotice error={error} />}
-      <ScrollView horizontal>
-        <Text selectable={selectable} style={styles.codeText}>
-          {code}
-        </Text>
-      </ScrollView>
-    </View>
-  );
-}
-
-function PanelLink({ title, onPress }: { title: string; onPress: () => void }) {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: "center",
-        flexDirection: "row",
-        gap: 12,
-        minHeight: Platform.OS === "android" ? 48 : 44,
-        opacity: pressed ? 0.6 : 1,
-        paddingVertical: 10,
-      })}
-    >
-      <BodyText style={{ flex: 1 }}>{title}</BodyText>
-      <ShellIcon name="chevron" size={16} color={colors.muted} />
-    </Pressable>
-  );
-}
-
-type ChatIconName =
-  | "menu"
-  | "more"
-  | "plus"
-  | "up"
-  | "down"
-  | "star"
-  | "stop"
-  | "close"
-  | "copy"
-  | "check";
-function ChatGlyph({
-  name,
-  color,
-  size = 20,
-  selected,
-}: {
-  name: ChatIconName;
-  color: string;
-  size?: number;
-  selected?: boolean;
-}) {
-  if (name === "menu") {
-    return <ShellIcon name="menu" size={size} color={color} />;
-  }
-  const path = {
-    check: "m5 12 4 4L19 6",
-    close: "M6 6l12 12M18 6 6 18",
-    copy: "M8 8h12v13H8Z M16 8V3H3v13h5",
-    down: "M6 9l6 6 6-6",
-    more: "M5 12h.01M12 12h.01M19 12h.01",
-    plus: "M12 5v14M5 12h14",
-    star: "m12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.3l-5.6 3 1.1-6.3L3 9.6l6.2-.9Z",
-    stop: "M7 7h10v10H7Z",
-    up: "M12 19V5M6 11l6-6 6 6",
-  }[name];
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
-      <Path
-        d={path}
-        stroke={color}
-        strokeWidth={name === "more" ? 3 : 1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill={name === "stop" || (name === "star" && selected) ? color : "none"}
-      />
-    </Svg>
-  );
-}
-function ChatIconButton({
-  name,
-  label,
-  onPress,
-  raised,
-  disabled,
-  busy,
-  selected,
-  compactFace,
-}: {
-  name: ChatIconName;
-  label: string;
-  onPress: () => void;
-  raised?: boolean;
-  disabled?: boolean;
-  busy?: boolean;
-  selected?: boolean;
-  compactFace?: boolean;
-}) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{
-        busy: !!busy,
-        disabled: !!disabled || !!busy,
-        selected,
-      }}
-      aria-pressed={selected}
-      disabled={disabled || busy}
-      onPress={(event) => {
-        event.stopPropagation();
-        onPress();
-      }}
-      style={styles.iconTarget}
-    >
-      {({ pressed }) => (
-        <PressFeedback
-          pressed={pressed}
-          disabled={disabled || busy}
-          style={[
-            styles.iconFace,
-            compactFace && {
-              borderRadius: raised ? 6 : 14,
-              height: 28,
-              width: 28,
-            },
-            raised && styles.raisedFace,
-            raised && compactFace && styles.betaRaisedFace,
-            (disabled || busy) && { opacity: 0.4 },
-          ]}
-        >
-          {busy ? (
-            <ActivityIndicator size="small" color={colors.primaryText} />
-          ) : (
-            <ChatGlyph
-              name={name}
-              selected={selected}
-              color={
-                raised
-                  ? compactFace
-                    ? colors.bg
-                    : colors.primaryText
-                  : selected
-                    ? colors.text
-                    : colors.muted
-              }
-            />
-          )}
-        </PressFeedback>
-      )}
-    </Pressable>
-  );
-}
-
-function createStyles(colors: ThemeColors) {
-  return StyleSheet.create({
-    assistant: { gap: 6 },
-    betaComposer: {
-      backgroundColor: colors.panel,
-      borderRadius: 12,
-      borderTopColor: colors.border,
-      paddingHorizontal: 4,
-      paddingVertical: 2,
-    },
-    betaComposerDock: { paddingBottom: 10, paddingHorizontal: 12 },
-    betaComposerInput: {
-      backgroundColor: colors.panel,
-      fontSize: 14,
-      lineHeight: 23,
-      paddingHorizontal: 11,
-      paddingVertical: 10,
-    },
-    betaComposerToolbar: { gap: 0 },
-    betaLatestOverlay: { bottom: 12, position: "absolute", right: 16 },
-    betaMessages: { flexGrow: 1, padding: 16, paddingBottom: 24 },
-    betaModelName: { flex: 1, minWidth: 0 },
-    betaModelTrigger: { gap: 3, minWidth: 0, paddingHorizontal: 4 },
-    betaProviderLabel: { maxWidth: 80 },
-    betaRaisedFace: {
-      backgroundColor: colors.text,
-      borderColor: colors.text,
-      borderTopColor: colors.text,
-    },
-    betaTriggerText: { color: colors.muted, flexShrink: 1, fontSize: 14 },
-    betaVariantTrigger: {
-      alignItems: "center",
-      flexDirection: "row",
-      flexShrink: 0,
-      gap: 3,
-      maxWidth: "38%",
-      minHeight: 48,
-      minWidth: 48,
-      paddingHorizontal: 4,
-    },
-    code: {
-      backgroundColor: colors.bg,
-      borderColor: colors.border,
-      borderRadius: 8,
-      borderWidth: 1,
-      overflow: "hidden",
-    },
-    codeText: {
-      color: colors.text,
-      fontFamily: mono,
-      fontSize: 13,
-      lineHeight: 20,
-      padding: 12,
-      paddingTop: 4,
-    },
-    composer: {
-      backgroundColor: colors.panel,
-      borderColor: colors.border,
-      borderRadius: 18,
-      borderTopColor: colors.controlTopEdge,
-      borderWidth: 1,
-      gap: 4,
-      maxWidth: 736,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-      width: "100%",
-    },
-    composerDock: {
-      alignItems: "center",
-      padding: 12,
-      paddingHorizontal: pageInset,
-      paddingTop: 4,
-    },
-    composerInput: {
-      backgroundColor: colors.panel,
-      borderRadius: 0,
-      borderWidth: 0,
-      boxShadow: [],
-      fontSize: 17,
-      lineHeight: 25,
-      maxHeight: 120,
-      minHeight: 44,
-      paddingHorizontal: 7,
-      paddingVertical: 6,
-    },
-    composerToolbar: {
-      alignItems: "center",
-      flexDirection: "row",
-      flexWrap: "nowrap",
-      gap: 4,
-    },
-    container: { backgroundColor: colors.bg, flex: 1, minHeight: 0 },
-    dot: { borderRadius: 3, height: 5, width: 5 },
-    errorBanner: { gap: 4, paddingHorizontal: 12, paddingTop: 8 },
-    eyebrow: {
-      color: colors.muted,
-      fontFamily: mono,
-      fontSize: 11,
-      letterSpacing: 1.2,
-    },
-    frame: { flex: 1, minHeight: 0 },
-    header: {
-      alignItems: "center",
-      borderBottomColor: colors.border,
-      borderBottomWidth: 1,
-      flexDirection: "row",
-      gap: 4,
-      minHeight: 56,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-    },
-    headerLeading: { marginEnd: 24 - pageInset, marginStart: pageInset - 24 },
-    headerSubtitle: { alignItems: "center", flexDirection: "row", gap: 6 },
-    headerTitle: {
-      flex: 1,
-      gap: 1,
-      minWidth: 0,
-      paddingHorizontal: 4,
-      paddingStart: pageInset - 8,
-    },
-    headerTitleWithNavigation: { paddingStart: pageInset - 4 },
-    headerTrailing: { marginEnd: pageInset - 24, marginStart: 24 - pageInset },
-    iconFace: {
-      alignItems: "center",
-      borderRadius: 18,
-      height: 36,
-      justifyContent: "center",
-      width: 36,
-    },
-    iconTarget: {
-      alignItems: "center",
-      flexShrink: 0,
-      height: Platform.OS === "android" ? 48 : 44,
-      justifyContent: "center",
-      width: Platform.OS === "android" ? 48 : 44,
-    },
-    messages: {
-      flexGrow: 1,
-      padding: 16,
-      paddingBottom: 24,
-      paddingHorizontal: pageInset,
-    },
-    modelList: { paddingBottom: 24, paddingHorizontal: 12 },
-    modelRow: {
-      alignItems: "center",
-      borderRadius: 8,
-      flexDirection: "row",
-      gap: 12,
-      minHeight: 66,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-    modelSearch: { gap: 8, padding: 16, paddingBottom: 10 },
-    modelTrigger: {
-      alignItems: "center",
-      flex: 1,
-      flexDirection: "row",
-      gap: 6,
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: 0,
-      paddingHorizontal: 8,
-    },
-    modelTriggerText: { color: colors.muted, flexShrink: 1, fontSize: 13 },
-    notice: { fontFamily: mono, fontSize: 12 },
-    projectLabel: { flexShrink: 1, fontSize: 13, lineHeight: 17 },
-    radio: {
-      alignItems: "center",
-      borderColor: colors.muted,
-      borderRadius: 9,
-      borderWidth: 1,
-      height: 18,
-      justifyContent: "center",
-      width: 18,
-    },
-    radioDot: {
-      backgroundColor: colors.text,
-      borderRadius: 4,
-      height: 8,
-      width: 8,
-    },
-    raisedFace: {
-      backgroundColor: colors.primary,
-      borderColor: colors.border,
-      borderTopColor: colors.controlTopEdge,
-      borderWidth: 1,
-      elevation: 2,
-      shadowColor: "#000000",
-      shadowOffset: { height: 1, width: 0 },
-      shadowOpacity: 0.2,
-      shadowRadius: 1,
-    },
-    revert: {
-      backgroundColor: colors.raised,
-      borderRadius: 10,
-      gap: 8,
-      margin: 12,
-      padding: 14,
-    },
-    selectableMessage: { position: "relative" },
-    selectionCount: {
-      flex: 1,
-      fontSize: 15,
-      minWidth: 0,
-      paddingStart: pageInset - 4,
-    },
-    selectionHeader: { backgroundColor: colors.panel },
-    selectionMarker: {
-      borderRadius: 1,
-      bottom: 0,
-      position: "absolute",
-      start: -8,
-      top: 0,
-      width: 2,
-    },
-    sessionTitle: { fontSize: 17, fontWeight: "500", lineHeight: 22 },
-    transcript: {
-      alignSelf: "center",
-      flex: 1,
-      maxWidth: 760,
-      minHeight: 0,
-      width: "100%",
-    },
-    transcriptFrame: { flex: 1, minHeight: 0, paddingBottom: 8 },
-    variants: { gap: 8, paddingBottom: 16, paddingHorizontal: 4 },
-  });
-}
