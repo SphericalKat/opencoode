@@ -155,6 +155,6 @@ function PiWorkspaceSession({ connection, foreground, onManageServers, onConnect
       </> : <Busy />}
     </SessionSurface>
     <BetaMoreSheet visible={moreOpen} onClose={() => setMoreOpen(false)} onDismiss={onNavigationDismissed} onDetails={() => afterMenu(showDetails)} />
-    <BetaTabsSheet visible={navigationOpen} tabs={tabs} recent={recent} selectedID={session?.id} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} onSelect={id => afterNavigation(() => openSession(id))} onNew={() => afterNavigation(() => { void changeSession({ type: 'new' }); })} onSettings={() => afterNavigation(() => setSettingsOpen(true))} onHelp={() => afterNavigation(() => { void Linking.openURL('https://pi.dev/docs/latest/'); })} />
+    <BetaTabsSheet visible={navigationOpen} tabs={tabs} recent={recent} selectedID={session?.id} serverLabel={connection.name} onServer={() => afterNavigation(onManageServers)} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} onSelect={id => afterNavigation(() => openSession(id))} onNew={() => afterNavigation(() => { void changeSession({ type: 'new' }); })} onSettings={() => afterNavigation(() => setSettingsOpen(true))} onHelp={() => afterNavigation(() => { void Linking.openURL('https://pi.dev/docs/latest/'); })} />
   </View>;
 }

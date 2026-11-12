@@ -650,7 +650,7 @@ function MobileApp() {
     setForm({ id: '', name: '', url: '', token: '' });
     setPairingLink(null);
     setFlowRevision(value => value + 1);
-    void showNavigationSheet('servers');
+    showServerSheet.current();
   };
   const navigation = client && active ? <>
     <View style={styles.navigationBrand}><OpenCodeLogo width={Platform.OS === 'android' ? 112 : 136} />{!wide && <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={() => setNavigationOpen(false)} style={styles.iconButton}><ShellIcon name="close" color={colors.muted} /></Pressable>}</View>
@@ -690,7 +690,7 @@ function MobileApp() {
     <MotionDrawer visible={navigationOpen && !wide && !!active && !betaLayout} width={Math.min(width - 32, 352)} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} panelStyle={styles.drawer}>
       <SafeAreaView style={styles.full} edges={['top', 'bottom', 'left']}>{navigation}</SafeAreaView>
     </MotionDrawer>
-    {betaLayout && <BetaTabsSheet visible={navigationOpen && !!active} tabs={openTabs} selectedID={currentOpenTab?.id} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} onSelect={id => { void openSession(id); }} onCloseTab={id => { void closeBetaTab(id); }} onNew={() => afterBetaNavigation(() => { void createBetaSession(); })} onHome={() => afterBetaNavigation(showBetaHome)} onSettings={() => afterBetaNavigation(() => { void changeTab('settings'); })} onHelp={() => afterBetaNavigation(() => { void Linking.openURL('https://opencode.ai/v2/docs/'); })} />}
+    {betaLayout && active && <BetaTabsSheet visible={navigationOpen} tabs={openTabs} selectedID={currentOpenTab?.id} serverLabel={active.name} onServer={() => afterBetaNavigation(openServers)} onClose={() => setNavigationOpen(false)} onDismiss={onNavigationDismissed} onSelect={id => { void openSession(id); }} onCloseTab={id => { void closeBetaTab(id); }} onNew={() => afterBetaNavigation(() => { void createBetaSession(); })} onHome={() => afterBetaNavigation(showBetaHome)} onSettings={() => afterBetaNavigation(() => { void changeTab('settings'); })} onHelp={() => afterBetaNavigation(() => { void Linking.openURL('https://opencode.ai/v2/docs/'); })} />}
     {betaLayout && <BetaMoreSheet visible={betaMoreOpen} pane={selectedPane} onClose={() => setBetaMoreOpen(false)} onDismiss={() => { const action = pendingBetaAction.current; pendingBetaAction.current = null; action?.(); }} onView={pane => afterBetaMenu(() => openBetaPane(pane))} onUsage={() => requestSessionPanel('stats')} onDetails={() => requestSessionPanel('actions')} />}
     <Sheet visible={serversOpen && !!active} title={unavailableID === active?.id ? 'Connection' : 'Servers'} allowDuringRecovery onClose={() => { serverSheetRequest.current += 1; setServersOpen(false); }} onDismiss={resumeSheets}>{serversOpen && active && serverForm}</Sheet>
     <Sheet visible={projectsOpen} title="Open a project" scroll={false} onClose={() => setProjectsOpen(false)}>
