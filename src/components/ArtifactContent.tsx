@@ -165,7 +165,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   placeholder: { height: 112, borderRadius: 6, backgroundColor: colors.panel, padding: 10, justifyContent: 'center' },
   viewerImage: { flex: 1, width: '100%', minHeight: 0 },
   name: { fontWeight: '500' },
-  mime: { fontSize: 12 },
+  mime: { fontSize: 13 },
   preview: { width: '100%', height: 180, backgroundColor: colors.bg, borderRadius: 6 },
   expanded: { height: 420 },
 });

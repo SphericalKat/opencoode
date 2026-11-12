@@ -95,7 +95,7 @@ export function Schedules({ client, sessionID }: { client: Client; sessionID: st
       }); }} />
     </Card>}
     {items.map(item => <Card key={item.id}>
-      <Label style={{ fontSize: 16, fontWeight: '600' }}>{item.name || 'Scheduled prompt'}</Label>
+      <Label style={{ fontSize: 17, fontWeight: '600' }}>{item.name || 'Scheduled prompt'}</Label>
       <Label>{triggerLabel(item)} · {item.tz}</Label>
       <Label muted>{item.status} · {item.runCount} runs{item.remainingRuns !== undefined ? ` · ${item.remainingRuns} remaining` : ''}</Label>
       {item.nextDueAt !== undefined && <Label muted>Next: {new Date(item.nextDueAt).toLocaleString()}</Label>}

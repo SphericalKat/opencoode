@@ -33,7 +33,7 @@ export function DynamicFields({ fields, values, onChange, errors = {} }: {
       return <View key={field.key} style={{ gap: 8 }}>
         <Label style={{ fontWeight: '600' }}>{label}</Label>
         {field.description && <Label muted>{field.description}</Label>}
-        {field.type === 'external' ? <><Label muted style={{ fontFamily: mono, fontSize: 12 }}>{field.url}</Label><Button title="Open link" onPress={() => void open(field.url)} /><Button title={value === true ? '✓ Completed' : 'I completed this step'} variant={value === true ? 'primary' : 'secondary'} onPress={() => change(field.key, value !== true)} /></> :
+        {field.type === 'external' ? <><Label muted style={{ fontFamily: mono, fontSize: 13 }}>{field.url}</Label><Button title="Open link" onPress={() => void open(field.url)} /><Button title={value === true ? '✓ Completed' : 'I completed this step'} variant={value === true ? 'primary' : 'secondary'} onPress={() => change(field.key, value !== true)} /></> :
           field.type === 'boolean' ? <Row>{[true, false].map(choice => <Button key={String(choice)} title={choice ? 'Yes' : 'No'} variant={value === choice ? 'primary' : 'secondary'} compact onPress={() => change(field.key, choice)} />)}{!field.required && value !== undefined && <Button title="Clear" compact variant="ghost" onPress={() => change(field.key, undefined)} />}</Row> :
           field.type === 'multiselect' ? <>
             <Row>{field.options.map(option => <Button key={option.value} title={`${Array.isArray(value) && value.includes(option.value) ? '✓ ' : ''}${option.label}`} variant={Array.isArray(value) && value.includes(option.value) ? 'primary' : 'secondary'} compact onPress={() => change(field.key, Array.isArray(value) && value.includes(option.value) ? value.filter(item => item !== option.value) : [...(Array.isArray(value) ? value : []), option.value])} />)}</Row>
@@ -82,7 +82,7 @@ function PendingPermission({ client, sessionID, permission, onChanged, onError }
   };
   return <Card style={{ borderColor: colors.success }}><Label style={{ color: colors.success, fontWeight: '600' }}>Permission required</Label><Heading>{permission.action}</Heading>
     {permission.message && <Label>{permission.message}</Label>}
-    {permission.resources.map((resource, index) => <Label key={`${index}-${resource}`} style={{ fontFamily: mono, fontSize: 12 }}>{resource}</Label>)}
+    {permission.resources.map((resource, index) => <Label key={`${index}-${resource}`} style={{ fontFamily: mono, fontSize: 13 }}>{resource}</Label>)}
     <Field label="Reply message (optional)" value={message} onChangeText={setMessage} />
     <Row><Button title="Allow once" variant="primary" disabled={busy} onPress={() => void reply('once')} />{permission.save && permission.save.length > 0 && <Button title="Always allow" disabled={busy} onPress={() => void reply('always')} />}<Button title="Reject" variant="danger" disabled={busy} onPress={() => void reply('reject')} /></Row>
     {permission.save && permission.save.length > 0 && <Label muted>Always allow saves permission for: {permission.save.join(', ')}</Label>}

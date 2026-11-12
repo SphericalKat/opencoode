@@ -130,8 +130,8 @@ export function ProjectDirectoryBrowser({ client, directory, value, projects, bu
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { flex: 1, minHeight: 0 }, header: { padding: 16, paddingBottom: 8, gap: 10 }, path: { color: colors.muted, fontFamily: mono, fontSize: 12 },
-    list: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 16 }, folder: { minHeight: touchTarget + 8, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border }, detail: { fontSize: 11, fontFamily: mono },
+    container: { flex: 1, minHeight: 0 }, header: { padding: 16, paddingBottom: 8, gap: 10 }, path: { color: colors.muted, fontFamily: mono, fontSize: 13 },
+    list: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 16 }, folder: { minHeight: touchTarget + 8, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border }, detail: { fontSize: 12, fontFamily: mono },
     footer: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, gap: 8, padding: 16, borderTopWidth: 1, borderColor: colors.border },
   });
 }

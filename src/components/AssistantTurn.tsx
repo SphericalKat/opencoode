@@ -169,13 +169,13 @@ function ActivityGroupHeader({ labels, open, onToggle }: { labels: string; open:
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
-  imageLabel: { fontSize: 12, lineHeight: 18, paddingTop: 8 },
+  imageLabel: { fontSize: 13, lineHeight: 19, paddingTop: 8 },
   images: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 8, minWidth: 0 },
   turn: { gap: 6 }, activity: { minWidth: 0 },
   groupHeader: { minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 6 },
-  groupTitle: { fontSize: 13, lineHeight: 20, flexShrink: 1 }, groupBody: { paddingLeft: 12 },
+  groupTitle: { fontSize: 14, lineHeight: 21, flexShrink: 1 }, groupBody: { paddingLeft: 12 },
   activityHeader: { minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 6 },
-  activityTitle: { fontSize: 13, lineHeight: 20, flexShrink: 0 }, duration: { fontSize: 12, lineHeight: 18 },
-  preview: { fontFamily: mono, fontSize: 12, lineHeight: 18, flex: 1, minWidth: 0 },
+  activityTitle: { fontSize: 14, lineHeight: 21, flexShrink: 0 }, duration: { fontSize: 13, lineHeight: 19 },
+  preview: { fontFamily: mono, fontSize: 13, lineHeight: 19, flex: 1, minWidth: 0 },
   thoughtBody: { paddingLeft: 12, paddingBottom: 8 }, toolBody: { paddingBottom: 8 },
 });

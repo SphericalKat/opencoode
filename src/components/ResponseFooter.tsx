@@ -23,5 +23,5 @@ export function ResponseFooter({ text, elapsedSeconds }: { text: string; elapsed
 const styles = StyleSheet.create({
   footer: { flexDirection: 'row', alignItems: 'center', marginStart: -16 },
   copy: { width: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
-  detail: { fontSize: 11, lineHeight: 16 },
+  detail: { fontSize: 12, lineHeight: 17 },
 });

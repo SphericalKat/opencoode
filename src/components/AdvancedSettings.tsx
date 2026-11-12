@@ -37,7 +37,7 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
     finally { if (active.current) setLoading(false); }
   }
   return <ScrollView contentContainerStyle={{ padding: 18, gap: 14 }}>
-    <Row><Label style={{ fontSize: 18, fontWeight: '600', flex: 1 }}>Server usage</Label><Button title="Refresh" compact busy={loading} onPress={() => void load()} /></Row>
+    <Row><Label style={{ fontSize: 19, fontWeight: '600', flex: 1 }}>Server usage</Label><Button title="Refresh" compact busy={loading} onPress={() => void load()} /></Row>
     <ErrorNotice error={error} onRetry={() => void load()} />{loading && !info && <Busy />}
     {info && <><Label muted>{info.workspace.name || info.workspace.id}</Label>
       <Button title="Open usage dashboard" onPress={() => { void openLink(info.workspace.usageURL).catch(e => setError(errorMessage(e))); }} />
@@ -77,11 +77,11 @@ function WebSearch({ client, directory }: { client: Client; directory: string })
     finally { if (active.current && !abort.signal.aborted) setBusy(false); }
   }
   return <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 18, gap: 14 }}>
-    <Label style={{ fontSize: 18, fontWeight: '600' }}>Search the web</Label><Label muted>Use the web search providers on your OpenCode server.</Label>
+    <Label style={{ fontSize: 19, fontWeight: '600' }}>Search the web</Label><Label muted>Use the web search providers on your OpenCode server.</Label>
     <Field label="Search query" value={query} onChangeText={setQuery} returnKeyType="search" onSubmitEditing={() => { if (query.trim() && !busy) void search(); }} />
     <Row><Button title="Default provider" compact variant={!provider ? 'primary' : 'secondary'} onPress={() => setProvider(undefined)} />{providers.map(item => <Button key={item.id} title={item.name} compact variant={provider === item.id ? 'primary' : 'secondary'} onPress={() => setProvider(item.id)} />)}</Row>
     <Button title="Search" variant="primary" busy={busy} disabled={!query.trim()} onPress={() => void search()} /><ErrorNotice error={error} />
-    {results?.map((result, index) => <Card key={`${result.url}:${index}`}><Label style={{ fontSize: 16, fontWeight: '600' }}>{result.title || result.url}</Label><Label muted>{result.url}</Label>{result.content && <Text selectable style={{ fontFamily: sans, color: colors.text, lineHeight: 22 }}>{result.content}</Text>}<Button title="Open source" compact onPress={() => { void openLink(result.url).catch(e => setError(errorMessage(e))); }} /></Card>)}
+    {results?.map((result, index) => <Card key={`${result.url}:${index}`}><Label style={{ fontSize: 17, fontWeight: '600' }}>{result.title || result.url}</Label><Label muted>{result.url}</Label>{result.content && <Text selectable style={{ fontFamily: sans, color: colors.text, lineHeight: 23, fontSize: 15 }}>{result.content}</Text>}<Button title="Open source" compact onPress={() => { void openLink(result.url).catch(e => setError(errorMessage(e))); }} /></Card>)}
     {results && !results.length && <Empty title="No results" detail="Try another query or search provider." />}
   </ScrollView>;
 }
@@ -139,7 +139,7 @@ function Generate({ client, directory }: { client: Client; directory: string }) 
     finally { setSharing(false); }
   }
   return <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 18, gap: 14 }}>
-    <Label style={{ fontSize: 18, fontWeight: '600' }}>Generate</Label><Label muted>Create a standalone result through your server. Requests use your connected provider and can incur charges.</Label><Label muted>Standalone generation uses the server global configuration. Project-only model settings do not apply.</Label>
+    <Label style={{ fontSize: 19, fontWeight: '600' }}>Generate</Label><Label muted>Create a standalone result through your server. Requests use your connected provider and can incur charges.</Label><Label muted>Standalone generation uses the server global configuration. Project-only model settings do not apply.</Label>
     <Row><Button title="Text" compact variant={kind === 'text' ? 'primary' : 'secondary'} disabled={busy} onPress={() => { setKind('text'); setModel(undefined); }} /><Button title="Image" compact variant={kind === 'image' ? 'primary' : 'secondary'} disabled={busy} onPress={() => { setKind('image'); setModel(undefined); }} /></Row>
     <Field label="Find a model" value={query} onChangeText={setQuery} /><Label muted>{model ? `${model.name} · ${model.providerID}` : kind === 'text' ? 'Server default model' : 'Choose an available image model'}</Label>
     <ScrollView horizontal contentContainerStyle={{ gap: 8 }}>{kind === 'text' && <Button title="Server default" compact variant={!model ? 'primary' : 'secondary'} onPress={() => setModel(undefined)} />}{matches.slice(0, 30).map(item => <Button key={`${item.providerID}/${item.id}`} title={`${item.name} · ${item.providerID}`} compact variant={model === item ? 'primary' : 'secondary'} onPress={() => setModel(item)} />)}</ScrollView>
@@ -149,7 +149,7 @@ function Generate({ client, directory }: { client: Client; directory: string }) 
     <Button title={kind === 'image' ? 'Generate image' : 'Generate text'} variant="primary" busy={busy} disabled={!prompt.trim() || (kind === 'image' && !model)} onPress={() => void generate()} />
     {busy && <Button title="Stop waiting" compact onPress={() => { request.current?.abort(); setBusy(false); }} />}
     <ErrorNotice error={error} />
-    {!!text && <Card><Text selectable style={{ fontFamily: sans, color: colors.text, lineHeight: 23 }}>{text}</Text><Button title="Copy text" compact onPress={() => { void Clipboard.setStringAsync(text).catch(e => setError(errorMessage(e))); }} /></Card>}
+    {!!text && <Card><Text selectable style={{ fontFamily: sans, color: colors.text, lineHeight: 24, fontSize: 15 }}>{text}</Text><Button title="Copy text" compact onPress={() => { void Clipboard.setStringAsync(text).catch(e => setError(errorMessage(e))); }} /></Card>}
     {images?.images.map((image, index) => <Card key={index}><Image accessibilityLabel={prompt} source={{ uri: `data:${image.mime};base64,${image.data}` }} resizeMode="contain" style={{ width: '100%', aspectRatio: 1, borderRadius: 6 }} /><Button title={Platform.OS === 'web' ? 'Save image' : 'Save or share image'} busy={sharing} onPress={() => void shareImage(image)} /></Card>)}
     {images?.cost !== undefined && <Label muted>Cost: ${images.cost.toFixed(4)}</Label>}
   </ScrollView>;

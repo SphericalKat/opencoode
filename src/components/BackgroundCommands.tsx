@@ -140,19 +140,19 @@ function Commands({ client, sessionID, directory, initialShellID, initialDirecto
     {loading && !commands.length && <Busy />}
     {!loading && !error && !commands.length && <Empty title="No running commands" detail="Open a shell message's full output to inspect a completed command." />}
     {commands.slice(0, limit).map(command => <Card key={command.id}>
-      <Label selectable numberOfLines={3} style={{ fontFamily: mono, fontSize: 12 }}>{command.command}</Label>
+      <Label selectable numberOfLines={3} style={{ fontFamily: mono, fontSize: 13 }}>{command.command}</Label>
       <Label muted numberOfLines={2}>{command.cwd}</Label>
       <Button title={selectedID === command.id ? 'Selected' : 'View output'} compact selected={selectedID === command.id} disabled={stopping} onPress={() => setSelectedID(command.id)} />
     </Card>)}
     {commands.length > limit && <Button title="Load more commands" compact onPress={() => setLimit(value => value + 20)} />}
     {selectedID && <Card>
       {selectedID === initialShellID && initialDirectory && initialDirectory !== directory && <Label muted>Output location: {initialDirectory}</Label>}
-      {selected && <><Label selectable style={{ fontFamily: mono, fontSize: 12 }}>{selected.command}</Label><Label muted>{selected.status}{selected.exit !== undefined ? ` · Exit ${selected.exit}` : ''}{selected.signal ? ` · ${selected.signal}` : ''}</Label></>}
+      {selected && <><Label selectable style={{ fontFamily: mono, fontSize: 13 }}>{selected.command}</Label><Label muted>{selected.status}{selected.exit !== undefined ? ` · Exit ${selected.exit}` : ''}{selected.signal ? ` · ${selected.signal}` : ''}</Label></>}
       <ErrorNotice error={outputError} onRetry={() => { void loadOutput(selectedID, page?.start ?? 0); }} />
       {outputBusy && !page && <Busy />}
       {page && <>
         <Label muted>Bytes {page.start.toLocaleString()}–{page.cursor.toLocaleString()} of {page.size.toLocaleString()}</Label>
-        {page.output ? <ScrollView horizontal style={{ maxHeight: 360 }}><ScrollView nestedScrollEnabled style={{ maxHeight: 360 }}><Text selectable style={{ color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 19 }}>{page.output}</Text></ScrollView></ScrollView> : <Label muted>No output at this position</Label>}
+        {page.output ? <ScrollView horizontal style={{ maxHeight: 360 }}><ScrollView nestedScrollEnabled style={{ maxHeight: 360 }}><Text selectable style={{ color: colors.text, fontFamily: mono, fontSize: 13, lineHeight: 20 }}>{page.output}</Text></ScrollView></ScrollView> : <Label muted>No output at this position</Label>}
         <Row><Button title="Start over" compact disabled={outputBusy || page.start === 0} onPress={() => { void loadOutput(selectedID); }} /><Button title="Next output" compact disabled={outputBusy || page.cursor >= page.size} onPress={() => { void loadOutput(selectedID, page.cursor); }} /><Button title="Refresh output" compact busy={outputBusy} onPress={() => { void loadOutput(selectedID, page.start); }} /></Row>
       </>}
       {selected && selected.metadata.sessionID !== sessionID && <Label muted>This command belongs to another session. Open that session to stop it or remove its output.</Label>}
