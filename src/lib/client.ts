@@ -129,34 +129,47 @@ const pairingFailure = (error: unknown): unknown => {
   );
 };
 
-const checkConnection = async (
+const checkPiServer = async (
   next: Connection,
   fetchOverride: typeof globalThis.fetch,
   signal: AbortSignal
-): Promise<ConnectedServer> => {
+): Promise<ConnectedServer | undefined> => {
   const discovery = await fetchOverride(`${next.url}/opencoode/info`, {
     headers: { Accept: "application/json" },
     signal,
   });
   if (
-    discovery.ok &&
-    discovery.headers.get("content-type")?.includes("application/json")
+    !discovery.ok ||
+    !discovery.headers.get("content-type")?.includes("application/json")
   ) {
-    const identity: unknown = await discovery.json();
-    if (
-      identity &&
-      typeof identity === "object" &&
-      "backend" in identity &&
-      identity.backend === "pi"
-    ) {
-      if (!("protocol" in identity) || identity.protocol !== 1) {
-        throw new Error(
-          "Update the app and the Pi mobile extension to use the same protocol version."
-        );
-      }
-      const info = await createPiClient(next, fetchOverride).info(signal);
-      return { backend: "pi", connection: { ...next, backend: "pi" }, info };
-    }
+    return undefined;
+  }
+  const identity: unknown = await discovery.json();
+  if (
+    !identity ||
+    typeof identity !== "object" ||
+    !("backend" in identity) ||
+    identity.backend !== "pi"
+  ) {
+    return undefined;
+  }
+  if (!("protocol" in identity) || identity.protocol !== 1) {
+    throw new Error(
+      "Update the app and the Pi mobile extension to use the same protocol version."
+    );
+  }
+  const info = await createPiClient(next, fetchOverride).info(signal);
+  return { backend: "pi", connection: { ...next, backend: "pi" }, info };
+};
+
+const checkConnection = async (
+  next: Connection,
+  fetchOverride: typeof globalThis.fetch,
+  signal: AbortSignal
+): Promise<ConnectedServer> => {
+  const piInfo = await checkPiServer(next, fetchOverride, signal);
+  if (piInfo) {
+    return piInfo;
   }
   const info = await createClient(next, fetchOverride).server.info({ signal });
   if (!info || typeof info !== "object" || typeof info.version !== "string") {
@@ -347,6 +360,28 @@ export const errorMessage = (error: unknown): string => {
   return "The server request failed";
 };
 
+const timeoutMessage =
+  "The server did not respond within 15 seconds. OpenCode must run at the selected address on a reachable network.";
+const unreachableMessage =
+  "The server is unreachable. It requires the correct address and a connection through your local network or private VPN.";
+
+const isTimeout = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "name" in error &&
+  (error.name === "TimeoutError" || error.name === "AbortError");
+
+// Errors raised by fetch itself, before the OpenCode client wraps them.
+const fetchFailureMessage = (error: unknown): string | undefined => {
+  if (isTimeout(error)) {
+    return timeoutMessage;
+  }
+  if (error instanceof TypeError) {
+    return unreachableMessage;
+  }
+  return undefined;
+};
+
 export const connectionErrorMessage = (
   error: unknown,
   connection: Pick<Connection, "url">
@@ -359,16 +394,11 @@ export const connectionErrorMessage = (
   }
   if (error instanceof ClientError) {
     const { cause } = error;
-    if (
-      cause &&
-      typeof cause === "object" &&
-      "name" in cause &&
-      (cause.name === "TimeoutError" || cause.name === "AbortError")
-    ) {
-      return "The server did not respond within 15 seconds. OpenCode must run at the selected address on a reachable network.";
+    if (isTimeout(cause)) {
+      return timeoutMessage;
     }
     if (error.reason === "Transport") {
-      return "The server is unreachable. It requires the correct address and a connection through your local network or private VPN.";
+      return unreachableMessage;
     }
     if (
       error.reason === "UnsupportedContentType" ||
@@ -386,5 +416,5 @@ export const connectionErrorMessage = (
       return `The server returned HTTP ${cause.status}. Its address or proxy configuration requires a check.`;
     }
   }
-  return errorMessage(error);
+  return fetchFailureMessage(error) ?? errorMessage(error);
 };
