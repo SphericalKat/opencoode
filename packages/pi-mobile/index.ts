@@ -293,6 +293,7 @@ class MobileBridge {
     const tool: PiToolActivity = {
       id: event.toolCallId, name: event.toolName, input: object(event.args) ? structuredClone(event.args) : previous?.input ?? {},
       output: stage === 'start' ? undefined : output(stage === 'end' ? event.result : event.partialResult),
+      ...(stage === 'end' && object(event.result) ? { content: content(event.result.content) } : {}),
       status: stage === 'end' ? event.isError ? 'error' : 'completed' : 'running',
     };
     this.tools.set(tool.id, tool);

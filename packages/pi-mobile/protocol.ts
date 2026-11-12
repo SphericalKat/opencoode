@@ -32,7 +32,7 @@ export type PiServerInfo = {
   instanceID: string;
   session: PiSession;
 };
-export type PiToolActivity = { id: string; name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'completed' | 'error' };
+export type PiToolActivity = { id: string; name: string; input: Record<string, unknown>; output?: string; content?: PiContent[]; status: 'running' | 'completed' | 'error' };
 export type PiSnapshot = {
   cursor: number;
   instanceID: string;

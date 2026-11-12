@@ -6,10 +6,14 @@ import type { ToolFileContent } from '@opencode/client';
 import { type Client, errorMessage } from '../lib/client';
 import { type ThemeColors, useThemedStyles } from '../lib/theme';
 import { useNativePresentation } from '../lib/sheets';
-import { Button, ErrorNotice, Label, Row } from './ui';
+import { Button, ErrorNotice, Label, Row, Sheet } from './ui';
 
-type Props = { content: ToolFileContent; client?: Client; directory?: string };
+type Props = { content: ToolFileContent; client?: Client; directory?: string; thumbnail?: boolean };
 const imageTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif', 'image/bmp']);
+
+export function isImageArtifact(content: ToolFileContent) {
+  return imageTypes.has(content.mime.split(';')[0].trim().toLowerCase());
+}
 
 function source(uri: string): { kind: 'data' } | { kind: 'file'; path: string } | { kind: 'remote'; url: string } | undefined {
   if (uri.startsWith('data:')) return { kind: 'data' };
@@ -52,15 +56,15 @@ function dataUri(bytes: Uint8Array, mime: string) {
 }
 
 export function ArtifactContent(props: Props) {
-  return <Artifact key={`${props.directory ?? ''}:${props.content.uri}`} {...props} />;
+  return <Artifact key={`${props.directory ?? ''}:${props.content.uri}:${props.content.mime}`} {...props} />;
 }
 
-function Artifact({ content, client, directory }: Props) {
+function Artifact({ content, client, directory, thumbnail }: Props) {
   const styles = useThemedStyles(createStyles);
   const presentNative = useNativePresentation();
   const target = source(content.uri);
   const mime = content.mime.split(';')[0].trim().toLowerCase();
-  const image = imageTypes.has(mime);
+  const image = isImageArtifact(content);
   const [preview, setPreview] = useState<string>();
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -73,6 +77,9 @@ function Artifact({ content, client, directory }: Props) {
     running.current = undefined;
     setPreview(undefined); setExpanded(false); setError(undefined); setBusy(false);
     return () => request.abort();
+  }, [client]);
+  useEffect(() => {
+    if (image) void perform('preview');
   }, [client]);
   const filename = (content.name || `attachment.${mime.split('/')[1]?.replace(/[^a-z\d]/gi, '') || 'bin'}`).split(/[\\/]/).pop()!.replace(/[\u0000-\u001f\u007f<>:"|?*]/g, '_') || 'attachment';
 
@@ -121,6 +128,23 @@ function Artifact({ content, client, directory }: Props) {
     }
   }
 
+  if (thumbnail) return <View style={styles.thumbnail}>
+    {preview ? <Pressable accessibilityRole="button" accessibilityLabel={`Expand image preview: ${filename}`} onPress={() => setExpanded(true)}>
+      <Image source={{ uri: preview }} accessibilityLabel={filename} resizeMode="contain" style={styles.thumbnailImage} onError={() => { setPreview(undefined); setError(`This image cannot be displayed. Retry the preview or use ${Platform.OS === 'web' ? 'Download' : 'Save or share'} to open the file.`); }} />
+    </Pressable> : <View style={styles.placeholder}><Label muted accessibilityRole="status">{busy ? 'Loading image…' : 'Image unavailable'}</Label></View>}
+    <Label numberOfLines={2} style={styles.mime}>{filename}</Label>
+    <ErrorNotice error={error} />
+    {!preview && <Row>
+      {!busy && <Button title="Retry image" compact onPress={() => { void perform('preview'); }} />}
+      <Button title={Platform.OS === 'web' ? 'Download' : 'Save or share'} compact disabled={busy} onPress={() => { void perform('save'); }} />
+    </Row>}
+    <Sheet visible={expanded} title={filename} onClose={() => setExpanded(false)} scroll={false}>
+      {preview && <Image source={{ uri: preview }} accessibilityLabel={`Expanded ${filename}`} resizeMode="contain" style={styles.viewerImage} />}
+      <Button title={Platform.OS === 'web' ? 'Download' : 'Save or share'} busy={busy} onPress={() => { void perform('save'); }} />
+      <ErrorNotice error={error} />
+    </Sheet>
+  </View>;
+
   return <View style={styles.container}>
     <Label numberOfLines={2} style={styles.name}>{filename}</Label>
     <Label muted style={styles.mime}>{content.mime}</Label>
@@ -136,6 +160,10 @@ function Artifact({ content, client, directory }: Props) {
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { gap: 8, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.panel, minWidth: 0 },
+  thumbnail: { flexBasis: 148, flexShrink: 1, maxWidth: '100%', minWidth: 0, gap: 6 },
+  thumbnailImage: { width: '100%', height: 112, borderRadius: 6, backgroundColor: colors.panel },
+  placeholder: { height: 112, borderRadius: 6, backgroundColor: colors.panel, padding: 10, justifyContent: 'center' },
+  viewerImage: { flex: 1, width: '100%', minHeight: 0 },
   name: { fontWeight: '500' },
   mime: { fontSize: 12 },
   preview: { width: '100%', height: 180, backgroundColor: colors.bg, borderRadius: 6 },

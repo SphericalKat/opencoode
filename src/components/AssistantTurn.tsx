@@ -1,7 +1,7 @@
 import React, { memo, useContext, useLayoutEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import type { SessionMessageAssistant, SessionMessageInfo } from '@opencode/client';
+import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageAssistantTool, ToolContent } from '@opencode/client';
 import type { Client } from '../lib/client';
 import type { AgentActivity } from '../lib/activity';
 import { MessageActionsContext, MessageDisclosureContext } from '../lib/messageActions';
@@ -11,6 +11,7 @@ import { ErrorNotice, Label, mono } from './ui';
 import { Markdown } from './Markdown';
 import { ResponseFooter } from './ResponseFooter';
 import { MotionDisclosureBody, MotionDisclosureChevron, WorkingIndicator } from './motion';
+import { ArtifactContent, isImageArtifact } from './ArtifactContent';
 import { ToolCallDetails, toolDetail, toolDisplayName } from './ToolCallDetails';
 
 export type TranscriptItem = { type: 'message'; id: string; message: SessionMessageInfo } | { type: 'assistant-turn'; id: string; messages: SessionMessageAssistant[] };
@@ -68,6 +69,14 @@ function Chevron({ open }: { open: boolean }) {
   return <MotionDisclosureChevron open={open}><Svg width={12} height={12} viewBox="0 0 16 16" fill="none" aria-hidden><Path d="m6 4 4 4-4 4" stroke={colors.faint} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg></MotionDisclosureChevron>;
 }
 
+function ToolResultImages({ tool, client, directory, label }: { tool: SessionMessageAssistantTool; client?: Client; directory: string; label?: string }) {
+  const styles = useThemedStyles(createStyles);
+  const content: ToolContent[] = 'content' in tool.state ? tool.state.content ?? [] : [];
+  const images = content.filter(item => item.type === 'file').filter(isImageArtifact);
+  if (!images.length) return null;
+  return <View>{label && <Label muted numberOfLines={2} style={styles.imageLabel}>{label}</Label>}<View style={styles.images}>{images.map((image, index) => <ArtifactContent key={`${index}:${image.uri}`} content={image} client={client} directory={directory} thumbnail />)}</View></View>;
+}
+
 export const AssistantActivityPart = memo(function AssistantActivityPart({ part, detailsKey, live, activityKind, animate, client, directory, selectable }: {
   part: Part; detailsKey: string; live: boolean; activityKind?: AgentActivity['kind']; animate?: boolean; client?: Client; directory: string; selectable: boolean;
 }) {
@@ -94,6 +103,7 @@ export const AssistantActivityPart = memo(function AssistantActivityPart({ part,
     <MotionDisclosureBody open={open} style={part.type === 'reasoning' ? styles.thoughtBody : styles.toolBody}>
       {part.type === 'reasoning' ? <Markdown text={part.text} muted selectable={selectable} /> : <ToolCallDetails tool={part} client={client} directory={directory} selectable={selectable} />}
     </MotionDisclosureBody>
+    {part.type === 'tool' && <ToolResultImages tool={part} client={client} directory={directory} />}
     {!open && part.type === 'tool' && part.state.status === 'error' && <ErrorNotice error={part.state.error.message || 'The tool failed'} />}
   </View>;
 });
@@ -126,14 +136,14 @@ export const AssistantTurn = memo(function AssistantTurn({ turn, liveMessageID, 
   const finalText = entries.findLast(entry => entry.part?.type === 'text' && !!entry.part.text.trim());
   return <View style={styles.turn}>
     {entries.slice(0, start < 0 ? entries.length : start).map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)}
-    {first && <TurnActivities key={turn.id} turnID={turn.id} entries={entries.slice(start, end + 1)} activities={completedActivities} renderEntry={renderEntry} renderSource={renderSource} />}
+    {first && <TurnActivities key={turn.id} turnID={turn.id} entries={entries.slice(start, end + 1)} activities={completedActivities} renderEntry={renderEntry} renderSource={renderSource} client={client} directory={directory} />}
     {start >= 0 && entries.slice(end + 1).map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)}
     {betaLayout && !active && finalText && <ResponseFooter text={turn.messages.flatMap(message => message.content.flatMap(part => part.type === 'text' ? [part.text] : [])).join('\n\n')} elapsedSeconds={finalText.message.time.completed === undefined ? undefined : Math.max(0, Math.round((finalText.message.time.completed - turn.messages[0].time.created) / 1000))} />}
   </View>;
 });
 
-function TurnActivities({ turnID, entries, activities, renderEntry, renderSource }: {
-  turnID: string; entries: Entry[]; activities: Entry[]; renderEntry: (entry: Entry) => React.ReactNode; renderSource: SourceRenderer;
+function TurnActivities({ turnID, entries, activities, renderEntry, renderSource, client, directory }: {
+  client?: Client; directory: string; turnID: string; entries: Entry[]; activities: Entry[]; renderEntry: (entry: Entry) => React.ReactNode; renderSource: SourceRenderer;
 }) {
   const styles = useThemedStyles(createStyles);
   const disclosures = useContext(MessageDisclosureContext);
@@ -146,7 +156,7 @@ function TurnActivities({ turnID, entries, activities, renderEntry, renderSource
   return <View>
     {renderSource(activities[0].message, `turn:${turnID}:summary`, <ActivityGroupHeader labels={labels} open={open} onToggle={toggle} />)}
     <MotionDisclosureBody open={open} style={styles.groupBody}>{entries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)}</MotionDisclosureBody>
-    {!open && entries.map(entry => <React.Fragment key={entry.key}>{entry.error !== undefined && renderEntry(entry)}{entry.part?.type === 'tool' && entry.part.state.status === 'error' && renderSource(entry.message, `${entry.key}:error`, <ErrorNotice error={entry.part.state.error.message || 'The tool failed'} />)}</React.Fragment>)}
+    {!open && entries.map(entry => <React.Fragment key={entry.key}>{entry.error !== undefined && renderEntry(entry)}{entry.part?.type === 'tool' && renderSource(entry.message, `${entry.key}:images`, <ToolResultImages tool={entry.part} client={client} directory={directory} label={activities.length > 1 ? `${toolDisplayName(entry.part.name)}${toolDetail(entry.part) ? ` · ${toolDetail(entry.part)}` : ''}` : undefined} />)}{entry.part?.type === 'tool' && entry.part.state.status === 'error' && renderSource(entry.message, `${entry.key}:error`, <ErrorNotice error={entry.part.state.error.message || 'The tool failed'} />)}</React.Fragment>)}
   </View>;
 }
 
@@ -159,6 +169,8 @@ function ActivityGroupHeader({ labels, open, onToggle }: { labels: string; open:
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  imageLabel: { fontSize: 12, lineHeight: 18, paddingTop: 8 },
+  images: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 8, minWidth: 0 },
   turn: { gap: 6 }, activity: { minWidth: 0 },
   groupHeader: { minHeight: Platform.OS === 'android' ? 48 : 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 6 },
   groupTitle: { fontSize: 13, lineHeight: 20, flexShrink: 1 }, groupBody: { paddingLeft: 12 },

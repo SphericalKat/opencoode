@@ -123,7 +123,7 @@ export function useModelPreferences(serverID: string) {
   }), [change]);
 
   const reload = useCallback(() => setRevision(value => value + 1), []);
-  const current = !serverID.trim()
+  const current: Omit<State, 'serverID'> = !serverID.trim()
     ? { favoriteIDs: [], recentIDs: [], loading: false, saving: false, error: null }
     : state.serverID === serverID ? state : { favoriteIDs: [], recentIDs: [], loading: true, saving: false, error: null };
   return { favoriteIDs: current.favoriteIDs, recentIDs: current.recentIDs, loading: current.loading, saving: current.saving, error: current.error, toggleFavorite, recordRecent, reload };
