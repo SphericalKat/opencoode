@@ -167,8 +167,8 @@ importers:
   .:
     dependencies:
       '@opencode/client':
-        specifier: 2.2.2
-        version: 2.2.2(effect@4.0.6)
+        specifier: 2.2.7
+        version: 2.2.7(effect@4.1.0)
       '@react-navigation/elements':
         specifier: ^2.9.45
         version: 2.9.45(@react-navigation/native@7.5.1(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1))(react-native-safe-area-context@5.11.1(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1))(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1)
@@ -1099,10 +1099,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@opencode/client@2.2.2':
-    resolution: {integrity: sha512-g98UZXcnLWg74t6eH284DmIqgIYX4JE4oWq2diepZK63/HV0GrnIXSxXKITw0CLvGlN5m7S+LIawuY1kOK8M8g==}
+  '@opencode/client@2.2.7':
+    resolution: {integrity: sha512-L1nqJqEBEHyg+OwJaMYA5jX8OA4nZ1Jxehp8xTw5u4kzKEgqLes2re7yWzXJSZmybZ5Kv4rX24gJjYHeegwf7g==}
     peerDependencies:
-      effect: 4.0.6
+      effect: 4.1.0
       solid-js: '>=1.9.0'
     peerDependenciesMeta:
       effect:
@@ -1110,11 +1110,11 @@ packages:
       solid-js:
         optional: true
 
-  '@opencode/protocol@2.2.2':
-    resolution: {integrity: sha512-wph91QN2LygnzxdI9IRyVh/vVBinibXW/jhcwjtbTYBv+PA52jPCloyMSPdusb/R7wjscATDVKviYaPornR37A==}
+  '@opencode/protocol@2.2.7':
+    resolution: {integrity: sha512-J86R/rNrFC0KRJd4G5i2yT5FG7FB4M9Yh418NS3PcTHoWP1jwWKLV85L5JvGYPwb7sKtahyxPeN88Q/Mw+pZvQ==}
 
-  '@opencode/schema@2.2.2':
-    resolution: {integrity: sha512-HgUtQ7sY3E1ns00sIYjdEdGQNw7aGDm7BOJwLiKnoYChDItrglby1XvjE7U/fzOliq6HYgxliXH+lmxQquSf1A==}
+  '@opencode/schema@2.2.7':
+    resolution: {integrity: sha512-A+aUfvpcPm8mN0ptFl2GUHwDFjyrCuLdig3jjQCRoOghF+un1+vVKek1IwIph935vMNqAwRDnwtvZDtHFiGokA==}
 
   '@oxc-project/types@0.154.0':
     resolution: {integrity: sha512-KYOUGQFlLWR+s4QMV2Q9ko38TZm7EdO87Qm7rvZLqk/webse/cDjtyxKhg/47l0byCbs/k46LT8qc4PKjAikzA==}
@@ -1751,8 +1751,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  effect@4.0.6:
-    resolution: {integrity: sha512-Tc3mkzuLR6t6P9dhLt0D2GrxYtmU5td4XEJEiXCmILz53IRIfJyHsKZWjTA3xEjiwpNTtXBgI4iqYPxMztBDrw==}
+  effect@4.1.0:
+    resolution: {integrity: sha512-lGx2MJJyrXA8RZb2UpQ/0Nkb5Utaimby7oD92+18noBxLPE85IFOvptdzau8dvcxAOwfwHo9iqapbKeFzqQM/Q==}
 
   electron-to-chromium@1.5.467:
     resolution: {integrity: sha512-Nw9X371rtZmYcBSnEijnCDONILjs93biCZO34juC7MBOmK8E+GFnyD4T/WvyrlJkppul7oxg6TwvtKst9SODTw==}
@@ -4066,22 +4066,22 @@ snapshots:
   '@noxcturnal/noxcturnal-win32-x64-msvc@0.1.11':
     optional: true
 
-  '@opencode/client@2.2.2(effect@4.0.6)':
+  '@opencode/client@2.2.7(effect@4.1.0)':
     dependencies:
-      '@opencode/protocol': 2.2.2
-      '@opencode/schema': 2.2.2
+      '@opencode/protocol': 2.2.7
+      '@opencode/schema': 2.2.7
     optionalDependencies:
-      effect: 4.0.6
+      effect: 4.1.0
 
-  '@opencode/protocol@2.2.2':
+  '@opencode/protocol@2.2.7':
     dependencies:
-      '@opencode/schema': 2.2.2
-      effect: 4.0.6
+      '@opencode/schema': 2.2.7
+      effect: 4.1.0
 
-  '@opencode/schema@2.2.2':
+  '@opencode/schema@2.2.7':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      effect: 4.0.6
+      effect: 4.1.0
 
   '@oxc-project/types@0.154.0': {}
 
@@ -4752,7 +4752,7 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  effect@4.0.6: {}
+  effect@4.1.0: {}
 
   electron-to-chromium@1.5.467: {}
 
