@@ -16,7 +16,7 @@ import { GlobalForms } from '../components/GlobalForms';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { ShellIcon } from '../components/ShellIcon';
 import { useMotionPreference } from '../components/motion';
-import { useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
+import { paletteOptions, useTheme, useThemedStyles, type ThemeColors } from '../lib/theme';
 import { useHasUnsavedChanges, useUnsavedChanges, useUnsavedGuard } from '../lib/unsaved';
 import { pageInset } from '../lib/layout';
 import { useBetaLayout } from '../lib/betaLayout';
@@ -255,13 +255,16 @@ function Page({ children, error, loading, refresh }: { children: React.ReactNode
   </ScrollView>;
 }
 
-function AppearanceSettings() {
-  const { appearance, scheme, setAppearance, colors } = useTheme();
+export function AppearanceSettings() {
+  const { appearance, scheme, setAppearance, palette, setPalette, colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const betaLayout = useBetaLayout();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  const [choosingPalette, setChoosingPalette] = useState(false);
+  const paletteLabel = paletteOptions.find(option => option.id === palette)?.name ?? 'OpenCoode';
+  const palettePicker = <><View style={styles.betaAppearanceCard}><View style={styles.detail}><Label style={styles.betaSettingTitle}>Palette</Label><Label muted style={styles.betaDescription}>Choose the app colors.</Label></View><Pressable accessibilityRole="button" accessibilityLabel={`Palette: ${paletteLabel}`} accessibilityState={{ disabled: busy, expanded: choosingPalette }} disabled={busy} onPress={() => setChoosingPalette(true)} style={styles.betaChooserTarget}><View style={styles.betaSettingChooser}><Label style={styles.betaBackLabel}>{paletteLabel}</Label><View style={{ transform: [{ rotate: '90deg' }] }}><ShellIcon name="chevron" size={12} color={colors.text} /></View></View></Pressable></View><Sheet visible={choosingPalette} title="Palette" fitContent contentStyle={{ gap: 0 }} onClose={() => { if (!busy) setChoosingPalette(false); }}><ErrorNotice error={error} />{paletteOptions.map(option => <Pressable key={option.id} accessibilityRole="button" accessibilityLabel={option.name} accessibilityState={{ selected: palette === option.id, disabled: busy }} disabled={busy} style={({ pressed }) => [styles.betaCategoryRow, pressed && { backgroundColor: colors.raised }]} onPress={() => { setBusy(true); setError(null); void setPalette(option.id).then(() => setChoosingPalette(false)).catch(e => setError(errorMessage(e))).finally(() => setBusy(false)); }}><Label style={[styles.betaBackLabel, styles.detail]}>{option.name}</Label>{palette === option.id && <Label accessibilityElementsHidden>✓</Label>}</Pressable>)}</Sheet></>;
   const choiceLabel = appearance === 'system' ? 'System' : appearance === 'light' ? 'Light' : 'Dark';
   if (betaLayout) return <Page error={error}>
     <View style={styles.betaAppearanceCard}>
@@ -270,6 +273,7 @@ function AppearanceSettings() {
         <View style={styles.betaSettingChooser}>{busy ? <ActivityIndicator size="small" color={colors.muted} /> : <Label style={styles.betaBackLabel}>{choiceLabel}</Label>}<View style={{ transform: [{ rotate: '90deg' }] }}><ShellIcon name="chevron" size={12} color={colors.text} /></View></View>
       </Pressable>
     </View>
+    {palettePicker}
     <Sheet visible={choosing} title="Color scheme" fitContent contentStyle={{ gap: 0 }} onClose={() => { if (!busy) setChoosing(false); }}>
       <ErrorNotice error={error} />
       {(['system', 'light', 'dark'] as const).map(value => <Pressable key={value} accessibilityRole="button" accessibilityLabel={value === 'system' ? 'System' : value === 'light' ? 'Light' : 'Dark'} accessibilityState={{ selected: appearance === value, disabled: busy }} disabled={busy} style={({ pressed }) => [styles.betaCategoryRow, pressed && { backgroundColor: colors.raised }]} onPress={() => {
@@ -285,6 +289,7 @@ function AppearanceSettings() {
       void setAppearance(value).catch(e => setError(errorMessage(e))).finally(() => setBusy(false));
     }} />)}
     <Label muted>Current theme: {scheme}</Label>
+    {palettePicker}
   </Page>;
 }
 

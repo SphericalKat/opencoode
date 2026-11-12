@@ -169,6 +169,9 @@ importers:
       '@opencode/client':
         specifier: 2.2.7
         version: 2.2.7(effect@4.1.0)
+      '@pchmn/expo-material3-theme':
+        specifier: ^1.4.0
+        version: 1.4.0(expo@58.0.21(c588cad047954d8994664631d910b031))(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1)
       '@react-navigation/elements':
         specifier: ^2.9.45
         version: 2.9.45(@react-navigation/native@7.5.1(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1))(react-native-safe-area-context@5.11.1(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1))(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1)
@@ -226,6 +229,9 @@ importers:
       markdown-it:
         specifier: ^15.0.3
         version: 15.0.3
+      prismjs:
+        specifier: ^1.30.0
+        version: 1.30.0
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -266,6 +272,9 @@ importers:
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
+      '@types/prismjs':
+        specifier: ^1.26.6
+        version: 1.26.6
       '@types/react':
         specifier: ~19.3.0
         version: 19.3.0
@@ -1047,6 +1056,9 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@material/material-color-utilities@0.3.0':
+    resolution: {integrity: sha512-ztmtTd6xwnuh2/xu+Vb01btgV8SQWYCaK56CkRK8gEkWe5TuDyBcYJ0wgkMRn+2VcE9KUmhvkz+N9GHrqw/C0g==}
+
   '@noxcturnal/noxcturnal-darwin-arm64@0.1.11':
     resolution: {integrity: sha512-tqvZOVmSoiJzm7QjQ+whPxCP45J2C1zCAZnzc1HhwmJrFIWw/qyA8o9Cup0aVqnjNVAN+as9GHX+DbAmkCbGlQ==}
     engines: {node: '>=18'}
@@ -1118,6 +1130,13 @@ packages:
 
   '@oxc-project/types@0.154.0':
     resolution: {integrity: sha512-KYOUGQFlLWR+s4QMV2Q9ko38TZm7EdO87Qm7rvZLqk/webse/cDjtyxKhg/47l0byCbs/k46LT8qc4PKjAikzA==}
+
+  '@pchmn/expo-material3-theme@1.4.0':
+    resolution: {integrity: sha512-XNt0gpZX5argOQ7JiFnNdiXHpHjmpwJoMQrlnd1kpb8ly/IWZN2hh011incmfZXV2Xs+p6Uo1BGDKv8hW4MQTQ==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: '*'
 
   '@react-native/asset-utils@0.88.1':
     resolution: {integrity: sha512-BLb5FF7NgggGYiCsA7KKkK2qFhn0K+6iGXOI+4Ucd+G7Robzw9Gt4WsWwxLt+Od+G+/hyqfz8ASokyWFZ6VcLw==}
@@ -1269,6 +1288,9 @@ packages:
 
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
+
+  '@types/prismjs@1.26.6':
+    resolution: {integrity: sha512-vqlvI7qlMvcCBbVe0AKAb4f97//Hy0EBTaiW8AalRnG/xAN5zOiWWyrNqNXeq8+KAuvRewjCVY1+IPxk4RdNYw==}
 
   '@types/react@19.3.0':
     resolution: {integrity: sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==}
@@ -2529,6 +2551,10 @@ packages:
   pretty-format@29.7.0:
     resolution: {integrity: sha512-Pdlw/oPxN+aXdmM9R00JVC9WVFoCLTKJvDVLgmJ+qAffBMxsV85l/Lu7sNx4zSzPyoL2euImuEwHhOXdEgNFZQ==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
+
+  prismjs@1.30.0:
+    resolution: {integrity: sha512-DEvV2ZF2r2/63V+tK8hQvrR2ZGn10srHbXviTlcv7Kpzw8jWiNTqbVgjO3IY8RxrrOUF8VPMQQFysYYYv0YZxw==}
+    engines: {node: '>=6'}
 
   proc-log@4.2.0:
     resolution: {integrity: sha512-g8+OnU/L2v+wyiVK+D5fA34J7EH8jZ8DDlvwhRCMxmMj7UCBvxiO1mGeN+36JXIKF4zevU4kRBd8lVgG9vLelA==}
@@ -4042,6 +4068,8 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
+  '@material/material-color-utilities@0.3.0': {}
+
   '@noxcturnal/noxcturnal-darwin-arm64@0.1.11':
     optional: true
 
@@ -4084,6 +4112,14 @@ snapshots:
       effect: 4.1.0
 
   '@oxc-project/types@0.154.0': {}
+
+  '@pchmn/expo-material3-theme@1.4.0(expo@58.0.21(c588cad047954d8994664631d910b031))(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1)':
+    dependencies:
+      '@material/material-color-utilities': 0.3.0
+      color: 4.2.3
+      expo: 58.0.21(c588cad047954d8994664631d910b031)
+      react: 19.3.1
+      react-native: 0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1)
 
   '@react-native/asset-utils@0.88.1': {}
 
@@ -4307,6 +4343,8 @@ snapshots:
   '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
+
+  '@types/prismjs@1.26.6': {}
 
   '@types/react@19.3.0':
     dependencies:
@@ -5610,6 +5648,8 @@ snapshots:
       '@jest/schemas': 29.6.3
       ansi-styles: 5.2.0
       react-is: 18.3.1
+
+  prismjs@1.30.0: {}
 
   proc-log@4.2.0: {}
 
