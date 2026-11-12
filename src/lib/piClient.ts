@@ -353,10 +353,11 @@ export function createPiClient(
       instanceID: string,
       signal: AbortSignal
     ): AsyncGenerator<PiEventBatch> {
-      if (!cursor(after) || !instanceID)
+      if (!cursor(after) || !instanceID) {
         throw new PiConnectionError(
           "Pi requires a valid event cursor and server identity."
         );
+      }
       while (!signal.aborted) {
         const query = new URLSearchParams({
           after: String(after),
@@ -373,12 +374,15 @@ export function createPiClient(
           result.reset ||
           result.instanceID !== instanceID ||
           result.events.some((item) => item.type === "reset");
-        if (!reset && result.cursor < after)
+        if (!reset && result.cursor < after) {
           throw new PiConnectionError(
             "Pi returned an outdated event cursor. Reload the session."
           );
+        }
         yield result;
-        if (reset) return;
+        if (reset) {
+          return;
+        }
         after = result.cursor;
       }
     },

@@ -14,17 +14,17 @@ export async function verifyBackendImages(page) {
         instanceID: "server",
         messages: [
           {
+            content: [
+              {
+                arguments: {},
+                id: "capture",
+                name: "screenshot",
+                type: "toolCall",
+              },
+            ],
             id: "assistant",
             role: "assistant",
             timestamp: 1,
-            content: [
-              {
-                type: "toolCall",
-                id: "capture",
-                name: "screenshot",
-                arguments: {},
-              },
-            ],
           },
         ],
         session: {
@@ -55,12 +55,12 @@ export async function verifyBackendImages(page) {
       const events = [
         {
           cursor: 1,
-          events: [{ type: "tool", tool: completed }],
+          events: [{ tool: completed, type: "tool" }],
           instanceID: "server",
         },
         {
           cursor: 2,
-          events: [{ type: "message", message }],
+          events: [{ message, type: "message" }],
           instanceID: "server",
         },
       ];
@@ -95,15 +95,15 @@ export async function verifyBackendImages(page) {
     }, failed);
     const expected = {
       content: [
-        { type: "text", text: "Captured" },
+        { text: "Captured", type: "text" },
         {
-          type: "file",
           mime: "image/png",
+          type: "file",
           uri: "data:image/png;base64,Zmlyc3Q=",
         },
         {
-          type: "file",
           mime: "image/jpeg",
+          type: "file",
           uri: "data:image/jpeg;base64,c2Vjb25k",
         },
       ],
@@ -168,7 +168,7 @@ export async function verifyBackendImages(page) {
             executed: true,
             id: "capture",
             ...(failed
-              ? { error: { type: "tool-error", message: "Capture failed" } }
+              ? { error: { message: "Capture failed", type: "tool-error" } }
               : {}),
           },
           type: failed ? "session.tool.failed" : "session.tool.success",

@@ -102,7 +102,7 @@ function inlineBytes(uri: string): Uint8Array {
 function dataUri(bytes: Uint8Array, mime: string) {
   let binary = "";
   for (let index = 0; index < bytes.length; index += 16_384) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + 16384));
+    binary += String.fromCharCode(...bytes.subarray(index, index + 16_384));
   }
   return `data:${mime};base64,${btoa(binary)}`;
 }
@@ -220,12 +220,14 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
         const { uri } = temporary;
         if (!signal.aborted) {
           await presentNative(() =>
-            Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: filename })
+            Sharing.shareAsync(uri, { dialogTitle: filename, mimeType: mime })
           );
         }
       }
     } catch (error_) {
-      if (!signal.aborted) setError(errorMessage(error_));
+      if (!signal.aborted) {
+        setError(errorMessage(error_));
+      }
     } finally {
       if (temporary?.exists) {
         try {

@@ -34,7 +34,9 @@ export const TerminalRenderer = forwardRef<
   );
   useEffect(() => {
     function receive(event: MessageEvent) {
-      if (event.source !== frame.current?.contentWindow) return;
+      if (event.source !== frame.current?.contentWindow) {
+        return;
+      }
       try {
         const data: unknown =
           typeof event.data === "string" ? JSON.parse(event.data) : event.data;
@@ -43,10 +45,13 @@ export const TerminalRenderer = forwardRef<
           typeof data !== "object" ||
           !("channel" in data) ||
           data.channel !== "opencoode-terminal"
-        )
+        ) {
           return;
+        }
         const parsed = terminalEvent(data);
-        if (parsed) onEventRef.current(parsed);
+        if (parsed) {
+          onEventRef.current(parsed);
+        }
       } catch {
         return;
       }
@@ -62,12 +67,12 @@ export const TerminalRenderer = forwardRef<
       sandbox="allow-scripts"
       onError={() => onError("The terminal view did not load")}
       style={{
+        background: colors.bg,
         border: 0,
         flex: 1,
-        width: "100%",
         height: "100%",
-        background: colors.bg,
         minHeight: 0,
+        width: "100%",
       }}
     />
   );

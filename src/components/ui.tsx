@@ -559,7 +559,7 @@ function createStyles(colors: ThemeColors) {
       borderTopColor: colors.controlTopEdge,
       borderWidth: 1,
       boxShadow: [
-        { offsetX: 0, offsetY: 1, blurRadius: 1, color: "#00000035" },
+        { blurRadius: 1, color: "#00000035", offsetX: 0, offsetY: 1 },
       ],
       justifyContent: "center",
       minHeight: 36,
@@ -661,11 +661,11 @@ function createStyles(colors: ThemeColors) {
       boxShadow: inset
         ? [
             {
-              offsetX: 0,
-              offsetY: 1,
               blurRadius: 2,
               color: "#00000020",
               inset: true,
+              offsetX: 0,
+              offsetY: 1,
             },
           ]
         : [],
@@ -681,11 +681,11 @@ function createStyles(colors: ThemeColors) {
       boxShadow: inset
         ? [
             {
-              offsetX: 0,
-              offsetY: 1,
               blurRadius: 1,
               color: "#00000030",
               inset: true,
+              offsetX: 0,
+              offsetY: 1,
             },
           ]
         : [],

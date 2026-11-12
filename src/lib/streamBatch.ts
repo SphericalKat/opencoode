@@ -32,7 +32,9 @@ export function createStreamBatch<T>(
     flush,
     push(event: T) {
       events.push(event);
-      if (timer !== undefined || frame !== undefined) return;
+      if (timer !== undefined || frame !== undefined) {
+        return;
+      }
       if (options.frame && typeof requestAnimationFrame === "function") {
         frame = requestAnimationFrame(() => {
           frame = undefined;

@@ -270,7 +270,7 @@ function fileMime(path: string, bytes: Uint8Array): string {
 function base64(bytes: Uint8Array): string {
   const chunks: string[] = [];
   for (let index = 0; index < bytes.length; index += 0x80_00) {
-    chunks.push(String.fromCharCode(...bytes.subarray(index, index + 0x8000)));
+    chunks.push(String.fromCharCode(...bytes.subarray(index, index + 0x80_00)));
   }
   return btoa(chunks.join(""));
 }
@@ -414,13 +414,13 @@ function Files({
           setFile((current) =>
             current?.path === nextPath
               ? {
-                  path: nextPath,
                   bytes,
-                  original: null,
-                  text: "",
                   initialText: "",
                   mime,
                   notice: errorMessage(error_),
+                  original: null,
+                  path: nextPath,
+                  text: "",
                 }
               : current
           );
@@ -779,7 +779,9 @@ function Files({
                           "Reload the file?",
                           "Your unsaved edits will be lost."
                         ).then((yes) => {
-                          if (yes) void openFile(file.path);
+                          if (yes) {
+                            void openFile(file.path);
+                          }
                         });
                       }
                     }}
@@ -1304,7 +1306,9 @@ function Worktrees({
         }
       })
       .catch((error_) => {
-        if (!controller.signal.aborted) setError(errorMessage(error_));
+        if (!controller.signal.aborted) {
+          setError(errorMessage(error_));
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) {

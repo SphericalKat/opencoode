@@ -277,15 +277,15 @@ function PendingForm({
         : undefined;
       if (cancel) {
         await client.session.form.cancel(
-          { sessionID: form.sessionID, formID: form.id },
+          { formID: form.id, sessionID: form.sessionID },
           options
         );
       } else {
         await client.session.form.reply(
           {
-            sessionID: form.sessionID,
-            formID: form.id,
             answer: prepared.answer,
+            formID: form.id,
+            sessionID: form.sessionID,
           },
           options
         );

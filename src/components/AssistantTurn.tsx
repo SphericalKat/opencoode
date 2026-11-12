@@ -63,8 +63,11 @@ export function groupTranscriptMessages(
   const previousItems = new Map(previous.map((item) => [item.id, item]));
   const previousTurns = new Map<string, Turn>();
   for (const item of previous) {
-    if (item.type === "assistant-turn")
-      for (const message of item.messages) previousTurns.set(message.id, item);
+    if (item.type === "assistant-turn") {
+      for (const message of item.messages) {
+        previousTurns.set(message.id, item);
+      }
+    }
   }
   const items: TranscriptItem[] = [];
   const usedIDs = new Set<string>();
@@ -219,8 +222,9 @@ export const AssistantActivityPart = memo(
     const styles = useThemedStyles(createStyles);
     const actions = useContext(MessageActionsContext);
     const { open, toggle } = useDisclosure(detailsKey);
-    if (part.type === "text")
+    if (part.type === "text") {
       return <Markdown text={part.text} selectable={selectable} />;
+    }
     const waiting =
       activityKind === "approval" ||
       activityKind === "question" ||
@@ -247,7 +251,7 @@ export const AssistantActivityPart = memo(
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${title}${duration ? ` ${duration}` : ""}${detail && !open ? `, ${detail}` : ""}`}
-          accessibilityState={{ expanded: open, busy }}
+          accessibilityState={{ busy, expanded: open }}
           aria-expanded={open}
           onPress={(event) => {
             event.stopPropagation();
@@ -335,18 +339,18 @@ export const AssistantTurn = memo(
       () =>
         turn.messages.flatMap((message) => [
           ...message.content.map((part, index) => ({
-            message,
-            part,
             index,
             key: entryKey(message, part, index),
+            message,
+            part,
           })),
           ...(message.error
             ? [
                 {
-                  message,
                   error: message.error.message,
                   index: message.content.length,
                   key: `${message.id}:error`,
+                  message,
                 },
               ]
             : []),

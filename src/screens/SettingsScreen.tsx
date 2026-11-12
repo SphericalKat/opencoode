@@ -352,11 +352,11 @@ export function SettingsScreen({
                       accessibilityLabel="Open navigation"
                       onPress={onOpenNavigation}
                       style={{
-                        width: 44,
-                        height: 44,
-                        marginEnd: Platform.OS === "android" ? -16 : 0,
                         alignItems: "center",
+                        height: 44,
                         justifyContent: "center",
+                        marginEnd: Platform.OS === "android" ? -16 : 0,
+                        width: 44,
                       }}
                     >
                       <ShellIcon name="menu" color={colors.text} />
@@ -750,7 +750,9 @@ function useResource<T>(
         setData(result);
       }
     } catch (error_) {
-      if (isCurrent()) setError(errorMessage(error_));
+      if (isCurrent()) {
+        setError(errorMessage(error_));
+      }
     } finally {
       if (isCurrent()) {
         setLoading(false);
@@ -945,7 +947,9 @@ export function AppearanceSettings() {
           fitContent
           contentStyle={{ gap: 0 }}
           onClose={() => {
-            if (!busy) setChoosing(false);
+            if (!busy) {
+              setChoosing(false);
+            }
           }}
         >
           <ErrorNotice error={error} />
@@ -961,8 +965,8 @@ export function AppearanceSettings() {
                     : "Dark"
               }
               accessibilityState={{
-                selected: appearance === value,
                 disabled: busy,
+                selected: appearance === value,
               }}
               disabled={busy}
               style={({ pressed }) => [
@@ -974,7 +978,7 @@ export function AppearanceSettings() {
                 setError(null);
                 void setAppearance(value)
                   .then(() => setChoosing(false))
-                  .catch((e) => setError(errorMessage(e)))
+                  .catch((error_) => setError(errorMessage(error_)))
                   .finally(() => setBusy(false));
               }}
             >
@@ -1325,7 +1329,9 @@ function ConnectIntegration({
         onClose();
       }
     } catch (error_) {
-      if (active.current) setError(errorMessage(error_));
+      if (active.current) {
+        setError(errorMessage(error_));
+      }
     } finally {
       statusRequest.current = false;
     }
@@ -1351,7 +1357,9 @@ function ConnectIntegration({
     try {
       await action();
     } catch (error_) {
-      if (active.current) setError(errorMessage(error_));
+      if (active.current) {
+        setError(errorMessage(error_));
+      }
     } finally {
       if (active.current) {
         setBusy(false);
@@ -1847,7 +1855,7 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
                 if (confirmed) {
                   void run(async (signal) => {
                     await client.experimental.mcp.remove(
-                      { server: item.name, location: { directory } },
+                      { location: { directory }, server: item.name },
                       { signal }
                     );
                   });
@@ -1934,9 +1942,9 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
               if (kind === "remote") {
                 await client.experimental.mcp.add(
                   {
-                    server,
-                    location: { directory },
                     config: { type: "remote", url: externalURL(url.trim()) },
+                    location: { directory },
+                    server,
                   },
                   { signal }
                 );
@@ -2053,7 +2061,9 @@ function Configuration({
               setEditing({ original: source, path });
               setText(source);
             } catch (error_) {
-              if (!isFileNotFoundError(error_)) throw error_;
+              if (!isFileNotFoundError(error_)) {
+                throw error_;
+              }
               signal.throwIfAborted();
               setEditing({ original: null, path });
               setText('{\n  "$schema": "https://opencode.ai/config.json"\n}\n');
@@ -2156,7 +2166,9 @@ function Configuration({
               "Discard changes?",
               "Your unsaved changes will be lost."
             ).then((ok) => {
-              if (ok) setEditing(undefined);
+              if (ok) {
+                setEditing(undefined);
+              }
             });
           }
         }}

@@ -131,37 +131,37 @@ function commandPayload(value: Record<string, unknown>): PiCommand {
     }
     case "compact": {
       return {
-        type: "compact",
         instructions:
           value.instructions === undefined
             ? undefined
             : text(value.instructions, "compaction instructions"),
+        type: "compact",
       };
     }
     case "model": {
       return {
-        type: "model",
-        provider: text(value.provider, "provider", 256),
         id: text(value.id, "model", 512),
+        provider: text(value.provider, "provider", 256),
+        type: "model",
       };
     }
     case "thinking": {
       return {
-        type: "thinking",
         level: text(value.level, "thinking level", 32),
+        type: "thinking",
       };
     }
     case "rename": {
-      return { type: "rename", name: text(value.name, "session name", 200) };
+      return { name: text(value.name, "session name", 200), type: "rename" };
     }
     case "switch": {
       return {
-        type: "switch",
         sessionID: text(value.sessionID, "session ID", 128),
+        type: "switch",
       };
     }
     case "fork": {
-      return { type: "fork", entryID: text(value.entryID, "entry ID", 128) };
+      return { entryID: text(value.entryID, "entry ID", 128), type: "fork" };
     }
     default: {
       throw new RequestError(400, "Unknown command");
@@ -182,7 +182,7 @@ function modelInfo(model: Model<Api>): PiModel {
 
 function content(value: unknown): PiContent[] {
   if (typeof value === "string") {
-    return [{ type: "text", text: value }];
+    return [{ text: value, type: "text" }];
   }
   if (!Array.isArray(value)) {
     return [];
@@ -192,17 +192,17 @@ function content(value: unknown): PiContent[] {
       return [];
     }
     if (part.type === "text" && typeof part.text === "string") {
-      return [{ type: "text", text: part.text }];
+      return [{ text: part.text, type: "text" }];
     }
     if (part.type === "thinking" && typeof part.thinking === "string") {
-      return [{ type: "thinking", thinking: part.thinking }];
+      return [{ thinking: part.thinking, type: "thinking" }];
     }
     if (
       part.type === "image" &&
       typeof part.data === "string" &&
       typeof part.mimeType === "string"
     ) {
-      return [{ type: "image", data: part.data, mimeType: part.mimeType }];
+      return [{ data: part.data, mimeType: part.mimeType, type: "image" }];
     }
     if (
       part.type === "toolCall" &&
@@ -211,12 +211,12 @@ function content(value: unknown): PiContent[] {
     ) {
       return [
         {
-          type: "toolCall",
-          id: part.id,
-          name: part.name,
           arguments: object(part.arguments)
             ? structuredClone(part.arguments)
             : {},
+          id: part.id,
+          name: part.name,
+          type: "toolCall",
         },
       ];
     }
@@ -471,7 +471,7 @@ class MobileBridge {
       clearTimeout(this.sessionTimer);
       this.sessionTimer = setTimeout(() => {
         if (this.context && !this.closed) {
-          this.emit({ type: "session", session: this.session() });
+          this.emit({ session: this.session(), type: "session" });
         }
       }, 0);
     }
@@ -570,7 +570,7 @@ class MobileBridge {
     clearTimeout(this.flushTimer);
     this.flushTimer = undefined;
     for (const message of this.dirtyMessages.values()) {
-      this.emit({ type: "message", message });
+      this.emit({ message, type: "message" });
     }
     this.dirtyMessages.clear();
   }
@@ -636,9 +636,9 @@ class MobileBridge {
         this.customMessages.delete(alias);
         if (entry.display) {
           messages.push({
+            content: content(entry.content),
             id: alias,
             role: "custom",
-            content: content(entry.content),
             timestamp,
           });
         }
@@ -652,8 +652,8 @@ class MobileBridge {
         if (part.type === "toolCall") {
           tools.set(part.id, {
             id: part.id,
-            name: part.name,
             input: part.arguments,
+            name: part.name,
             status: session.idle ? "error" : "running",
           });
         }
@@ -1059,7 +1059,7 @@ class MobileBridge {
           onComplete: () => this.compaction(this.current(), false),
           onError: () => this.compaction(this.current(), false),
         });
-        this.emit({ type: "session", session: this.session() });
+        this.emit({ session: this.session(), type: "session" });
         return;
       }
       case "model": {

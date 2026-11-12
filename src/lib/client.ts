@@ -314,11 +314,12 @@ async function connectWithSignal(
     paired = await Promise.any(checks);
   } catch (error) {
     const failure = pairingFailure(error);
-    if (isConnectionUnauthorized(failure))
+    if (isConnectionUnauthorized(failure)) {
       throw new Error(
         "The server rejected the paired connection. Create a new pairing link on your computer.",
         { cause: error }
       );
+    }
     throw failure;
   }
   if (paired.connection.url === allowed[0]) {

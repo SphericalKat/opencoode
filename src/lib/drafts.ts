@@ -12,7 +12,7 @@ export type ChatDraft = {
 function storageKey(key: string) {
   let hash = 2_166_136_261;
   for (let index = 0; index < key.length; index++) {
-    hash = Math.imul(hash ^ key.charCodeAt(index), 16777619);
+    hash = Math.imul(hash ^ key.charCodeAt(index), 16_777_619);
   }
   return `opencoode-draft-${encodeURIComponent(key).slice(0, 140)}-${(hash >>> 0).toString(16)}`;
 }

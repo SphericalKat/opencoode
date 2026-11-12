@@ -105,7 +105,9 @@ function Terminals(props: Props) {
         capabilityKnown.current = true;
       })
       .catch((error_) => {
-        if (!controller.signal.aborted) setError(errorMessage(error_));
+        if (!controller.signal.aborted) {
+          setError(errorMessage(error_));
+        }
       });
     return () => {
       mounted.current = false;
@@ -131,7 +133,9 @@ function Terminals(props: Props) {
       );
       setSessionCursor(result.cursor.next ?? undefined);
     } catch (error_) {
-      if (mounted.current) setError(errorMessage(error_));
+      if (mounted.current) {
+        setError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current) {
         setLoading(false);
@@ -308,7 +312,9 @@ function TerminalList({
             null)
       );
     } catch (error_) {
-      if (!controller.signal.aborted) setError(errorMessage(error_));
+      if (!controller.signal.aborted) {
+        setError(errorMessage(error_));
+      }
     } finally {
       if (!controller.signal.aborted) {
         setLoading(false);
@@ -405,7 +411,9 @@ function TerminalList({
         }
       }
     })().catch((error_) => {
-      if (!controller.signal.aborted) setError(errorMessage(error_));
+      if (!controller.signal.aborted) {
+        setError(errorMessage(error_));
+      }
     });
     return () => {
       controller.abort();
@@ -450,7 +458,9 @@ function TerminalList({
       );
       setSelectedID(terminal.id);
     } catch (error_) {
-      if (mounted.current) setError(errorMessage(error_));
+      if (mounted.current) {
+        setError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current) {
         setBusy(false);
@@ -481,13 +491,15 @@ function TerminalList({
       if (mode === "desktop") {
         await client.experimental.persistentPty.remove({ ptyID: selectedID });
       } else {
-        await client.pty.remove({ ptyID: selectedID, location: { directory } });
+        await client.pty.remove({ location: { directory }, ptyID: selectedID });
       }
       if (mounted.current) {
         await refresh();
       }
     } catch (error_) {
-      if (mounted.current) setError(errorMessage(error_));
+      if (mounted.current) {
+        setError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current) {
         setBusy(false);
@@ -1121,7 +1133,9 @@ function TerminalSession({
           { signal: requestController.signal }
         )
         .catch((error_) => {
-          if (!requestController.signal.aborted) setError(errorMessage(error_));
+          if (!requestController.signal.aborted) {
+            setError(errorMessage(error_));
+          }
         });
     }, 120);
     return () => {
@@ -1173,7 +1187,9 @@ function TerminalSession({
       }
       return true;
     } catch (error_) {
-      if (reportError) setError(errorMessage(error_));
+      if (reportError) {
+        setError(errorMessage(error_));
+      }
       return false;
     }
   }

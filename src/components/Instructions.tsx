@@ -58,8 +58,9 @@ export function Instructions({
         setEntries(result);
       }
     } catch (error_) {
-      if (mounted.current && request === sequence.current)
+      if (mounted.current && request === sequence.current) {
         setError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current && request === sequence.current) {
         setLoading(false);
@@ -94,8 +95,9 @@ export function Instructions({
       setJson(false);
       await refresh();
     } catch (error_) {
-      if (owner === scope.current && mounted.current)
+      if (owner === scope.current && mounted.current) {
         setError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current) {
         setBusy(false);
@@ -170,7 +172,7 @@ export function Instructions({
                     mounted.current
                   ) {
                     await client.experimental.session.instructions.entry.remove(
-                      { sessionID, key: entry.key }
+                      { key: entry.key, sessionID }
                     );
                   }
                 });

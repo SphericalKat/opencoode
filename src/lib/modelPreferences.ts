@@ -178,8 +178,8 @@ export function useModelPreferences(serverID: string) {
         ) {
           setState((current) => ({
             ...current,
-            loading: false,
             error: failureMessage(error, "load"),
+            loading: false,
           }));
         }
       });
@@ -218,9 +218,9 @@ export function useModelPreferences(serverID: string) {
         ) {
           setState((current) => ({
             ...current,
+            error: failureMessage(error, "save"),
             loading: false,
             saving: false,
-            error: failureMessage(error, "save"),
           }));
         }
       }
@@ -265,18 +265,18 @@ export function useModelPreferences(serverID: string) {
     ? state.serverID === serverID
       ? state
       : {
-          favoriteIDs: [],
-          recentIDs: [],
-          loading: true,
-          saving: false,
           error: null,
+          favoriteIDs: [],
+          loading: true,
+          recentIDs: [],
+          saving: false,
         }
     : {
-        favoriteIDs: [],
-        recentIDs: [],
-        loading: false,
-        saving: false,
         error: null,
+        favoriteIDs: [],
+        loading: false,
+        recentIDs: [],
+        saving: false,
       };
   return {
     error: current.error,

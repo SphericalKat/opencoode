@@ -473,18 +473,20 @@ const Block = memo(
     const { token, children } = node;
     const prose = [styles.text, muted && styles.muted];
     switch (token.type) {
-      case "inline":
+      case "inline": {
         return (
           <Text selectable={selectable} style={prose}>
             <Inline nodes={children} />
           </Text>
         );
-      case "paragraph_open":
+      }
+      case "paragraph_open": {
         return (
           <View style={styles.paragraph}>
             <Blocks nodes={children} muted={muted} />
           </View>
         );
+      }
       case "heading_open": {
         const level = Number(token.tag.slice(1));
         const fontSize =
@@ -509,19 +511,21 @@ const Block = memo(
         );
       }
       case "fence":
-      case "code_block":
+      case "code_block": {
         return (
           <Code
             code={token.content}
             language={token.info.trim().split(/\s+/)[0]}
           />
         );
-      case "blockquote_open":
+      }
+      case "blockquote_open": {
         return (
           <View style={styles.quote}>
             <Blocks nodes={children} muted={muted} />
           </View>
         );
+      }
       case "bullet_list_open":
       case "ordered_list_open": {
         const start = Number(token.attrGet("start") || 1);
@@ -547,11 +551,13 @@ const Block = memo(
           </View>
         );
       }
-      case "hr":
+      case "hr": {
         return <View style={styles.rule} />;
-      case "table_open":
+      }
+      case "table_open": {
         return <MarkdownTable node={node} muted={muted} />;
-      default:
+      }
+      default: {
         return children.length ? (
           <View style={styles.group}>
             <Blocks nodes={children} muted={muted} />
@@ -561,6 +567,7 @@ const Block = memo(
             {token.content}
           </Text>
         ) : null;
+      }
     }
   },
   (previous, next) =>

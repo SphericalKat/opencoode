@@ -21,7 +21,7 @@ const model = {
   cost: { input: 0, output: 0 },
   enabled: true,
   id: "demo-model",
-  limit: { context: 200000, output: 32000 },
+  limit: { context: 200_000, output: 32_000 },
   name: "Sample Model",
   providerID: "openai",
   variants: ["low", "medium", "high", "xhigh"].map((id) => ({ id })),
@@ -36,16 +36,9 @@ const session = {
   tokens: { cache: { read: 0, write: 0 }, input: 0, output: 0, reasoning: 0 },
 };
 const backend: any = {
-  async *subscribe({ signal }: { signal?: AbortSignal }) {
-    await new Promise<void>((resolve) => {
-      if (signal?.aborted) resolve();
-      else signal?.addEventListener("abort", () => resolve(), { once: true });
-    });
-  },
-  kind: "pi",
   capabilities: { defaultVariant: true },
   core: {
-    message: { list: async () => ({ data: [], cursor: {} }) },
+    message: { list: async () => ({ cursor: {}, data: [] }) },
     model: { list: async () => ({ data: [model] }) },
     session: {
       active: async () => ({}),
@@ -57,6 +50,16 @@ const backend: any = {
       switchModel: async () => {},
       update: async () => {},
     },
+  },
+  kind: "pi",
+  async *subscribe({ signal }: { signal?: AbortSignal }) {
+    await new Promise<void>((resolve) => {
+      if (signal?.aborted) {
+        resolve();
+      } else {
+        signal?.addEventListener("abort", () => resolve(), { once: true });
+      }
+    });
   },
 };
 function Content() {

@@ -208,7 +208,9 @@ export function ProjectDirectoryBrowser({
         setNotice(`Git initialized in ${location.project.directory}`);
       }
     } catch (error_) {
-      if (!controller.signal.aborted) setActionError(errorMessage(error_));
+      if (!controller.signal.aborted) {
+        setActionError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current) {
         setInitializing(false);

@@ -47,33 +47,33 @@ function Demo() {
     agent: "build",
     content: [
       {
-        type: "tool",
         id: "capture",
         name: "screenshot",
-        time: { created: 1 },
         state: {
-          status: "completed",
-          input: {},
           content: [
-            { type: "text", text: "Screenshot captured successfully" },
+            { text: "Screenshot captured successfully", type: "text" },
             ...files.map((name) => ({
-              type: "file" as const,
-              name,
               mime,
+              name,
+              type: "file" as const,
               uri: ["unavailable", "loading", "undecodable"].includes(scenario)
                 ? `${location.origin}/fixture-image.png`
                 : `data:image/png;base64,${png}`,
             })),
             {
-              type: "file",
-              name: "report.txt",
               mime: "text/plain",
+              name: "report.txt",
+              type: "file",
               uri: "data:text/plain,report",
             },
           ],
+          input: {},
+          status: "completed",
         },
+        time: { created: 1 },
+        type: "tool",
       },
-      { type: "text", text: "The screenshot is ready for review." },
+      { text: "The screenshot is ready for review.", type: "text" },
     ],
     id: "assistant",
     model: { id: "model", providerID: "provider" },
@@ -89,16 +89,16 @@ function Demo() {
         name: "read",
         state: {
           ...first.state,
-          status: "completed",
-          input: { path: "/project/result.png" },
           content: [
             {
-              type: "file",
-              name: "Result.png",
               mime: "image/png",
+              name: "Result.png",
+              type: "file",
               uri: `data:image/png;base64,${png}`,
             },
           ],
+          input: { path: "/project/result.png" },
+          status: "completed",
         },
       });
     }

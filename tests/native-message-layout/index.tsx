@@ -44,7 +44,7 @@ function Demo() {
       (globalThis as ProbeGlobal).repro45Measure?.();
       if (phase === "attachment") {
         attachment.current?.measureInWindow((x, y, w, h) =>
-          console.log("REPRO45_ATTACHMENT", JSON.stringify({ x, y, w, h }))
+          console.log("REPRO45_ATTACHMENT", JSON.stringify({ h, w, x, y }))
         );
       }
       next.current?.measureInWindow((x, y, w, h) =>
@@ -55,11 +55,13 @@ function Demo() {
     (async () => {
       for (const b of [true, false]) {
         for (const w of [393, 360, 320]) {
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           setWidth(w);
           setBeta(b);
           setItems([{ id: `initial-${w}-${b}`, target: true }, ...fillers]);
-          list.current?.scrollToOffset({ offset: 0, animated: false });
+          list.current?.scrollToOffset({ animated: false, offset: 0 });
           await delay(1200);
           await measure(w, b, "initial");
           setItems((previous) => [
@@ -71,11 +73,11 @@ function Demo() {
           list.current?.scrollToEnd({ animated: false });
           await delay(1200);
           await measure(w, b, "send");
-          list.current?.scrollToOffset({ offset: 0, animated: false });
+          list.current?.scrollToOffset({ animated: false, offset: 0 });
           await delay(1200);
           console.log(
             "REPRO45_AWAY",
-            JSON.stringify({ w, b, offset: offset.current })
+            JSON.stringify({ b, offset: offset.current, w })
           );
           list.current?.scrollToEnd({ animated: false });
           await delay(1200);

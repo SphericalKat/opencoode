@@ -121,7 +121,9 @@ function Commands({
           );
         }
       } catch (error_) {
-        if (!controller.signal.aborted) setError(errorMessage(error_));
+        if (!controller.signal.aborted) {
+          setError(errorMessage(error_));
+        }
       } finally {
         if (listRequest.current === controller) {
           listRequest.current = undefined;
@@ -179,14 +181,16 @@ function Commands({
         );
         if (!controller.signal.aborted) {
           setPage({
-            start,
-            output: result.data.output,
             cursor: result.data.cursor,
+            output: result.data.output,
             size: result.data.size,
+            start,
           });
         }
       } catch (error_) {
-        if (!controller.signal.aborted) setOutputError(errorMessage(error_));
+        if (!controller.signal.aborted) {
+          setOutputError(errorMessage(error_));
+        }
       } finally {
         if (outputRequest.current === controller) {
           outputRequest.current = undefined;
@@ -302,8 +306,9 @@ function Commands({
       setPage(undefined);
       await refresh();
     } catch (error_) {
-      if (mounted.current && owner === generation.current)
+      if (mounted.current && owner === generation.current) {
         setOutputError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current && owner === generation.current) {
         setStopping(false);

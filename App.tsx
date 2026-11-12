@@ -110,7 +110,7 @@ export default function App() {
     Inter: require("./assets/fonts/Inter.ttf"),
   });
   if (!fontsReady && !fontError) {
-    return <View style={{ flex: 1, backgroundColor: "#080808" }} />;
+    return <View style={{ backgroundColor: "#080808", flex: 1 }} />;
   }
   return (
     <SafeAreaProvider>
@@ -362,8 +362,9 @@ function MobileApp() {
                       signal.aborted ||
                       !workspace?.directory ||
                       !isLocationNotFoundError(error_)
-                    )
+                    ) {
                       throw error_;
+                    }
                     restoredSessionID = undefined;
                     return nextClient!.location.get(undefined, { signal });
                   })
@@ -475,7 +476,9 @@ function MobileApp() {
         }
       })
       .catch((error_) => {
-        if (live) setError(errorMessage(error_));
+        if (live) {
+          setError(errorMessage(error_));
+        }
       })
       .finally(() => {
         if (live) {
@@ -663,7 +666,9 @@ function MobileApp() {
         setPendingLocation(null);
         return next;
       } catch (error_) {
-        if (current()) setError(errorMessage(error_));
+        if (current()) {
+          setError(errorMessage(error_));
+        }
         return null;
       }
     })();
@@ -730,7 +735,9 @@ function MobileApp() {
         }
         return true;
       } catch (error_) {
-        if (current()) setError(errorMessage(error_));
+        if (current()) {
+          setError(errorMessage(error_));
+        }
         return false;
       } finally {
         if (current()) {
@@ -778,7 +785,9 @@ function MobileApp() {
       setBetaHome(false);
       setRevision((value) => value + 1);
     } catch (error_) {
-      if (current()) setError(errorMessage(error_));
+      if (current()) {
+        setError(errorMessage(error_));
+      }
     } finally {
       creatingSessionRef.current = false;
       setCreatingSession(false);
@@ -895,7 +904,9 @@ function MobileApp() {
         setProjects(result);
       }
     } catch (error_) {
-      if (activeRef.current === owner) setProjectError(errorMessage(error_));
+      if (activeRef.current === owner) {
+        setProjectError(errorMessage(error_));
+      }
     } finally {
       if (activeRef.current === owner) {
         setProjectBusy(false);
@@ -1095,7 +1106,9 @@ function MobileApp() {
           void probe();
         }, 5000);
       } catch (error_) {
-        if (!current()) return;
+        if (!current()) {
+          return;
+        }
         failures += 1;
         const unauthorized =
           isUnauthorizedError(error_) ||
@@ -1105,8 +1118,9 @@ function MobileApp() {
             typeof error_.cause === "object" &&
             "status" in error_.cause &&
             error_.cause.status === 401);
-        if (unauthorized || failures >= 2)
+        if (unauthorized || failures >= 2) {
           recoverConnection.current(owner, error_);
+        }
         timer = setTimeout(
           () => {
             void probe();
@@ -1160,8 +1174,9 @@ function MobileApp() {
       }
       changeDirectory(location.directory);
     } catch (error_) {
-      if (activeRef.current === owner && request === epoch.current)
+      if (activeRef.current === owner && request === epoch.current) {
         setProjectError(errorMessage(error_));
+      }
     } finally {
       if (activeRef.current === owner && request === epoch.current) {
         setProjectBusy(false);
@@ -1251,8 +1266,9 @@ function MobileApp() {
         activeRef.current === owner &&
         epoch.current === request &&
         selection.current === navigation
-      )
+      ) {
         setError(errorMessage(error_));
+      }
       return false;
     }
   }

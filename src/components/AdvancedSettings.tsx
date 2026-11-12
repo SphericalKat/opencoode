@@ -89,13 +89,14 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
         setInfo(result.data);
       }
     } catch (error_) {
-      if (active.current)
+      if (active.current) {
         setError(
           error_ instanceof ClientError &&
             error_.reason === "UnsupportedContentType"
             ? "Usage limits require OpenCode 2.2.1 or later. Update your server to use this view."
             : errorMessage(error_)
         );
+      }
     } finally {
       if (active.current) {
         setLoading(false);
@@ -230,7 +231,9 @@ function WebSearch({
         }
       })
       .catch((error_) => {
-        if (active.current) setError(errorMessage(error_));
+        if (active.current) {
+          setError(errorMessage(error_));
+        }
       });
     return () => {
       active.current = false;
@@ -253,8 +256,9 @@ function WebSearch({
         setResults(result.data.results);
       }
     } catch (error_) {
-      if (active.current && !abort.signal.aborted)
+      if (active.current && !abort.signal.aborted) {
         setError(errorMessage(error_));
+      }
     } finally {
       if (active.current && !abort.signal.aborted) {
         setBusy(false);
@@ -376,7 +380,9 @@ function Generate({
         }
       })
       .catch((error_) => {
-        if (active.current) setError(errorMessage(error_));
+        if (active.current) {
+          setError(errorMessage(error_));
+        }
       });
     return () => {
       active.current = false;
@@ -433,13 +439,14 @@ function Generate({
         }
       }
     } catch (error_) {
-      if (active.current && !abort.signal.aborted)
+      if (active.current && !abort.signal.aborted) {
         setError(
           error_ instanceof ClientError &&
             error_.reason === "UnsupportedContentType"
             ? "Standalone generation requires OpenCode 2.2.1 or later. Update your server to use this feature."
             : errorMessage(error_)
         );
+      }
     } finally {
       if (active.current && !abort.signal.aborted) {
         setBusy(false);

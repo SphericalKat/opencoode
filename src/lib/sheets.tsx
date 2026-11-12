@@ -104,7 +104,9 @@ export function useNativePresentation() {
   const sequence = useRef(0);
   return useCallback(
     async <T,>(operation: () => Promise<T>): Promise<T> => {
-      if (Platform.OS === "web") return operation();
+      if (Platform.OS === "web") {
+        return operation();
+      }
       const presentation = `${id}:native:${++sequence.current}`;
       presentSheet(presentation);
       try {

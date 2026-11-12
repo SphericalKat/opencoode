@@ -23,8 +23,8 @@ test("configuration preserves a newer server file instead of overwriting it", as
             write: async () => {
               writes++;
               return {
-                location: { directory: "/project" },
                 data: { path: "/project/opencode.jsonc" },
+                location: { directory: "/project" },
               };
             },
           },
@@ -53,8 +53,8 @@ test("new configuration refuses to overwrite a file created after the editor ope
             write: async () => {
               writes++;
               return {
-                location: { directory: "/project" },
                 data: { path: "/project/opencode.jsonc" },
+                location: { directory: "/project" },
               };
             },
           },
@@ -80,8 +80,8 @@ test("configuration validates before reading or writing and saves the exact edit
         write: async (input: { payload: Uint8Array }) => {
           written.push(input.payload);
           return {
-            location: { directory: "/project" },
             data: { path: "/project/opencode.jsonc" },
+            location: { directory: "/project" },
           };
         },
       },

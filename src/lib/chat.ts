@@ -9,7 +9,9 @@ export function mergeMessages(
 ): SessionMessageInfo[] {
   const messages = new Map<string, SessionMessageInfo>();
   for (const page of pages) {
-    for (const message of page) messages.set(message.id, message);
+    for (const message of page) {
+      messages.set(message.id, message);
+    }
   }
   return [...messages.values()].sort(
     (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id)
@@ -27,11 +29,11 @@ export function parseComposer(
 ): ComposerSubmission {
   const trimmed = text.trim();
   if (trimmed.startsWith("!") && trimmed.slice(1).trim()) {
-    return { type: "shell", command: trimmed.slice(1).trim() };
+    return { command: trimmed.slice(1).trim(), type: "shell" };
   }
   const command = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
   if (command && commandNames.includes(command[1])) {
-    return { type: "command", name: command[1], text: command[2] ?? "" };
+    return { name: command[1], text: command[2] ?? "", type: "command" };
   }
   return { text: trimmed, type: "prompt" };
 }
@@ -149,8 +151,8 @@ export function projectLiveEvents(
         if (fragment(kind, event.data.ordinal) < 0) {
           mutable().content.push(
             kind === "reasoning"
-              ? { type: kind, text: "", time: { created: event.created } }
-              : { type: kind, text: "" }
+              ? { text: "", time: { created: event.created }, type: kind }
+              : { text: "", type: kind }
           );
         }
         break;
@@ -184,8 +186,8 @@ export function projectLiveEvents(
             event.type === "session.reasoning.ended"
               ? {
                   time: {
-                    created: part.time?.created ?? event.created,
                     completed: event.created,
+                    created: part.time?.created ?? event.created,
                   },
                 }
               : {}),
@@ -200,11 +202,11 @@ export function projectLiveEvents(
           )
         ) {
           mutable().content.push({
-            type: "tool",
             id: event.data.id,
             name: event.data.name,
-            state: { status: "streaming", input: "" },
+            state: { input: "", status: "streaming" },
             time: { created: event.created },
+            type: "tool",
           });
         }
         break;
@@ -241,15 +243,15 @@ export function projectLiveEvents(
           tool.state.status === "streaming"
         ) {
           tool.state = {
-            status: "streaming",
             input: tool.state.input + event.data.delta,
+            status: "streaming",
           };
         }
         if (
           event.type === "session.tool.input.ended" &&
           tool.state.status === "streaming"
         ) {
-          tool.state = { status: "streaming", input: event.data.text };
+          tool.state = { input: event.data.text, status: "streaming" };
         }
         if (event.type === "session.tool.called") {
           tool.executed = event.data.executed;
@@ -312,8 +314,8 @@ export function projectLiveEvents(
       }
       case "session.retry.scheduled": {
         mutable().retry = {
-          attempt: event.data.attempt,
           at: event.data.at,
+          attempt: event.data.attempt,
           error: event.data.error,
         };
         break;

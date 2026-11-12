@@ -140,7 +140,9 @@ function PiWorkspaceSession({
     }
     const controller = new AbortController();
     void refreshSession(controller.signal).catch((error_) => {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        return;
+      }
       setError(errorMessage(error_));
       lostConnection.current(error_);
     });
@@ -158,15 +160,17 @@ function PiWorkspaceSession({
         if (!controller.signal.aborted) {
           setRecent(
             value.map((item) => ({
+              directory: item.cwd,
               id: item.id,
               title: item.name || "New session",
-              directory: item.cwd,
             }))
           );
         }
       })
       .catch((error_) => {
-        if (!controller.signal.aborted) setError(errorMessage(error_));
+        if (!controller.signal.aborted) {
+          setError(errorMessage(error_));
+        }
       });
     return () => controller.abort();
   }, [client, foreground, navigationOpen]);
@@ -210,7 +214,9 @@ function PiWorkspaceSession({
         await refreshSession();
       }
     } catch (error_) {
-      if (alive.current) setError(errorMessage(error_));
+      if (alive.current) {
+        setError(errorMessage(error_));
+      }
     } finally {
       operation.current = false;
       if (alive.current) {
@@ -237,10 +243,12 @@ function PiWorkspaceSession({
       if (info.session.id === id) {
         recordSession(await backend.core.session.get({ sessionID: id }));
       } else {
-        await changeSession({ type: "switch", sessionID: id });
+        await changeSession({ sessionID: id, type: "switch" });
       }
     })().catch((error_) => {
-      if (alive.current) setError(errorMessage(error_));
+      if (alive.current) {
+        setError(errorMessage(error_));
+      }
     });
   };
   const afterNavigation = (action: () => void) => {
@@ -259,8 +267,8 @@ function PiWorkspaceSession({
     if (current) {
       setPanelRequest({
         id: ++requestID.current,
-        sessionID: current.id,
         panel: "actions",
+        sessionID: current.id,
       });
     }
   };
@@ -334,7 +342,9 @@ function PiWorkspaceSession({
                 onSessionInfo={recordSession}
                 onSessionChanged={() => {
                   void refreshSession().catch((error_) => {
-                    if (alive.current) setError(errorMessage(error_));
+                    if (alive.current) {
+                      setError(errorMessage(error_));
+                    }
                   });
                 }}
                 onOpenSession={openChatSession}

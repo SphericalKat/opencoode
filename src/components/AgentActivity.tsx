@@ -40,7 +40,9 @@ export const AgentActivityBar = memo(
     const [showError, setShowError] = useState(false);
     useEffect(() => {
       setShowError(false);
-      if (!retry || !animate) return;
+      if (!retry || !animate) {
+        return;
+      }
       setNow(Date.now());
       const timer = setInterval(() => setNow(Date.now()), 1000);
       return () => clearInterval(timer);
@@ -70,12 +72,15 @@ export const AgentActivityBar = memo(
             : activity.label;
     const lastAnnouncement = useRef(announcement);
     useEffect(() => {
-      if (lastAnnouncement.current === announcement) return;
+      if (lastAnnouncement.current === announcement) {
+        return;
+      }
       lastAnnouncement.current = announcement;
-      if (animate && Platform.OS !== "web")
+      if (animate && Platform.OS !== "web") {
         AccessibilityInfo.announceForAccessibility(
           announcement || "Agent is ready"
         );
+      }
     }, [announcement, animate]);
     const needsAttention =
       blocked || (connected && !stopping && activity.kind === "error");

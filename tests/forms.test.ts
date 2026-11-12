@@ -39,7 +39,7 @@ test("multiselect conditions require an answer and check membership", () => {
   const fields: FormField[] = [
     {
       key: "choices",
-      options: [{ value: "a", label: "A" }],
+      options: [{ label: "A", value: "a" }],
       type: "multiselect",
     },
     {
@@ -83,7 +83,7 @@ test("forms reject invalid numeric and restricted choice answers", () => {
     { key: "count", maximum: 3, minimum: 1, type: "integer" },
     {
       key: "choice",
-      options: [{ value: "allowed", label: "Allowed" }],
+      options: [{ label: "Allowed", value: "allowed" }],
       type: "string",
     },
     {

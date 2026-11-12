@@ -125,7 +125,7 @@ test("chat updates the right concurrent tool and preserves the terminal result",
       ...base,
       data: {
         ...owned,
-        content: [{ type: "text", text: "Contents" }],
+        content: [{ text: "Contents", type: "text" }],
         executed: true,
         id: "one",
       },
@@ -141,15 +141,15 @@ test("chat updates the right concurrent tool and preserves the terminal result",
   assert.equal(first.type, "tool");
   if (first.type === "tool") {
     assert.deepEqual(first.state, {
-      status: "completed",
+      content: [{ text: "Contents", type: "text" }],
       input: { path: "a" },
-      content: [{ type: "text", text: "Contents" }],
       metadata: undefined,
+      status: "completed",
     });
   }
   assert.equal(second.type, "tool");
   if (second.type === "tool") {
-    assert.deepEqual(second.state, { status: "streaming", input: "" });
+    assert.deepEqual(second.state, { input: "", status: "streaming" });
   }
 });
 

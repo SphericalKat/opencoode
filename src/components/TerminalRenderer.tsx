@@ -31,7 +31,7 @@ export const TerminalRenderer = forwardRef<
     <WebView<object>
       ref={view}
       source={source}
-      style={{ flex: 1, backgroundColor: colors.bg }}
+      style={{ backgroundColor: colors.bg, flex: 1 }}
       originWhitelist={["*"]}
       onShouldStartLoadWithRequest={(request) => request.url === "about:blank"}
       onMessage={(event) => {
@@ -42,10 +42,13 @@ export const TerminalRenderer = forwardRef<
             typeof data !== "object" ||
             !("channel" in data) ||
             data.channel !== "opencoode-terminal"
-          )
+          ) {
             return;
+          }
           const parsed = terminalEvent(data);
-          if (parsed) onEvent(parsed);
+          if (parsed) {
+            onEvent(parsed);
+          }
         } catch {
           return;
         }

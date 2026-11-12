@@ -426,7 +426,7 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
 
     await client.session.update({
       permissions: [
-        { action: "integration.review", resource: "*", effect: "ask" },
+        { action: "integration.review", effect: "ask", resource: "*" },
       ],
       sessionID: session.id,
     });

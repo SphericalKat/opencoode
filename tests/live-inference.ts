@@ -152,15 +152,15 @@ try {
   console.log(
     JSON.stringify({
       cheapestConnected: connectedModels.slice(0, 12).map((model) => ({
-        providerID: model.providerID,
         id: model.id,
         perMillionTokens: rates(model),
+        providerID: model.providerID,
       })),
       connectedProviders: [...connectedProviders],
       defaultModel: defaultModel.data && {
-        providerID: defaultModel.data.providerID,
         id: defaultModel.data.id,
         perMillionTokens: rates(defaultModel.data),
+        providerID: defaultModel.data.providerID,
       },
       enabledChatModels: models.length,
       integrationConnections: integrations.data
@@ -197,10 +197,10 @@ try {
       ["none", "minimal", "low"].includes(item.id)
     )?.id;
     const session = await client.session.create({
-      title: "Live mobile connection verification",
       location: { directory },
       model: { id: model.id, providerID: model.providerID, variant },
-      permissions: [{ action: "*", resource: "*", effect: "deny" }],
+      permissions: [{ action: "*", effect: "deny", resource: "*" }],
+      title: "Live mobile connection verification",
     });
     sessionID = session.id;
     const events: OpenCodeEvent[] = [];
@@ -214,24 +214,31 @@ try {
         for await (const event of client!.event.subscribe({
           signal: stream.signal,
         })) {
-          if (event.type === "server.connected") connected = true;
+          if (event.type === "server.connected") {
+            connected = true;
+          }
           if (
             !("sessionID" in event.data) ||
             event.data.sessionID !== session.id
-          )
+          ) {
             continue;
+          }
           events.push(event);
           projected = projectLiveEvent(projected, event, session.id);
-          if (event.type === "session.execution.failed")
+          if (event.type === "session.execution.failed") {
             executionError = event.data.error;
+          }
           if (
             event.type === "session.execution.succeeded" ||
             event.type === "session.execution.failed"
-          )
+          ) {
             finished = true;
+          }
         }
       } catch (error) {
-        if (!stream.signal.aborted) eventError = error;
+        if (!stream.signal.aborted) {
+          eventError = error;
+        }
       }
     })();
     await until(() => connected, "SSE connection");
@@ -241,7 +248,9 @@ try {
     });
     await until(
       () => {
-        if (eventError) throw eventError;
+        if (eventError) {
+          throw eventError;
+        }
         if (executionError) {
           const message = executionError.message
             .replace(/(?:Bearer|Basic)\s+\S+/gi, "[redacted]")
@@ -250,7 +259,7 @@ try {
             .replaceAll(token!, "[redacted]")
             .slice(0, 500);
           throw new Error(
-            `Server inference failure: ${JSON.stringify({ type: executionError.type, status: executionError.status, message })}`
+            `Server inference failure: ${JSON.stringify({ message, status: executionError.status, type: executionError.type })}`
           );
         }
         return finished;
@@ -259,9 +268,9 @@ try {
       90_000
     );
     const history = await client.message.list({
-      sessionID: session.id,
-      order: "asc",
       limit: 20,
+      order: "asc",
+      sessionID: session.id,
     });
     const durable = history.data.filter(
       (message): message is SessionMessageAssistant =>
@@ -290,15 +299,15 @@ try {
     assert.equal(live.finish, durable[0].finish);
     console.log(
       JSON.stringify({
-        result: "PASS",
-        providerID: model.providerID,
-        modelID: model.id,
+        assistantText: text(durable[0]),
         deltaEvents: events.filter(
           (event) => event.type === "session.text.delta"
         ).length,
-        assistantText: text(durable[0]),
+        modelID: model.id,
+        providerID: model.providerID,
         recordedCostUSD: durable[0].cost,
         reducerMatchesDurableMessage: true,
+        result: "PASS",
       })
     );
   } else {

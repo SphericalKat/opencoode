@@ -41,11 +41,12 @@ export async function withSettingsRequest<T>(
     signal.throwIfAborted();
     return result;
   } catch (error) {
-    if (signal.aborted)
+    if (signal.aborted) {
       throw new Error(
         "The request timed out. Check your connection, then refresh before you retry.",
         { cause: error }
       );
+    }
     throw error;
   }
 }

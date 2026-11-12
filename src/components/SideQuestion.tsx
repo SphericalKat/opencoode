@@ -96,8 +96,9 @@ export function SideQuestion({
         mounted.current &&
         current === epoch.current &&
         !controller.signal.aborted
-      )
+      ) {
         setError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current && current === epoch.current) {
         request.current = null;
@@ -117,8 +118,9 @@ export function SideQuestion({
         setCopied(true);
       }
     } catch (error_) {
-      if (mounted.current && current === epoch.current)
+      if (mounted.current && current === epoch.current) {
         setError(errorMessage(error_));
+      }
     }
   };
 

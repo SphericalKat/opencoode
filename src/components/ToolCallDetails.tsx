@@ -134,7 +134,7 @@ function inputSections(
         text(metadata, "diff", "patch") ??
         text(input, "diff", "patch", "patchText");
       if (diff) {
-        return [...file, { label: "Diff", text: diff, diff: true }];
+        return [...file, { diff: true, label: "Diff", text: diff }];
       }
       const before = optionalString(
         input,
@@ -386,8 +386,12 @@ export const ToolCallDetails = memo(
     const outputs = content
       .filter((item) => item.type === "text")
       .map((item) => item.text);
-    if (state.status === "running" && typeof state.metadata.output === "string")
+    if (
+      state.status === "running" &&
+      typeof state.metadata.output === "string"
+    ) {
       outputs.push(state.metadata.output);
+    }
     const output = outputs.join("\n\n");
     const files = content
       .filter((item) => item.type === "file")

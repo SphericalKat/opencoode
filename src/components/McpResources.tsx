@@ -60,7 +60,9 @@ export function McpResources({ client, location, onAttachContext }: Props) {
         setCatalog(result.data);
       }
     } catch (error_) {
-      if (!controller.signal.aborted) setError(errorMessage(error_));
+      if (!controller.signal.aborted) {
+        setError(errorMessage(error_));
+      }
     } finally {
       if (!controller.signal.aborted) {
         setLoading(false);

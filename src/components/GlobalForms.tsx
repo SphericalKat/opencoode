@@ -57,8 +57,9 @@ export function GlobalForms({
         setForms(result.data.filter((form) => form.sessionID === "global"));
         setError(null);
       } catch (error_) {
-        if (!controller.signal.aborted && current === request)
+        if (!controller.signal.aborted && current === request) {
           setError(errorMessage(error_));
+        }
       } finally {
         if (!controller.signal.aborted && current === request) {
           setLoading(false);
@@ -106,7 +107,9 @@ export function GlobalForms({
             throw new Error("The live connection closed");
           }
         } catch (error_) {
-          if (controller.signal.aborted) break;
+          if (controller.signal.aborted) {
+            break;
+          }
           setError(
             `Pending request updates unavailable: ${errorMessage(error_)}`
           );
@@ -123,7 +126,9 @@ export function GlobalForms({
         }
       }
     })().catch((error_) => {
-      if (!controller.signal.aborted) setError(errorMessage(error_));
+      if (!controller.signal.aborted) {
+        setError(errorMessage(error_));
+      }
     });
     return () => {
       controller.abort();

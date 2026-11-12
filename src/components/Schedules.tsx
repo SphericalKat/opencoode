@@ -89,8 +89,9 @@ export function Schedules({
         setItems(schedules);
       }
     } catch (error_) {
-      if (mounted.current && request.current === id)
+      if (mounted.current && request.current === id) {
         setError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current && request.current === id) {
         setLoading(false);
@@ -119,8 +120,9 @@ export function Schedules({
     try {
       await action();
     } catch (error_) {
-      if (mounted.current && owner === scope.current)
+      if (mounted.current && owner === scope.current) {
         setError(errorMessage(error_));
+      }
     } finally {
       if (mounted.current) {
         setBusy(false);

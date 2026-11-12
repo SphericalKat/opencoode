@@ -312,8 +312,9 @@ export function SessionsScreen({
           !signal?.aborted &&
           mounted.current &&
           scope.current.client === client
-        )
+        ) {
           setProjectsError(errorMessage(error_));
+        }
       } finally {
         if (
           !signal?.aborted &&
@@ -446,7 +447,9 @@ export function SessionsScreen({
             throw new Error("The live connection closed");
           }
         } catch (error_) {
-          if (controller.signal.aborted) break;
+          if (controller.signal.aborted) {
+            break;
+          }
           setStreamError(`Live updates unavailable: ${errorMessage(error_)}`);
           await new Promise<void>((resolve) => {
             releaseRetry = resolve;
@@ -461,7 +464,9 @@ export function SessionsScreen({
         }
       }
     })().catch((error_) => {
-      if (!controller.signal.aborted) setStreamError(errorMessage(error_));
+      if (!controller.signal.aborted) {
+        setStreamError(errorMessage(error_));
+      }
     });
     return () => {
       controller.abort();
@@ -489,8 +494,11 @@ export function SessionsScreen({
       await operation();
     } catch (error_) {
       if (mounted.current && owner === scope.current) {
-        if (inSheet) setSheetError(errorMessage(error_));
-        else setError(errorMessage(error_));
+        if (inSheet) {
+          setSheetError(errorMessage(error_));
+        } else {
+          setError(errorMessage(error_));
+        }
       }
     } finally {
       operationPending.current = false;
@@ -725,14 +733,17 @@ export function SessionsScreen({
           if (Platform.OS === "ios") {
             ActionSheetIOS.showActionSheetWithOptions(
               {
-                title: "Session history",
-                options: ["Recent sessions", "Archived sessions", "Cancel"],
                 cancelButtonIndex: 2,
+                options: ["Recent sessions", "Archived sessions", "Cancel"],
+                title: "Session history",
                 userInterfaceStyle: scheme,
               },
               (index) => {
-                if (index < 2) choose(index === 1);
-                else resolve();
+                if (index < 2) {
+                  choose(index === 1);
+                } else {
+                  resolve();
+                }
               }
             );
           } else {
@@ -740,17 +751,18 @@ export function SessionsScreen({
               "Session history",
               undefined,
               [
-                { text: "Recent sessions", onPress: () => choose(false) },
-                { text: "Archived sessions", onPress: () => choose(true) },
-                { text: "Cancel", style: "cancel", onPress: () => resolve() },
+                { onPress: () => choose(false), text: "Recent sessions" },
+                { onPress: () => choose(true), text: "Archived sessions" },
+                { onPress: () => resolve(), style: "cancel", text: "Cancel" },
               ],
               { cancelable: true, onDismiss: () => resolve() }
             );
           }
         })
     ).catch((error_) => {
-      if (mounted.current && scope.current === owner)
+      if (mounted.current && scope.current === owner) {
         setError(errorMessage(error_));
+      }
     });
   };
 

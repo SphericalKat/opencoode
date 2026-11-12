@@ -144,7 +144,9 @@ export function ConnectionFlow({
     void connectRef
       .current(submission[0], submission.slice(1))
       .catch((error_) => {
-        if (live) setLocalError(errorMessage(error_));
+        if (live) {
+          setLocalError(errorMessage(error_));
+        }
       })
       .finally(() => {
         submitting.current = false;
@@ -178,7 +180,7 @@ export function ConnectionFlow({
           setLocalError(
             "The camera is unavailable. Paste a pairing link instead."
           );
-        }, 7_000);
+        }, 7000);
     return () => {
       back.remove();
       appState.remove();
@@ -361,7 +363,9 @@ export function ConnectionFlow({
     try {
       await onRemove(connection);
     } catch (error_) {
-      if (mounted.current) setLocalError(errorMessage(error_));
+      if (mounted.current) {
+        setLocalError(errorMessage(error_));
+      }
     } finally {
       removing.current = null;
       if (mounted.current) {

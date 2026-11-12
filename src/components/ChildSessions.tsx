@@ -89,8 +89,9 @@ export function ChildSessions({
         setCursor(nextCursor);
         setError(undefined);
       } catch (error_) {
-        if (!controller.signal.aborted && request === version)
+        if (!controller.signal.aborted && request === version) {
           setError(errorMessage(error_));
+        }
       } finally {
         if (!controller.signal.aborted && request === version) {
           setLoading(false);
@@ -139,7 +140,9 @@ export function ChildSessions({
           ]);
         })
         .catch((error_) => {
-          if (!controller.signal.aborted) setError(errorMessage(error_));
+          if (!controller.signal.aborted) {
+            setError(errorMessage(error_));
+          }
         })
         .finally(() => {
           paging = false;
@@ -169,7 +172,9 @@ export function ChildSessions({
           );
           await refresh();
         } catch (error_) {
-          if (!controller.signal.aborted) setError(errorMessage(error_));
+          if (!controller.signal.aborted) {
+            setError(errorMessage(error_));
+          }
         } finally {
           if (!controller.signal.aborted) {
             setStoppingID(undefined);
@@ -255,8 +260,9 @@ export function ChildSessions({
                   }
                 })
                 .catch((error_) => {
-                  if (!controller.signal.aborted)
+                  if (!controller.signal.aborted) {
                     setError(errorMessage(error_));
+                  }
                 });
             }
             if (event.type === "session.renamed") {
@@ -284,7 +290,9 @@ export function ChildSessions({
             throw new Error("Child session updates disconnected");
           }
         } catch (error_) {
-          if (controller.signal.aborted) break;
+          if (controller.signal.aborted) {
+            break;
+          }
           setError(errorMessage(error_));
           await new Promise<void>((resolve) => {
             releaseRetry = resolve;
@@ -299,7 +307,9 @@ export function ChildSessions({
         }
       }
     })().catch((error_) => {
-      if (!controller.signal.aborted) setError(errorMessage(error_));
+      if (!controller.signal.aborted) {
+        setError(errorMessage(error_));
+      }
     });
     return () => {
       controller.abort();

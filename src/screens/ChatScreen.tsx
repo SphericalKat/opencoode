@@ -893,7 +893,9 @@ function ChatSession({
           }
         })
         .catch((error_) => {
-          if (!controller.signal.aborted) showError(error_);
+          if (!controller.signal.aborted) {
+            showError(error_);
+          }
         })
         .finally(() => {
           if (!controller.signal.aborted) {
@@ -1085,8 +1087,9 @@ function ChatSession({
           }
         }
         for (const message of next) {
-          if (message.type === "assistant" && touched.has(message.id))
+          if (message.type === "assistant" && touched.has(message.id)) {
             liveMessages.current.set(message.id, message);
+          }
         }
         return next;
       });
@@ -1222,18 +1225,21 @@ function ChatSession({
         }
         if (current()) {
           setSyncErrors((previous) => {
-            if (!previous[scope]) return previous;
+            if (!previous[scope]) {
+              return previous;
+            }
             const next = { ...previous };
             delete next[scope];
             return next;
           });
         }
       } catch (error_) {
-        if (current())
+        if (current()) {
           setSyncErrors((previous) => ({
             ...previous,
             [scope]: errorMessage(error_),
           }));
+        }
       }
     };
     const scheduleScope = (scope: SyncScope) => {
@@ -1459,10 +1465,14 @@ function ChatSession({
           }
         } catch (error_) {
           flushPending();
-          if (controller.signal.aborted) break;
+          if (controller.signal.aborted) {
+            break;
+          }
           setStreamStatus("Reconnecting");
           reportConnectionFailure(error_);
-          if (attempts > 1) setFetchError(errorMessage(error_));
+          if (attempts > 1) {
+            setFetchError(errorMessage(error_));
+          }
           await new Promise<void>((resolve) => {
             retryResolve = resolve;
             retryTimer = setTimeout(
@@ -1593,7 +1603,9 @@ function ChatSession({
         }
       })
       .catch((error_) => {
-        if (!controller.signal.aborted) showError(error_);
+        if (!controller.signal.aborted) {
+          showError(error_);
+        }
       });
     return () => controller.abort();
   }, [
@@ -1629,13 +1641,14 @@ function ChatSession({
         setAttachments((current) =>
           current.some((file) => file.uri === uri)
             ? current
-            : [...current, { uri, name: attachmentPath.split("/").pop() }]
+            : [...current, { name: attachmentPath.split("/").pop(), uri }]
         );
       } else {
-        if (attachmentContext)
+        if (attachmentContext) {
           setDraft((current) =>
             current ? `${current}\n\n${attachmentContext}` : attachmentContext
           );
+        }
       }
       consumedAttachment.current = {
         context: attachmentContext,
@@ -1824,7 +1837,9 @@ function ChatSession({
       try {
         await client.session.interrupt({ sessionID });
       } catch (error_) {
-        if (alive.current) setStopping(false);
+        if (alive.current) {
+          setStopping(false);
+        }
         throw error_;
       }
     });
@@ -2098,15 +2113,15 @@ function ChatSession({
         if (await Sharing.isAvailableAsync()) {
           await withNativePresentation(() =>
             Sharing.shareAsync(file.uri, {
-              mimeType: "application/json",
               dialogTitle: session?.title || "OpenCode session",
+              mimeType: "application/json",
             })
           );
         } else {
           await withNativePresentation(() =>
             Share.share({
-              title: session?.title || "OpenCode session",
               message: content,
+              title: session?.title || "OpenCode session",
             })
           );
         }
@@ -2331,10 +2346,11 @@ function ChatSession({
       if (text) {
         void Clipboard.setStringAsync(text)
           .then(() => {
-            if (alive.current)
+            if (alive.current) {
               setSelectedMessageID((current) =>
                 current === messageID ? null : current
               );
+            }
           })
           .catch(showError);
       }
@@ -2811,11 +2827,11 @@ function ChatSession({
                     styles.composerInput,
                     betaLayout && styles.betaComposerInput,
                     {
-                      minHeight: minimumComposerHeight,
-                      maxHeight: maximumComposerHeight,
                       height: draft
                         ? Math.max(minimumComposerHeight, composerHeight)
                         : minimumComposerHeight,
+                      maxHeight: maximumComposerHeight,
+                      minHeight: minimumComposerHeight,
                     },
                   ]}
                 />
@@ -2953,8 +2969,11 @@ function ChatSession({
                       active && !hasPrompt ? !stopReady || stopping : !hasPrompt
                     }
                     onPress={() => {
-                      if (active && !hasPrompt) void interrupt();
-                      else void send();
+                      if (active && !hasPrompt) {
+                        void interrupt();
+                      } else {
+                        void send();
+                      }
                     }}
                   />
                 </View>
@@ -3687,9 +3706,9 @@ function ChatSession({
                         )
                       ) {
                         await opencodeClient.session.revert.stage({
-                          sessionID,
-                          messageID: actionMessage.id,
                           files: true,
+                          messageID: actionMessage.id,
+                          sessionID,
                         });
                       }
                     }, true);
@@ -4101,8 +4120,10 @@ const MessageRow = memo(
       [onSelect, message.id]
     );
     const separateContent = screenReader || Platform.OS === "web";
-    if (message.type === "idle" && !message.error) return null;
-    if (!onSelect)
+    if (message.type === "idle" && !message.error) {
+      return null;
+    }
+    if (!onSelect) {
       return (
         children ?? (
           <MessageContent
@@ -4113,6 +4134,7 @@ const MessageRow = memo(
           />
         )
       );
+    }
     return (
       <Pressable
         nativeID={`chat-message-${encodeURIComponent(message.id)}${sourceKey ? `:${encodeURIComponent(sourceKey)}` : ""}`}
@@ -4133,8 +4155,8 @@ const MessageRow = memo(
           separateContent
             ? undefined
             : [
-                { name: "activate", label: "Select message" },
-                { name: "longpress", label: "Select message" },
+                { label: "Select message", name: "activate" },
+                { label: "Select message", name: "longpress" },
               ]
         }
         onAccessibilityAction={
@@ -4199,11 +4221,12 @@ const MessageContent = memo(
   }) => {
     const styles = useThemedStyles(createStyles);
     const betaLayout = useBetaLayout();
-    if (message.type === "idle")
+    if (message.type === "idle") {
       return message.error ? (
         <ErrorNotice error={message.error.message} />
       ) : null;
-    if (message.type === "assistant")
+    }
+    if (message.type === "assistant") {
       return (
         <View style={styles.assistant}>
           {message.content.map((part, index) => (
@@ -4232,7 +4255,8 @@ const MessageContent = memo(
             )}
         </View>
       );
-    if (message.type === "user")
+    }
+    if (message.type === "user") {
       return (
         <UserMessageBubble withAttachments={!!message.files?.length}>
           <MessageText text={message.text} selectable={selectable} />
@@ -4244,7 +4268,7 @@ const MessageContent = memo(
               {file.mime.startsWith("image/") && (
                 <Image
                   source={{ uri: `data:${file.mime};base64,${file.data}` }}
-                  style={{ height: 180, width: "100%", borderRadius: 10 }}
+                  style={{ borderRadius: 10, height: 180, width: "100%" }}
                   resizeMode="contain"
                   accessibilityLabel={file.name || "Attached image"}
                 />
@@ -4258,7 +4282,8 @@ const MessageContent = memo(
           ))}
         </UserMessageBubble>
       );
-    if (message.type === "shell")
+    }
+    if (message.type === "shell") {
       return (
         <Disclosure
           disclosureKey={message.id}
@@ -4273,7 +4298,8 @@ const MessageContent = memo(
           )}
         </Disclosure>
       );
-    if (message.type === "compaction")
+    }
+    if (message.type === "compaction") {
       return (
         <Disclosure
           disclosureKey={message.id}
@@ -4285,26 +4311,30 @@ const MessageContent = memo(
           {"error" in message && <ErrorNotice error={message.error.message} />}
         </Disclosure>
       );
-    if (message.type === "agent-switched")
+    }
+    if (message.type === "agent-switched") {
       return (
         <Label muted style={styles.notice}>
           Agent → {message.agent}
         </Label>
       );
-    if (message.type === "model-switched")
+    }
+    if (message.type === "model-switched") {
       return (
         <Label muted style={styles.notice}>
           Model → {message.model.id}
           {message.model.variant ? ` · ${message.model.variant}` : ""}
         </Label>
       );
-    if (message.type === "location-switched")
+    }
+    if (message.type === "location-switched") {
       return (
         <Label muted style={styles.notice}>
           Directory → {message.location.directory}
         </Label>
       );
-    if (message.type === "skill")
+    }
+    if (message.type === "skill") {
       return (
         <Disclosure
           disclosureKey={message.id}
@@ -4313,6 +4343,7 @@ const MessageContent = memo(
           <MessageText text={message.text} selectable={selectable} />
         </Disclosure>
       );
+    }
     return (
       <Disclosure
         disclosureKey={message.id}
