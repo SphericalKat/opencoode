@@ -2,6 +2,26 @@ import React, { createContext, memo, useContext, useMemo, useState } from 'react
 import { Linking, PixelRatio, Platform, ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import MarkdownIt, { type Token } from 'markdown-it';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-kotlin';
+import 'prismjs/components/prism-c';
+import 'prismjs/components/prism-cpp';
+import 'prismjs/components/prism-csharp';
+import 'prismjs/components/prism-go';
+import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-sql';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-markup';
 import { Button, mono, sans } from './ui';
 import { type ThemeColors, useTheme } from '../lib/theme';
 import { MessageActionsContext } from '../lib/messageActions';
@@ -81,7 +101,9 @@ const Inline = memo(function Inline({ nodes }: { nodes: Node[] }) {
 
 const Code = memo(function Code({ code, language }: { code: string; language: string }) {
   const styles = useMarkdownStyles();
+  const { colors } = useTheme();
   const selectable = useContext(SelectionContext);
+  const highlighted = useMemo(() => highlightCode(code, language, colors), [code, language, colors]);
   const [feedback, setFeedback] = useState<{ code: string; failed: boolean }>();
   const currentFeedback = feedback?.code === code ? feedback : undefined;
   return <View style={styles.code}>
@@ -89,9 +111,33 @@ const Code = memo(function Code({ code, language }: { code: string; language: st
       void Clipboard.setStringAsync(code).then(() => setFeedback({ code, failed: false })).catch(() => setFeedback({ code, failed: true }));
     }} /></View>
     {currentFeedback?.failed && <Text selectable={selectable} accessibilityRole="alert" style={styles.copyError}>Copy failed. {selectable ? 'Select the text or try again.' : 'Try again.'}</Text>}
-    <ScrollView horizontal contentContainerStyle={styles.codeContent}><Text selectable={selectable} style={styles.codeText}>{code}</Text></ScrollView>
+    <ScrollView horizontal contentContainerStyle={styles.codeContent}><Text selectable={selectable} style={styles.codeText}>{highlighted ?? code}</Text></ScrollView>
   </View>;
 });
+
+const supportedLanguages: Record<string, string> = { javascript: 'javascript', js: 'javascript', typescript: 'typescript', ts: 'typescript', jsx: 'jsx', tsx: 'tsx', json: 'json', bash: 'bash', sh: 'bash', shell: 'bash', python: 'python', py: 'python', java: 'java', kotlin: 'kotlin', kt: 'kotlin', c: 'c', cpp: 'cpp', 'c++': 'cpp', csharp: 'csharp', 'c#': 'csharp', go: 'go', rust: 'rust', rs: 'rust', sql: 'sql', yaml: 'yaml', yml: 'yaml', css: 'css', html: 'markup', xml: 'markup' };
+
+function highlightCode(code: string, language: string, colors: ThemeColors): React.ReactNode[] | null {
+  const grammar = Prism.languages[supportedLanguages[language.toLowerCase()]];
+  if (!grammar) return null;
+  const colorFor = (type: string) => {
+    if (type === 'comment' || type === 'prolog' || type === 'doctype') return colors.syntaxComment;
+    if (type === 'string' || type === 'char' || type === 'attr-value') return colors.syntaxString;
+    if (type === 'keyword' || type === 'atrule' || type === 'selector') return colors.syntaxKeyword;
+    if (type === 'number' || type === 'boolean') return colors.syntaxNumber;
+    if (type === 'property' || type === 'function' || type === 'attr-name') return colors.syntaxProperty;
+    if (type === 'class-name' || type === 'builtin' || type === 'tag') return colors.syntaxType;
+    if (type === 'constant' || type === 'symbol' || type === 'variable') return colors.syntaxConstant;
+    return undefined;
+  };
+  let key = 0;
+  const flatten = (token: string | Prism.Token, inherited?: string): React.ReactNode[] => {
+    if (typeof token === 'string') return [<Text key={key++} style={inherited ? { color: inherited } : undefined}>{token}</Text>];
+    const color = colorFor(token.type) ?? inherited;
+    return (Array.isArray(token.content) ? token.content : [token.content]).flatMap(child => flatten(child, color));
+  };
+  try { return Prism.tokenize(code, grammar).flatMap(token => flatten(token)); } catch { return null; }
+}
 
 function Blocks({ nodes, muted }: { nodes: Node[]; muted?: boolean }) {
   return nodes.map((node, index) => <Block key={index} node={node} muted={muted} />);

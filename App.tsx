@@ -45,7 +45,7 @@ export default function App() {
 function ThemedStatusBar() {
   const { scheme, colors } = useTheme();
   const betaLayout = useBetaLayout();
-  const background = betaLayout ? scheme === 'dark' ? '#080808' : '#fafafa' : colors.bg;
+  const background = colors.bg;
   useEffect(() => { if (Platform.OS !== 'web') void SystemUI.setBackgroundColorAsync(background); }, [background]);
   return <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />;
 }
@@ -666,7 +666,7 @@ function MobileApp() {
 
   if (booting) return <SafeAreaView style={styles.safe}><View style={styles.boot}><OpenCodeLogo width={160} /><Busy /><Label muted>Restoring your workspace</Label></View></SafeAreaView>;
 
-  return <SafeAreaView style={[styles.safe, betaLayout && tab !== 'settings' && { backgroundColor: scheme === 'dark' ? '#080808' : '#fafafa' }]} edges={['top', 'left', 'right', 'bottom']}>
+  return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
     {active?.backend === 'pi' ? <PiWorkspace key={`${active.id}:${connectionRevision}`} connection={active} foreground={foreground && !connecting} onManageServers={openServers} onConnectionLost={onPiConnectionLost} /> : !client || !active ? <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" automaticOffset><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.onboarding, betaLayout && styles.betaOnboarding]}>
       {!betaLayout && <View style={{ gap: 16, marginBottom: 20 }}><OpenCodeLogo width={180} /><Label muted>Mobile client</Label></View>}
       {serverForm}
