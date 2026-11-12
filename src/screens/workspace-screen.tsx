@@ -370,13 +370,63 @@ const loadEntries = async (
   }: { directory: string; path: string; query: string },
   signal: AbortSignal
 ): Promise<FileSystemEntry[]> => {
+  const findFiles = client.file.find.bind(client.file);
   const result = query.trim()
-    ? await client.file.find(
+    ? await findFiles(
         { limit: 200, location: { directory }, query: query.trim() },
         { signal }
       )
     : await client.file.list({ location: { directory }, path }, { signal });
-  return [...result.data].sort(compareEntries);
+  const entries = [...result.data];
+  entries.sort(compareEntries);
+  return entries;
+};
+
+const loadEntriesInto = async (
+  request: {
+    client: Props["client"];
+    directory: string;
+    path: string;
+    query: string;
+  },
+  signal: AbortSignal,
+  setters: {
+    setEntries: (entries: FileSystemEntry[]) => void;
+    setError: (error: string | null) => void;
+    setLoading: (loading: boolean) => void;
+  }
+) => {
+  const { client, directory, path, query } = request;
+  try {
+    const sorted = await loadEntries(
+      client,
+      { directory, path, query },
+      signal
+    );
+    if (!signal.aborted) {
+      setters.setEntries(sorted);
+    }
+  } catch (error_) {
+    if (!signal.aborted) {
+      setters.setEntries([]);
+      setters.setError(errorMessage(error_));
+    }
+  }
+  if (!signal.aborted) {
+    setters.setLoading(false);
+  }
+};
+
+const runWithFlag = async (
+  setFlag: (value: boolean) => void,
+  task: () => Promise<void>
+) => {
+  setFlag(true);
+  try {
+    await task();
+  } finally {
+    setFlag(false);
+  }
 };
 
 const shareTitle = () =>
@@ -647,39 +697,42 @@ const Files = ({
     !!file && (file.text !== file.initialText || (fileBusy && !!file.original))
   );
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const [request, setRequest] = useState({
+    client,
+    directory,
+    path,
+    query,
+    revision,
+  });
+  if (
+    request.client !== client ||
+    request.directory !== directory ||
+    request.path !== path ||
+    request.query !== query ||
+    request.revision !== revision
+  ) {
+    setRequest({ client, directory, path, query, revision });
     setLoading(true);
     setError(null);
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
     const timer = setTimeout(
-      async () => {
-        try {
-          const sorted = await loadEntries(
-            client,
-            { directory, path, query },
-            controller.signal
-          );
-          if (!controller.signal.aborted) {
-            setEntries(sorted);
-          }
-        } catch (error_) {
-          if (!controller.signal.aborted) {
-            setEntries([]);
-            setError(errorMessage(error_));
-          }
-        } finally {
-          if (!controller.signal.aborted) {
-            setLoading(false);
-          }
-        }
+      () => {
+        void loadEntriesInto(request, controller.signal, {
+          setEntries,
+          setError,
+          setLoading,
+        });
       },
-      query.trim() ? 250 : 0
+      request.query.trim() ? 250 : 0
     );
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [client, directory, path, query, revision]);
+  }, [request]);
 
   const openFile = async (nextPath: string) => {
     setFile({
@@ -689,25 +742,24 @@ const Files = ({
       path: nextPath,
       text: "",
     });
-    setFileBusy(true);
     setSaveError(null);
     setSaved(false);
     setFileActionsOpen(false);
     setCopied(false);
     setSelection({ end: 0, start: 0 });
-    try {
-      const bytes = await client.file.read({ location, path: nextPath });
-      const loaded = loadedFile(nextPath, bytes);
-      setFile((current) => (current?.path === nextPath ? loaded : current));
-    } catch (error_) {
-      setFile((current) =>
-        current?.path === nextPath
-          ? { ...current, error: errorMessage(error_) }
-          : current
-      );
-    } finally {
-      setFileBusy(false);
-    }
+    await runWithFlag(setFileBusy, async () => {
+      try {
+        const bytes = await client.file.read({ location, path: nextPath });
+        const loaded = loadedFile(nextPath, bytes);
+        setFile((current) => (current?.path === nextPath ? loaded : current));
+      } catch (error_) {
+        setFile((current) =>
+          current?.path === nextPath
+            ? { ...current, error: errorMessage(error_) }
+            : current
+        );
+      }
+    });
   };
 
   const closeFile = async () => {
@@ -734,34 +786,33 @@ const Files = ({
       return;
     }
     const editing = file;
-    setFileBusy(true);
     setSaveError(null);
-    try {
-      const bytes = await saveEditableFile(
-        {
-          read: () => client.file.read({ location, path: editing.path }),
-          write: (payload) =>
-            client.experimental.file.write({
-              location,
-              path: editing.path,
-              payload,
-            }),
-        },
-        original,
-        editing.text
-      );
-      setFile((current) =>
-        current?.path === editing.path
-          ? { ...current, bytes, initialText: editing.text, original: bytes }
-          : current
-      );
-      setSaved(true);
-      setRevision((value) => value + 1);
-    } catch (error_) {
-      setSaveError(errorMessage(error_));
-    } finally {
-      setFileBusy(false);
-    }
+    await runWithFlag(setFileBusy, async () => {
+      try {
+        const bytes = await saveEditableFile(
+          {
+            read: () => client.file.read({ location, path: editing.path }),
+            write: (payload) =>
+              client.experimental.file.write({
+                location,
+                path: editing.path,
+                payload,
+              }),
+          },
+          original,
+          editing.text
+        );
+        setFile((current) =>
+          current?.path === editing.path
+            ? { ...current, bytes, initialText: editing.text, original: bytes }
+            : current
+        );
+        setSaved(true);
+        setRevision((value) => value + 1);
+      } catch (error_) {
+        setSaveError(errorMessage(error_));
+      }
+    });
   };
 
   const attach = async (contextText?: string) => {
@@ -805,25 +856,27 @@ const Files = ({
     if (!file?.bytes) {
       return;
     }
-    setSharing(true);
     setSaveError(null);
-    try {
-      const bytes = file.original
-        ? new TextEncoder().encode(file.text)
-        : file.bytes;
-      const name =
-        fileName(file.path).replaceAll(/[^\p{L}\p{N}._-]/gu, "_") || "download";
-      const mime = file.mime || "application/octet-stream";
-      if (Platform.OS === "web") {
-        downloadInBrowser(bytes, name, mime);
-      } else {
-        await shareNatively(bytes, name, mime, presentNative);
+    const current = file;
+    const { bytes: fileBytes } = file;
+    await runWithFlag(setSharing, async () => {
+      try {
+        const bytes = current.original
+          ? new TextEncoder().encode(current.text)
+          : fileBytes;
+        const name =
+          fileName(current.path).replaceAll(/[^\p{L}\p{N}._-]/gu, "_") ||
+          "download";
+        const mime = current.mime || "application/octet-stream";
+        if (Platform.OS === "web") {
+          downloadInBrowser(bytes, name, mime);
+        } else {
+          await shareNatively(bytes, name, mime, presentNative);
+        }
+      } catch (error_) {
+        setSaveError(errorMessage(error_));
       }
-    } catch (error_) {
-      setSaveError(errorMessage(error_));
-    } finally {
-      setSharing(false);
-    }
+    });
   };
 
   return (
@@ -1019,17 +1072,30 @@ const Changes = ({
     "Review comment",
     !!review && !!reviewComment.trim() && !addingReview
   );
-  useEffect(() => {
-    const controller = new AbortController();
+  const [vcsRequest, setVcsRequest] = useState({
+    client,
+    directory,
+    revision,
+  });
+  if (
+    vcsRequest.client !== client ||
+    vcsRequest.directory !== directory ||
+    vcsRequest.revision !== revision
+  ) {
+    setVcsRequest({ client, directory, revision });
     setLoading(true);
     setError(null);
+  }
+  useEffect(() => {
+    const { client: requestClient, directory: requestDirectory } = vcsRequest;
+    const controller = new AbortController();
     void Promise.allSettled([
-      client.vcs.get(
-        { location: { directory } },
+      requestClient.vcs.get(
+        { location: { directory: requestDirectory } },
         { signal: controller.signal }
       ),
-      client.vcs.status(
-        { location: { directory } },
+      requestClient.vcs.status(
+        { location: { directory: requestDirectory } },
         { signal: controller.signal }
       ),
     ])
@@ -1059,41 +1125,39 @@ const Changes = ({
         }
       });
     return () => controller.abort();
-  }, [client, directory, revision]);
+  }, [vcsRequest]);
   const loadDiff = async (file?: string) => {
-    setBusy(true);
     setError(null);
-    try {
-      const result = await client.vcs.diff({
-        base: base.trim() || undefined,
-        location: { directory },
-        mode,
-        untracked: "files",
-      });
-      setDiff(
-        file ? result.data.filter((item) => item.file === file) : result.data
-      );
-    } catch (error_) {
-      setError(errorMessage(error_));
-    } finally {
-      setBusy(false);
-    }
+    await runWithFlag(setBusy, async () => {
+      try {
+        const result = await client.vcs.diff({
+          base: base.trim() || undefined,
+          location: { directory },
+          mode,
+          untracked: "files",
+        });
+        setDiff(
+          file ? result.data.filter((item) => item.file === file) : result.data
+        );
+      } catch (error_) {
+        setError(errorMessage(error_));
+      }
+    });
   };
   const loadBranches = async () => {
-    setBusy(true);
     setError(null);
-    try {
-      const result = await client.vcs.branch.list({
-        limit: 200,
-        location: { directory },
-      });
-      setBranches(result.data);
-      setBranchesVisible(true);
-    } catch (error_) {
-      setError(errorMessage(error_));
-    } finally {
-      setBusy(false);
-    }
+    await runWithFlag(setBusy, async () => {
+      try {
+        const result = await client.vcs.branch.list({
+          limit: 200,
+          location: { directory },
+        });
+        setBranches(result.data);
+        setBranchesVisible(true);
+      } catch (error_) {
+        setError(errorMessage(error_));
+      }
+    });
   };
   const closeDiff = async () => {
     if (addingReview) {
@@ -1134,28 +1198,28 @@ const Changes = ({
     if (!review || !onAttachFile || !reviewComment.trim()) {
       return;
     }
-    setAddingReview(true);
     setError(null);
-    try {
-      const context = `Review feedback for ${serverFilePath(directory, review.file)}:\n\n${reviewComment.trim()}\n\n${quotedText(review.patch, "diff")}${review.more ? "\n\nThe server truncated this diff." : ""}`;
-      if (
-        (await onAttachFile(
-          serverFilePath(directory, review.file),
-          context
-        )) === false
-      ) {
-        setError("The review was not added. Check the connection and retry.");
-      } else {
-        setReview(null);
-        setReviewVisible(false);
-        setReviewComment("");
-        setDiff(null);
+    const target = review;
+    await runWithFlag(setAddingReview, async () => {
+      try {
+        const context = `Review feedback for ${serverFilePath(directory, target.file)}:\n\n${reviewComment.trim()}\n\n${quotedText(target.patch, "diff")}${target.more ? "\n\nThe server truncated this diff." : ""}`;
+        if (
+          (await onAttachFile(
+            serverFilePath(directory, target.file),
+            context
+          )) === false
+        ) {
+          setError("The review was not added. Check the connection and retry.");
+        } else {
+          setReview(null);
+          setReviewVisible(false);
+          setReviewComment("");
+          setDiff(null);
+        }
+      } catch (error_) {
+        setError(errorMessage(error_));
       }
-    } catch (error_) {
-      setError(errorMessage(error_));
-    } finally {
-      setAddingReview(false);
-    }
+    });
   };
   return (
     <View style={styles.screen}>
@@ -1376,14 +1440,30 @@ const Worktrees = ({
   const [branch, setBranch] = useState("");
   const [from, setFrom] = useState("");
   const [revision, setRevision] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
+  const [treeRequest, setTreeRequest] = useState({
+    client,
+    directory,
+    revision,
+  });
+  if (
+    treeRequest.client !== client ||
+    treeRequest.directory !== directory ||
+    treeRequest.revision !== revision
+  ) {
+    setTreeRequest({ client, directory, revision });
     setLoading(true);
     setError(null);
-    void client.location
-      .get({ location: { directory } }, { signal: controller.signal })
+  }
+  useEffect(() => {
+    const { client: requestClient, directory: requestDirectory } = treeRequest;
+    const controller = new AbortController();
+    void requestClient.location
+      .get(
+        { location: { directory: requestDirectory } },
+        { signal: controller.signal }
+      )
       .then(async (result) => {
-        const list = await client.worktree.list(
+        const list = await requestClient.worktree.list(
           { projectID: result.project.id },
           { signal: controller.signal }
         );
@@ -1404,27 +1484,27 @@ const Worktrees = ({
         }
       });
     return () => controller.abort();
-  }, [client, directory, revision]);
+  }, [treeRequest]);
   const create = async () => {
     if (!location) {
       return;
     }
-    setBusy(true);
     setError(null);
-    try {
-      const tree = await client.worktree.create({
-        branch: branch.trim() || undefined,
-        from: from.trim() || undefined,
-        name: name.trim() || undefined,
-        projectID: location.project.id,
-      });
-      setCreateVisible(false);
-      onDirectoryChange(tree.directory);
-    } catch (error_) {
-      setError(errorMessage(error_));
-    } finally {
-      setBusy(false);
-    }
+    const projectID = location.project.id;
+    await runWithFlag(setBusy, async () => {
+      try {
+        const tree = await client.worktree.create({
+          branch: branch.trim() || undefined,
+          from: from.trim() || undefined,
+          name: name.trim() || undefined,
+          projectID,
+        });
+        setCreateVisible(false);
+        onDirectoryChange(tree.directory);
+      } catch (error_) {
+        setError(errorMessage(error_));
+      }
+    });
   };
   const remove = async (tree: WorktreeDirectory) => {
     if (
@@ -1437,20 +1517,20 @@ const Worktrees = ({
     ) {
       return;
     }
-    setBusy(true);
     setError(null);
-    try {
-      await client.worktree.remove({
-        directory: tree.directory,
-        force: false,
-        projectID: location.project.id,
-      });
-      setRevision((value) => value + 1);
-    } catch (error_) {
-      setError(errorMessage(error_));
-    } finally {
-      setBusy(false);
-    }
+    const projectID = location.project.id;
+    await runWithFlag(setBusy, async () => {
+      try {
+        await client.worktree.remove({
+          directory: tree.directory,
+          force: false,
+          projectID,
+        });
+        setRevision((value) => value + 1);
+      } catch (error_) {
+        setError(errorMessage(error_));
+      }
+    });
   };
   return (
     <ScrollView contentContainerStyle={styles.content}>
