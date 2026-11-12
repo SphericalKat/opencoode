@@ -4,41 +4,41 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client";
 
-export function mergeMessages(
+export const mergeMessages = (
   ...pages: SessionMessageInfo[][]
-): SessionMessageInfo[] {
+): SessionMessageInfo[] => {
   const messages = new Map<string, SessionMessageInfo>();
   for (const page of pages) {
     for (const message of page) {
       messages.set(message.id, message);
     }
   }
-  return [...messages.values()].sort(
+  return [...messages.values()].toSorted(
     (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id)
   );
-}
+};
 
 export type ComposerSubmission =
   | { type: "prompt"; text: string }
   | { type: "shell"; command: string }
   | { type: "command"; name: string; text: string };
 
-export function parseComposer(
+export const parseComposer = (
   text: string,
   commandNames: string[]
-): ComposerSubmission {
+): ComposerSubmission => {
   const trimmed = text.trim();
   if (trimmed.startsWith("!") && trimmed.slice(1).trim()) {
     return { command: trimmed.slice(1).trim(), type: "shell" };
   }
-  const command = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
+  const command = /^\/(?<name>[^\s]+)(?:\s+(?<text>[\s\S]*))?$/u.exec(trimmed);
   if (command && commandNames.includes(command[1])) {
     return { name: command[1], text: command[2] ?? "", type: "command" };
   }
   return { text: trimmed, type: "prompt" };
-}
+};
 
-export function serverFileUri(path: string): string {
+export const serverFileUri = (path: string): string => {
   if (path.startsWith("file://")) {
     return path;
   }
@@ -46,18 +46,10 @@ export function serverFileUri(path: string): string {
     throw new Error("The server file path must be absolute");
   }
   return `file://${path.split("/").map(encodeURIComponent).join("/")}`;
-}
+};
 
-export function projectLiveEvent(
-  messages: SessionMessageInfo[],
-  event: OpenCodeEvent,
-  sessionID: string
-): SessionMessageInfo[] {
-  return projectLiveEvents(messages, [event], sessionID);
-}
-
-export function isAssistantProgress(event: OpenCodeEvent): boolean {
-  return [
+export const isAssistantProgress = (event: OpenCodeEvent): boolean =>
+  [
     "session.text.started",
     "session.text.delta",
     "session.reasoning.started",
@@ -70,13 +62,285 @@ export function isAssistantProgress(event: OpenCodeEvent): boolean {
     "session.step.ended",
     "session.step.failed",
   ].includes(event.type);
+
+type LiveEvent<T extends OpenCodeEvent["type"]> = Extract<
+  OpenCodeEvent,
+  { type: T }
+>;
+
+interface LiveTarget {
+  current: SessionMessageAssistant;
+  mutable: () => SessionMessageAssistant;
+  fragment: (kind: "text" | "reasoning", ordinal: number) => number;
 }
 
-export function projectLiveEvents(
+const applyFragmentStarted = (
+  event: LiveEvent<"session.text.started" | "session.reasoning.started">,
+  { fragment, mutable }: LiveTarget
+) => {
+  const kind = event.type === "session.text.started" ? "text" : "reasoning";
+  if (fragment(kind, event.data.ordinal) < 0) {
+    mutable().content.push(
+      kind === "reasoning"
+        ? { text: "", time: { created: event.created }, type: kind }
+        : { text: "", type: kind }
+    );
+  }
+};
+
+const applyFragmentText = (
+  event: LiveEvent<
+    | "session.text.delta"
+    | "session.reasoning.delta"
+    | "session.text.ended"
+    | "session.reasoning.ended"
+  >,
+  { fragment, mutable }: LiveTarget
+) => {
+  const kind = event.type.startsWith("session.text.") ? "text" : "reasoning";
+  let index = fragment(kind, event.data.ordinal);
+  const assistant = mutable();
+  if (index < 0) {
+    assistant.content.push(
+      kind === "reasoning"
+        ? { text: "", time: { created: event.created }, type: kind }
+        : { text: "", type: kind }
+    );
+    index = assistant.content.length - 1;
+  }
+  const part = assistant.content[index];
+  if (part.type === "text" || part.type === "reasoning") {
+    assistant.content[index] = {
+      ...part,
+      text:
+        "delta" in event.data ? part.text + event.data.delta : event.data.text,
+      ...(part.type === "reasoning" && event.type === "session.reasoning.ended"
+        ? {
+            time: {
+              completed: event.created,
+              created: part.time?.created ?? event.created,
+            },
+          }
+        : {}),
+    };
+  }
+};
+
+const applyToolInputStarted = (
+  event: LiveEvent<"session.tool.input.started">,
+  { current, mutable }: LiveTarget
+) => {
+  if (
+    !current.content.some(
+      (part) => part.type === "tool" && part.id === event.data.id
+    )
+  ) {
+    mutable().content.push({
+      id: event.data.id,
+      name: event.data.name,
+      state: { input: "", status: "streaming" },
+      time: { created: event.created },
+      type: "tool",
+    });
+  }
+};
+
+type ToolEvent = LiveEvent<
+  | "session.tool.input.delta"
+  | "session.tool.input.ended"
+  | "session.tool.called"
+  | "session.tool.progress"
+  | "session.tool.success"
+  | "session.tool.failed"
+>;
+
+type ToolPart = Extract<
+  SessionMessageAssistant["content"][number],
+  {
+    type: "tool";
+  }
+>;
+
+const toolEventApplies = (event: ToolEvent, part: ToolPart): boolean => {
+  if (
+    (event.type === "session.tool.input.delta" ||
+      event.type === "session.tool.input.ended") &&
+    part.state.status !== "streaming"
+  ) {
+    return false;
+  }
+  if (
+    event.type === "session.tool.progress" &&
+    part.state.status !== "running"
+  ) {
+    return false;
+  }
+  return true;
+};
+
+const applyToolInputEvent = (event: ToolEvent, tool: ToolPart) => {
+  if (
+    event.type === "session.tool.input.delta" &&
+    tool.state.status === "streaming"
+  ) {
+    tool.state = {
+      input: tool.state.input + event.data.delta,
+      status: "streaming",
+    };
+  }
+  if (
+    event.type === "session.tool.input.ended" &&
+    tool.state.status === "streaming"
+  ) {
+    tool.state = { input: event.data.text, status: "streaming" };
+  }
+  if (event.type === "session.tool.called") {
+    tool.executed = event.data.executed;
+    tool.state = {
+      input: event.data.input,
+      metadata: {},
+      status: "running",
+    };
+    tool.time.ran = event.created;
+  }
+  if (
+    event.type === "session.tool.progress" &&
+    tool.state.status === "running"
+  ) {
+    tool.state = {
+      ...tool.state,
+      metadata: { ...tool.state.metadata, ...event.data },
+    };
+  }
+};
+
+const applyToolResultEvent = (event: ToolEvent, tool: ToolPart) => {
+  if (event.type === "session.tool.success") {
+    tool.state = {
+      content: event.data.content,
+      input: typeof tool.state.input === "string" ? {} : tool.state.input,
+      metadata: event.data.metadata,
+      status: "completed",
+    };
+    tool.time.completed = event.created;
+  }
+  if (event.type === "session.tool.failed") {
+    tool.state = {
+      content: event.data.content,
+      error: event.data.error,
+      input: typeof tool.state.input === "string" ? {} : tool.state.input,
+      metadata: event.data.metadata,
+      status: "error",
+    };
+    tool.time.completed = event.created;
+  }
+};
+
+const applyToolEvent = (event: ToolEvent, { current, mutable }: LiveTarget) => {
+  const index = current.content.findIndex(
+    (part) => part.type === "tool" && part.id === event.data.id
+  );
+  const part = current.content[index];
+  if (!part || part.type !== "tool") {
+    return;
+  }
+  if (!toolEventApplies(event, part)) {
+    return;
+  }
+  const tool = { ...part, time: { ...part.time } };
+  applyToolInputEvent(event, tool);
+  applyToolResultEvent(event, tool);
+  mutable().content[index] = tool;
+};
+
+const applyStepEvent = (
+  event: LiveEvent<
+    | "session.step.streamed"
+    | "session.step.ended"
+    | "session.step.failed"
+    | "session.retry.scheduled"
+  >,
+  { mutable }: LiveTarget
+) => {
+  switch (event.type) {
+    case "session.step.streamed": {
+      mutable().time.streamed = event.created;
+      break;
+    }
+    case "session.step.ended": {
+      const assistant = mutable();
+      assistant.time.completed = event.created;
+      assistant.finish = event.data.finish;
+      assistant.cost = event.data.cost;
+      assistant.tokens = event.data.tokens;
+      break;
+    }
+    case "session.step.failed": {
+      const assistant = mutable();
+      assistant.time.completed = event.created;
+      assistant.finish = "error";
+      assistant.error = event.data.error;
+      break;
+    }
+    case "session.retry.scheduled": {
+      mutable().retry = {
+        at: event.data.at,
+        attempt: event.data.attempt,
+        error: event.data.error,
+      };
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+};
+
+const applyLiveEvent = (event: OpenCodeEvent, target: LiveTarget) => {
+  switch (event.type) {
+    case "session.text.started":
+    case "session.reasoning.started": {
+      applyFragmentStarted(event, target);
+      break;
+    }
+    case "session.text.delta":
+    case "session.reasoning.delta":
+    case "session.text.ended":
+    case "session.reasoning.ended": {
+      applyFragmentText(event, target);
+      break;
+    }
+    case "session.tool.input.started": {
+      applyToolInputStarted(event, target);
+      break;
+    }
+    case "session.tool.input.delta":
+    case "session.tool.input.ended":
+    case "session.tool.called":
+    case "session.tool.progress":
+    case "session.tool.success":
+    case "session.tool.failed": {
+      applyToolEvent(event, target);
+      break;
+    }
+    case "session.step.streamed":
+    case "session.step.ended":
+    case "session.step.failed":
+    case "session.retry.scheduled": {
+      applyStepEvent(event, target);
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+};
+
+export const projectLiveEvents = (
   messages: SessionMessageInfo[],
   events: OpenCodeEvent[],
   sessionID: string
-): SessionMessageInfo[] {
+): SessionMessageInfo[] => {
   if (!events.length) {
     return messages;
   }
@@ -139,188 +403,16 @@ export function projectLiveEvents(
     }
     const fragment = (kind: "text" | "reasoning", ordinal: number) => {
       let count = 0;
-      return current.content.findIndex(
-        (part) => part.type === kind && count++ === ordinal
-      );
+      return current.content.findIndex((part) => {
+        if (part.type !== kind) {
+          return false;
+        }
+        const matches = count === ordinal;
+        count += 1;
+        return matches;
+      });
     };
-    switch (event.type) {
-      case "session.text.started":
-      case "session.reasoning.started": {
-        const kind =
-          event.type === "session.text.started" ? "text" : "reasoning";
-        if (fragment(kind, event.data.ordinal) < 0) {
-          mutable().content.push(
-            kind === "reasoning"
-              ? { text: "", time: { created: event.created }, type: kind }
-              : { text: "", type: kind }
-          );
-        }
-        break;
-      }
-      case "session.text.delta":
-      case "session.reasoning.delta":
-      case "session.text.ended":
-      case "session.reasoning.ended": {
-        const kind = event.type.startsWith("session.text.")
-          ? "text"
-          : "reasoning";
-        let index = fragment(kind, event.data.ordinal);
-        const assistant = mutable();
-        if (index < 0) {
-          assistant.content.push(
-            kind === "reasoning"
-              ? { text: "", time: { created: event.created }, type: kind }
-              : { text: "", type: kind }
-          );
-          index = assistant.content.length - 1;
-        }
-        const part = assistant.content[index];
-        if (part.type === "text" || part.type === "reasoning") {
-          assistant.content[index] = {
-            ...part,
-            text:
-              "delta" in event.data
-                ? part.text + event.data.delta
-                : event.data.text,
-            ...(part.type === "reasoning" &&
-            event.type === "session.reasoning.ended"
-              ? {
-                  time: {
-                    completed: event.created,
-                    created: part.time?.created ?? event.created,
-                  },
-                }
-              : {}),
-          };
-        }
-        break;
-      }
-      case "session.tool.input.started": {
-        if (
-          !current.content.some(
-            (part) => part.type === "tool" && part.id === event.data.id
-          )
-        ) {
-          mutable().content.push({
-            id: event.data.id,
-            name: event.data.name,
-            state: { input: "", status: "streaming" },
-            time: { created: event.created },
-            type: "tool",
-          });
-        }
-        break;
-      }
-      case "session.tool.input.delta":
-      case "session.tool.input.ended":
-      case "session.tool.called":
-      case "session.tool.progress":
-      case "session.tool.success":
-      case "session.tool.failed": {
-        const index = current.content.findIndex(
-          (part) => part.type === "tool" && part.id === event.data.id
-        );
-        const part = current.content[index];
-        if (!part || part.type !== "tool") {
-          break;
-        }
-        if (
-          (event.type === "session.tool.input.delta" ||
-            event.type === "session.tool.input.ended") &&
-          part.state.status !== "streaming"
-        ) {
-          break;
-        }
-        if (
-          event.type === "session.tool.progress" &&
-          part.state.status !== "running"
-        ) {
-          break;
-        }
-        const tool = { ...part, time: { ...part.time } };
-        if (
-          event.type === "session.tool.input.delta" &&
-          tool.state.status === "streaming"
-        ) {
-          tool.state = {
-            input: tool.state.input + event.data.delta,
-            status: "streaming",
-          };
-        }
-        if (
-          event.type === "session.tool.input.ended" &&
-          tool.state.status === "streaming"
-        ) {
-          tool.state = { input: event.data.text, status: "streaming" };
-        }
-        if (event.type === "session.tool.called") {
-          tool.executed = event.data.executed;
-          tool.state = {
-            input: event.data.input,
-            metadata: {},
-            status: "running",
-          };
-          tool.time.ran = event.created;
-        }
-        if (
-          event.type === "session.tool.progress" &&
-          tool.state.status === "running"
-        ) {
-          tool.state = {
-            ...tool.state,
-            metadata: { ...tool.state.metadata, ...event.data },
-          };
-        }
-        if (event.type === "session.tool.success") {
-          tool.state = {
-            content: event.data.content,
-            input: typeof tool.state.input === "string" ? {} : tool.state.input,
-            metadata: event.data.metadata,
-            status: "completed",
-          };
-          tool.time.completed = event.created;
-        }
-        if (event.type === "session.tool.failed") {
-          tool.state = {
-            content: event.data.content,
-            error: event.data.error,
-            input: typeof tool.state.input === "string" ? {} : tool.state.input,
-            metadata: event.data.metadata,
-            status: "error",
-          };
-          tool.time.completed = event.created;
-        }
-        mutable().content[index] = tool;
-        break;
-      }
-      case "session.step.streamed": {
-        mutable().time.streamed = event.created;
-        break;
-      }
-      case "session.step.ended": {
-        const assistant = mutable();
-        assistant.time.completed = event.created;
-        assistant.finish = event.data.finish;
-        assistant.cost = event.data.cost;
-        assistant.tokens = event.data.tokens;
-        break;
-      }
-      case "session.step.failed": {
-        const assistant = mutable();
-        assistant.time.completed = event.created;
-        assistant.finish = "error";
-        assistant.error = event.data.error;
-        break;
-      }
-      case "session.retry.scheduled": {
-        mutable().retry = {
-          at: event.data.at,
-          attempt: event.data.attempt,
-          error: event.data.error,
-        };
-        break;
-      }
-    }
+    applyLiveEvent(event, { current, fragment, mutable });
   }
   if (inserted) {
     next.sort(
@@ -328,4 +420,10 @@ export function projectLiveEvents(
     );
   }
   return next;
-}
+};
+
+export const projectLiveEvent = (
+  messages: SessionMessageInfo[],
+  event: OpenCodeEvent,
+  sessionID: string
+): SessionMessageInfo[] => projectLiveEvents(messages, [event], sessionID);

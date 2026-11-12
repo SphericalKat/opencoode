@@ -1,7 +1,7 @@
-export function createStreamBatch<T>(
+export const createStreamBatch = <T>(
   apply: (events: T[]) => void,
   options: { delayMs?: number; frame?: boolean } = {}
-) {
+) => {
   let events: T[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   let frame: number | undefined;
@@ -45,4 +45,4 @@ export function createStreamBatch<T>(
       }
     },
   };
-}
+};

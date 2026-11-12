@@ -24,8 +24,10 @@ export interface AgentActivity {
   retry?: { attempt: number; at: number; message: string };
 }
 
-export function toolActivityLabel(tool: SessionMessageAssistantTool): string {
-  const name = tool.name.replace(/^.*[.:]/, "").replaceAll(/[_-]/g, " ");
+export const toolActivityLabel = (
+  tool: SessionMessageAssistantTool
+): string => {
+  const name = tool.name.replace(/^.*[.:]/u, "").replaceAll(/[_-]/gu, " ");
   if (tool.state.status === "streaming") {
     return `Preparing ${["shell", "bash"].includes(name) ? "command" : name}`;
   }
@@ -46,15 +48,12 @@ export function toolActivityLabel(tool: SessionMessageAssistantTool): string {
   return tool.state.status === "completed"
     ? labels[name]?.[1] || `${name} completed`
     : labels[name]?.[0] || `Running ${name}`;
-}
+};
 
-export function sessionActivity(
-  messages: SessionMessageInfo[],
-  active: boolean,
-  status: SessionStatus | null,
+const pendingInputActivity = (
   permissionCount: number,
   formCount: number
-): AgentActivity {
+): AgentActivity | undefined => {
   if (permissionCount) {
     return {
       kind: "approval",
@@ -66,6 +65,88 @@ export function sessionActivity(
   }
   if (formCount) {
     return { kind: "question", label: "Waiting for your answer" };
+  }
+  return undefined;
+};
+
+const currentRetry = (
+  status: SessionStatus | null,
+  assistant: SessionMessageAssistant | undefined
+): AgentActivity["retry"] => {
+  if (status?.type === "retry") {
+    return {
+      at: status.next,
+      attempt: status.attempt,
+      message: status.message,
+    };
+  }
+  if (!status && assistant?.retry) {
+    return {
+      at: assistant.retry.at,
+      attempt: assistant.retry.attempt,
+      message: assistant.retry.error.message,
+    };
+  }
+  return undefined;
+};
+
+const messageActivity = (
+  current: SessionMessageInfo | undefined
+): AgentActivity | undefined => {
+  if (current?.type === "assistant" && current.error) {
+    return { kind: "error", label: "Agent encountered an error" };
+  }
+  if (current?.type === "compaction" && current.status === "running") {
+    return { kind: "compaction", label: "Compacting context" };
+  }
+  if (current?.type === "shell" && current.status === "running") {
+    return { kind: "shell", label: "Running command" };
+  }
+  return undefined;
+};
+
+const assistantActivity = (
+  assistant: SessionMessageAssistant
+): AgentActivity | undefined => {
+  const partIndex = assistant.content.length - 1;
+  const part = assistant.content[partIndex];
+  const location = { messageID: assistant.id, partIndex };
+  const tool = assistant.content.findLast(
+    (candidate) =>
+      candidate.type === "tool" &&
+      (candidate.state.status === "streaming" ||
+        candidate.state.status === "running")
+  );
+  if (tool?.type === "tool") {
+    return {
+      kind: "tool",
+      label: toolActivityLabel(tool),
+      messageID: assistant.id,
+    };
+  }
+  if (part?.type === "reasoning" && part.time?.completed === undefined) {
+    return { kind: "thinking", label: "Thinking", ...location };
+  }
+  if (
+    part?.type === "text" &&
+    part.text.trim() &&
+    assistant.time.streamed === undefined
+  ) {
+    return { kind: "writing", label: "Writing", ...location };
+  }
+  return undefined;
+};
+
+export const sessionActivity = (
+  messages: SessionMessageInfo[],
+  active: boolean,
+  status: SessionStatus | null,
+  permissionCount: number,
+  formCount: number
+): AgentActivity => {
+  const pending = pendingInputActivity(permissionCount, formCount);
+  if (pending) {
+    return pending;
   }
   if (!active) {
     return { kind: "idle", label: "" };
@@ -79,54 +160,14 @@ export function sessionActivity(
     !current.error
       ? current
       : undefined;
-  const retry =
-    status?.type === "retry"
-      ? { at: status.next, attempt: status.attempt, message: status.message }
-      : !status && assistant?.retry
-        ? {
-            at: assistant.retry.at,
-            attempt: assistant.retry.attempt,
-            message: assistant.retry.error.message,
-          }
-        : undefined;
+  const retry = currentRetry(status, assistant);
   if (retry) {
     return { kind: "retry", label: "Retrying", retry };
   }
-  if (current?.type === "assistant" && current.error) {
-    return { kind: "error", label: "Agent encountered an error" };
+  const fromMessage = messageActivity(current);
+  if (fromMessage) {
+    return fromMessage;
   }
-  if (current?.type === "compaction" && current.status === "running") {
-    return { kind: "compaction", label: "Compacting context" };
-  }
-  if (current?.type === "shell" && current.status === "running") {
-    return { kind: "shell", label: "Running command" };
-  }
-  if (assistant) {
-    const partIndex = assistant.content.length - 1;
-    const part = assistant.content[partIndex];
-    const location = { messageID: assistant.id, partIndex };
-    const tool = assistant.content.findLast(
-      (part) =>
-        part.type === "tool" &&
-        (part.state.status === "streaming" || part.state.status === "running")
-    );
-    if (tool?.type === "tool") {
-      return {
-        kind: "tool",
-        label: toolActivityLabel(tool),
-        messageID: assistant.id,
-      };
-    }
-    if (part?.type === "reasoning" && part.time?.completed === undefined) {
-      return { kind: "thinking", label: "Thinking", ...location };
-    }
-    if (
-      part?.type === "text" &&
-      part.text.trim() &&
-      assistant.time.streamed === undefined
-    ) {
-      return { kind: "writing", label: "Writing", ...location };
-    }
-  }
-  return { kind: "working", label: "Working" };
-}
+  const fromAssistant = assistant ? assistantActivity(assistant) : undefined;
+  return fromAssistant ?? { kind: "working", label: "Working" };
+};

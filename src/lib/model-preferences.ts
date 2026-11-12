@@ -15,15 +15,15 @@ type State = Preferences & {
 
 const writes = new Map<string, Promise<Preferences>>();
 
-export function modelPreferenceID(providerID: string, modelID: string): string {
-  return JSON.stringify([providerID, modelID]);
-}
+export const modelPreferenceID = (
+  providerID: string,
+  modelID: string
+): string => JSON.stringify([providerID, modelID]);
 
-function storageName(serverID: string): string {
-  return `opencoode-models-${Array.from(serverID, (character) => character.codePointAt(0)!.toString(16)).join("-")}.json`;
-}
+const storageName = (serverID: string): string =>
+  `opencoode-models-${Array.from(serverID, (character) => (character.codePointAt(0) ?? 0).toString(16)).join("-")}.json`;
 
-function isModelID(value: unknown): value is string {
+const isModelID = (value: unknown): value is string => {
   if (typeof value !== "string") {
     return false;
   }
@@ -37,17 +37,19 @@ function isModelID(value: unknown): value is string {
   } catch {
     return false;
   }
-}
+};
 
-async function readPreferences(serverID: string): Promise<Preferences> {
+const readRawPreferences = async (name: string): Promise<string | null> => {
+  if (Platform.OS === "web") {
+    return sessionStorage.getItem(name);
+  }
+  const file = new File(Paths.document, name);
+  return file.exists ? await file.text() : null;
+};
+
+const readPreferences = async (serverID: string): Promise<Preferences> => {
   const name = storageName(serverID);
-  const file = Platform.OS === "web" ? null : new File(Paths.document, name);
-  const raw =
-    Platform.OS === "web"
-      ? sessionStorage.getItem(name)
-      : file?.exists
-        ? await file.text()
-        : null;
+  const raw = await readRawPreferences(name);
   if (!raw) {
     return { favoriteIDs: [], recentIDs: [] };
   }
@@ -68,33 +70,35 @@ async function readPreferences(serverID: string): Promise<Preferences> {
     favoriteIDs: [...new Set(value.favoriteIDs)],
     recentIDs: [...new Set(value.recentIDs)].slice(0, 10),
   };
-}
+};
 
-async function loadPreferences(serverID: string): Promise<Preferences> {
-  await writes.get(serverID)?.catch(() => {});
+const ignoreError = () => {
+  // Failures are reported by the write's own caller.
+};
+
+const loadPreferences = async (serverID: string): Promise<Preferences> => {
+  await writes.get(serverID)?.catch(ignoreError);
   return readPreferences(serverID);
-}
+};
 
-function updatePreferences(
+const updatePreferences = (
   serverID: string,
   update: (current: Preferences) => Preferences
-): Promise<Preferences> {
+): Promise<Preferences> => {
   const previous = writes.get(serverID) ?? Promise.resolve();
-  const write = previous
-    .catch(() => {})
-    .then(async () => {
-      const current = await readPreferences(serverID);
-      const next = update(current);
-      if (next !== current) {
-        const name = storageName(serverID);
-        if (Platform.OS === "web") {
-          sessionStorage.setItem(name, JSON.stringify(next));
-        } else {
-          await new File(Paths.document, name).write(JSON.stringify(next));
-        }
+  const write = previous.catch(ignoreError).then(async () => {
+    const current = await readPreferences(serverID);
+    const updated = update(current);
+    if (updated !== current) {
+      const name = storageName(serverID);
+      if (Platform.OS === "web") {
+        sessionStorage.setItem(name, JSON.stringify(updated));
+      } else {
+        await new File(Paths.document, name).write(JSON.stringify(updated));
       }
-      return next;
-    });
+    }
+    return updated;
+  });
   writes.set(serverID, write);
   void write
     .finally(() => {
@@ -102,15 +106,32 @@ function updatePreferences(
         writes.delete(serverID);
       }
     })
-    .catch(() => {});
+    .catch(ignoreError);
   return write;
-}
+};
 
-function failureMessage(reason: unknown, action: string): string {
-  return `Cannot ${action} model preferences${reason instanceof Error ? `: ${reason.message}` : ""}`;
-}
+const failureMessage = (reason: unknown, action: string): string =>
+  `Cannot ${action} model preferences${reason instanceof Error ? `: ${reason.message}` : ""}`;
 
-export function useModelPreferences(serverID: string) {
+const emptyState = (loading: boolean): Omit<State, "serverID"> => ({
+  error: null,
+  favoriteIDs: [],
+  loading,
+  recentIDs: [],
+  saving: false,
+});
+
+const resolveCurrent = (
+  serverID: string,
+  state: State
+): Omit<State, "serverID"> => {
+  if (!serverID.trim()) {
+    return emptyState(false);
+  }
+  return state.serverID === serverID ? state : emptyState(true);
+};
+
+export const useModelPreferences = (serverID: string) => {
   const [state, setState] = useState<State>({
     error: null,
     favoriteIDs: [],
@@ -123,18 +144,25 @@ export function useModelPreferences(serverID: string) {
   const scope = useRef(serverID);
   const request = useRef(0);
   const mounted = useRef(true);
-  scope.current = serverID;
 
   useEffect(() => {
-    mounted.current = true;
+    scope.current = serverID;
+  }, [serverID]);
+
+  useEffect(() => {
+    const mountedRef = mounted;
+    const requestRef = request;
+    mountedRef.current = true;
     return () => {
-      mounted.current = false;
-      request.current++;
+      mountedRef.current = false;
+      requestRef.current += 1;
     };
   }, []);
 
   useEffect(() => {
-    const version = ++request.current;
+    const requestRef = request;
+    requestRef.current += 1;
+    const version = requestRef.current;
     if (!serverID.trim()) {
       setState({
         error: null,
@@ -154,37 +182,35 @@ export function useModelPreferences(serverID: string) {
       saving: false,
       serverID,
     }));
-    void loadPreferences(serverID)
-      .then((preferences) => {
-        if (
-          mounted.current &&
-          scope.current === serverID &&
-          version === request.current
-        ) {
+    const isCurrent = () =>
+      mounted.current &&
+      scope.current === serverID &&
+      version === request.current;
+    const load = async () => {
+      try {
+        const preferences = await loadPreferences(serverID);
+        if (isCurrent()) {
           setState({
-            serverID,
+            error: null,
             ...preferences,
             loading: false,
             saving: false,
-            error: null,
+            serverID,
           });
         }
-      })
-      .catch((error) => {
-        if (
-          mounted.current &&
-          scope.current === serverID &&
-          version === request.current
-        ) {
+      } catch (error) {
+        if (isCurrent()) {
           setState((current) => ({
             ...current,
             error: failureMessage(error, "load"),
             loading: false,
           }));
         }
-      });
+      }
+    };
+    void load();
     return () => {
-      request.current++;
+      requestRef.current += 1;
     };
   }, [serverID, revision]);
 
@@ -193,7 +219,8 @@ export function useModelPreferences(serverID: string) {
       if (!serverID.trim()) {
         return;
       }
-      const version = ++request.current;
+      request.current += 1;
+      const version = request.current;
       setState((current) => ({ ...current, error: null, saving: true }));
       try {
         const preferences = await updatePreferences(serverID, update);
@@ -203,11 +230,11 @@ export function useModelPreferences(serverID: string) {
           version === request.current
         ) {
           setState({
-            serverID,
+            error: null,
             ...preferences,
             loading: false,
             saving: false,
-            error: null,
+            serverID,
           });
         }
       } catch (error) {
@@ -261,23 +288,7 @@ export function useModelPreferences(serverID: string) {
   );
 
   const reload = useCallback(() => setRevision((value) => value + 1), []);
-  const current: Omit<State, "serverID"> = serverID.trim()
-    ? state.serverID === serverID
-      ? state
-      : {
-          error: null,
-          favoriteIDs: [],
-          loading: true,
-          recentIDs: [],
-          saving: false,
-        }
-    : {
-        error: null,
-        favoriteIDs: [],
-        loading: false,
-        recentIDs: [],
-        saving: false,
-      };
+  const current = resolveCurrent(serverID, state);
   return {
     error: current.error,
     favoriteIDs: current.favoriteIDs,
@@ -288,4 +299,4 @@ export function useModelPreferences(serverID: string) {
     saving: current.saving,
     toggleFavorite,
   };
-}
+};

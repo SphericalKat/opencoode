@@ -20,18 +20,22 @@ interface SheetCoordinator {
 
 const Context = createContext<SheetCoordinator>({
   dismissSheet: () => false,
-  presentSheet: () => {},
+  presentSheet: () => {
+    // No-op without a provider.
+  },
   recoveryPending: false,
-  resumeSheets: () => {},
-  suspendSheets: async () => {},
+  resumeSheets: () => {
+    // No-op without a provider.
+  },
+  suspendSheets: () => Promise.resolve(),
   suspended: false,
 });
 
-export function SheetCoordinatorProvider({
+export const SheetCoordinatorProvider = ({
   children,
 }: {
   children: React.ReactNode;
-}) {
+}) => {
   const [suspended, setSuspended] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(false);
   const suspensionRequested = useRef(false);
@@ -48,7 +52,9 @@ export function SheetCoordinatorProvider({
       setSuspended(true);
       const ready = [...waiting.current];
       waiting.current.clear();
-      ready.forEach((resolve) => resolve());
+      for (const resolve of ready) {
+        resolve();
+      }
     }
     return deferActions;
   }, []);
@@ -71,7 +77,9 @@ export function SheetCoordinatorProvider({
     setSuspended(false);
     const ready = [...waiting.current];
     waiting.current.clear();
-    ready.forEach((resolve) => resolve());
+    for (const resolve of ready) {
+      resolve();
+    }
   }, []);
   const value = useMemo(
     () => ({
@@ -92,13 +100,11 @@ export function SheetCoordinatorProvider({
     ]
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
-}
+};
 
-export function useSheetCoordinator() {
-  return useContext(Context);
-}
+export const useSheetCoordinator = () => useContext(Context);
 
-export function useNativePresentation() {
+export const useNativePresentation = () => {
   const { presentSheet, dismissSheet } = useSheetCoordinator();
   const id = useId();
   const sequence = useRef(0);
@@ -107,14 +113,19 @@ export function useNativePresentation() {
       if (Platform.OS === "web") {
         return operation();
       }
-      const presentation = `${id}:native:${++sequence.current}`;
+      sequence.current += 1;
+      const presentation = `${id}:native:${sequence.current}`;
       presentSheet(presentation);
+      let result: T;
       try {
-        return await operation();
-      } finally {
+        result = await operation();
+      } catch (error) {
         dismissSheet(presentation);
+        throw error;
       }
+      dismissSheet(presentation);
+      return result;
     },
     [id, presentSheet, dismissSheet]
   );
-}
+};

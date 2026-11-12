@@ -4,7 +4,7 @@ import type { ParseError } from "jsonc-parser/lib/esm/main";
 
 import type { Client } from "./client";
 
-export function validateConfig(text: string): void {
+export const validateConfig = (text: string): void => {
   const errors: ParseError[] = [];
   const value: unknown = parse(text, errors, { allowTrailingComma: true });
   if (errors.length) {
@@ -15,25 +15,25 @@ export function validateConfig(text: string): void {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("The configuration must be a JSON object");
   }
-}
+};
 
-export function externalURL(value: string): string {
+export const externalURL = (value: string): string => {
   const url = new URL(value);
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Error("The server returned an unsupported link");
   }
   return url.toString();
-}
+};
 
 interface ConfigFileClient {
   file: Pick<Client["file"], "read">;
   experimental: { file: Pick<Client["experimental"]["file"], "write"> };
 }
 
-export async function withSettingsRequest<T>(
+export const withSettingsRequest = async <T>(
   action: (signal: AbortSignal) => Promise<T>,
   parentSignal?: AbortSignal
-): Promise<T> {
+): Promise<T> => {
   const signal = parentSignal ?? AbortSignal.timeout(15_000);
   try {
     signal.throwIfAborted();
@@ -49,16 +49,16 @@ export async function withSettingsRequest<T>(
     }
     throw error;
   }
-}
+};
 
-export async function saveConfigFile(
+export const saveConfigFile = async (
   client: ConfigFileClient,
   directory: string,
   path: string,
   original: string | null,
   text: string,
   signal?: AbortSignal
-): Promise<void> {
+): Promise<void> => {
   validateConfig(text);
   let current: string | null;
   try {
@@ -83,4 +83,4 @@ export async function saveConfigFile(
     { signal }
   );
   signal?.throwIfAborted();
-}
+};

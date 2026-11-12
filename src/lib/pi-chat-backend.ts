@@ -40,7 +40,7 @@ type MessageCache = WeakMap<
   { model: string; dependencies: unknown[]; message: SessionMessageInfo }
 >;
 
-function json(value: unknown): JsonValue {
+const json = (value: unknown): JsonValue => {
   if (
     value === null ||
     typeof value === "string" ||
@@ -55,33 +55,32 @@ function json(value: unknown): JsonValue {
     return value.map(json);
   }
   if (typeof value === "object" && value) {
-    return jsonObject(value);
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, json(item)])
+    );
   }
   return null;
-}
+};
 
-function jsonObject(value: object): Record<string, JsonValue> {
-  return Object.fromEntries(
+const jsonObject = (value: object): Record<string, JsonValue> =>
+  Object.fromEntries(
     Object.entries(value).map(([key, item]) => [key, json(item)])
   );
-}
 
-function textOf(message: PiMessage): string {
-  return message.content
+const textOf = (message: PiMessage): string =>
+  message.content
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n\n");
-}
 
-function activityNotice(snapshot: PiSnapshot): string | undefined {
-  return snapshot.waiting
+const activityNotice = (snapshot: PiSnapshot): string | undefined =>
+  snapshot.waiting
     ? `${snapshot.waiting.title || "Pi needs input"}. Continue in the Pi terminal.`
     : undefined;
-}
 
-function resultContent(
+const resultContent = (
   content?: PiContent[],
   output?: string
-): [ToolContent, ...ToolContent[]] {
+): [ToolContent, ...ToolContent[]] => {
   const parts: ToolContent[] =
     content?.flatMap((part): ToolContent[] => {
       if (part.type === "text") {
@@ -104,71 +103,77 @@ function resultContent(
   }
   const [first, ...rest] = parts;
   return [first ?? { text: "", type: "text" }, ...rest];
-}
+};
 
-function toolPart(
+const toolErrorMessage = (
+  activity?: PiToolActivity,
+  result?: PiMessage
+): string =>
+  result?.errorMessage ||
+  activity?.output ||
+  (result && textOf(result)) ||
+  "Pi reported a tool error";
+
+const toolState = (
+  argumentsValue: Record<string, JsonValue>,
+  content: [ToolContent, ...ToolContent[]],
+  activity?: PiToolActivity,
+  result?: PiMessage
+): SessionMessageAssistantTool["state"] => {
+  if (activity?.status === "error" || result?.isError) {
+    return {
+      content,
+      error: {
+        message: toolErrorMessage(activity, result),
+        type: "tool-error",
+      },
+      input: argumentsValue,
+      status: "error",
+    };
+  }
+  if (activity?.status === "completed" || result) {
+    return {
+      content,
+      input: argumentsValue,
+      status: "completed",
+    };
+  }
+  return {
+    input: argumentsValue,
+    metadata: activity?.output === undefined ? {} : { output: activity.output },
+    status: "running",
+  };
+};
+
+const toolPart = (
   id: string,
   name: string,
   input: Record<string, unknown>,
   created: number,
   activity?: PiToolActivity,
   result?: PiMessage
-): SessionMessageAssistantTool {
+): SessionMessageAssistantTool => {
   const argumentsValue = jsonObject(activity?.input ?? input);
   const content = resultContent(
     result?.content ?? activity?.content,
     activity?.output
   );
-  const failed = activity?.status === "error" || result?.isError;
   return {
     id,
     name,
-    state: failed
-      ? {
-          content,
-          error: {
-            message:
-              result?.errorMessage ||
-              activity?.output ||
-              (result && textOf(result)) ||
-              "Pi reported a tool error",
-            type: "tool-error",
-          },
-          input: argumentsValue,
-          status: "error",
-        }
-      : activity?.status === "completed" || result
-        ? {
-            content,
-            input: argumentsValue,
-            status: "completed",
-          }
-        : {
-            input: argumentsValue,
-            metadata:
-              activity?.output === undefined ? {} : { output: activity.output },
-            status: "running",
-          },
+    state: toolState(argumentsValue, content, activity, result),
     time: { created },
     type: "tool",
   };
-}
+};
 
-function normalize(
-  snapshot: PiSnapshot,
-  cache: MessageCache
-): ChatBackendSnapshot {
-  const { session } = snapshot;
-  const model = session.model
-    ? {
-        id: session.model.id,
-        providerID: session.model.provider,
-        variant: session.thinkingLevel,
-      }
-    : undefined;
+type ToolActivities = Map<string, PiToolActivity>;
+type ToolResults = Map<string, PiMessage>;
+
+const timeRange = (messages: PiMessage[]) => {
   let created = 0;
   let updated = 0;
-  for (const message of snapshot.messages) {
+  for (const message of messages) {
     if (message.timestamp > 0) {
       if (!created || message.timestamp < created) {
         created = message.timestamp;
@@ -178,6 +183,171 @@ function normalize(
       }
     }
   }
+  return { created, updated };
+};
+
+const userMessage = (message: PiMessage): SessionMessageInfo => {
+  const files = message.content.flatMap((part) =>
+    part.type === "image"
+      ? [
+          {
+            data: part.data,
+            mime: part.mimeType,
+            source: { type: "inline" as const },
+          },
+        ]
+      : []
+  );
+  return {
+    id: message.id,
+    text: textOf(message),
+    time: { created: message.timestamp },
+    type: "user",
+    ...(files.length ? { files } : {}),
+  };
+};
+
+const assistantMessage = (
+  message: PiMessage,
+  model: SessionMessageAssistant["model"] | undefined,
+  activities: ToolActivities,
+  results: ToolResults
+): SessionMessageInfo => {
+  const content: SessionMessageAssistant["content"] = message.content.flatMap(
+    (part): SessionMessageAssistant["content"] => {
+      if (part.type === "text") {
+        return [{ text: part.text, type: "text" }];
+      }
+      if (part.type === "thinking") {
+        return [{ text: part.thinking, type: "reasoning" }];
+      }
+      if (part.type === "toolCall") {
+        return [
+          toolPart(
+            part.id,
+            part.name,
+            part.arguments,
+            message.timestamp,
+            activities.get(part.id),
+            results.get(part.id)
+          ),
+        ];
+      }
+      return [];
+    }
+  );
+  return {
+    agent: "pi",
+    content,
+    id: message.id,
+    model: model ?? { id: "", providerID: "" },
+    time: { created: message.timestamp },
+    type: "assistant",
+    ...(message.errorMessage
+      ? {
+          error: { message: message.errorMessage, type: "pi-error" },
+          finish: "error" as const,
+        }
+      : {}),
+  };
+};
+
+const systemMessage = (message: PiMessage): SessionMessageInfo | undefined => {
+  const text = textOf(message);
+  if (!(text || message.errorMessage)) {
+    return undefined;
+  }
+  return {
+    id: message.id,
+    text: [text, message.errorMessage].filter(Boolean).join("\n\n"),
+    time: { created: message.timestamp },
+    type: "system",
+  };
+};
+
+const isOrphanResult = (message: PiMessage, calls: Set<string>): boolean =>
+  message.role === "custom" ||
+  !message.toolCallId ||
+  !calls.has(message.toolCallId);
+
+const normalizeMessage = (
+  message: PiMessage,
+  model: SessionMessageAssistant["model"] | undefined,
+  activities: ToolActivities,
+  results: ToolResults,
+  calls: Set<string>
+): SessionMessageInfo | undefined => {
+  if (message.role === "user") {
+    return userMessage(message);
+  }
+  if (message.role === "assistant") {
+    return assistantMessage(message, model, activities, results);
+  }
+  if (isOrphanResult(message, calls)) {
+    return systemMessage(message);
+  }
+  return undefined;
+};
+
+const withOrphanTools = (
+  messages: SessionMessageInfo[],
+  snapshot: PiSnapshot,
+  calls: Set<string>,
+  results: ToolResults
+) => {
+  const lastAssistantIndex = messages.findLastIndex(
+    (message) => message.type === "assistant"
+  );
+  const lastAssistant = messages[lastAssistantIndex];
+  if (lastAssistant?.type !== "assistant") {
+    return;
+  }
+  const orphanTools = snapshot.tools
+    .filter((activity) => !calls.has(activity.id))
+    .map((activity) =>
+      toolPart(
+        activity.id,
+        activity.name,
+        activity.input,
+        lastAssistant.time.created,
+        activity,
+        results.get(activity.id)
+      )
+    );
+  if (orphanTools.length) {
+    messages[lastAssistantIndex] = {
+      ...lastAssistant,
+      content: [...lastAssistant.content, ...orphanTools],
+    };
+  }
+};
+
+const isCacheHit = (
+  cached: MessageCache extends WeakMap<PiMessage, infer V>
+    ? V | undefined
+    : never,
+  modelKey: string,
+  dependencies: unknown[]
+): boolean =>
+  cached?.model === modelKey &&
+  cached.dependencies.length === dependencies.length &&
+  dependencies.every(
+    (dependency, index) => dependency === cached.dependencies[index]
+  );
+
+const normalize = (
+  snapshot: PiSnapshot,
+  cache: MessageCache
+): ChatBackendSnapshot => {
+  const { session } = snapshot;
+  const model = session.model
+    ? {
+        id: session.model.id,
+        providerID: session.model.provider,
+        variant: session.thinkingLevel,
+      }
+    : undefined;
+  const { created, updated } = timeRange(snapshot.messages);
   const sessionInfo: SessionInfo = {
     cost: 0,
     id: session.id,
@@ -216,121 +386,29 @@ function normalize(
     );
     const cached =
       message.role === "toolResult" ? undefined : cache.get(message);
-    if (
-      cached?.model === modelKey &&
-      cached.dependencies.length === dependencies.length &&
-      dependencies.every(
-        (dependency, index) => dependency === cached.dependencies[index]
-      )
-    ) {
+    if (cached && isCacheHit(cached, modelKey, dependencies)) {
       messages.push(cached.message);
       continue;
     }
-    const index = messages.length;
-    if (message.role === "user") {
-      const files = message.content.flatMap((part) =>
-        part.type === "image"
-          ? [
-              {
-                data: part.data,
-                mime: part.mimeType,
-                source: { type: "inline" as const },
-              },
-            ]
-          : []
-      );
-      messages.push({
-        id: message.id,
-        text: textOf(message),
-        time: { created: message.timestamp },
-        type: "user",
-        ...(files.length ? { files } : {}),
-      });
-    } else if (message.role === "assistant") {
-      const content: SessionMessageAssistant["content"] =
-        message.content.flatMap((part): SessionMessageAssistant["content"] => {
-          if (part.type === "text") {
-            return [{ text: part.text, type: "text" }];
-          }
-          if (part.type === "thinking") {
-            return [{ text: part.thinking, type: "reasoning" }];
-          }
-          if (part.type === "toolCall") {
-            return [
-              toolPart(
-                part.id,
-                part.name,
-                part.arguments,
-                message.timestamp,
-                activities.get(part.id),
-                results.get(part.id)
-              ),
-            ];
-          }
-          return [];
-        });
-      messages.push({
-        agent: "pi",
-        content,
-        id: message.id,
-        model: model ?? { id: "", providerID: "" },
-        time: { created: message.timestamp },
-        type: "assistant",
-        ...(message.errorMessage
-          ? {
-              error: { message: message.errorMessage, type: "pi-error" },
-              finish: "error" as const,
-            }
-          : {}),
-      });
-    } else if (
-      message.role === "custom" ||
-      !message.toolCallId ||
-      !calls.has(message.toolCallId)
-    ) {
-      const text = textOf(message);
-      if (text || message.errorMessage) {
-        messages.push({
-          id: message.id,
-          text: [text, message.errorMessage].filter(Boolean).join("\n\n"),
-          time: { created: message.timestamp },
-          type: "system",
+    const normalized = normalizeMessage(
+      message,
+      model,
+      activities,
+      results,
+      calls
+    );
+    if (normalized) {
+      messages.push(normalized);
+      if (message.role !== "toolResult") {
+        cache.set(message, {
+          dependencies,
+          message: normalized,
+          model: modelKey,
         });
       }
     }
-    const normalized = messages[index];
-    if (normalized && message.role !== "toolResult") {
-      cache.set(message, {
-        dependencies,
-        message: normalized,
-        model: modelKey,
-      });
-    }
   }
-  const lastAssistantIndex = messages.findLastIndex(
-    (message) => message.type === "assistant"
-  );
-  const lastAssistant = messages[lastAssistantIndex];
-  if (lastAssistant?.type === "assistant") {
-    const orphanTools = snapshot.tools
-      .filter((activity) => !calls.has(activity.id))
-      .map((activity) =>
-        toolPart(
-          activity.id,
-          activity.name,
-          activity.input,
-          lastAssistant.time.created,
-          activity,
-          results.get(activity.id)
-        )
-      );
-    if (orphanTools.length) {
-      messages[lastAssistantIndex] = {
-        ...lastAssistant,
-        content: [...lastAssistant.content, ...orphanTools],
-      };
-    }
-  }
+  withOrphanTools(messages, snapshot, calls, results);
   messages.sort(
     (left, right) =>
       left.time.created - right.time.created || left.id.localeCompare(right.id)
@@ -353,31 +431,28 @@ function normalize(
         }
       : {}),
   };
-}
+};
 
-function normalizeModel(model: PiModel): ModelInfo {
-  return {
-    capabilities: { input: ["text"], output: ["text"], tools: true },
-    cost: [],
-    enabled: true,
-    id: model.id,
-    limit: { context: model.contextWindow, output: 0 },
-    modelID: model.id,
-    name: model.name,
-    providerID: model.provider,
-    status: "active",
-    time: { released: 0 },
-    variants: model.thinkingLevels.map((id) => ({ id })),
-  };
-}
+const normalizeModel = (model: PiModel): ModelInfo => ({
+  capabilities: { input: ["text"], output: ["text"], tools: true },
+  cost: [],
+  enabled: true,
+  id: model.id,
+  limit: { context: model.contextWindow, output: 0 },
+  modelID: model.id,
+  name: model.name,
+  providerID: model.provider,
+  status: "active",
+  time: { released: 0 },
+  variants: model.thinkingLevels.map((id) => ({ id })),
+});
 
-function applyBatch(snapshot: PiSnapshot, batch: PiEventBatch): PiSnapshot {
+const applyBatch = (snapshot: PiSnapshot, batch: PiEventBatch): PiSnapshot => {
   const messages = new Map(
     snapshot.messages.map((message) => [message.id, message])
   );
   const tools = new Map(snapshot.tools.map((tool) => [tool.id, tool]));
-  let session = snapshot.session;
-  let waiting = snapshot.waiting;
+  let { session, waiting } = snapshot;
   for (const event of batch.events) {
     if (event.type === "message") {
       messages.set(event.message.id, event.message);
@@ -386,10 +461,10 @@ function applyBatch(snapshot: PiSnapshot, batch: PiEventBatch): PiSnapshot {
       tools.set(event.tool.id, event.tool);
     }
     if (event.type === "session") {
-      session = event.session;
+      ({ session } = event);
     }
     if (event.type === "waiting") {
-      waiting = event.waiting;
+      ({ waiting } = event);
     }
   }
   return {
@@ -400,59 +475,75 @@ function applyBatch(snapshot: PiSnapshot, batch: PiEventBatch): PiSnapshot {
     tools: [...tools.values()],
     waiting,
   };
-}
+};
 
-async function imageAttachment(file: {
+const dataURIPattern = /^data:(?<mime>[^;,]+);base64,(?<data>[\s\S]*)$/u;
+const remoteURIPattern = /^https?:\/\//iu;
+const base64Pattern = /^[A-Za-z0-9+/]+={0,2}$/u;
+
+const extensionMimeTypes: Record<string, string> = {
+  gif: "image/gif",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+};
+
+const readImageFile = async (file: {
   uri: string;
   name?: string;
-}): Promise<{ mimeType: string; data: string }> {
-  const dataURI = /^data:([^;,]+);base64,([\s\S]*)$/.exec(file.uri);
+}): Promise<string> => {
+  if (remoteURIPattern.test(file.uri)) {
+    throw new Error("Attach an image from this device");
+  }
+  const source = new File(file.uri);
+  if (!source.exists) {
+    throw new Error(
+      `${file.name || "An attached image"} is no longer on this device. Remove it and attach it again.`
+    );
+  }
+  if (source.size > imageLimit) {
+    throw new Error(`${file.name || "An image"} exceeds the 3 MB image limit`);
+  }
+  return await source.base64();
+};
+
+const imageAttachment = async (file: {
+  uri: string;
+  name?: string;
+}): Promise<{ mimeType: string; data: string }> => {
+  const dataURI = dataURIPattern.exec(file.uri);
   const extension = (file.name || file.uri).split(".").pop()?.toLowerCase();
   const mimeType =
-    dataURI?.[1] ??
-    (extension === "jpg" || extension === "jpeg"
-      ? "image/jpeg"
-      : extension === "png"
-        ? "image/png"
-        : extension === "webp"
-          ? "image/webp"
-          : extension === "gif"
-            ? "image/gif"
-            : "");
+    dataURI?.groups?.mime ??
+    (extension === undefined ? undefined : extensionMimeTypes[extension]) ??
+    "";
   if (!imageTypes.has(mimeType)) {
     throw new Error("Attach a PNG, JPEG, WebP, or GIF image");
   }
-  let data = dataURI?.[2];
-  if (data === undefined) {
-    if (/^https?:\/\//i.test(file.uri)) {
-      throw new Error("Attach an image from this device");
-    }
-    const source = new File(file.uri);
-    if (!source.exists) {
-      throw new Error(
-        `${file.name || "An attached image"} is no longer on this device. Remove it and attach it again.`
-      );
-    }
-    if (source.size > imageLimit) {
-      throw new Error(
-        `${file.name || "An image"} exceeds the 3 MB image limit`
-      );
-    }
-    data = await source.base64();
-  }
-  if (!data || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+  const data = dataURI?.groups?.data ?? (await readImageFile(file));
+  if (!data || data.length % 4 !== 0 || !base64Pattern.test(data)) {
     throw new Error("The image data is invalid. Attach the image again.");
   }
   if (Math.ceil((data.length * 3) / 4) > imageLimit) {
     throw new Error(`${file.name || "An image"} exceeds the 3 MB image limit`);
   }
   return { data, mimeType };
-}
+};
 
-export function makePiChatBackend(
+const isResetBatch = (batch: PiEventBatch, value: PiSnapshot): boolean =>
+  batch.reset ||
+  batch.instanceID !== value.instanceID ||
+  batch.events.some(
+    (event) =>
+      event.type === "reset" ||
+      (event.type === "session" && event.session.id !== value.session.id)
+  );
+
+export const makePiChatBackend = (
   connection: Connection,
   pi: PiClient = createPiClient(connection)
-): ChatBackend {
+): ChatBackend => {
   let snapshot: PiSnapshot | undefined;
   let received = 0;
   let version = 0;
@@ -460,10 +551,10 @@ export function makePiChatBackend(
   const messageCache: MessageCache = new WeakMap();
   const normalized = (value: PiSnapshot) => normalize(value, messageCache);
 
-  async function load(
+  const load = async (
     signal?: AbortSignal,
     fresh = false
-  ): Promise<PiSnapshot> {
+  ): Promise<PiSnapshot> => {
     if (signal?.aborted) {
       throw (
         signal.reason ??
@@ -487,7 +578,7 @@ export function makePiChatBackend(
       ) {
         snapshot = value;
         received = Date.now();
-        version++;
+        version += 1;
       }
       return snapshot ?? value;
     });
@@ -499,12 +590,12 @@ export function makePiChatBackend(
         requests.delete(signal);
       }
     }
-  }
+  };
 
-  async function current(
+  const current = async (
     sessionID: string,
     signal?: AbortSignal
-  ): Promise<PiSnapshot> {
+  ): Promise<PiSnapshot> => {
     const value = await load(signal);
     if (value.session.id !== sessionID) {
       throw new Error(
@@ -512,13 +603,13 @@ export function makePiChatBackend(
       );
     }
     return value;
-  }
+  };
 
-  async function command(
+  const command = async (
     sessionID: string,
     value: PiCommand,
     signal?: AbortSignal
-  ): Promise<void> {
+  ): Promise<void> => {
     await current(sessionID, signal);
     const bound = { ...value, expectedSessionID: sessionID };
     if (
@@ -530,7 +621,7 @@ export function makePiChatBackend(
     }
     await pi.command(bound, signal);
     received = 0;
-  }
+  };
 
   const core: ChatCore = {
     message: {
@@ -563,7 +654,7 @@ export function makePiChatBackend(
           ? {}
           : { [value.session.id]: { type: "running" } };
       },
-      compact: async ({ sessionID }, options) =>
+      compact: ({ sessionID }, options) =>
         command(sessionID, { type: "compact" }, options?.signal),
       fork: async ({ sessionID, before }, options) => {
         const value = await current(sessionID, options?.signal);
@@ -584,7 +675,7 @@ export function makePiChatBackend(
       },
       get: async ({ sessionID }, options) =>
         normalized(await current(sessionID, options?.signal)).session,
-      interrupt: async ({ sessionID }, options) =>
+      interrupt: ({ sessionID }, options) =>
         command(sessionID, { type: "abort" }, options?.signal),
       prompt: async (input, options) => {
         const before = await current(input.sessionID, options?.signal);
@@ -603,9 +694,9 @@ export function makePiChatBackend(
         const value: Extract<PiCommand, { type: "prompt" }> = {
           text: input.text,
           type: "prompt",
-          ...(!after.session.idle
-            ? { delivery: input.delivery === "queue" ? "followUp" : "steer" }
-            : {}),
+          ...(after.session.idle
+            ? {}
+            : { delivery: input.delivery === "queue" ? "followUp" : "steer" }),
           ...(images.length ? { images } : {}),
         };
         await command(input.sessionID, value, options?.signal);
@@ -712,16 +803,7 @@ export function makePiChatBackend(
             if (controller.signal.aborted) {
               return;
             }
-            if (
-              batch.reset ||
-              batch.instanceID !== value.instanceID ||
-              batch.events.some(
-                (event) =>
-                  event.type === "reset" ||
-                  (event.type === "session" &&
-                    event.session.id !== value.session.id)
-              )
-            ) {
+            if (isResetBatch(batch, value)) {
               break;
             }
             if (
@@ -736,7 +818,7 @@ export function makePiChatBackend(
             value = applyBatch(value, batch);
             snapshot = value;
             received = Date.now();
-            version++;
+            version += 1;
             if (batch.events.length) {
               yield normalized(value);
             }
@@ -748,4 +830,4 @@ export function makePiChatBackend(
       }
     },
   };
-}
+};

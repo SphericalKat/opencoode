@@ -1,52 +1,54 @@
 import { normalizeConnection } from "./client";
 import type { Connection } from "./client";
 
-const codePattern = /^[A-Za-z0-9_-]+$/;
+const codePattern = /^[A-Za-z0-9_-]+$/u;
 const invalidPairing =
   "Scan a server pairing QR code or paste the complete pairing link.";
 const legacyPairing =
   "This link uses an older pairing format. Create a new pairing link on the server.";
 
-export function parsePairingPayload(input: string): Connection[] {
+const parseJsonPairingPayload = (value: string): Connection[] => {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(value);
+  } catch {
+    throw new Error(invalidPairing);
+  }
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !("code" in payload) ||
+    typeof payload.code !== "string" ||
+    !codePattern.test(payload.code) ||
+    !("urls" in payload) ||
+    !Array.isArray(payload.urls) ||
+    !payload.urls.length ||
+    !payload.urls.every((url) => typeof url === "string")
+  ) {
+    throw new Error(invalidPairing);
+  }
+  const { code } = payload;
+  let servers: Connection[];
+  try {
+    servers = payload.urls.map((url) => normalizeConnection({ name: "", url }));
+  } catch {
+    throw new Error(
+      "This pairing QR code contains an invalid server address. Create a new pairing code on the server."
+    );
+  }
+  return [
+    ...new Map(servers.map((server) => [server.url, server])).values(),
+  ].map((server) => ({
+    ...server,
+    token: undefined,
+    url: `${server.url}/auth/connect/${code}`,
+  }));
+};
+
+export const parsePairingPayload = (input: string): Connection[] => {
   const value = input.trim();
   if (value.startsWith("{")) {
-    let payload: unknown;
-    try {
-      payload = JSON.parse(value);
-    } catch {
-      throw new Error(invalidPairing);
-    }
-    if (
-      !payload ||
-      typeof payload !== "object" ||
-      !("code" in payload) ||
-      typeof payload.code !== "string" ||
-      !codePattern.test(payload.code) ||
-      !("urls" in payload) ||
-      !Array.isArray(payload.urls) ||
-      !payload.urls.length ||
-      !payload.urls.every((url) => typeof url === "string")
-    ) {
-      throw new Error(invalidPairing);
-    }
-    const { code } = payload;
-    let servers: Connection[];
-    try {
-      servers = payload.urls.map((url) =>
-        normalizeConnection({ name: "", url })
-      );
-    } catch {
-      throw new Error(
-        "This pairing QR code contains an invalid server address. Create a new pairing code on the server."
-      );
-    }
-    return [
-      ...new Map(servers.map((server) => [server.url, server])).values(),
-    ].map((server) => ({
-      ...server,
-      token: undefined,
-      url: `${server.url}/auth/connect/${code}`,
-    }));
+    return parseJsonPairingPayload(value);
   }
   let url: URL;
   try {
@@ -60,7 +62,8 @@ export function parsePairingPayload(input: string): Connection[] {
   ) {
     throw new Error(legacyPairing);
   }
-  const code = /\/auth\/connect\/([^/]+)\/?$/.exec(url.pathname)?.[1];
+  const code = /\/auth\/connect\/(?<code>[^/]+)\/?$/u.exec(url.pathname)?.groups
+    ?.code;
   if (!code || !codePattern.test(code)) {
     throw new Error(invalidPairing);
   }
@@ -69,4 +72,4 @@ export function parsePairingPayload(input: string): Connection[] {
   } catch {
     throw new Error(invalidPairing);
   }
-}
+};

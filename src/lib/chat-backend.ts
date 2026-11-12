@@ -76,60 +76,58 @@ export interface ChatBackend {
   }) => AsyncIterable<ChatBackendSnapshot>;
 }
 
-export function makeOpenCodeChatBackend(client: Client): ChatBackend {
-  return {
-    capabilities: {
-      agents: true,
-      archive: true,
-      attachments: true,
-      background: true,
-      children: true,
-      commands: true,
-      compact: true,
-      context: true,
-      defaultVariant: true,
-      delivery: true,
-      diff: true,
-      export: true,
-      files: true,
-      forkMessage: true,
-      forkSession: true,
-      forms: true,
-      inbox: true,
-      instructions: true,
-      move: true,
-      permissions: true,
-      remove: true,
-      rename: true,
-      resources: true,
-      schedules: true,
-      shell: true,
-      sideQuestion: true,
-      skills: true,
-      statistics: true,
-    },
-    core: {
-      event: { subscribe: client.event.subscribe },
-      message: { list: client.message.list },
-      model: { list: client.model.list },
-      session: {
-        active: client.session.active,
-        compact: async (...args) => {
-          await client.session.compact(...args);
-        },
-        fork: client.session.fork,
-        get: client.session.get,
-        interrupt: async (...args) => {
-          await client.session.interrupt(...args);
-        },
-        prompt: async (...args) => {
-          await client.session.prompt(...args);
-        },
-        switchModel: client.session.switchModel,
-        update: client.session.update,
+export const makeOpenCodeChatBackend = (client: Client): ChatBackend => ({
+  capabilities: {
+    agents: true,
+    archive: true,
+    attachments: true,
+    background: true,
+    children: true,
+    commands: true,
+    compact: true,
+    context: true,
+    defaultVariant: true,
+    delivery: true,
+    diff: true,
+    export: true,
+    files: true,
+    forkMessage: true,
+    forkSession: true,
+    forms: true,
+    inbox: true,
+    instructions: true,
+    move: true,
+    permissions: true,
+    remove: true,
+    rename: true,
+    resources: true,
+    schedules: true,
+    shell: true,
+    sideQuestion: true,
+    skills: true,
+    statistics: true,
+  },
+  core: {
+    event: { subscribe: client.event.subscribe },
+    message: { list: client.message.list },
+    model: { list: client.model.list },
+    session: {
+      active: client.session.active,
+      compact: async (...args) => {
+        await client.session.compact(...args);
       },
+      fork: client.session.fork,
+      get: client.session.get,
+      interrupt: async (...args) => {
+        await client.session.interrupt(...args);
+      },
+      prompt: async (...args) => {
+        await client.session.prompt(...args);
+      },
+      switchModel: client.session.switchModel,
+      update: client.session.update,
     },
-    kind: "opencode",
-    opencodeClient: client,
-  };
-}
+  },
+  kind: "opencode",
+  opencodeClient: client,
+});

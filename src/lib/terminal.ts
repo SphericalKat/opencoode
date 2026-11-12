@@ -28,7 +28,7 @@ export type TerminalCommand =
   | { type: "restore"; checkpoint: string; cols: number; rows: number }
   | { type: "inputEnabled"; enabled: boolean };
 
-export function persistentPtySocketUrl(
+export const persistentPtySocketUrl = (
   server: string,
   ptyID: string,
   ticket: string,
@@ -38,9 +38,9 @@ export function persistentPtySocketUrl(
     takeover?: boolean;
     role?: "controller" | "observer";
   }
-): string {
+): string => {
   const url = new URL(
-    `${server.replace(/\/+$/, "")}/api/experimental/persistent-pty/${encodeURIComponent(ptyID)}/connect`
+    `${server.replace(/\/+$/u, "")}/api/experimental/persistent-pty/${encodeURIComponent(ptyID)}/connect`
   );
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Use an HTTP or HTTPS server URL");
@@ -59,12 +59,12 @@ export function persistentPtySocketUrl(
   url.searchParams.set("takeover", String(options.takeover ?? false));
   url.searchParams.set("input_protocol", "1");
   return url.toString();
-}
+};
 
-export function persistentInputFrame(
+export const persistentInputFrame = (
   size: { cols: number; rows: number },
   data?: Uint8Array
-): ArrayBuffer {
+): ArrayBuffer => {
   if (
     !Number.isInteger(size.cols) ||
     !Number.isInteger(size.rows) ||
@@ -84,9 +84,9 @@ export function persistentInputFrame(
     frame.set(data, 5);
   }
   return frame.buffer;
-}
+};
 
-export function terminalEvent(value: unknown): TerminalEvent | undefined {
+export const terminalEvent = (value: unknown): TerminalEvent | undefined => {
   if (!value || typeof value !== "object" || !("type" in value)) {
     return;
   }
@@ -121,17 +121,17 @@ export function terminalEvent(value: unknown): TerminalEvent | undefined {
       type: "resize",
     };
   }
-}
+};
 
-export function ptySocketUrl(
+export const ptySocketUrl = (
   server: string,
   directory: string,
   ptyID: string,
   ticket: string,
   cursor?: number
-): string {
+): string => {
   const url = new URL(
-    `${server.replace(/\/+$/, "")}/api/pty/${encodeURIComponent(ptyID)}/connect`
+    `${server.replace(/\/+$/u, "")}/api/pty/${encodeURIComponent(ptyID)}/connect`
   );
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Use an HTTP or HTTPS server URL");
@@ -149,9 +149,9 @@ export function ptySocketUrl(
     url.searchParams.set("cursor", String(cursor));
   }
   return url.toString();
-}
+};
 
-export function ptyControlCursor(bytes: ArrayBuffer): number | undefined {
+export const ptyControlCursor = (bytes: ArrayBuffer): number | undefined => {
   const data = new Uint8Array(bytes);
   if (data[0] !== 0) {
     return;
@@ -171,6 +171,6 @@ export function ptyControlCursor(bytes: ArrayBuffer): number | undefined {
       return value.cursor;
     }
   } catch {
-    return;
+    // A malformed control frame carries no cursor.
   }
-}
+};

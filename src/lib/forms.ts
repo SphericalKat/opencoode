@@ -6,181 +6,29 @@ export type FormValues = Record<
 >;
 export type FormAnswer = Record<string, string | number | boolean | string[]>;
 
-export function initialFormValues(fields: readonly FormField[]): FormValues {
-  return Object.fromEntries(
-    fields.flatMap((field) =>
-      field.type !== "external" && field.default !== undefined
-        ? [[field.key, field.default]]
-        : []
-    )
-  );
-}
+type FormValue = FormAnswer[string];
+type FieldOutcome = { error: string } | { value: FormValue } | undefined;
+type NumericField = Extract<FormField, { type: "number" | "integer" }>;
+type MultiselectField = Extract<FormField, { type: "multiselect" }>;
+type TextField = Exclude<
+  FormField,
+  { type: "number" | "integer" | "boolean" | "multiselect" | "external" }
+>;
 
-export function isFieldActive(field: FormField, answer: FormValues): boolean {
-  return (
-    field.type === "external" ||
-    !field.when ||
-    field.when.every((condition) => {
-      const value = answer[condition.key];
-      if (value === undefined) {
-        return false;
-      }
-      const equal = Array.isArray(value)
-        ? value.some((item) => item === condition.value)
-        : value === condition.value;
-      return condition.op === "eq" ? equal : !equal;
-    })
-  );
-}
-
-export function prepareFormAnswer(
-  fields: readonly FormField[],
-  values: FormValues
-): { answer: FormAnswer; errors: Record<string, string> } {
-  const answer: FormAnswer = {};
-  const errors: Record<string, string> = {};
-  for (const field of fields) {
-    if (field.type === "external") {
-      if (values[field.key] === true) {
-        answer[field.key] = true;
-      } else {
-        errors[field.key] = "Confirm that you completed this step";
-      }
-      continue;
-    }
-    if (!isFieldActive(field, answer)) {
-      continue;
-    }
-    const value = Object.hasOwn(values, field.key)
-      ? values[field.key]
-      : field.default;
-    if (
-      value === undefined ||
-      ((field.type === "number" || field.type === "integer") && value === "")
-    ) {
-      if (field.required) {
-        errors[field.key] = "Enter a value";
-      }
-      continue;
-    }
-    if (
-      field.required &&
-      (value === "" || (Array.isArray(value) && value.length === 0))
-    ) {
-      errors[field.key] = "Enter a value";
-      continue;
-    }
-    if (field.type === "boolean") {
-      if (typeof value === "boolean") {
-        answer[field.key] = value;
-      } else {
-        errors[field.key] = "Choose Yes or No";
-      }
-      continue;
-    }
-    if (field.type === "integer" || field.type === "number") {
-      const number =
-        typeof value === "number"
-          ? value
-          : typeof value === "string" && value.trim()
-            ? Number(value)
-            : Number.NaN;
-      if (
-        !Number.isFinite(number) ||
-        (field.type === "integer" && !Number.isInteger(number))
-      ) {
-        errors[field.key] =
-          field.type === "integer" ? "Enter a whole number" : "Enter a number";
-      } else if (
-        field.minimum !== undefined &&
-        number < Number(field.minimum)
-      ) {
-        errors[field.key] = `Enter ${field.minimum} or more`;
-      } else if (
-        field.maximum !== undefined &&
-        number > Number(field.maximum)
-      ) {
-        errors[field.key] = `Enter ${field.maximum} or less`;
-      } else {
-        answer[field.key] = number;
-      }
-      continue;
-    }
-    if (field.type === "multiselect") {
-      if (
-        !Array.isArray(value) ||
-        value.some((item) => typeof item !== "string")
-      ) {
-        errors[field.key] = "Choose valid options";
-      } else if (new Set(value).size !== value.length) {
-        errors[field.key] = "Choose each option once";
-      } else if (
-        !field.custom &&
-        value.some(
-          (item) => !field.options.some((option) => option.value === item)
-        )
-      ) {
-        errors[field.key] = "Choose an option from the list";
-      } else if (
-        field.minItems !== undefined &&
-        value.length < field.minItems
-      ) {
-        errors[field.key] = `Choose at least ${field.minItems} options`;
-      } else if (
-        field.maxItems !== undefined &&
-        value.length > field.maxItems
-      ) {
-        errors[field.key] = `Choose no more than ${field.maxItems} options`;
-      } else {
-        answer[field.key] = value;
-      }
-      continue;
-    }
-    if (typeof value !== "string") {
-      errors[field.key] = "Enter text";
-      continue;
-    }
-    if (
-      field.options &&
-      !field.custom &&
-      !field.options.some((option) => option.value === value)
-    ) {
-      errors[field.key] = "Choose an option from the list";
-    } else if (
-      field.minLength !== undefined &&
-      value.length < field.minLength
-    ) {
-      errors[field.key] = `Enter at least ${field.minLength} characters`;
-    } else if (
-      field.maxLength !== undefined &&
-      value.length > field.maxLength
-    ) {
-      errors[field.key] = `Enter no more than ${field.maxLength} characters`;
-    } else if (field.pattern && !matchesPattern(value, field.pattern)) {
-      errors[field.key] = "Enter text in the required format";
-    } else if (field.format && !matchesFormat(value, field.format)) {
-      errors[field.key] = `Enter a valid ${field.format}`;
-    } else {
-      answer[field.key] = value;
-    }
-  }
-  return { answer, errors };
-}
-
-function matchesPattern(value: string, pattern: string): boolean {
+const matchesPattern = (value: string, pattern: string): boolean => {
   try {
     return new RegExp(pattern).test(value);
   } catch {
     return false;
   }
-}
+};
 
-function matchesFormat(
+const matchesFormat = (
   value: string,
   format: "email" | "uri" | "date" | "date-time"
-): boolean {
+): boolean => {
   if (format === "email") {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
   }
   if (format === "uri") {
     try {
@@ -191,10 +39,179 @@ function matchesFormat(
   }
   if (format === "date") {
     return (
-      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      /^\d{4}-\d{2}-\d{2}$/u.test(value) &&
       Number.isFinite(Date.parse(value)) &&
       new Date(value).toISOString().slice(0, 10) === value
     );
   }
   return Number.isFinite(Date.parse(value));
-}
+};
+
+export const initialFormValues = (fields: readonly FormField[]): FormValues =>
+  Object.fromEntries(
+    fields.flatMap((field) =>
+      field.type !== "external" && field.default !== undefined
+        ? [[field.key, field.default]]
+        : []
+    )
+  );
+
+export const isFieldActive = (field: FormField, answer: FormValues): boolean =>
+  field.type === "external" ||
+  !field.when ||
+  field.when.every((condition) => {
+    const value = answer[condition.key];
+    if (value === undefined) {
+      return false;
+    }
+    const equal = Array.isArray(value)
+      ? value.some((item) => item === condition.value)
+      : value === condition.value;
+    return condition.op === "eq" ? equal : !equal;
+  });
+
+const toNumber = (value: FormValue): number => {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    return Number(value);
+  }
+  return Number.NaN;
+};
+
+const validateNumber = (
+  field: NumericField,
+  value: FormValue
+): FieldOutcome => {
+  const number = toNumber(value);
+  if (
+    !Number.isFinite(number) ||
+    (field.type === "integer" && !Number.isInteger(number))
+  ) {
+    return {
+      error:
+        field.type === "integer" ? "Enter a whole number" : "Enter a number",
+    };
+  }
+  if (field.minimum !== undefined && number < Number(field.minimum)) {
+    return { error: `Enter ${field.minimum} or more` };
+  }
+  if (field.maximum !== undefined && number > Number(field.maximum)) {
+    return { error: `Enter ${field.maximum} or less` };
+  }
+  return { value: number };
+};
+
+const validateMultiselect = (
+  field: MultiselectField,
+  value: FormValue
+): FieldOutcome => {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    return { error: "Choose valid options" };
+  }
+  if (new Set(value).size !== value.length) {
+    return { error: "Choose each option once" };
+  }
+  if (
+    !field.custom &&
+    value.some((item) => !field.options.some((option) => option.value === item))
+  ) {
+    return { error: "Choose an option from the list" };
+  }
+  if (field.minItems !== undefined && value.length < field.minItems) {
+    return { error: `Choose at least ${field.minItems} options` };
+  }
+  if (field.maxItems !== undefined && value.length > field.maxItems) {
+    return { error: `Choose no more than ${field.maxItems} options` };
+  }
+  return { value };
+};
+
+const validateText = (field: TextField, value: FormValue): FieldOutcome => {
+  if (typeof value !== "string") {
+    return { error: "Enter text" };
+  }
+  if (
+    field.options &&
+    !field.custom &&
+    !field.options.some((option) => option.value === value)
+  ) {
+    return { error: "Choose an option from the list" };
+  }
+  if (field.minLength !== undefined && value.length < field.minLength) {
+    return { error: `Enter at least ${field.minLength} characters` };
+  }
+  if (field.maxLength !== undefined && value.length > field.maxLength) {
+    return { error: `Enter no more than ${field.maxLength} characters` };
+  }
+  if (field.pattern && !matchesPattern(value, field.pattern)) {
+    return { error: "Enter text in the required format" };
+  }
+  if (field.format && !matchesFormat(value, field.format)) {
+    return { error: `Enter a valid ${field.format}` };
+  }
+  return { value };
+};
+
+const validateField = (
+  field: FormField,
+  values: FormValues,
+  answer: FormAnswer
+): FieldOutcome => {
+  if (field.type === "external") {
+    return values[field.key] === true
+      ? { value: true }
+      : { error: "Confirm that you completed this step" };
+  }
+  if (!isFieldActive(field, answer)) {
+    return undefined;
+  }
+  const value = Object.hasOwn(values, field.key)
+    ? values[field.key]
+    : field.default;
+  if (
+    value === undefined ||
+    ((field.type === "number" || field.type === "integer") && value === "")
+  ) {
+    return field.required ? { error: "Enter a value" } : undefined;
+  }
+  if (
+    field.required &&
+    (value === "" || (Array.isArray(value) && value.length === 0))
+  ) {
+    return { error: "Enter a value" };
+  }
+  if (field.type === "boolean") {
+    return typeof value === "boolean"
+      ? { value }
+      : { error: "Choose Yes or No" };
+  }
+  if (field.type === "integer" || field.type === "number") {
+    return validateNumber(field, value);
+  }
+  if (field.type === "multiselect") {
+    return validateMultiselect(field, value);
+  }
+  return validateText(field, value);
+};
+
+export const prepareFormAnswer = (
+  fields: readonly FormField[],
+  values: FormValues
+): { answer: FormAnswer; errors: Record<string, string> } => {
+  const answer: FormAnswer = {};
+  const errors: Record<string, string> = {};
+  for (const field of fields) {
+    const outcome = validateField(field, values, answer);
+    if (outcome === undefined) {
+      continue;
+    }
+    if ("error" in outcome) {
+      errors[field.key] = outcome.error;
+    } else {
+      answer[field.key] = outcome.value;
+    }
+  }
+  return { answer, errors };
+};

@@ -17,13 +17,21 @@ interface Guard {
   has: (id: string) => boolean;
 }
 const Context = createContext<Guard>({
-  confirm: async () => true,
+  confirm: () => Promise.resolve(true),
   has: () => false,
-  subscribe: () => () => {},
-  update: () => {},
+  subscribe: () => () => {
+    // Without a provider there is nothing to unsubscribe.
+  },
+  update: () => {
+    // Without a provider there are no unsaved changes to track.
+  },
 });
 
-export function UnsavedProvider({ children }: { children: React.ReactNode }) {
+export const UnsavedProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const changes = useRef(new Map<string, string>());
   const listeners = useRef(new Set<() => void>());
   const update = useCallback((id: string, label: string | null) => {
@@ -35,7 +43,9 @@ export function UnsavedProvider({ children }: { children: React.ReactNode }) {
     } else {
       changes.current.delete(id);
     }
-    listeners.current.forEach((listener) => listener());
+    for (const listener of listeners.current) {
+      listener();
+    }
   }, []);
   const subscribe = useCallback((listener: () => void) => {
     listeners.current.add(listener);
@@ -50,10 +60,10 @@ export function UnsavedProvider({ children }: { children: React.ReactNode }) {
       : [...new Set(changes.current.values())];
     return (
       !labels.length ||
-      confirmAction(
+      (await confirmAction(
         "Leave this view?",
         `${labels.join(", ")} contains unsaved changes. Continue?`
-      )
+      ))
     );
   }, []);
   const value = useMemo(
@@ -61,26 +71,30 @@ export function UnsavedProvider({ children }: { children: React.ReactNode }) {
     [update, confirm, subscribe, has]
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
-}
+};
 
-export function useUnsavedChanges(id: string, label: string, dirty: boolean) {
+export const useUnsavedChanges = (
+  id: string,
+  label: string,
+  dirty: boolean
+) => {
   const { update } = useContext(Context);
   useEffect(() => {
     update(id, dirty ? label : null);
     return () => update(id, null);
   }, [id, label, dirty, update]);
-}
+};
 
-export function useUnsavedGuard(id?: string) {
+export const useUnsavedGuard = (id?: string) => {
   const { confirm } = useContext(Context);
   return useCallback(() => confirm(id), [confirm, id]);
-}
+};
 
-export function useHasUnsavedChanges(id: string) {
+export const useHasUnsavedChanges = (id: string) => {
   const { subscribe, has } = useContext(Context);
   return useSyncExternalStore(
     subscribe,
     () => has(id),
     () => false
   );
-}
+};

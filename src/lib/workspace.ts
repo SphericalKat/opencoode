@@ -1,6 +1,6 @@
 export const EDITABLE_FILE_LIMIT = 512 * 1024;
 
-export function decodeEditableFile(bytes: Uint8Array): string {
+export const decodeEditableFile = (bytes: Uint8Array): string => {
   if (bytes.byteLength > EDITABLE_FILE_LIMIT) {
     throw new Error("This file exceeds the 512 KB mobile editor limit");
   }
@@ -16,18 +16,18 @@ export function decodeEditableFile(bytes: Uint8Array): string {
       "This file is not UTF-8 text. Attach it to a prompt instead"
     );
   }
-}
+};
 
 interface FileAccess {
   read: () => Promise<Uint8Array>;
   write: (bytes: Uint8Array) => Promise<unknown>;
 }
 
-export async function saveEditableFile(
+export const saveEditableFile = async (
   access: FileAccess,
   original: Uint8Array,
   text: string
-): Promise<Uint8Array> {
+): Promise<Uint8Array> => {
   const latest = await access.read();
   if (
     latest.length !== original.length ||
@@ -43,32 +43,28 @@ export async function saveEditableFile(
   }
   await access.write(next);
   return next;
-}
+};
 
-export function parentPath(path: string): string {
-  return path
-    .replace(/[\\/]+$/, "")
-    .split(/[\\/]/)
+export const parentPath = (path: string): string =>
+  path
+    .replace(/[\\/]+$/u, "")
+    .split(/[\\/]/u)
     .slice(0, -1)
     .join("/");
-}
 
-export function fileName(path: string): string {
-  return (
-    path
-      .replace(/[\\/]+$/, "")
-      .split(/[\\/]/)
-      .pop() || path
-  );
-}
+export const fileName = (path: string): string =>
+  path
+    .replace(/[\\/]+$/u, "")
+    .split(/[\\/]/u)
+    .pop() || path;
 
-export function serverFilePath(directory: string, path: string): string {
+export const serverFilePath = (directory: string, path: string): string => {
   if (
     path.startsWith("/") ||
     path.startsWith("\\\\") ||
-    /^[A-Za-z]:[\\/]/.test(path)
+    /^[A-Za-z]:[\\/]/u.test(path)
   ) {
     return path;
   }
-  return `${directory.replace(/[\\/]+$/, "")}/${path}`;
-}
+  return `${directory.replace(/[\\/]+$/u, "")}/${path}`;
+};

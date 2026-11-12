@@ -129,8 +129,8 @@ const Context = createContext<Theme>({
   colors: darkColors,
   palette: "default",
   scheme: "dark",
-  setAppearance: async () => {},
-  setPalette: async () => {},
+  setAppearance: () => Promise.resolve(),
+  setPalette: () => Promise.resolve(),
 });
 const preferenceKey = "opencoode.appearance";
 const paletteKey = "opencoode.palette";
@@ -141,116 +141,6 @@ export const paletteOptions = [
     : []),
   ...upstreamThemes.map(({ id, name }) => ({ id, name })),
 ];
-
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const betaLayout = useBetaLayout();
-  const system = useColorScheme();
-  const { theme: materialTheme } = useMaterial3Theme();
-  const [appearance, updateAppearance] = useState<Appearance>("system");
-  const revision = useRef(0);
-  const paletteRevision = useRef(0);
-  const [palette, updatePalette] = useState("default");
-  useEffect(() => {
-    let alive = true;
-    const read =
-      Platform.OS === "web"
-        ? Promise.resolve(globalThis.sessionStorage.getItem(paletteKey))
-        : SecureStore.getItemAsync(paletteKey);
-    void read
-      .then((value) => {
-        if (
-          alive &&
-          paletteRevision.current === 0 &&
-          value &&
-          (value === "dynamic" ||
-            upstreamThemes.some((theme) => theme.id === value))
-        ) {
-          updatePalette(value);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-  const setPalette = useCallback(async (next: string) => {
-    const request = ++paletteRevision.current;
-    if (Platform.OS === "web") {
-      globalThis.sessionStorage.setItem(paletteKey, next);
-    } else {
-      await SecureStore.setItemAsync(paletteKey, next);
-    }
-    if (request === paletteRevision.current) {
-      updatePalette(next);
-    }
-  }, []);
-  useEffect(() => {
-    let alive = true;
-    const read = async () =>
-      Platform.OS === "web"
-        ? globalThis.sessionStorage.getItem(preferenceKey)
-        : SecureStore.getItemAsync(preferenceKey);
-    void read()
-      .then((value) => {
-        if (
-          alive &&
-          revision.current === 0 &&
-          (value === "system" || value === "dark" || value === "light")
-        ) {
-          updateAppearance(value);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const setAppearance = useCallback(async (next: Appearance) => {
-    const request = ++revision.current;
-    if (Platform.OS === "web") {
-      globalThis.sessionStorage.setItem(preferenceKey, next);
-    } else {
-      await SecureStore.setItemAsync(preferenceKey, next);
-    }
-    if (request === revision.current) {
-      updateAppearance(next);
-    }
-  }, []);
-  const scheme =
-    appearance === "system"
-      ? system === "light"
-        ? "light"
-        : "dark"
-      : appearance;
-  useEffect(() => {
-    if (Platform.OS === "web") {
-      document.documentElement.style.colorScheme = scheme;
-    }
-  }, [scheme]);
-  const fallback = betaLayout
-    ? scheme === "light"
-      ? betaLightColors
-      : betaDarkColors
-    : scheme === "light"
-      ? lightColors
-      : darkColors;
-  const colors = useMemo(() => {
-    const preset = upstreamThemes.find((item) => item.id === palette);
-    if (preset) {
-      return mapPreset(preset[scheme], fallback);
-    }
-    if (palette === "dynamic" && isDynamicThemeSupported) {
-      return dynamicColors(materialTheme[scheme], fallback);
-    }
-    return fallback;
-  }, [palette, scheme, fallback, materialTheme]);
-  const theme = useMemo(
-    () => ({ appearance, colors, palette, scheme, setAppearance, setPalette }),
-    [colors, appearance, scheme, setAppearance, palette, setPalette]
-  );
-  return <Context.Provider value={theme}>{children}</Context.Provider>;
-}
 
 const betaDarkColors: ThemeColors = {
   ...darkColors,
@@ -267,19 +157,10 @@ const betaLightColors: ThemeColors = {
   selected: "#f2f2f2",
 };
 
-export function useTheme() {
-  return useContext(Context);
-}
-
-export function useThemedStyles<T>(factory: (colors: ThemeColors) => T): T {
-  const { colors } = useTheme();
-  return useMemo(() => factory(colors), [colors, factory]);
-}
-
-function mapPreset(
+const mapPreset = (
   t: Record<string, string>,
   fallback: ThemeColors
-): ThemeColors {
+): ThemeColors => {
   const color = (key: string, otherwise: string) =>
     t[key]?.startsWith("#") ? t[key] : otherwise;
   return {
@@ -316,32 +197,170 @@ function mapPreset(
     syntaxType: color("syntax-type", fallback.syntaxType),
     text: color("text-base", fallback.text),
   };
-}
+};
 
-function dynamicColors(t: Material3Scheme, fallback: ThemeColors): ThemeColors {
-  return {
-    ...fallback,
-    accent: t.primary,
-    accentText: t.onPrimary,
-    bg: t.background,
-    blue: t.primary,
-    border: t.outlineVariant,
-    danger: t.error,
-    dangerBackground: t.errorContainer,
-    dangerBorder: t.error,
-    faint: t.outline,
-    focus: t.primary,
-    frame: t.background,
-    input: t.surfaceContainer,
-    muted: t.onSurfaceVariant,
-    panel: t.surface,
-    primary: t.primary,
-    primaryText: t.onPrimary,
-    raised: t.surfaceContainerHigh,
-    selected: t.secondaryContainer,
-    syntaxConstant: t.tertiary,
-    syntaxKeyword: t.primary,
-    syntaxProperty: t.secondary,
-    text: t.onBackground,
-  };
-}
+const dynamicColors = (
+  t: Material3Scheme,
+  fallback: ThemeColors
+): ThemeColors => ({
+  ...fallback,
+  accent: t.primary,
+  accentText: t.onPrimary,
+  bg: t.background,
+  blue: t.primary,
+  border: t.outlineVariant,
+  danger: t.error,
+  dangerBackground: t.errorContainer,
+  dangerBorder: t.error,
+  faint: t.outline,
+  focus: t.primary,
+  frame: t.background,
+  input: t.surfaceContainer,
+  muted: t.onSurfaceVariant,
+  panel: t.surface,
+  primary: t.primary,
+  primaryText: t.onPrimary,
+  raised: t.surfaceContainerHigh,
+  selected: t.secondaryContainer,
+  syntaxConstant: t.tertiary,
+  syntaxKeyword: t.primary,
+  syntaxProperty: t.secondary,
+  text: t.onBackground,
+});
+
+const resolveScheme = (
+  appearance: Appearance,
+  system: ReturnType<typeof useColorScheme>
+): "light" | "dark" => {
+  if (appearance !== "system") {
+    return appearance;
+  }
+  return system === "light" ? "light" : "dark";
+};
+
+const fallbackColors = (
+  betaLayout: boolean,
+  scheme: "light" | "dark"
+): ThemeColors => {
+  if (betaLayout) {
+    return scheme === "light" ? betaLightColors : betaDarkColors;
+  }
+  return scheme === "light" ? lightColors : darkColors;
+};
+
+export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
+  const betaLayout = useBetaLayout();
+  const system = useColorScheme();
+  const { theme: materialTheme } = useMaterial3Theme();
+  const [appearanceState, setAppearanceState] = useState<Appearance>("system");
+  const revision = useRef(0);
+  const paletteRevision = useRef(0);
+  const [paletteState, setPaletteState] = useState("default");
+  useEffect(() => {
+    let alive = true;
+    const read =
+      Platform.OS === "web"
+        ? Promise.resolve(globalThis.sessionStorage.getItem(paletteKey))
+        : SecureStore.getItemAsync(paletteKey);
+    void read
+      .then((value) => {
+        if (
+          alive &&
+          paletteRevision.current === 0 &&
+          value &&
+          (value === "dynamic" ||
+            upstreamThemes.some((theme) => theme.id === value))
+        ) {
+          setPaletteState(value);
+        }
+        return null;
+      })
+      .catch(() => null);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const setPalette = useCallback(async (next: string) => {
+    paletteRevision.current += 1;
+    const request = paletteRevision.current;
+    if (Platform.OS === "web") {
+      globalThis.sessionStorage.setItem(paletteKey, next);
+    } else {
+      await SecureStore.setItemAsync(paletteKey, next);
+    }
+    if (request === paletteRevision.current) {
+      setPaletteState(next);
+    }
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    const read = async () =>
+      Platform.OS === "web"
+        ? globalThis.sessionStorage.getItem(preferenceKey)
+        : await SecureStore.getItemAsync(preferenceKey);
+    void read()
+      .then((value) => {
+        if (
+          alive &&
+          revision.current === 0 &&
+          (value === "system" || value === "dark" || value === "light")
+        ) {
+          setAppearanceState(value);
+        }
+        return null;
+      })
+      .catch(() => null);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const setAppearance = useCallback(async (next: Appearance) => {
+    revision.current += 1;
+    const request = revision.current;
+    if (Platform.OS === "web") {
+      globalThis.sessionStorage.setItem(preferenceKey, next);
+    } else {
+      await SecureStore.setItemAsync(preferenceKey, next);
+    }
+    if (request === revision.current) {
+      setAppearanceState(next);
+    }
+  }, []);
+  const scheme = resolveScheme(appearanceState, system);
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      document.documentElement.style.colorScheme = scheme;
+    }
+  }, [scheme]);
+  const fallback = fallbackColors(betaLayout, scheme);
+  const colors = useMemo(() => {
+    const preset = upstreamThemes.find((item) => item.id === paletteState);
+    if (preset) {
+      return mapPreset(preset[scheme], fallback);
+    }
+    if (paletteState === "dynamic" && isDynamicThemeSupported) {
+      return dynamicColors(materialTheme[scheme], fallback);
+    }
+    return fallback;
+  }, [paletteState, scheme, fallback, materialTheme]);
+  const theme = useMemo(
+    () => ({
+      appearance: appearanceState,
+      colors,
+      palette: paletteState,
+      scheme,
+      setAppearance,
+      setPalette,
+    }),
+    [colors, appearanceState, scheme, setAppearance, paletteState, setPalette]
+  );
+  return <Context.Provider value={theme}>{children}</Context.Provider>;
+};
+
+export const useTheme = () => useContext(Context);
+
+export const useThemedStyles = <T,>(factory: (colors: ThemeColors) => T): T => {
+  const { colors } = useTheme();
+  return useMemo(() => factory(colors), [colors, factory]);
+};

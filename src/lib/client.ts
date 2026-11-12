@@ -23,13 +23,13 @@ let redeemedPairing:
   | { code: string; token: string; urls: string[]; expiresAt: number }
   | undefined;
 
-export function clearPairingRetry(): void {
+export const clearPairingRetry = (): void => {
   redeemedPairing = undefined;
-}
+};
 
-export function normalizeConnection(
+export const normalizeConnection = (
   input: Omit<Connection, "id"> & { id?: string }
-): Connection {
+): Connection => {
   let url: URL;
   try {
     url = new URL(input.url.trim());
@@ -56,38 +56,40 @@ export function normalizeConnection(
     id: input.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     name: input.name.trim() || url.hostname,
     token: input.token || undefined,
-    url: url.toString().replace(/\/+$/, ""),
+    url: url.toString().replace(/\/+$/u, ""),
     username,
   };
-}
+};
 
-export function authorizationHeader(
+export const authorizationHeader = (
   connection: Connection
-): string | undefined {
+): string | undefined => {
   if (!connection.token) {
     return undefined;
   }
   const bytes = new TextEncoder().encode(
     `${connection.username || "opencode"}:${connection.token}`
   );
-  return `Basic ${btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""))}`;
-}
+  return `Basic ${btoa(Array.from(bytes, (byte) => String.fromCodePoint(byte)).join(""))}`;
+};
 
-export function createClient(
+export const createClient = (
   connection: Connection,
   fetchOverride: typeof globalThis.fetch = globalThis.fetch
-): Client {
+): Client => {
   const authorization = authorizationHeader(connection);
   return OpenCode.make({
     baseUrl: connection.url,
     fetch: fetchOverride,
     headers: authorization ? { Authorization: authorization } : undefined,
   });
-}
+};
 
-function pairingAddress(connection: Connection) {
+const pairingAddress = (connection: Connection) => {
   const url = new URL(connection.url);
-  const match = /^(.*)\/auth\/connect\/([^/]+)\/?$/.exec(url.pathname);
+  const match = /^(?<prefix>.*)\/auth\/connect\/(?<code>[^/]+)\/?$/u.exec(
+    url.pathname
+  );
   if (!match) {
     return;
   }
@@ -99,22 +101,19 @@ function pairingAddress(connection: Connection) {
       "This pairing link is invalid. Create a new link on your computer."
     );
   }
-  if (!/^[A-Za-z0-9_-]+$/.test(code)) {
+  if (!/^[A-Za-z0-9_-]+$/u.test(code)) {
     throw new Error(
       "This pairing link is invalid. Create a new link on your computer."
     );
   }
-  return { code, url: `${url.origin}${match[1]}`.replace(/\/+$/, "") };
-}
+  return { code, url: `${url.origin}${match[1]}`.replace(/\/+$/u, "") };
+};
 
-export function isConnectionUnauthorized(error: unknown): boolean {
-  return (
-    isUnauthorizedError(error) ||
-    (error instanceof PiConnectionError && error.status === 401)
-  );
-}
+export const isConnectionUnauthorized = (error: unknown): boolean =>
+  isUnauthorizedError(error) ||
+  (error instanceof PiConnectionError && error.status === 401);
 
-function pairingFailure(error: unknown): unknown {
+const pairingFailure = (error: unknown): unknown => {
   if (
     !error ||
     typeof error !== "object" ||
@@ -128,13 +127,13 @@ function pairingFailure(error: unknown): unknown {
     error.errors[0] ??
     new Error("The server is unreachable. Check your network and try again.")
   );
-}
+};
 
-async function checkConnection(
+const checkConnection = async (
   next: Connection,
   fetchOverride: typeof globalThis.fetch,
   signal: AbortSignal
-): Promise<ConnectedServer> {
+): Promise<ConnectedServer> => {
   const discovery = await fetchOverride(`${next.url}/opencoode/info`, {
     headers: { Accept: "application/json" },
     signal,
@@ -183,49 +182,37 @@ async function checkConnection(
     connection: { ...next, backend: "opencode" },
     info,
   };
-}
+};
 
-export async function withServerDeadline<T>(
+export const withServerDeadline = async <T>(
   operation: (signal: AbortSignal) => Promise<T>
-): Promise<T> {
+): Promise<T> => {
   const controller = new AbortController();
   let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([
-      operation(controller.signal),
-      new Promise<never>((_, reject) => {
-        deadline = setTimeout(() => {
-          reject(
-            new Error(
-              "The server did not respond within 15 seconds. Check its address and your network."
-            )
-          );
-          controller.abort();
-        }, 15_000);
-      }),
-    ]);
+    const pending = operation(controller.signal);
+    const timeout = Promise.withResolvers<never>();
+    deadline = setTimeout(() => {
+      timeout.reject(
+        new Error(
+          "The server did not respond within 15 seconds. Check its address and your network."
+        )
+      );
+      controller.abort();
+    }, 15_000);
+    return await Promise.race([pending, timeout.promise]);
   } finally {
     clearTimeout(deadline);
     controller.abort();
   }
-}
+};
 
-export async function connect(
-  connection: Connection,
-  fetchOverride: typeof globalThis.fetch = globalThis.fetch,
-  alternatives: Connection[] = []
-) {
-  return withServerDeadline((signal) =>
-    connectWithSignal(connection, fetchOverride, alternatives, signal)
-  );
-}
-
-async function connectWithSignal(
+const connectWithSignal = async (
   connection: Connection,
   fetchOverride: typeof globalThis.fetch,
   alternatives: Connection[],
   signal: AbortSignal
-) {
+) => {
   const next = normalizeConnection(connection);
   const pairing = pairingAddress(next);
   if (!pairing) {
@@ -327,18 +314,25 @@ async function connectWithSignal(
   }
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([
-      checks[0].catch(() => paired),
-      new Promise<typeof paired>((resolve) => {
-        timer = setTimeout(() => resolve(paired), 1000);
-      }),
-    ]);
+    const preferred = checks[0].catch(() => paired);
+    const fallback = Promise.withResolvers<typeof paired>();
+    timer = setTimeout(() => fallback.resolve(paired), 1000);
+    return await Promise.race([preferred, fallback.promise]);
   } finally {
     clearTimeout(timer);
   }
-}
+};
 
-export function errorMessage(error: unknown): string {
+export const connect = (
+  connection: Connection,
+  fetchOverride: typeof globalThis.fetch = globalThis.fetch,
+  alternatives: Connection[] = []
+) =>
+  withServerDeadline((signal) =>
+    connectWithSignal(connection, fetchOverride, alternatives, signal)
+  );
+
+export const errorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message;
   }
@@ -351,14 +345,14 @@ export function errorMessage(error: unknown): string {
     return error.message;
   }
   return "The server request failed";
-}
+};
 
-export function connectionErrorMessage(
+export const connectionErrorMessage = (
   error: unknown,
   connection: Pick<Connection, "url">
-): string {
+): string => {
   if (isConnectionUnauthorized(error)) {
-    if (/\/auth\/connect\/[^/]+\/?$/.test(connection.url)) {
+    if (/\/auth\/connect\/[^/]+\/?$/u.test(connection.url)) {
       return "This pairing link expired or was already used. A new pairing link from your computer is required.";
     }
     return "The server rejected this password. The current server password or a new pairing link is required.";
@@ -393,4 +387,4 @@ export function connectionErrorMessage(
     }
   }
   return errorMessage(error);
-}
+};
