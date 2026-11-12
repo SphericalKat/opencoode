@@ -2,7 +2,7 @@ import { registerRootComponent } from "expo";
 import React from "react";
 import { ScrollView } from "react-native";
 
-import { Markdown } from "../../src/components/Markdown";
+import { Markdown } from "../../src/components/markdown";
 import { ThemeProvider } from "../../src/lib/theme";
 
 function Demo() {

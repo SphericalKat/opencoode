@@ -4,9 +4,9 @@ import { registerRootComponent } from "expo";
 import React, { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 
-import { Markdown } from "../../src/components/Markdown";
-import { UserMessageBubble } from "../../src/components/UserMessageBubble";
-import { BetaLayoutContext } from "../../src/lib/betaLayout";
+import { Markdown } from "../../src/components/markdown";
+import { UserMessageBubble } from "../../src/components/user-message-bubble";
+import { BetaLayoutContext } from "../../src/lib/beta-layout";
 import { ThemeProvider } from "../../src/lib/theme";
 
 const text = `Initial set of feedback:

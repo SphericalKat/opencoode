@@ -18,10 +18,14 @@ import type {
   PiSnapshot,
   PiToolActivity,
 } from "../../packages/pi-mobile/protocol";
-import type { ChatBackend, ChatBackendSnapshot, ChatCore } from "./chatBackend";
+import type {
+  ChatBackend,
+  ChatBackendSnapshot,
+  ChatCore,
+} from "./chat-backend";
 import type { Connection } from "./client";
-import { createPiClient } from "./piClient";
-import type { PiClient } from "./piClient";
+import { createPiClient } from "./pi-client";
+import type { PiClient } from "./pi-client";
 
 const imageLimit = 3_000_000;
 const bodyLimit = 5_000_000;

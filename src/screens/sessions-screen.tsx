@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
-import { ShellIcon } from "../components/ShellIcon";
+import { ShellIcon } from "../components/shell-icon";
 import {
   Button,
   Busy,

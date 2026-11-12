@@ -17,10 +17,10 @@ import Svg, { Path, Rect } from "react-native-svg";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
-import { MessageActionsContext } from "../lib/messageActions";
+import { MessageActionsContext } from "../lib/message-actions";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import { ArtifactContent, isImageArtifact } from "./ArtifactContent";
+import { ArtifactContent, isImageArtifact } from "./artifact-content";
 import { Disclosure, ErrorNotice, BodyText, mono, touchTarget } from "./ui";
 
 type Arguments = Record<string, JsonValue>;

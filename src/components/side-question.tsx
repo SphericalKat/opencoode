@@ -4,7 +4,7 @@ import { AppState, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
-import { Markdown } from "./Markdown";
+import { Markdown } from "./markdown";
 import { Button, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
 export function SideQuestion({

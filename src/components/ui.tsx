@@ -28,11 +28,11 @@ import type {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import { useBetaLayout } from "../lib/betaLayout";
+import { useBetaLayout } from "../lib/beta-layout";
 import {
   MessageActionsContext,
   MessageDisclosureContext,
-} from "../lib/messageActions";
+} from "../lib/message-actions";
 import { useSheetCoordinator } from "../lib/sheets";
 import { darkColors, useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
@@ -42,7 +42,7 @@ import {
   PressFeedback,
   useMotionPreference,
 } from "./motion";
-import { ShellIcon } from "./ShellIcon";
+import { ShellIcon } from "./shell-icon";
 
 export const colors = darkColors;
 export const sans = "Inter";

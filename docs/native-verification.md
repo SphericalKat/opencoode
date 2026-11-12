@@ -6,9 +6,9 @@ I used Expo SDK 58, React Native 0.88.1, and the existing Metro server on port 8
 
 ## iOS simulator resources
 
-I used the existing iPhone 17 Pro simulator with iOS 26.3. I applied `scripts/simslim-dev.json` with `simslim on --no-reboot`. The profile preserves document search, Keychain, web services, photos, the App Store, and device sharing. I stopped 102 unrelated background services.
+I used the existing iPhone 17 Pro simulator with iOS 26.3. I applied `scripts/simslim-dev.json` with `simslim on --no-reboot`. The profile preserves document search, Keychain, web services, photos, the app Store, and device sharing. I stopped 102 unrelated background services.
 
-Before the change, SimSlim measured 236 processes and 4.26 GB of memory. After the change, SimSlim measured 128 processes and 2.16 GB of memory. The measurement used `phys_footprint` and represents one local observation. SimSlim verified the profile without drift. Its doctor passed the file picker, Keychain, universal link, photo, and App Store checks.
+Before the change, SimSlim measured 236 processes and 4.26 GB of memory. After the change, SimSlim measured 128 processes and 2.16 GB of memory. The measurement used `phys_footprint` and represents one local observation. SimSlim verified the profile without drift. Its doctor passed the file picker, Keychain, universal link, photo, and app Store checks.
 
 ## Runtime installation
 

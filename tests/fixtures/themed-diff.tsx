@@ -1,7 +1,7 @@
 import { registerRootComponent } from "expo";
 import React from "react";
 
-import { Patch } from "../../src/components/Patch";
+import { Patch } from "../../src/components/patch";
 import { ThemeProvider } from "../../src/lib/theme";
 
 function Demo() {

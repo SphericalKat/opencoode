@@ -38,18 +38,18 @@ import {
   BetaTabsSheet,
   BetaTabStrip,
   SessionSurface,
-} from "./src/components/BetaNavigation";
+} from "./src/components/beta-navigation";
 import type {
   OpenSessionTab,
   SessionPane,
-} from "./src/components/BetaNavigation";
-import { ConnectionFlow } from "./src/components/ConnectionFlow";
-import type { ConnectionForm } from "./src/components/ConnectionFlow";
-import { NavIcon } from "./src/components/Icons";
+} from "./src/components/beta-navigation";
+import { ConnectionFlow } from "./src/components/connection-flow";
+import type { ConnectionForm } from "./src/components/connection-flow";
+import { NavIcon } from "./src/components/icons";
 import { MotionDrawer, MotionScreen } from "./src/components/motion";
-import { OpenCodeLogo } from "./src/components/OpenCodeLogo";
-import { ProjectDirectoryBrowser } from "./src/components/ProjectDirectoryBrowser";
-import { ShellIcon } from "./src/components/ShellIcon";
+import { OpenCodeLogo } from "./src/components/open-code-logo";
+import { ProjectDirectoryBrowser } from "./src/components/project-directory-browser";
+import { ShellIcon } from "./src/components/shell-icon";
 import {
   Button,
   Busy,
@@ -60,8 +60,8 @@ import {
   sans,
   Sheet,
 } from "./src/components/ui";
-import { BetaLayoutContext, useBetaLayout } from "./src/lib/betaLayout";
-import { makeOpenCodeChatBackend } from "./src/lib/chatBackend";
+import { BetaLayoutContext, useBetaLayout } from "./src/lib/beta-layout";
+import { makeOpenCodeChatBackend } from "./src/lib/chat-backend";
 import {
   clearPairingRetry,
   connect,
@@ -89,12 +89,12 @@ import {
 import { ThemeProvider, useTheme, useThemedStyles } from "./src/lib/theme";
 import type { ThemeColors } from "./src/lib/theme";
 import { UnsavedProvider, useUnsavedGuard } from "./src/lib/unsaved";
-import { ChatScreen } from "./src/screens/ChatScreen";
-import { PiWorkspace } from "./src/screens/PiWorkspace";
-import { SessionsScreen } from "./src/screens/SessionsScreen";
-import { SettingsScreen } from "./src/screens/SettingsScreen";
-import { WorkspaceScreen } from "./src/screens/WorkspaceScreen";
-import type { WorkspaceSection } from "./src/screens/WorkspaceScreen";
+import { ChatScreen } from "./src/screens/chat-screen";
+import { PiWorkspace } from "./src/screens/pi-workspace";
+import { SessionsScreen } from "./src/screens/sessions-screen";
+import { SettingsScreen } from "./src/screens/settings-screen";
+import { WorkspaceScreen } from "./src/screens/workspace-screen";
+import type { WorkspaceSection } from "./src/screens/workspace-screen";
 
 type Tab = "sessions" | "workspace" | "settings";
 const destinations: { id: Tab; label: string }[] = [
@@ -102,7 +102,7 @@ const destinations: { id: Tab; label: string }[] = [
   { id: "settings", label: "Settings" },
 ];
 
-export default function App() {
+export default function app() {
   const { width } = useWindowDimensions();
   const betaLayout = Platform.OS === "android" && width < 920;
   const [fontsReady, fontError] = useFonts({

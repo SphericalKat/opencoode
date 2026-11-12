@@ -15,7 +15,7 @@ import React, {
 } from "react";
 import { Platform, useColorScheme } from "react-native";
 
-import { useBetaLayout } from "./betaLayout";
+import { useBetaLayout } from "./beta-layout";
 import upstreamThemes from "./upstreamThemes.json";
 
 export type Appearance = "system" | "light" | "dark";

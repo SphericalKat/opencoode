@@ -15,27 +15,27 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 import type { AgentActivity } from "../lib/activity";
-import { useBetaLayout } from "../lib/betaLayout";
+import { useBetaLayout } from "../lib/beta-layout";
 import type { Client } from "../lib/client";
 import {
   MessageActionsContext,
   MessageDisclosureContext,
-} from "../lib/messageActions";
+} from "../lib/message-actions";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import { ArtifactContent, isImageArtifact } from "./ArtifactContent";
-import { Markdown } from "./Markdown";
+import { ArtifactContent, isImageArtifact } from "./artifact-content";
+import { Markdown } from "./markdown";
 import {
   MotionDisclosureBody,
   MotionDisclosureChevron,
   WorkingIndicator,
 } from "./motion";
-import { ResponseFooter } from "./ResponseFooter";
+import { ResponseFooter } from "./response-footer";
 import {
   ToolCallDetails,
   toolDetail,
   toolDisplayName,
-} from "./ToolCallDetails";
+} from "./tool-call-details";
 import { ErrorNotice, BodyText, mono } from "./ui";
 
 export type TranscriptItem =

@@ -4,7 +4,7 @@ import { AppState, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
-import { SessionForms } from "./SessionForms";
+import { SessionForms } from "./session-forms";
 import { Button, Busy, ErrorNotice, Heading, BodyText, Row } from "./ui";
 
 export function GlobalForms({

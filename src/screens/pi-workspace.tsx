@@ -15,18 +15,18 @@ import {
   BetaTabsSheet,
   BetaTabStrip,
   SessionSurface,
-} from "../components/BetaNavigation";
-import type { OpenSessionTab } from "../components/BetaNavigation";
+} from "../components/beta-navigation";
+import type { OpenSessionTab } from "../components/beta-navigation";
 import { Busy, ErrorNotice } from "../components/ui";
-import { useBetaLayout } from "../lib/betaLayout";
+import { useBetaLayout } from "../lib/beta-layout";
 import { errorMessage } from "../lib/client";
 import type { Connection } from "../lib/client";
-import { makePiChatBackend } from "../lib/piChatBackend";
-import { createPiClient } from "../lib/piClient";
+import { makePiChatBackend } from "../lib/pi-chat-backend";
+import { createPiClient } from "../lib/pi-client";
 import { useUnsavedGuard } from "../lib/unsaved";
-import { ChatScreen } from "./ChatScreen";
-import { SettingsScreen } from "./SettingsScreen";
-import type { Section } from "./SettingsScreen";
+import { ChatScreen } from "./chat-screen";
+import { SettingsScreen } from "./settings-screen";
+import type { Section } from "./settings-screen";
 
 interface Props {
   connection: Connection;

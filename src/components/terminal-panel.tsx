@@ -34,8 +34,8 @@ import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { useUnsavedChanges, useUnsavedGuard } from "../lib/unsaved";
 import { useMotionPreference } from "./motion";
-import { TerminalRenderer } from "./TerminalRenderer";
-import type { TerminalRendererHandle } from "./TerminalRenderer.types";
+import { TerminalRenderer } from "./terminal-renderer";
+import type { TerminalRendererHandle } from "./terminal-renderer.types";
 import {
   Busy,
   Button,

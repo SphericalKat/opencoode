@@ -11,8 +11,8 @@ import Svg, { Path, Rect } from "react-native-svg";
 
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import { NavIcon } from "./Icons";
-import { ShellIcon } from "./ShellIcon";
+import { NavIcon } from "./icons";
+import { ShellIcon } from "./shell-icon";
 import { BodyText, Sheet } from "./ui";
 
 export interface OpenSessionTab {

@@ -5,15 +5,15 @@ import { ScrollView, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { Markdown } from "../../src/components/Markdown";
-import { Patch } from "../../src/components/Patch";
+import { Markdown } from "../../src/components/markdown";
+import { Patch } from "../../src/components/patch";
 import { Button } from "../../src/components/ui";
-import { BetaLayoutContext } from "../../src/lib/betaLayout";
+import { BetaLayoutContext } from "../../src/lib/beta-layout";
 import { SheetCoordinatorProvider } from "../../src/lib/sheets";
 import { ThemeProvider, useTheme } from "../../src/lib/theme";
 import { UnsavedProvider } from "../../src/lib/unsaved";
-import { ChatScreen } from "../../src/screens/ChatScreen";
-import { AppearanceSettings } from "../../src/screens/SettingsScreen";
+import { ChatScreen } from "../../src/screens/chat-screen";
+import { AppearanceSettings } from "../../src/screens/settings-screen";
 
 const noop = () => {};
 const model = {

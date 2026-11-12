@@ -13,15 +13,15 @@ import {
 } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
 
-import { useBetaLayout } from "../lib/betaLayout";
+import { useBetaLayout } from "../lib/beta-layout";
 import { errorMessage, normalizeConnection } from "../lib/client";
 import type { Connection } from "../lib/client";
 import { parsePairingPayload } from "../lib/pairing";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { MotionContent } from "./motion";
-import { OpenCodeLogo } from "./OpenCodeLogo";
-import { ShellIcon } from "./ShellIcon";
+import { OpenCodeLogo } from "./open-code-logo";
+import { ShellIcon } from "./shell-icon";
 import {
   Button,
   Busy,

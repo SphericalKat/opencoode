@@ -21,9 +21,9 @@ import {
   View,
 } from "react-native";
 
-import { Patch } from "../components/Patch";
-import { ScreenHeader } from "../components/ScreenHeader";
-import { TerminalPanel } from "../components/TerminalPanel";
+import { Patch } from "../components/patch";
+import { ScreenHeader } from "../components/screen-header";
+import { TerminalPanel } from "../components/terminal-panel";
 import {
   Busy,
   Button,

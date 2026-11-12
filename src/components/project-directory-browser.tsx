@@ -7,7 +7,7 @@ import type { Client } from "../lib/client";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { fileName } from "../lib/workspace";
-import { NavIcon } from "./Icons";
+import { NavIcon } from "./icons";
 import {
   Button,
   Busy,

@@ -10,7 +10,7 @@ import {
 import { pageInset } from "../lib/layout";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import { ShellIcon } from "./ShellIcon";
+import { ShellIcon } from "./shell-icon";
 import { BodyText } from "./ui";
 
 export function ScreenHeader({

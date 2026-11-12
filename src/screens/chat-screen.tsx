@@ -62,29 +62,29 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
-import { AgentActivityBar } from "../components/AgentActivity";
+import { AgentActivityBar } from "../components/agent-activity";
 import {
   AssistantActivityPart as AssistantPart,
   AssistantTurn,
   groupTranscriptMessages,
-} from "../components/AssistantTurn";
-import type { TranscriptItem } from "../components/AssistantTurn";
-import { BackgroundCommands } from "../components/BackgroundCommands";
-import { ChildSessions } from "../components/ChildSessions";
-import { Instructions } from "../components/Instructions";
-import { Markdown } from "../components/Markdown";
-import { McpResources } from "../components/McpResources";
+} from "../components/assistant-turn";
+import type { TranscriptItem } from "../components/assistant-turn";
+import { BackgroundCommands } from "../components/background-commands";
+import { ChildSessions } from "../components/child-sessions";
+import { Instructions } from "../components/instructions";
+import { Markdown } from "../components/markdown";
+import { McpResources } from "../components/mcp-resources";
 import {
   MotionContent,
   PressFeedback,
   WorkingIndicator,
 } from "../components/motion";
-import { ResponseFooter } from "../components/ResponseFooter";
-import { Schedules } from "../components/Schedules";
-import { SessionForms } from "../components/SessionForms";
-import { SessionStats } from "../components/SessionStats";
-import { ShellIcon } from "../components/ShellIcon";
-import { SideQuestion } from "../components/SideQuestion";
+import { ResponseFooter } from "../components/response-footer";
+import { Schedules } from "../components/schedules";
+import { SessionForms } from "../components/session-forms";
+import { SessionStats } from "../components/session-stats";
+import { ShellIcon } from "../components/shell-icon";
+import { SideQuestion } from "../components/side-question";
 import {
   Button,
   Busy,
@@ -101,10 +101,10 @@ import {
   Row,
   Sheet,
 } from "../components/ui";
-import { UserMessageBubble } from "../components/UserMessageBubble";
+import { UserMessageBubble } from "../components/user-message-bubble";
 import { sessionActivity } from "../lib/activity";
 import type { AgentActivity } from "../lib/activity";
-import { useBetaLayout } from "../lib/betaLayout";
+import { useBetaLayout } from "../lib/beta-layout";
 import {
   isAssistantProgress,
   mergeMessages,
@@ -112,7 +112,7 @@ import {
   projectLiveEvents,
   serverFileUri,
 } from "../lib/chat";
-import type { ChatBackend, ChatBackendSnapshot } from "../lib/chatBackend";
+import type { ChatBackend, ChatBackendSnapshot } from "../lib/chat-backend";
 import { errorMessage, isConnectionUnauthorized } from "../lib/client";
 import type { Client } from "../lib/client";
 import { loadDraft, saveDraft } from "../lib/drafts";
@@ -120,13 +120,13 @@ import { pageInset } from "../lib/layout";
 import {
   MessageActionsContext,
   MessageDisclosureContext,
-} from "../lib/messageActions";
+} from "../lib/message-actions";
 import {
   modelPreferenceID,
   useModelPreferences,
-} from "../lib/modelPreferences";
+} from "../lib/model-preferences";
 import { useNativePresentation } from "../lib/sheets";
-import { createStreamBatch } from "../lib/streamBatch";
+import { createStreamBatch } from "../lib/stream-batch";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { useUnsavedChanges } from "../lib/unsaved";

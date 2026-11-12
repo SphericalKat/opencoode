@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 
-import { createStreamBatch } from "../src/lib/streamBatch";
+import { createStreamBatch } from "../src/lib/stream-batch";
 
 test("stream batches preserve Unicode and event order with one render per interval", () => {
   mock.timers.enable({ apis: ["setTimeout"] });

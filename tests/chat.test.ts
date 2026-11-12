@@ -13,7 +13,7 @@ import {
   projectLiveEvent,
   serverFileUri,
 } from "../src/lib/chat";
-import { createStreamBatch } from "../src/lib/streamBatch";
+import { createStreamBatch } from "../src/lib/stream-batch";
 
 const base = {
   created: 1,

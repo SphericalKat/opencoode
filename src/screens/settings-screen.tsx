@@ -42,12 +42,12 @@ import {
 import type { ViewStyle } from "react-native";
 import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
-import { AdvancedSettings } from "../components/AdvancedSettings";
-import { GlobalForms } from "../components/GlobalForms";
+import { AdvancedSettings } from "../components/advanced-settings";
+import { GlobalForms } from "../components/global-forms";
 import { useMotionPreference } from "../components/motion";
-import { ScreenHeader } from "../components/ScreenHeader";
-import { DynamicFields } from "../components/SessionForms";
-import { ShellIcon } from "../components/ShellIcon";
+import { ScreenHeader } from "../components/screen-header";
+import { DynamicFields } from "../components/session-forms";
+import { ShellIcon } from "../components/shell-icon";
 import {
   Button,
   Busy,
@@ -65,7 +65,7 @@ import {
   Row,
   Sheet,
 } from "../components/ui";
-import { useBetaLayout } from "../lib/betaLayout";
+import { useBetaLayout } from "../lib/beta-layout";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { initialFormValues, prepareFormAnswer } from "../lib/forms";

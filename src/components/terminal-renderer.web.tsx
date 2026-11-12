@@ -11,7 +11,7 @@ import { useTheme } from "../lib/theme";
 import type {
   TerminalRendererHandle,
   TerminalRendererProps,
-} from "./TerminalRenderer.types";
+} from "./terminal-renderer.types";
 
 export const TerminalRenderer = forwardRef<
   TerminalRendererHandle,

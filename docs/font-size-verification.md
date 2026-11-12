@@ -45,7 +45,7 @@ The fixture bundle was inserted into an existing release APK shell, aligned, and
 
 No new unit tests mirror style declarations.
 
-Source review compared all explicit `fontSize` declarations in App/src TSX against the baseline, including conditional Markdown body sizes and every heading size. Terminal implementations/generated assets have no diff. No scaling override was added.
+Source review compared all explicit `fontSize` declarations in app/src TSX against the baseline, including conditional Markdown body sizes and every heading size. Terminal implementations/generated assets have no diff. No scaling override was added.
 
 ## Native visual coverage
 

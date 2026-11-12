@@ -2,7 +2,7 @@ import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client";
 import type { ServerInfo } from "@opencode/client";
 
 import type { PiServerInfo } from "../../packages/pi-mobile/protocol";
-import { createPiClient, PiConnectionError } from "./piClient";
+import { createPiClient, PiConnectionError } from "./pi-client";
 
 export interface Connection {
   id: string;

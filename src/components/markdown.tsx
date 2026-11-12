@@ -39,8 +39,8 @@ import "prismjs/components/prism-yaml";
 import "prismjs/components/prism-css";
 import "prismjs/components/prism-markup";
 
-import { useBetaLayout } from "../lib/betaLayout";
-import { MessageActionsContext } from "../lib/messageActions";
+import { useBetaLayout } from "../lib/beta-layout";
+import { MessageActionsContext } from "../lib/message-actions";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { Button, mono, sans } from "./ui";

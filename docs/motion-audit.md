@@ -16,7 +16,7 @@ The app uses React Native 0.88.1, Expo SDK 58, Reanimated, and Worklets. The sou
 
 The drawer uses `cubic-bezier(0.32, 0.72, 0, 1)` and retains its panel until the exit completes. The tablet sidebar stays static. The clipboard crossfade from the initial proposal did not ship.
 
-Implementation: `src/components/motion.tsx`, `src/components/ui.tsx`, `src/components/TerminalPanel.tsx`, and `src/screens/ChatScreen.tsx`.
+Implementation: `src/components/motion.tsx`, `src/components/ui.tsx`, `src/components/terminal-panel.tsx`, and `src/screens/chat-screen.tsx`.
 
 ## Streaming stability
 
@@ -26,7 +26,7 @@ The client coalesces text deltas and tool progress into the next animation frame
 
 The batch projector builds one history index for the whole event batch and preserves unchanged message objects. Stable message rows, assistant parts, and Markdown blocks can skip unchanged content. Markdown still parses changed text. Block memoization limits unchanged native view work rather than eliminates parsing. Metadata, history, inbox, and pending requests use separate refresh scopes. Execution completion and reconnect still request a full authoritative refresh.
 
-Implementation: `src/lib/streamBatch.ts`, `src/lib/chat.ts`, `src/screens/ChatScreen.tsx`, and `src/components/Markdown.tsx`.
+Implementation: `src/lib/stream-batch.ts`, `src/lib/chat.ts`, `src/screens/chat-screen.tsx`, and `src/components/markdown.tsx`.
 
 The lead agent observed a real browser response of about 450 words and recorded a zero-pixel gap at the transcript end. An upward wheel movement paused bottom-follow and exposed Jump to latest. These observations establish those interactions. They do not establish a measured frame-rate improvement or release performance.
 

@@ -6,12 +6,12 @@ import { View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { AssistantTurn } from "../../src/components/AssistantTurn";
+import { AssistantTurn } from "../../src/components/assistant-turn";
 import { projectLiveEvent } from "../../src/lib/chat";
-import { makeOpenCodeChatBackend } from "../../src/lib/chatBackend";
+import { makeOpenCodeChatBackend } from "../../src/lib/chat-backend";
 import { createClient } from "../../src/lib/client";
-import { makePiChatBackend } from "../../src/lib/piChatBackend";
-import { createPiClient } from "../../src/lib/piClient";
+import { makePiChatBackend } from "../../src/lib/pi-chat-backend";
+import { createPiClient } from "../../src/lib/pi-client";
 import { SheetCoordinatorProvider } from "../../src/lib/sheets";
 import { ThemeProvider } from "../../src/lib/theme";
 
