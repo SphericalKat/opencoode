@@ -1,6 +1,7 @@
 import { registerRootComponent } from "expo";
 import { useFonts } from "expo-font";
 import React, { useState } from "react";
+import type { ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -9,13 +10,19 @@ import { Markdown } from "../../src/components/markdown";
 import { Patch } from "../../src/components/patch";
 import { Button } from "../../src/components/ui";
 import { BetaLayoutContext } from "../../src/lib/beta-layout";
+import type { ChatBackend } from "../../src/lib/chat-backend";
 import { SheetCoordinatorProvider } from "../../src/lib/sheets";
 import { ThemeProvider, useTheme } from "../../src/lib/theme";
 import { UnsavedProvider } from "../../src/lib/unsaved";
 import { ChatScreen } from "../../src/screens/chat-screen";
 import { AppearanceSettings } from "../../src/screens/settings-screen";
 
-const noop = () => {};
+const IBMPlexMono = require("../../assets/fonts/IBMPlexMono-Text.ttf");
+const Inter = require("../../assets/fonts/Inter.ttf");
+
+const noop = () => {
+  // The fixture ignores session navigation.
+};
 const model = {
   capabilities: {},
   cost: { input: 0, output: 0 },
@@ -35,20 +42,20 @@ const session = {
   title: "Picker spacing comparison",
   tokens: { cache: { read: 0, write: 0 }, input: 0, output: 0, reasoning: 0 },
 };
-const backend: any = {
+const backend = {
   capabilities: { defaultVariant: true },
   core: {
-    message: { list: async () => ({ cursor: {}, data: [] }) },
-    model: { list: async () => ({ data: [model] }) },
+    message: { list: () => Promise.resolve({ cursor: {}, data: [] }) },
+    model: { list: () => Promise.resolve({ data: [model] }) },
     session: {
-      active: async () => ({}),
-      compact: async () => {},
-      fork: async () => {},
-      get: async () => session,
-      interrupt: async () => {},
-      prompt: async () => {},
-      switchModel: async () => {},
-      update: async () => {},
+      active: () => Promise.resolve({}),
+      compact: () => Promise.resolve(),
+      fork: () => Promise.resolve(),
+      get: () => Promise.resolve(session),
+      interrupt: () => Promise.resolve(),
+      prompt: () => Promise.resolve(),
+      switchModel: () => Promise.resolve(),
+      update: () => Promise.resolve(),
     },
   },
   kind: "pi",
@@ -60,13 +67,40 @@ const backend: any = {
         signal?.addEventListener("abort", () => resolve(), { once: true });
       }
     });
+    yield* [];
   },
-};
-function Content() {
+} as unknown as ChatBackend;
+const Content = () => {
   const { colors } = useTheme();
   const [screen, setScreen] = useState<"chat" | "appearance" | "content">(
     "chat"
   );
+  let body: ReactNode;
+  if (screen === "chat") {
+    body = (
+      <ChatScreen
+        backend={backend}
+        sessionID={session.id}
+        serverID="visual-42"
+        betaLayout={true}
+        onSessionChanged={noop}
+        onOpenSession={noop}
+      />
+    );
+  } else if (screen === "appearance") {
+    body = <AppearanceSettings />;
+  } else {
+    body = (
+      <ScrollView>
+        <Markdown
+          text={
+            '```javascript\nconst message = "hello";\nconsole.log(message);\n```'
+          }
+        />
+        <Patch patch={"@@ -1,2 +1,2 @@\n context\n-old text\n+new text\n"} />
+      </ScrollView>
+    );
+  }
   return (
     <View style={{ backgroundColor: colors.bg, flex: 1, paddingTop: 56 }}>
       <View
@@ -84,34 +118,14 @@ function Content() {
         />
         <Button title="Content fixture" onPress={() => setScreen("content")} />
       </View>
-      {screen === "chat" ? (
-        <ChatScreen
-          backend={backend}
-          sessionID={session.id}
-          serverID="visual-42"
-          betaLayout={true}
-          onSessionChanged={noop}
-          onOpenSession={noop}
-        />
-      ) : screen === "appearance" ? (
-        <AppearanceSettings />
-      ) : (
-        <ScrollView>
-          <Markdown
-            text={
-              '```javascript\nconst message = "hello";\nconsole.log(message);\n```'
-            }
-          />
-          <Patch patch={"@@ -1,2 +1,2 @@\n context\n-old text\n+new text\n"} />
-        </ScrollView>
-      )}
+      {body}
     </View>
   );
-}
-function Demo() {
+};
+const Demo = () => {
   const [ready] = useFonts({
-    IBMPlexMono: require("../../assets/fonts/IBMPlexMono-Text.ttf"),
-    Inter: require("../../assets/fonts/Inter.ttf"),
+    IBMPlexMono,
+    Inter,
   });
   if (!ready) {
     return null;
@@ -131,5 +145,5 @@ function Demo() {
       </KeyboardProvider>
     </SafeAreaProvider>
   );
-}
+};
 registerRootComponent(Demo);

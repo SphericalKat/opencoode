@@ -9,6 +9,9 @@ import {
   terminalEvent,
 } from "../src/lib/terminal";
 
+const control = (text: string) =>
+  Uint8Array.from([0, ...new TextEncoder().encode(text)]).buffer;
+
 test("terminal reconnection preserves directory and output position without password credentials", () => {
   const url = new URL(
     ptySocketUrl(
@@ -28,17 +31,15 @@ test("terminal reconnection preserves directory and output position without pass
   assert.equal(url.password, "");
   assert.throws(
     () => ptySocketUrl("http://user:secret@host", "/work", "pty", "ticket"),
-    /credentials/
+    /credentials/u
   );
   assert.throws(
     () => ptySocketUrl("http://host", "/work", "pty", "ticket", -1),
-    /position/
+    /position/u
   );
 });
 
 test("terminal ignores malformed control data and accepts a valid resume position", () => {
-  const control = (text: string) =>
-    Uint8Array.from([0, ...new TextEncoder().encode(text)]).buffer;
   assert.equal(ptyControlCursor(control('{"cursor":345}')), 345);
   assert.equal(ptyControlCursor(control('{"cursor":-1}')), undefined);
   assert.equal(ptyControlCursor(control("not json")), undefined);
@@ -86,7 +87,7 @@ test("persistent terminal input preserves UTF-8 bytes and the requested viewport
     ],
     [0, 1, 44, 0, 20]
   );
-  assert.throws(() => persistentInputFrame({ cols: 0, rows: 15 }), /size/);
+  assert.throws(() => persistentInputFrame({ cols: 0, rows: 15 }), /size/u);
 });
 
 test("persistent terminal opens as an observer without credentials or automatic takeover", () => {

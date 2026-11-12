@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-function run(command, args, options = {}) {
+const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, { encoding: "utf-8", ...options });
   if (result.error) {
     throw result.error;
@@ -10,7 +10,7 @@ function run(command, args, options = {}) {
     throw new Error(`${command} exited with ${result.status}`);
   }
   return result.stdout;
-}
+};
 
 try {
   const devices = JSON.parse(run("simslim", ["list", "--json"]));
@@ -21,7 +21,7 @@ try {
   const selected = requested
     ? devices.find((device) => device.udid === requested)
     : (phones.find((device) => device.state === "Booted") ??
-      phones.sort((a, b) =>
+      phones.toSorted((a, b) =>
         b.osVersion.localeCompare(a.osVersion, undefined, { numeric: true })
       )[0]);
   if (!selected || selected.platform !== "iOS") {

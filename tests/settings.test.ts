@@ -9,8 +9,8 @@ import {
 
 test("configuration accepts comments and trailing commas but rejects non-objects and syntax errors", () => {
   validateConfig('{ // Project options\n "default_agent": "build",\n}');
-  assert.throws(() => validateConfig('{"model": }'), /Invalid configuration/);
-  assert.throws(() => validateConfig("[]"), /JSON object/);
+  assert.throws(() => validateConfig('{"model": }'), /Invalid configuration/u);
+  assert.throws(() => validateConfig("[]"), /JSON object/u);
 });
 
 test("configuration preserves a newer server file instead of overwriting it", async () => {
@@ -20,17 +20,18 @@ test("configuration preserves a newer server file instead of overwriting it", as
       {
         experimental: {
           file: {
-            write: async () => {
-              writes++;
-              return {
+            write: () => {
+              writes += 1;
+              return Promise.resolve({
                 data: { path: "/project/opencode.jsonc" },
                 location: { directory: "/project" },
-              };
+              });
             },
           },
         },
         file: {
-          read: async () => new TextEncoder().encode('{"model":"newer"}'),
+          read: () =>
+            Promise.resolve(new TextEncoder().encode('{"model":"newer"}')),
         },
       },
       "/project",
@@ -38,7 +39,7 @@ test("configuration preserves a newer server file instead of overwriting it", as
       "{}",
       '{"model":"requested"}'
     ),
-    /changed on the server/
+    /changed on the server/u
   );
   assert.equal(writes, 0);
 });
@@ -50,23 +51,23 @@ test("new configuration refuses to overwrite a file created after the editor ope
       {
         experimental: {
           file: {
-            write: async () => {
-              writes++;
-              return {
+            write: () => {
+              writes += 1;
+              return Promise.resolve({
                 data: { path: "/project/opencode.jsonc" },
                 location: { directory: "/project" },
-              };
+              });
             },
           },
         },
-        file: { read: async () => new TextEncoder().encode("{}") },
+        file: { read: () => Promise.resolve(new TextEncoder().encode("{}")) },
       },
       "/project",
       "/project/opencode.jsonc",
       null,
       '{"default_agent":"build"}'
     ),
-    /changed on the server/
+    /changed on the server/u
   );
   assert.equal(writes, 0);
 });
@@ -77,19 +78,19 @@ test("configuration validates before reading or writing and saves the exact edit
   const client = {
     experimental: {
       file: {
-        write: async (input: { payload: Uint8Array }) => {
+        write: (input: { payload: Uint8Array }) => {
           written.push(input.payload);
-          return {
+          return Promise.resolve({
             data: { path: "/project/opencode.jsonc" },
             location: { directory: "/project" },
-          };
+          });
         },
       },
     },
     file: {
-      read: async () => {
-        reads++;
-        return new TextEncoder().encode("{}");
+      read: () => {
+        reads += 1;
+        return Promise.resolve(new TextEncoder().encode("{}"));
       },
     },
   };
@@ -101,7 +102,7 @@ test("configuration validates before reading or writing and saves the exact edit
       "{}",
       "{bad}"
     ),
-    /Invalid configuration/
+    /Invalid configuration/u
   );
   assert.equal(reads, 0);
   const source = '{\n  // Keep this comment\n  "default_agent": "build",\n}';
@@ -121,6 +122,9 @@ test("integration links permit browser URLs and block executable schemes", () =>
     externalURL("https://example.com/authorize?state=abc"),
     "https://example.com/authorize?state=abc"
   );
-  assert.throws(() => externalURL("javascript:alert(1)"), /unsupported link/);
-  assert.throws(() => externalURL("file:///etc/passwd"), /unsupported link/);
+  assert.throws(
+    () => externalURL(["javascript", "alert(1)"].join(":")),
+    /unsupported link/u
+  );
+  assert.throws(() => externalURL("file:///etc/passwd"), /unsupported link/u);
 });

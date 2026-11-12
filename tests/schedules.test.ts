@@ -18,11 +18,11 @@ const draft: ScheduleDraft = {
 test("schedule form rejects empty input and invalid repeat limits before server admission", () => {
   assert.throws(
     () => prepareSchedule("ses_a", { ...draft, prompt: "  " }),
-    /Enter the prompt/
+    /Enter the prompt/u
   );
   assert.throws(
     () => prepareSchedule("ses_a", { ...draft, trigger: "" }),
-    /Enter when/
+    /Enter when/u
   );
   for (const runs of [
     "0",
@@ -34,12 +34,12 @@ test("schedule form rejects empty input and invalid repeat limits before server 
   ]) {
     assert.throws(
       () => prepareSchedule("ses_a", { ...draft, runs }),
-      /whole number/
+      /whole number/u
     );
   }
   assert.throws(
     () => prepareSchedule("ses_a", { ...draft, timezone: "Not/AZone" }),
-    /valid time zone/
+    /valid time zone/u
   );
 });
 

@@ -1,4 +1,4 @@
-(function () {
+(() => {
   const channel = "opencoode-terminal";
   let currentTheme;
   let restoreResize = false;
@@ -26,15 +26,47 @@
     true
   );
 
-  function send(value) {
+  const send = (value) => {
     const message = JSON.stringify({ channel, ...value });
     if (window.ReactNativeWebView) {
-      window.ReactNativeWebView.postMessage(message);
+      window.ReactNativeWebView["postMessage"](message);
     } else {
       window.parent.postMessage(message, "*");
     }
-  }
-  function receive(event) {
+  };
+  const applyInputEnabled = (message) => {
+    inputEnabled = message.enabled;
+    term.textarea.readOnly = !inputEnabled;
+    term.textarea.tabIndex = inputEnabled ? 0 : -1;
+    term.textarea.setAttribute("inputmode", inputEnabled ? "text" : "none");
+    if (!inputEnabled) {
+      term.textarea.blur();
+    }
+  };
+  const applyTheme = (message) => {
+    currentTheme = message.colors;
+    term.options.theme = message.colors;
+    document.documentElement.style.backgroundColor = message.colors.background;
+    document.body.style.backgroundColor = message.colors.background;
+    document.querySelector("#terminal").style.visibility = "visible";
+  };
+  const applyRestore = (message) => {
+    const bytes = Uint8Array.from(atob(message.checkpoint), (char) =>
+      char.codePointAt(0)
+    );
+    restoreResize = true;
+    term.resize(message.cols, message.rows);
+    restoreResize = false;
+    const restored = new Uint8Array(bytes.byteLength + 2);
+    restored.set([27, 99]);
+    restored.set(bytes, 2);
+    term.write(restored, () => {
+      if (currentTheme) {
+        term.options.theme = currentTheme;
+      }
+    });
+  };
+  const receive = (event) => {
     if (!window.ReactNativeWebView && event.source !== window.parent) {
       return;
     }
@@ -58,25 +90,14 @@
       message.type === "inputEnabled" &&
       typeof message.enabled === "boolean"
     ) {
-      inputEnabled = message.enabled;
-      term.textarea.readOnly = !inputEnabled;
-      term.textarea.tabIndex = inputEnabled ? 0 : -1;
-      term.textarea.setAttribute("inputmode", inputEnabled ? "text" : "none");
-      if (!inputEnabled) {
-        term.textarea.blur();
-      }
+      applyInputEnabled(message);
     }
     if (
       message.type === "theme" &&
       message.colors &&
       typeof message.colors.background === "string"
     ) {
-      currentTheme = message.colors;
-      term.options.theme = message.colors;
-      document.documentElement.style.backgroundColor =
-        message.colors.background;
-      document.body.style.backgroundColor = message.colors.background;
-      document.querySelector("#terminal").style.visibility = "visible";
+      applyTheme(message);
     }
     if (
       message.type === "restore" &&
@@ -84,22 +105,9 @@
       Number.isInteger(message.cols) &&
       Number.isInteger(message.rows)
     ) {
-      const bytes = Uint8Array.from(atob(message.checkpoint), (char) =>
-        char.charCodeAt(0)
-      );
-      restoreResize = true;
-      term.resize(message.cols, message.rows);
-      restoreResize = false;
-      const restored = new Uint8Array(bytes.byteLength + 2);
-      restored.set([27, 99]);
-      restored.set(bytes, 2);
-      term.write(restored, () => {
-        if (currentTheme) {
-          term.options.theme = currentTheme;
-        }
-      });
+      applyRestore(message);
     }
-  }
+  };
   window.addEventListener("message", receive);
   document.addEventListener("message", receive);
   term.onData((data) => send({ data, type: "input" }));

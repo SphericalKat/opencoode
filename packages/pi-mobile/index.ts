@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
@@ -52,78 +53,100 @@ interface Poll {
 }
 
 class RequestError extends Error {
-  constructor(
-    readonly status: number,
-    message: string
-  ) {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
     super(message);
+    this.name = "RequestError";
+    this.status = status;
   }
 }
 
-function object(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+type PromptCommand = Extract<PiCommand, { type: "prompt" }>;
+type BranchEntry = ReturnType<
+  ExtensionContext["sessionManager"]["getBranch"]
+>[number];
+type SessionModel = NonNullable<ExtensionContext["model"]>;
+type WithSession = (fresh: ExtensionCommandContext) => Promise<void>;
+const imageMimeTypes = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
 
-function text(value: unknown, key: string, limit = 100_000): string {
+const ignoreError = () => {
+  // The caller receives the failure from the command result.
+};
+
+const object = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const text = (value: unknown, key: string, limit = 100_000): string => {
   if (typeof value !== "string" || !value.trim() || value.length > limit) {
     throw new RequestError(400, `Invalid ${key}`);
   }
   return value;
-}
+};
 
-function command(value: unknown): PiCommand {
-  if (!object(value)) {
-    throw new RequestError(400, "Expected a command");
+const reply = (response: ServerResponse, status: number, body: unknown) => {
+  response.writeHead(status, {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+  });
+  response.end(JSON.stringify(body));
+};
+
+const promptImage = (
+  image: unknown
+): NonNullable<PromptCommand["images"]>[number] => {
+  if (!object(image) || !imageMimeTypes.has(String(image.mimeType))) {
+    throw new RequestError(400, "Invalid image type");
   }
-  const expectedSessionID =
-    value.expectedSessionID === undefined
-      ? undefined
-      : text(value.expectedSessionID, "expected session ID", 128);
-  return { ...commandPayload(value), expectedSessionID };
-}
+  const data = text(image.data, "image data", maxBody);
+  if (data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(data)) {
+    throw new RequestError(400, "Invalid image data");
+  }
+  return { data, mimeType: image.mimeType as string };
+};
 
-function commandPayload(value: Record<string, unknown>): PiCommand {
+const promptImages = (raw: unknown): PromptCommand["images"] => {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(raw) || raw.length > 16) {
+    throw new RequestError(400, "Invalid images");
+  }
+  return raw.map((image) => promptImage(image));
+};
+
+const promptCommand = (value: Record<string, unknown>): PromptCommand => {
+  const prompt =
+    typeof value.text === "string" && value.text.length <= 1_000_000
+      ? value.text
+      : undefined;
+  if (prompt === undefined) {
+    throw new RequestError(400, "Invalid prompt text");
+  }
+  if (
+    value.delivery !== undefined &&
+    value.delivery !== "steer" &&
+    value.delivery !== "followUp"
+  ) {
+    throw new RequestError(400, "Invalid prompt delivery");
+  }
+  const images = promptImages(value.images);
+  if (!prompt.trim() && !images?.length) {
+    throw new RequestError(400, "The prompt is empty");
+  }
+  return { delivery: value.delivery, images, text: prompt, type: "prompt" };
+};
+
+const commandPayload = (value: Record<string, unknown>): PiCommand => {
   switch (value.type) {
     case "prompt": {
-      const prompt =
-        typeof value.text === "string" && value.text.length <= 1_000_000
-          ? value.text
-          : undefined;
-      if (prompt === undefined) {
-        throw new RequestError(400, "Invalid prompt text");
-      }
-      if (
-        value.delivery !== undefined &&
-        value.delivery !== "steer" &&
-        value.delivery !== "followUp"
-      ) {
-        throw new RequestError(400, "Invalid prompt delivery");
-      }
-      let images: Extract<PiCommand, { type: "prompt" }>["images"];
-      if (value.images !== undefined) {
-        if (!Array.isArray(value.images) || value.images.length > 16) {
-          throw new RequestError(400, "Invalid images");
-        }
-        images = value.images.map((image) => {
-          if (
-            !object(image) ||
-            !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(
-              String(image.mimeType)
-            )
-          ) {
-            throw new RequestError(400, "Invalid image type");
-          }
-          const data = text(image.data, "image data", maxBody);
-          if (data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
-            throw new RequestError(400, "Invalid image data");
-          }
-          return { data, mimeType: image.mimeType as string };
-        });
-      }
-      if (!prompt.trim() && !images?.length) {
-        throw new RequestError(400, "The prompt is empty");
-      }
-      return { delivery: value.delivery, images, text: prompt, type: "prompt" };
+      return promptCommand(value);
     }
     case "abort":
     case "new": {
@@ -167,20 +190,29 @@ function commandPayload(value: Record<string, unknown>): PiCommand {
       throw new RequestError(400, "Unknown command");
     }
   }
-}
+};
 
-function modelInfo(model: Model<Api>): PiModel {
-  return {
-    contextWindow: model.contextWindow,
-    id: model.id,
-    name: model.name,
-    provider: model.provider,
-    reasoning: model.reasoning,
-    thinkingLevels: getSupportedThinkingLevels(model),
-  };
-}
+const command = (value: unknown): PiCommand => {
+  if (!object(value)) {
+    throw new RequestError(400, "Expected a command");
+  }
+  const expectedSessionID =
+    value.expectedSessionID === undefined
+      ? undefined
+      : text(value.expectedSessionID, "expected session ID", 128);
+  return { ...commandPayload(value), expectedSessionID };
+};
 
-function content(value: unknown): PiContent[] {
+const modelInfo = (model: Model<Api>): PiModel => ({
+  contextWindow: model.contextWindow,
+  id: model.id,
+  name: model.name,
+  provider: model.provider,
+  reasoning: model.reasoning,
+  thinkingLevels: getSupportedThinkingLevels(model),
+});
+
+const content = (value: unknown): PiContent[] => {
   if (typeof value === "string") {
     return [{ text: value, type: "text" }];
   }
@@ -222,9 +254,9 @@ function content(value: unknown): PiContent[] {
     }
     return [];
   });
-}
+};
 
-function messageInfo(raw: RawMessage, id: string): PiMessage | undefined {
+const messageInfo = (raw: RawMessage, id: string): PiMessage | undefined => {
   if (
     raw.role !== "user" &&
     raw.role !== "assistant" &&
@@ -243,18 +275,17 @@ function messageInfo(raw: RawMessage, id: string): PiMessage | undefined {
     toolCallId: raw.toolCallId,
     toolName: raw.toolName,
   };
-}
+};
 
-function output(result: unknown): string {
-  return object(result)
+const output = (result: unknown): string =>
+  object(result)
     ? content(result.content)
         .flatMap((part) => (part.type === "text" ? [part.text] : []))
         .join("\n")
     : "";
-}
 
-function privateAddress(address: string): boolean {
-  const normalized = address.replace(/^::ffff:/, "");
+const privateAddress = (address: string): boolean => {
+  const normalized = address.replace(/^::ffff:/u, "");
   if (normalized === "::1") {
     return true;
   }
@@ -273,45 +304,50 @@ function privateAddress(address: string): boolean {
     (parts[0] === 169 && parts[1] === 254) ||
     (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127)
   );
-}
+};
 
-function localAddresses(): string[] {
-  return [
-    ...new Set(
-      Object.values(networkInterfaces())
-        .flatMap((entries) => entries ?? [])
-        .filter(
-          (entry) => entry.family === "IPv4" && privateAddress(entry.address)
-        )
-        .map((entry) => entry.address)
-    ),
-  ];
-}
+const localAddresses = (): string[] => [
+  ...new Set(
+    Object.values(networkInterfaces())
+      .flatMap((entries) => entries ?? [])
+      .filter(
+        (entry) => entry.family === "IPv4" && privateAddress(entry.address)
+      )
+      .map((entry) => entry.address)
+  ),
+];
 
-function equalSecret(actual: string, expected: string): boolean {
+const equalSecret = (actual: string, expected: string): boolean => {
   const left = Buffer.from(actual);
   const right = Buffer.from(expected);
   return left.length === right.length && timingSafeEqual(left, right);
-}
+};
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
+const readJson = (request: IncomingMessage): Promise<unknown> => {
   if (
     request.headers["content-type"]?.split(";")[0].trim().toLowerCase() !==
     "application/json"
   ) {
-    throw new RequestError(415, "Use application/json");
+    return Promise.reject(new RequestError(415, "Use application/json"));
   }
   if (Number(request.headers["content-length"] ?? 0) > maxBody) {
-    throw new RequestError(413, "The request exceeds 5 MB");
+    return Promise.reject(new RequestError(413, "The request exceeds 5 MB"));
   }
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
+    const listeners: {
+      event: string;
+      handler: (...args: Buffer[]) => void;
+    }[] = [];
     let size = 0;
+    const listen = (event: string, handler: (...args: Buffer[]) => void) => {
+      request.on(event, handler);
+      listeners.push({ event, handler });
+    };
     const cleanup = () => {
-      request.off("data", onData);
-      request.off("end", onEnd);
-      request.off("error", onError);
-      request.off("aborted", onAborted);
+      for (const { event, handler } of listeners) {
+        request.off(event, handler);
+      }
     };
     const onError = () => {
       cleanup();
@@ -336,12 +372,54 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
         reject(new RequestError(400, "Invalid JSON"));
       }
     };
-    request.on("data", onData);
-    request.on("end", onEnd);
-    request.on("error", onError);
-    request.on("aborted", onAborted);
+    listen("data", onData);
+    listen("end", onEnd);
+    listen("error", onError);
+    listen("aborted", onAborted);
   });
-}
+};
+
+const toolStatus = (
+  stage: "start" | "update" | "end",
+  isError?: boolean
+): PiToolActivity["status"] => {
+  if (stage !== "end") {
+    return "running";
+  }
+  return isError ? "error" : "completed";
+};
+
+const toolsFromMessages = (
+  messages: PiMessage[],
+  idle: boolean
+): Map<string, PiToolActivity> => {
+  const tools = new Map<string, PiToolActivity>();
+  for (const message of messages) {
+    for (const part of message.content) {
+      if (part.type === "toolCall") {
+        tools.set(part.id, {
+          id: part.id,
+          input: part.arguments,
+          name: part.name,
+          status: idle ? "error" : "running",
+        });
+      }
+    }
+    if (message.role === "toolResult" && message.toolCallId) {
+      const previous = tools.get(message.toolCallId);
+      tools.set(message.toolCallId, {
+        id: message.toolCallId,
+        input: previous?.input ?? {},
+        name: message.toolName ?? previous?.name ?? "",
+        output: message.content
+          .flatMap((part) => (part.type === "text" ? [part.text] : []))
+          .join("\n"),
+        status: message.isError ? "error" : "completed",
+      });
+    }
+  }
+  return tools;
+};
 
 class MobileBridge {
   readonly instanceID = randomUUID();
@@ -548,10 +626,10 @@ class MobileBridge {
     const previous = this.tools.get(event.toolCallId);
     const tool: PiToolActivity = {
       id: event.toolCallId,
-      name: event.toolName,
       input: object(event.args)
         ? structuredClone(event.args)
         : (previous?.input ?? {}),
+      name: event.toolName,
       output:
         stage === "start"
           ? undefined
@@ -559,8 +637,7 @@ class MobileBridge {
       ...(stage === "end" && object(event.result)
         ? { content: content(event.result.content) }
         : {}),
-      status:
-        stage === "end" ? (event.isError ? "error" : "completed") : "running",
+      status: toolStatus(stage, event.isError),
     };
     this.tools.set(tool.id, tool);
     this.emit({ tool, type: "tool" });
@@ -580,14 +657,18 @@ class MobileBridge {
       return;
     }
     const bytes = Buffer.byteLength(JSON.stringify(event));
-    this.events.push({ bytes, cursor: ++this.cursor, event });
+    this.cursor += 1;
+    this.events.push({ bytes, cursor: this.cursor, event });
     this.eventBytes += bytes;
     while (this.events.length > maxEvents || this.eventBytes > maxEventBytes) {
-      const removed = this.events.shift()!;
+      const removed = this.events.shift();
+      if (!removed) {
+        break;
+      }
       this.eventBytes -= removed.bytes;
       this.eventFloor = removed.cursor;
     }
-    for (const poll of [...this.polls]) {
+    for (const poll of this.polls) {
       this.finishPoll(poll);
     }
   }
@@ -606,71 +687,67 @@ class MobileBridge {
     };
   }
 
-  private snapshot(): PiSnapshot {
-    const ctx = this.current();
+  private messageEntry(
+    entry: Extract<BranchEntry, { type: "message" }>
+  ): PiMessage | undefined {
+    const alias =
+      this.entryAliases.get(entry.id) ??
+      this.messageIDs.get(entry.message) ??
+      entry.id;
+    this.entryAliases.set(entry.id, alias);
+    const message = messageInfo(entry.message, alias);
+    this.live.delete(alias);
+    return message;
+  }
+
+  private customEntry(
+    entry: Extract<BranchEntry, { type: "custom_message" }>
+  ): PiMessage | undefined {
+    let alias = this.entryAliases.get(entry.id);
+    if (!alias) {
+      alias =
+        [...this.customMessages].find(
+          ([, rawContent]) => rawContent === entry.content
+        )?.[0] ?? entry.id;
+      this.entryAliases.set(entry.id, alias);
+    }
+    const timestamp =
+      this.live.get(alias)?.timestamp ?? Date.parse(entry.timestamp);
+    this.live.delete(alias);
+    this.customMessages.delete(alias);
+    if (!entry.display) {
+      return undefined;
+    }
+    return {
+      content: content(entry.content),
+      id: alias,
+      role: "custom",
+      timestamp,
+    };
+  }
+
+  private branchMessages(ctx: ExtensionContext): PiMessage[] {
     const messages: PiMessage[] = [];
     for (const entry of ctx.sessionManager.getBranch()) {
+      let message: PiMessage | undefined;
       if (entry.type === "message") {
-        const alias =
-          this.entryAliases.get(entry.id) ??
-          this.messageIDs.get(entry.message) ??
-          entry.id;
-        this.entryAliases.set(entry.id, alias);
-        const message = messageInfo(entry.message, alias);
-        if (message) {
-          messages.push(message);
-        }
-        this.live.delete(alias);
+        message = this.messageEntry(entry);
       } else if (entry.type === "custom_message") {
-        let alias = this.entryAliases.get(entry.id);
-        if (!alias) {
-          alias =
-            [...this.customMessages].find(
-              ([, rawContent]) => rawContent === entry.content
-            )?.[0] ?? entry.id;
-          this.entryAliases.set(entry.id, alias);
-        }
-        const timestamp =
-          this.live.get(alias)?.timestamp ?? Date.parse(entry.timestamp);
-        this.live.delete(alias);
-        this.customMessages.delete(alias);
-        if (entry.display) {
-          messages.push({
-            content: content(entry.content),
-            id: alias,
-            role: "custom",
-            timestamp,
-          });
-        }
+        message = this.customEntry(entry);
+      }
+      if (message) {
+        messages.push(message);
       }
     }
+    return messages;
+  }
+
+  private snapshot(): PiSnapshot {
+    const ctx = this.current();
+    const messages = this.branchMessages(ctx);
     messages.push(...this.live.values());
     const session = this.session();
-    const tools = new Map<string, PiToolActivity>();
-    for (const message of messages) {
-      for (const part of message.content) {
-        if (part.type === "toolCall") {
-          tools.set(part.id, {
-            id: part.id,
-            input: part.arguments,
-            name: part.name,
-            status: session.idle ? "error" : "running",
-          });
-        }
-      }
-      if (message.role === "toolResult" && message.toolCallId) {
-        const previous = tools.get(message.toolCallId);
-        tools.set(message.toolCallId, {
-          id: message.toolCallId,
-          input: previous?.input ?? {},
-          name: message.toolName ?? previous?.name ?? "",
-          output: message.content
-            .flatMap((part) => (part.type === "text" ? [part.text] : []))
-            .join("\n"),
-          status: message.isError ? "error" : "completed",
-        });
-      }
-    }
+    const tools = toolsFromMessages(messages, session.idle);
     for (const tool of this.tools.values()) {
       tools.set(tool.id, tool);
     }
@@ -692,7 +769,7 @@ class MobileBridge {
       const server = createServer((request, response) => {
         void this.request(request, response).catch((error) => {
           if (!response.headersSent && !response.destroyed) {
-            this.reply(
+            reply(
               response,
               error instanceof RequestError ? error.status : 500,
               {
@@ -711,16 +788,14 @@ class MobileBridge {
       server.requestTimeout = 10_000;
       server.headersTimeout = 10_000;
       server.keepAliveTimeout = 5000;
-      await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(0, "0.0.0.0", () => {
-          server.off("error", reject);
-          resolve();
-        });
-      }).catch((error) => {
+      try {
+        const listening = once(server, "listening");
+        server.listen(0, "0.0.0.0");
+        await listening;
+      } catch (error) {
         this.server = undefined;
         throw error;
-      });
+      }
       server.on("error", () => {
         void this.close();
       });
@@ -755,24 +830,15 @@ class MobileBridge {
     }, 300_000);
   }
 
-  private reply(response: ServerResponse, status: number, body: unknown) {
-    response.writeHead(status, {
-      "Cache-Control": "no-store",
-      "Content-Type": "application/json; charset=utf-8",
-      "X-Content-Type-Options": "nosniff",
-    });
-    response.end(JSON.stringify(body));
-  }
-
   private finishPoll(poll: Poll) {
     clearTimeout(poll.timer);
     this.polls.delete(poll);
     if (!poll.response.destroyed) {
-      this.reply(poll.response, 200, this.batch(poll.after));
+      reply(poll.response, 200, this.batch(poll.after));
     }
   }
 
-  private async request(request: IncomingMessage, response: ServerResponse) {
+  private assertReachable(request: IncomingMessage) {
     if (this.closed) {
       throw new RequestError(503, "The mobile listener is stopped");
     }
@@ -793,138 +859,195 @@ class MobileBridge {
     if (!allowedHosts.includes(request.headers.host ?? "")) {
       throw new RequestError(403, "Invalid server address");
     }
-    const url = new URL(request.url ?? "/", `http://127.0.0.1:${this.port}`);
-    if (request.method === "GET" && url.pathname === "/opencoode/info") {
-      this.reply(response, 200, {
-        backend: "pi",
-        protocol: PI_MOBILE_PROTOCOL,
-      });
-      return;
-    }
-    const pairingCode = /^\/auth\/connect\/([A-Za-z0-9_-]{22})$/.exec(
+  }
+
+  private tryPair(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL
+  ): boolean {
+    const pairingCode = /^\/auth\/connect\/(?<code>[A-Za-z0-9_-]{22})$/u.exec(
       url.pathname
-    )?.[1];
+    )?.groups?.code;
     if (
-      (request.method === "GET" || request.method === "POST") &&
-      pairingCode
+      !pairingCode ||
+      (request.method !== "GET" && request.method !== "POST")
     ) {
-      if (
-        !this.pairing ||
-        this.pairing.expires <= Date.now() ||
-        !equalSecret(pairingCode, this.pairing.code)
-      ) {
-        throw new RequestError(
-          401,
-          "The pairing code expired or was already used. Run /mobile in Pi"
-        );
-      }
-      this.pairing = undefined;
-      clearTimeout(this.pairingTimer);
-      this.context?.ui.setWidget("opencoode-mobile-pairing", undefined);
-      this.context?.ui.setStatus("opencoode-mobile", "Mobile: paired");
-      this.reply(response, 200, { token: this.token });
-      return;
+      return false;
     }
+    if (
+      !this.pairing ||
+      this.pairing.expires <= Date.now() ||
+      !equalSecret(pairingCode, this.pairing.code)
+    ) {
+      throw new RequestError(
+        401,
+        "The pairing code expired or was already used. Run /mobile in Pi"
+      );
+    }
+    this.pairing = undefined;
+    clearTimeout(this.pairingTimer);
+    this.context?.ui.setWidget("opencoode-mobile-pairing", undefined);
+    this.context?.ui.setStatus("opencoode-mobile", "Mobile: paired");
+    reply(response, 200, { token: this.token });
+    return true;
+  }
+
+  private assertAuthorized(request: IncomingMessage) {
     const expected = `Basic ${Buffer.from(`opencode:${this.token}`).toString("base64")}`;
     if (!equalSecret(request.headers.authorization ?? "", expected)) {
       throw new RequestError(401, "Pair the phone with /mobile in Pi");
     }
-    if (request.method === "GET" && url.pathname === "/pi/info") {
-      this.reply(response, 200, {
+  }
+
+  private async request(request: IncomingMessage, response: ServerResponse) {
+    this.assertReachable(request);
+    const url = new URL(request.url ?? "/", `http://127.0.0.1:${this.port}`);
+    if (request.method === "GET" && url.pathname === "/opencoode/info") {
+      reply(response, 200, {
         backend: "pi",
-        instanceID: this.instanceID,
         protocol: PI_MOBILE_PROTOCOL,
-        session: this.session(),
-        version: VERSION,
       });
-    } else if (request.method === "GET" && url.pathname === "/pi/snapshot") {
-      this.reply(response, 200, this.snapshot());
-    } else if (request.method === "GET" && url.pathname === "/pi/events") {
-      const rawAfter = url.searchParams.get("after");
-      const after = Number(rawAfter);
-      if (
-        rawAfter === null ||
-        !/^\d+$/.test(rawAfter) ||
-        !Number.isSafeInteger(after)
-      ) {
-        throw new RequestError(400, "Invalid event cursor");
-      }
-      if (url.searchParams.get("instance") !== this.instanceID) {
-        this.reply(response, 200, {
-          cursor: this.cursor,
-          events: [],
-          instanceID: this.instanceID,
-          reset: true,
-        } satisfies PiEventBatch);
-        return;
-      }
-      const batch = this.batch(after);
-      if (batch.reset || batch.events.length) {
-        this.reply(response, 200, batch);
-      } else {
-        if (
-          this.polls.size >= 16 ||
-          [...this.polls].filter((poll) => poll.address === address).length >= 4
-        ) {
-          throw new RequestError(429, "Too many event requests");
-        }
-        const poll: Poll = {
-          address,
-          after,
-          response,
-          timer: setTimeout(() => this.finishPoll(poll), 25_000),
-        };
-        this.polls.add(poll);
-        response.once("close", () => {
-          clearTimeout(poll.timer);
-          this.polls.delete(poll);
-        });
-      }
-    } else if (request.method === "GET" && url.pathname === "/pi/models") {
-      this.reply(response, 200, {
-        models: this.current().modelRegistry.getAvailable().map(modelInfo),
-      });
-    } else if (request.method === "GET" && url.pathname === "/pi/sessions") {
-      const ctx = this.current();
-      const sessions = await SessionManager.list(
-        ctx.cwd,
-        ctx.sessionManager.getSessionDir()
-      );
-      this.reply(response, 200, {
-        sessions: sessions
-          .filter((session) => session.cwd === ctx.cwd)
-          .map((session) => ({
-            active: session.id === this.sessionID,
-            cwd: session.cwd,
-            id: session.id,
-            name: session.name ?? session.firstMessage ?? "",
-            updated: session.modified.getTime(),
-          })),
-      });
-    } else if (request.method === "POST" && url.pathname === "/pi/command") {
-      const parsed = command(await readJson(request));
-      if (this.closed) {
-        throw new RequestError(503, "The mobile listener is stopped");
-      }
-      if (
-        parsed.expectedSessionID !== undefined &&
-        this.current().sessionManager.getSessionId() !==
-          parsed.expectedSessionID
-      ) {
-        throw new RequestError(
-          409,
-          "The active Pi session changed. Send the command again"
-        );
-      }
-      if (parsed.type === "abort") {
-        this.current().abort();
-      } else {
-        await this.enqueue(parsed);
-      }
-      this.reply(response, 200, { ok: true });
-    } else {
-      throw new RequestError(404, "Unknown Pi endpoint");
+      return;
     }
+    if (this.tryPair(request, response, url)) {
+      return;
+    }
+    this.assertAuthorized(request);
+    await this.route(request, response, url);
+  }
+
+  private async route(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL
+  ) {
+    switch (`${request.method} ${url.pathname}`) {
+      case "GET /pi/info": {
+        reply(response, 200, {
+          backend: "pi",
+          instanceID: this.instanceID,
+          protocol: PI_MOBILE_PROTOCOL,
+          session: this.session(),
+          version: VERSION,
+        });
+        break;
+      }
+      case "GET /pi/snapshot": {
+        reply(response, 200, this.snapshot());
+        break;
+      }
+      case "GET /pi/events": {
+        this.pollEvents(request, response, url);
+        break;
+      }
+      case "GET /pi/models": {
+        reply(response, 200, {
+          models: this.current().modelRegistry.getAvailable().map(modelInfo),
+        });
+        break;
+      }
+      case "GET /pi/sessions": {
+        await this.listSessions(response);
+        break;
+      }
+      case "POST /pi/command": {
+        await this.runCommand(request, response);
+        break;
+      }
+      default: {
+        throw new RequestError(404, "Unknown Pi endpoint");
+      }
+    }
+  }
+
+  private pollEvents(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL
+  ) {
+    const address = request.socket.remoteAddress ?? "";
+    const rawAfter = url.searchParams.get("after");
+    const after = Number(rawAfter);
+    if (
+      rawAfter === null ||
+      !/^\d+$/u.test(rawAfter) ||
+      !Number.isSafeInteger(after)
+    ) {
+      throw new RequestError(400, "Invalid event cursor");
+    }
+    if (url.searchParams.get("instance") !== this.instanceID) {
+      reply(response, 200, {
+        cursor: this.cursor,
+        events: [],
+        instanceID: this.instanceID,
+        reset: true,
+      } satisfies PiEventBatch);
+      return;
+    }
+    const batch = this.batch(after);
+    if (batch.reset || batch.events.length) {
+      reply(response, 200, batch);
+      return;
+    }
+    if (
+      this.polls.size >= 16 ||
+      [...this.polls].filter((poll) => poll.address === address).length >= 4
+    ) {
+      throw new RequestError(429, "Too many event requests");
+    }
+    const poll: Poll = {
+      address,
+      after,
+      response,
+      timer: setTimeout(() => this.finishPoll(poll), 25_000),
+    };
+    this.polls.add(poll);
+    response.once("close", () => {
+      clearTimeout(poll.timer);
+      this.polls.delete(poll);
+    });
+  }
+
+  private async listSessions(response: ServerResponse) {
+    const ctx = this.current();
+    const sessions = await SessionManager.list(
+      ctx.cwd,
+      ctx.sessionManager.getSessionDir()
+    );
+    reply(response, 200, {
+      sessions: sessions
+        .filter((session) => session.cwd === ctx.cwd)
+        .map((session) => ({
+          active: session.id === this.sessionID,
+          cwd: session.cwd,
+          id: session.id,
+          name: session.name ?? session.firstMessage ?? "",
+          updated: session.modified.getTime(),
+        })),
+    });
+  }
+
+  private async runCommand(request: IncomingMessage, response: ServerResponse) {
+    const parsed = command(await readJson(request));
+    if (this.closed) {
+      throw new RequestError(503, "The mobile listener is stopped");
+    }
+    if (
+      parsed.expectedSessionID !== undefined &&
+      this.current().sessionManager.getSessionId() !== parsed.expectedSessionID
+    ) {
+      throw new RequestError(
+        409,
+        "The active Pi session changed. Send the command again"
+      );
+    }
+    if (parsed.type === "abort") {
+      this.current().abort();
+    } else {
+      await this.enqueue(parsed);
+    }
+    reply(response, 200, { ok: true });
   }
 
   private enqueue(value: PiCommand): Promise<void> {
@@ -932,7 +1055,7 @@ class MobileBridge {
       throw new RequestError(429, "Too many commands");
     }
     const sessionID = this.current().sessionManager.getSessionId();
-    this.queued++;
+    this.queued += 1;
     const result = this.queue.then(() => {
       if (this.current().sessionManager.getSessionId() !== sessionID) {
         throw new RequestError(
@@ -942,12 +1065,244 @@ class MobileBridge {
       }
       return this.execute(value);
     });
-    this.queue = result
-      .catch(() => {})
-      .finally(() => {
-        this.queued--;
-      });
+    this.queue = result.catch(ignoreError).finally(() => {
+      this.queued -= 1;
+    });
     return result;
+  }
+
+  private async confirmIdlePrompt(
+    ctx: ExtensionContext,
+    sessionID: string,
+    model: SessionModel,
+    value: PromptCommand
+  ) {
+    const { pi } = this;
+    let authenticated: boolean;
+    try {
+      const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+      authenticated = auth.ok;
+    } catch {
+      throw new RequestError(
+        400,
+        "Pi could not authenticate the selected model. Check its provider credentials in the terminal"
+      );
+    }
+    if (this.closed) {
+      throw new RequestError(503, "The mobile listener is stopped");
+    }
+    const current = this.current();
+    if (
+      this.pi !== pi ||
+      current.sessionManager.getSessionId() !== sessionID ||
+      current.model?.provider !== model.provider ||
+      current.model?.id !== model.id
+    ) {
+      throw new RequestError(
+        409,
+        "The Pi session or model changed. Send the prompt again"
+      );
+    }
+    if (!authenticated) {
+      throw new RequestError(
+        400,
+        "Pi could not authenticate the selected model. Check its provider credentials in the terminal"
+      );
+    }
+    if (this.prompts.length) {
+      throw new RequestError(
+        409,
+        "Pi needs a response in the terminal. Complete the terminal dialog first"
+      );
+    }
+    if (this.compacting) {
+      throw new RequestError(409, "Wait for compaction to finish");
+    }
+    if (!this.session().idle && !value.delivery) {
+      throw new RequestError(409, "Pi is busy. Choose steer or follow-up");
+    }
+  }
+
+  private async executePrompt(
+    ctx: ExtensionContext,
+    sessionID: string,
+    value: PromptCommand
+  ) {
+    if (this.compacting) {
+      throw new RequestError(409, "Wait for compaction to finish");
+    }
+    const wasIdle = this.session().idle;
+    if (!wasIdle && !value.delivery) {
+      throw new RequestError(409, "Pi is busy. Choose steer or follow-up");
+    }
+    const { model } = ctx;
+    if (!model) {
+      throw new RequestError(400, "Select a model in Pi before a prompt");
+    }
+    if (value.images?.length && !model.input.includes("image")) {
+      throw new RequestError(400, "The selected model does not accept images");
+    }
+    if (wasIdle) {
+      await this.confirmIdlePrompt(ctx, sessionID, model, value);
+    }
+    const parts = [
+      { text: value.text, type: "text" as const },
+      ...(value.images ?? []).map((image) => ({
+        type: "image" as const,
+        ...image,
+      })),
+    ];
+    this.pi.sendUserMessage(parts, {
+      deliverAs: value.delivery,
+      expandPromptTemplates: true,
+    });
+  }
+
+  private executeCompact(
+    ctx: ExtensionContext,
+    value: Extract<PiCommand, { type: "compact" }>
+  ) {
+    this.compacting = true;
+    ctx.compact({
+      customInstructions: value.instructions,
+      onComplete: () => this.compaction(this.current(), false),
+      onError: () => this.compaction(this.current(), false),
+    });
+    this.emit({ session: this.session(), type: "session" });
+  }
+
+  private async executeModel(
+    ctx: ExtensionContext,
+    value: Extract<PiCommand, { type: "model" }>
+  ) {
+    const model = ctx.modelRegistry
+      .getAvailable()
+      .find(
+        (candidate) =>
+          candidate.provider === value.provider && candidate.id === value.id
+      );
+    if (!model) {
+      throw new RequestError(400, "The model is unavailable");
+    }
+    if (!(await this.pi.setModel(model))) {
+      throw new RequestError(400, "Pi has no authentication for this model");
+    }
+  }
+
+  private executeThinking(
+    ctx: ExtensionContext,
+    value: Extract<PiCommand, { type: "thinking" }>
+  ) {
+    const level =
+      ctx.model &&
+      getSupportedThinkingLevels(ctx.model).find(
+        (candidate) => candidate === value.level
+      );
+    if (!level) {
+      throw new RequestError(
+        400,
+        "The model does not support this thinking level"
+      );
+    }
+    this.pi.setThinkingLevel(level);
+  }
+
+  private async switchSession(
+    commandCtx: ExtensionCommandContext,
+    ctx: ExtensionContext,
+    sessionID: string,
+    target: string,
+    withSession: WithSession
+  ) {
+    const sessions = await SessionManager.list(
+      ctx.cwd,
+      ctx.sessionManager.getSessionDir()
+    );
+    const found = sessions.find(
+      (session) => session.id === target && session.cwd === ctx.cwd
+    );
+    if (!found) {
+      throw new RequestError(404, "The session does not exist in this project");
+    }
+    if (
+      this.current().sessionManager.getSessionId() !== sessionID ||
+      !this.session().idle
+    ) {
+      throw new RequestError(
+        409,
+        "The Pi session changed or started a response. Send the command again"
+      );
+    }
+    return commandCtx.switchSession(found.path, { withSession });
+  }
+
+  private forkSession(
+    commandCtx: ExtensionCommandContext,
+    ctx: ExtensionContext,
+    entryID: string,
+    withSession: WithSession
+  ) {
+    this.snapshot();
+    const entry = ctx.sessionManager
+      .getBranch()
+      .find(
+        (candidate) =>
+          candidate.id === entryID ||
+          this.entryAliases.get(candidate.id) === entryID
+      );
+    if (!entry || entry.type !== "message" || entry.message.role !== "user") {
+      throw new RequestError(
+        400,
+        "Fork from a user message in the active session"
+      );
+    }
+    return commandCtx.fork(entry.id, { withSession });
+  }
+
+  private async executeSessionChange(
+    ctx: ExtensionContext,
+    sessionID: string,
+    value: Extract<PiCommand, { type: "new" | "switch" | "fork" }>
+  ) {
+    const commandCtx = this.commandContext;
+    if (!commandCtx) {
+      throw new RequestError(
+        409,
+        "Run /mobile in this Pi session before session controls"
+      );
+    }
+    const withSession: WithSession = (fresh) => {
+      try {
+        this.attach(fresh);
+        this.commandContext = fresh;
+        this.emit({ session: this.session(), type: "session" });
+        return Promise.resolve();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    };
+    let result: { cancelled: boolean };
+    if (value.type === "new") {
+      result = await commandCtx.newSession({ withSession });
+    } else if (value.type === "switch") {
+      result = await this.switchSession(
+        commandCtx,
+        ctx,
+        sessionID,
+        value.sessionID,
+        withSession
+      );
+    } else {
+      result = await this.forkSession(
+        commandCtx,
+        ctx,
+        value.entryID,
+        withSession
+      );
+    }
+    if (result.cancelled) {
+      throw new RequestError(409, "Pi cancelled the session change");
+    }
   }
 
   private async execute(value: PiCommand) {
@@ -972,80 +1327,7 @@ class MobileBridge {
       );
     }
     if (value.type === "prompt") {
-      if (this.compacting) {
-        throw new RequestError(409, "Wait for compaction to finish");
-      }
-      const wasIdle = this.session().idle;
-      if (!wasIdle && !value.delivery) {
-        throw new RequestError(409, "Pi is busy. Choose steer or follow-up");
-      }
-      const { model } = ctx;
-      if (!model) {
-        throw new RequestError(400, "Select a model in Pi before a prompt");
-      }
-      if (value.images?.length && !model.input.includes("image")) {
-        throw new RequestError(
-          400,
-          "The selected model does not accept images"
-        );
-      }
-      if (wasIdle) {
-        const { pi } = this;
-        let authenticated: boolean;
-        try {
-          authenticated = (await ctx.modelRegistry.getApiKeyAndHeaders(model))
-            .ok;
-        } catch {
-          throw new RequestError(
-            400,
-            "Pi could not authenticate the selected model. Check its provider credentials in the terminal"
-          );
-        }
-        if (this.closed) {
-          throw new RequestError(503, "The mobile listener is stopped");
-        }
-        const current = this.current();
-        if (
-          this.pi !== pi ||
-          current.sessionManager.getSessionId() !== sessionID ||
-          current.model?.provider !== model.provider ||
-          current.model?.id !== model.id
-        ) {
-          throw new RequestError(
-            409,
-            "The Pi session or model changed. Send the prompt again"
-          );
-        }
-        if (!authenticated) {
-          throw new RequestError(
-            400,
-            "Pi could not authenticate the selected model. Check its provider credentials in the terminal"
-          );
-        }
-        if (this.prompts.length) {
-          throw new RequestError(
-            409,
-            "Pi needs a response in the terminal. Complete the terminal dialog first"
-          );
-        }
-        if (this.compacting) {
-          throw new RequestError(409, "Wait for compaction to finish");
-        }
-        if (!this.session().idle && !value.delivery) {
-          throw new RequestError(409, "Pi is busy. Choose steer or follow-up");
-        }
-      }
-      const parts = [
-        { text: value.text, type: "text" as const },
-        ...(value.images ?? []).map((image) => ({
-          type: "image" as const,
-          ...image,
-        })),
-      ];
-      this.pi.sendUserMessage(parts, {
-        deliverAs: value.delivery,
-        expandPromptTemplates: true,
-      });
+      await this.executePrompt(ctx, sessionID, value);
       return;
     }
     if (!this.session().idle) {
@@ -1053,46 +1335,15 @@ class MobileBridge {
     }
     switch (value.type) {
       case "compact": {
-        this.compacting = true;
-        ctx.compact({
-          customInstructions: value.instructions,
-          onComplete: () => this.compaction(this.current(), false),
-          onError: () => this.compaction(this.current(), false),
-        });
-        this.emit({ session: this.session(), type: "session" });
+        this.executeCompact(ctx, value);
         return;
       }
       case "model": {
-        const model = ctx.modelRegistry
-          .getAvailable()
-          .find(
-            (model) =>
-              model.provider === value.provider && model.id === value.id
-          );
-        if (!model) {
-          throw new RequestError(400, "The model is unavailable");
-        }
-        if (!(await this.pi.setModel(model))) {
-          throw new RequestError(
-            400,
-            "Pi has no authentication for this model"
-          );
-        }
+        await this.executeModel(ctx, value);
         break;
       }
       case "thinking": {
-        const level =
-          ctx.model &&
-          getSupportedThinkingLevels(ctx.model).find(
-            (level) => level === value.level
-          );
-        if (!level) {
-          throw new RequestError(
-            400,
-            "The model does not support this thinking level"
-          );
-        }
-        this.pi.setThinkingLevel(level);
+        this.executeThinking(ctx, value);
         break;
       }
       case "rename": {
@@ -1102,71 +1353,11 @@ class MobileBridge {
       case "new":
       case "switch":
       case "fork": {
-        const commandCtx = this.commandContext;
-        if (!commandCtx) {
-          throw new RequestError(
-            409,
-            "Run /mobile in this Pi session before session controls"
-          );
-        }
-        const withSession = async (fresh: ExtensionCommandContext) => {
-          this.attach(fresh);
-          this.commandContext = fresh;
-          this.emit({ session: this.session(), type: "session" });
-        };
-        let result: { cancelled: boolean };
-        if (value.type === "new") {
-          result = await commandCtx.newSession({ withSession });
-        } else if (value.type === "switch") {
-          const sessions = await SessionManager.list(
-            ctx.cwd,
-            ctx.sessionManager.getSessionDir()
-          );
-          const target = sessions.find(
-            (session) =>
-              session.id === value.sessionID && session.cwd === ctx.cwd
-          );
-          if (!target) {
-            throw new RequestError(
-              404,
-              "The session does not exist in this project"
-            );
-          }
-          if (
-            this.current().sessionManager.getSessionId() !== sessionID ||
-            !this.session().idle
-          ) {
-            throw new RequestError(
-              409,
-              "The Pi session changed or started a response. Send the command again"
-            );
-          }
-          result = await commandCtx.switchSession(target.path, { withSession });
-        } else {
-          this.snapshot();
-          const entry = ctx.sessionManager
-            .getBranch()
-            .find(
-              (entry) =>
-                entry.id === value.entryID ||
-                this.entryAliases.get(entry.id) === value.entryID
-            );
-          if (
-            !entry ||
-            entry.type !== "message" ||
-            entry.message.role !== "user"
-          ) {
-            throw new RequestError(
-              400,
-              "Fork from a user message in the active session"
-            );
-          }
-          result = await commandCtx.fork(entry.id, { withSession });
-        }
-        if (result.cancelled) {
-          throw new RequestError(409, "Pi cancelled the session change");
-        }
+        await this.executeSessionChange(ctx, sessionID, value);
         return;
+      }
+      default: {
+        break;
       }
     }
     this.emit({ session: this.session(), type: "session" });
@@ -1199,7 +1390,7 @@ class MobileBridge {
     for (const poll of this.polls) {
       clearTimeout(poll.timer);
       if (!poll.response.destroyed) {
-        this.reply(poll.response, 503, {
+        reply(poll.response, 503, {
           error: "The mobile listener stopped",
         });
       }
@@ -1208,7 +1399,7 @@ class MobileBridge {
     const { server } = this;
     this.server = undefined;
     if (processState[bridgeKey] === this) {
-      delete processState[bridgeKey];
+      Reflect.deleteProperty(processState, bridgeKey);
     }
     if (server) {
       await new Promise<void>((resolve) => {

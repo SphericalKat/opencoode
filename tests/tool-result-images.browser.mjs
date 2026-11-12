@@ -65,7 +65,7 @@ await page.evaluate(() =>
   Promise.all(
     document
       .getAnimations()
-      .map((animation) => animation.finished.catch(() => {}))
+      .map((animation) => animation.finished.catch(() => null))
   )
 );
 await page.screenshot({ fullPage: true, path: `${output}/expanded.png` });
@@ -101,7 +101,7 @@ console.log(
 );
 
 await page.goto(`${origin}/?scenario=multiple`);
-const previews = page.getByRole("button", { name: /Expand image preview:/ });
+const previews = page.getByRole("button", { name: /Expand image preview:/u });
 await previews.nth(2).waitFor();
 assert.deepEqual(
   await previews.evaluateAll((elements) =>
@@ -154,9 +154,9 @@ console.log(
 
 let finishLoading;
 await page.route(`${origin}/fixture-image.png`, async (route) => {
-  await new Promise((resolve) => {
-    finishLoading = resolve;
-  });
+  const loading = Promise.withResolvers();
+  finishLoading = loading.resolve;
+  await loading.promise;
   await route.fulfill({ body: "Missing", status: 404 });
 });
 await page.goto(`${origin}/?scenario=loading`);

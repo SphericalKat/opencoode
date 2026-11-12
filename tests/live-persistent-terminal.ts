@@ -16,8 +16,9 @@ const client = createClient(fixture.connection, (input, init) =>
   fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(20_000) })
 );
 const api = client.experimental.persistentPty;
+const serverInfo = await client.server.info();
 assert.equal(
-  (await client.server.info()).capabilities?.persistentPty,
+  serverInfo.capabilities?.persistentPty,
   true,
   "The fixture must support persistent terminals"
 );
@@ -28,18 +29,23 @@ const session = await client.session.create({
 let terminalID: string | undefined;
 let socket: WebSocket | undefined;
 
-async function until(
+const until = async (
   check: () => boolean | Promise<boolean>,
   description: string
-) {
+) => {
   const deadline = Date.now() + 10_000;
-  while (!(await check())) {
+  const poll = async (): Promise<void> => {
+    if (await check()) {
+      return;
+    }
     if (Date.now() >= deadline) {
       throw new Error(`Timed out: ${description}`);
     }
     await delay(25);
-  }
-}
+    await poll();
+  };
+  await poll();
+};
 
 try {
   const terminal = await api.create({
@@ -52,11 +58,8 @@ try {
   });
   terminalID = terminal.id;
   assert.equal(terminal.sessionID, session.id);
-  assert.ok(
-    (await api.list({ sessionID: session.id })).some(
-      (item) => item.id === terminal.id
-    )
-  );
+  const listed = await api.list({ sessionID: session.id });
+  assert.ok(listed.some((item) => item.id === terminal.id));
   const firstSnapshot = await api.snapshot({ ptyID: terminal.id });
   assert.equal(typeof firstSnapshot.checkpoint, "string");
   const attachmentID = crypto.randomUUID();
@@ -67,7 +70,7 @@ try {
   let offset = firstSnapshot.info.output.tail;
   let latest = Date.now();
   let socketError: Error | undefined;
-  async function attach(cursor: number) {
+  const attach = async (cursor: number) => {
     attached = false;
     restored = false;
     controller = false;
@@ -85,10 +88,10 @@ try {
     );
     socket.binaryType = "arraybuffer";
     const decoder = new TextDecoder();
-    socket.onerror = () => {
+    socket.addEventListener("error", () => {
       socketError = new Error("The persistent terminal WebSocket failed");
-    };
-    socket.onmessage = (event) => {
+    });
+    socket.addEventListener("message", (event) => {
       try {
         latest = Date.now();
         if (event.data instanceof ArrayBuffer) {
@@ -123,19 +126,20 @@ try {
             ? error
             : new Error("Invalid persistent terminal response");
       }
-    };
+    });
     await until(() => {
       if (socketError) {
         throw socketError;
       }
       return attached && restored && socket?.readyState === WebSocket.OPEN;
     }, "persistent terminal attachment and replay");
-  }
+  };
   await attach(offset);
   assert.equal(controller, false, "A new viewer must not take desktop control");
-  socket!.send(persistentInputFrame({ cols: 80, rows: 24 }));
+  assert.ok(socket);
+  socket.send(persistentInputFrame({ cols: 80, rows: 24 }));
   await until(() => controller, "explicit terminal control");
-  socket!.send(
+  socket.send(
     persistentInputFrame(
       { cols: 80, rows: 24 },
       new TextEncoder().encode("printf '\\nOC_PERSISTENT_α🙂世界_END\\n'\r")
@@ -157,7 +161,7 @@ try {
     "Persistent output offsets must count bytes"
   );
   assert.ok(Buffer.from(snapshot.checkpoint, "base64").byteLength > 0);
-  socket!.close();
+  socket.close();
   output = "";
   await attach(snapshot.info.output.tail);
   assert.equal(
@@ -165,7 +169,8 @@ try {
     false,
     "Reconnection must not repeat prior output"
   );
-  socket!.send(persistentInputFrame({ cols: 80, rows: 24 }));
+  assert.ok(socket);
+  socket.send(persistentInputFrame({ cols: 80, rows: 24 }));
   await until(() => controller, "terminal control after reconnection");
   const resized = await api.update({
     attachmentID,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-function visibleTextColors(element) {
+const visibleTextColors = (element) => {
   const colors = new Set();
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
@@ -12,7 +12,7 @@ function visibleTextColors(element) {
     }
   }
   return [...colors];
-}
+};
 
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
@@ -33,8 +33,9 @@ await page.addInitScript(() => {
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: {
-      writeText: async (text) => {
+      writeText: (text) => {
         window.copiedCode = text;
+        return Promise.resolve();
       },
     },
   });
@@ -50,8 +51,9 @@ assert.ok(
 );
 const plain = page.getByText("const plain", { exact: false }).last();
 assert.equal(await plain.textContent(), 'const plain = "hello";\n');
+const plainColors = await plain.evaluate(visibleTextColors);
 assert.equal(
-  (await plain.evaluate(visibleTextColors)).length,
+  plainColors.length,
   1,
   "unknown languages use one visible text color"
 );

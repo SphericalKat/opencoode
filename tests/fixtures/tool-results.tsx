@@ -26,17 +26,18 @@ Object.assign(globalThis, {
 const png =
   (globalThis as typeof globalThis & { fixtureImage?: string }).fixtureImage ||
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
-function Demo() {
+const IBMPlexMono = require("../../assets/fonts/IBMPlexMono-Text.ttf");
+const Inter = require("../../assets/fonts/Inter.ttf");
+
+const fonts = { IBMPlexMono, Inter };
+const Demo = () => {
   const [mime, setMime] = useState("image/png");
   useEffect(() => {
     const update = () => setMime("image/jpeg");
     addEventListener("fixture-mime", update);
     return () => removeEventListener("fixture-mime", update);
   }, []);
-  const [fontsReady] = useFonts({
-    IBMPlexMono: require("../../assets/fonts/IBMPlexMono-Text.ttf"),
-    Inter: require("../../assets/fonts/Inter.ttf"),
-  });
+  const [fontsReady] = useFonts(fonts);
   const scenario =
     new URLSearchParams(location.search).get("scenario") || "single";
   const files =
@@ -81,7 +82,7 @@ function Demo() {
     type: "assistant",
   };
   if (scenario === "tools") {
-    const first = message.content[0];
+    const [first] = message.content;
     if (first.type === "tool") {
       message.content.splice(1, 0, {
         ...first,
@@ -136,5 +137,5 @@ function Demo() {
       </KeyboardProvider>
     </SafeAreaProvider>
   );
-}
+};
 registerRootComponent(Demo);

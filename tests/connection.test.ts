@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { createServer } from "node:http";
 import { test } from "node:test";
+import { promisify } from "node:util";
 
 import {
   authorizationHeader,
@@ -8,6 +10,11 @@ import {
   connectionErrorMessage,
   normalizeConnection,
 } from "../src/lib/client";
+
+const rejectingFetch =
+  (cause: unknown): typeof globalThis.fetch =>
+  () =>
+    Promise.reject(cause);
 
 test("connection validation rejects credentials in URLs and unsupported schemes", () => {
   for (const url of [
@@ -32,8 +39,9 @@ test("Basic authentication preserves a Unicode password and its colons", () => {
     token: "sëcret:a:b",
     url: "https://example.com",
   });
+  assert.ok(header);
   assert.equal(
-    Buffer.from(header!.slice(6), "base64").toString("utf-8"),
+    Buffer.from(header.slice(6), "base64").toString("utf-8"),
     "opencode:sëcret:a:b"
   );
 });
@@ -66,7 +74,8 @@ test("pairing redeems the code as JSON and authenticates the next request under 
       response.writeHead(404).end();
     }
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
   try {
     const address = server.address();
     assert.ok(address && typeof address !== "string");
@@ -94,9 +103,7 @@ test("pairing redeems the code as JSON and authenticates the next request under 
       },
     ]);
   } finally {
-    await new Promise<void>((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve()))
-    );
+    await promisify(server.close.bind(server))();
   }
 });
 
@@ -122,37 +129,39 @@ test("connection recovery distinguishes rejected passwords, expired links, and i
       })
     );
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
   try {
     const address = server.address();
     assert.ok(address && typeof address !== "string");
     const origin = `http://127.0.0.1:${address.port}`;
-    for (const [path, expected] of [
-      ["", /rejected this password/],
-      ["/auth/connect/expired-code", /pairing link expired/],
-      ["/old", /did not return an OpenCode 2 API/],
-      ["/missing", /did not return an OpenCode 2 API/],
-    ] as const) {
-      const connection = {
-        id: "recovery",
-        name: "Server",
-        token: "incorrect-password",
-        url: origin + path,
-      };
-      await assert.rejects(
-        () => connect(connection),
-        (error) => {
-          const message = connectionErrorMessage(error, connection);
-          assert.match(message, expected);
-          assert.ok(!message.includes(connection.token));
-          return true;
-        }
-      );
-    }
-  } finally {
-    await new Promise<void>((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve()))
+    const cases = [
+      ["", /rejected this password/u],
+      ["/auth/connect/expired-code", /pairing link expired/u],
+      ["/old", /did not return an OpenCode 2 API/u],
+      ["/missing", /did not return an OpenCode 2 API/u],
+    ] as const;
+    await Promise.all(
+      cases.map(([path, expected]) => {
+        const connection = {
+          id: "recovery",
+          name: "Server",
+          token: "incorrect-password",
+          url: origin + path,
+        };
+        return assert.rejects(
+          () => connect(connection),
+          (error) => {
+            const message = connectionErrorMessage(error, connection);
+            assert.match(message, expected);
+            assert.ok(!message.includes(connection.token));
+            return true;
+          }
+        );
+      })
     );
+  } finally {
+    await promisify(server.close.bind(server))();
   }
 });
 
@@ -162,22 +171,22 @@ test("connection recovery provides safe network and timeout guidance", async () 
     name: "Server",
     url: "http://127.0.0.1:4096",
   };
-  for (const [cause, expected] of [
+  const cases = [
     [
       new DOMException("signal timed out", "TimeoutError"),
-      /did not respond within 15 seconds/,
+      /did not respond within 15 seconds/u,
     ],
-    [new TypeError("Failed to fetch"), /server is unreachable/],
-  ] as const) {
-    await assert.rejects(
-      () =>
-        connect(connection, async () => {
-          throw cause;
-        }),
-      (error) => {
-        assert.match(connectionErrorMessage(error, connection), expected);
-        return true;
-      }
-    );
-  }
+    [new TypeError("Failed to fetch"), /server is unreachable/u],
+  ] as const;
+  await Promise.all(
+    cases.map(([cause, expected]) =>
+      assert.rejects(
+        () => connect(connection, rejectingFetch(cause)),
+        (error) => {
+          assert.match(connectionErrorMessage(error, connection), expected);
+          return true;
+        }
+      )
+    )
+  );
 });

@@ -48,10 +48,10 @@ server.on("error", (error) => {
 });
 server.stdout?.on("data", (bytes: Buffer) => {
   output = (output + bytes.toString()).slice(-16_384);
-  url = /server listening on (https?:\/\/[^\s]+)/.exec(output)?.[1];
-  token = /server password ([^\s]+)/.exec(output)?.[1];
+  url = /server listening on (?<url>https?:\/\/[^\s]+)/u.exec(output)?.[1];
+  token = /server password (?<token>[^\s]+)/u.exec(output)?.[1];
 });
-server.stderr?.on("data", () => {});
+server.stderr?.on("data", () => null);
 const interrupt = () => {
   server.kill("SIGTERM");
 };
@@ -62,32 +62,35 @@ let eventTask: Promise<void> | undefined;
 let sessionID: string | undefined;
 let client: ReturnType<typeof createClient> | undefined;
 
-async function until(
+const until = (
   check: () => boolean | Promise<boolean>,
   label: string,
   timeout = 30_000
-) {
+): Promise<void> => {
   const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
+  const poll = async (): Promise<void> => {
+    if (Date.now() >= deadline) {
+      throw new Error(`Timed out: ${label}`);
+    }
     if (await check()) {
       return;
     }
     await delay(50);
-  }
-  throw new Error(`Timed out: ${label}`);
-}
+    return poll();
+  };
+  return poll();
+};
 
-function rates(model: ModelInfo) {
+const rates = (model: ModelInfo) => {
   const cost = model.cost.find((tier) => !tier.tier) ?? model.cost[0];
   return cost ? { input: cost.input, output: cost.output } : undefined;
-}
+};
 
-function text(message: SessionMessageAssistant) {
-  return message.content
+const text = (message: SessionMessageAssistant) =>
+  message.content
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("");
-}
 
 try {
   await until(
@@ -103,11 +106,12 @@ try {
     "server startup",
     45_000
   );
+  assert.ok(url);
   const connection: Connection = {
     id: "inference-check",
     name: "Inference check",
     token,
-    url: url!,
+    url,
   };
   client = createClient(connection, (input, init) =>
     fetch(input, {
@@ -126,7 +130,7 @@ try {
   const connectedIntegrations = new Set(
     integrations.data
       .filter((integration) =>
-        integration.connections.some((connection) => !connection.status)
+        integration.connections.some((entry) => !entry.status)
       )
       .map((integration) => integration.id)
   );
@@ -139,7 +143,7 @@ try {
   );
   const models = catalog.data
     .filter((model) => model.enabled && model.status !== "deprecated")
-    .sort((left, right) => {
+    .toSorted((left, right) => {
       const a = rates(left);
       const b = rates(right);
       const priceA = a ? a.input * 4 + a.output : Number.POSITIVE_INFINITY;
@@ -168,7 +172,7 @@ try {
         .map((integration) => ({
           integrationID: integration.id,
           statuses: integration.connections.map(
-            (connection) => connection.status?.status ?? "connected"
+            (entry) => entry.status?.status ?? "connected"
           ),
         })),
       serverVersion: info.version,
@@ -181,7 +185,9 @@ try {
   } else if (runInference) {
     const requested = process.env.OPENCODE_INFERENCE_MODEL;
     const model = requested
-      ? models.find((model) => `${model.providerID}/${model.id}` === requested)
+      ? models.find(
+          (candidate) => `${candidate.providerID}/${candidate.id}` === requested
+        )
       : connectedModels[0];
     assert.ok(
       model,
@@ -209,9 +215,10 @@ try {
     let eventError: unknown;
     let executionError: SessionStructuredError | undefined;
     let finished = false;
+    const eventClient = client;
     eventTask = (async () => {
       try {
-        for await (const event of client!.event.subscribe({
+        for await (const event of eventClient.event.subscribe({
           signal: stream.signal,
         })) {
           if (event.type === "server.connected") {
@@ -253,10 +260,13 @@ try {
         }
         if (executionError) {
           const message = executionError.message
-            .replace(/(?:Bearer|Basic)\s+\S+/gi, "[redacted]")
-            .replace(/([?&](?:key|token|api_key)=)[^&\s]+/gi, "$1[redacted]")
-            .replace(/\bsk-[A-Za-z0-9_-]+\b/g, "[redacted]")
-            .replaceAll(token!, "[redacted]")
+            .replaceAll(/(?:Bearer|Basic)\s+\S+/giu, "[redacted]")
+            .replaceAll(
+              /(?<param>[?&](?:key|token|api_key)=)[^&\s]+/giu,
+              "$1[redacted]"
+            )
+            .replaceAll(/\bsk-[\w-]+\b/gu, "[redacted]")
+            .replaceAll(String(token), "[redacted]")
             .slice(0, 500);
           throw new Error(
             `Server inference failure: ${JSON.stringify({ message, status: executionError.status, type: executionError.type })}`
@@ -319,8 +329,8 @@ try {
   stream.abort();
   await eventTask;
   if (client && sessionID) {
-    await client.session.interrupt({ sessionID }).catch(() => {});
-    await client.session.remove({ sessionID }).catch(() => {});
+    await client.session.interrupt({ sessionID }).catch(() => null);
+    await client.session.remove({ sessionID }).catch(() => null);
   }
   process.off("SIGINT", interrupt);
   process.off("SIGTERM", interrupt);

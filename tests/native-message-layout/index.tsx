@@ -4,6 +4,7 @@ import { registerRootComponent } from "expo";
 import React, { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 
+import "../../src/lib/polyfills";
 import { Markdown } from "../../src/components/markdown";
 import { UserMessageBubble } from "../../src/components/user-message-bubble";
 import { BetaLayoutContext } from "../../src/lib/beta-layout";
@@ -21,7 +22,7 @@ interface Item {
 }
 type ProbeGlobal = typeof globalThis & { repro45Measure?: () => void };
 const fillers = Array.from({ length: 35 }, (_, i) => ({ id: `filler-${i}` }));
-function Demo() {
+const Demo = () => {
   const [items, setItems] = useState<Item[]>([
     { id: "initial", target: true },
     ...fillers,
@@ -34,8 +35,11 @@ function Demo() {
   const attachment = useRef<React.ComponentRef<typeof View>>(null);
   useEffect(() => {
     let cancelled = false;
-    const delay = (ms: number) =>
-      new Promise((resolve) => setTimeout(resolve, ms));
+    const delay = (ms: number) => {
+      const { promise, resolve } = Promise.withResolvers<unknown>();
+      setTimeout(resolve, ms);
+      return promise;
+    };
     const measure = async (w: number, b: boolean, phase: string) => {
       console.log(
         "REPRO45_CASE",
@@ -43,55 +47,87 @@ function Demo() {
       );
       (globalThis as ProbeGlobal).repro45Measure?.();
       if (phase === "attachment") {
-        attachment.current?.measureInWindow((x, y, w, h) =>
-          console.log("REPRO45_ATTACHMENT", JSON.stringify({ h, w, x, y }))
+        attachment.current?.measureInWindow((x, y, measuredWidth, h) =>
+          console.log(
+            "REPRO45_ATTACHMENT",
+            JSON.stringify({ h, w: measuredWidth, x, y })
+          )
         );
       }
-      next.current?.measureInWindow((x, y, w, h) =>
-        console.log("REPRO45_NEXT", JSON.stringify({ h, w, x, y }))
+      next.current?.measureInWindow((x, y, measuredWidth, h) =>
+        console.log(
+          "REPRO45_NEXT",
+          JSON.stringify({ h, w: measuredWidth, x, y })
+        )
       );
       await delay(500);
     };
+    const runLayoutCase = async ([b, w]: [boolean, number]) => {
+      setWidth(w);
+      setBeta(b);
+      setItems([{ id: `initial-${w}-${b}`, target: true }, ...fillers]);
+      list.current?.scrollToOffset({ animated: false, offset: 0 });
+      await delay(1200);
+      await measure(w, b, "initial");
+      setItems((previous) => [
+        ...previous,
+        { id: `sent-${w}-${b}`, target: true },
+        { id: "following" },
+      ]);
+      await delay(700);
+      list.current?.scrollToEnd({ animated: false });
+      await delay(1200);
+      await measure(w, b, "send");
+      list.current?.scrollToOffset({ animated: false, offset: 0 });
+      await delay(1200);
+      console.log(
+        "REPRO45_AWAY",
+        JSON.stringify({ b, offset: offset.current, w })
+      );
+      list.current?.scrollToEnd({ animated: false });
+      await delay(1200);
+      await measure(w, b, "scroll");
+    };
+    const runVariantCase = async (variant: "short" | "attachment") => {
+      setWidth(393);
+      setBeta(true);
+      setItems([{ id: variant, target: true, variant }, ...fillers]);
+      list.current?.scrollToOffset({ animated: false, offset: 0 });
+      await delay(1200);
+      await measure(393, true, variant);
+    };
+    // Each case must finish before the next one starts, so run them in order.
+    const runLayoutCases = async (
+      cases: [boolean, number][]
+    ): Promise<boolean> => {
+      const [current, ...rest] = cases;
+      if (!current) {
+        return true;
+      }
+      if (cancelled) {
+        return false;
+      }
+      await runLayoutCase(current);
+      return runLayoutCases(rest);
+    };
+    const runVariantCases = async (
+      variants: ("short" | "attachment")[]
+    ): Promise<void> => {
+      const [current, ...rest] = variants;
+      if (!current) {
+        return;
+      }
+      await runVariantCase(current);
+      await runVariantCases(rest);
+    };
+    const layoutCases = [true, false].flatMap((b) =>
+      [393, 360, 320].map((w): [boolean, number] => [b, w])
+    );
     (async () => {
-      for (const b of [true, false]) {
-        for (const w of [393, 360, 320]) {
-          if (cancelled) {
-            return;
-          }
-          setWidth(w);
-          setBeta(b);
-          setItems([{ id: `initial-${w}-${b}`, target: true }, ...fillers]);
-          list.current?.scrollToOffset({ animated: false, offset: 0 });
-          await delay(1200);
-          await measure(w, b, "initial");
-          setItems((previous) => [
-            ...previous,
-            { id: `sent-${w}-${b}`, target: true },
-            { id: "following" },
-          ]);
-          await delay(700);
-          list.current?.scrollToEnd({ animated: false });
-          await delay(1200);
-          await measure(w, b, "send");
-          list.current?.scrollToOffset({ animated: false, offset: 0 });
-          await delay(1200);
-          console.log(
-            "REPRO45_AWAY",
-            JSON.stringify({ b, offset: offset.current, w })
-          );
-          list.current?.scrollToEnd({ animated: false });
-          await delay(1200);
-          await measure(w, b, "scroll");
-        }
+      if (!(await runLayoutCases(layoutCases))) {
+        return;
       }
-      for (const variant of ["short", "attachment"] as const) {
-        setWidth(393);
-        setBeta(true);
-        setItems([{ id: variant, target: true, variant }, ...fillers]);
-        list.current?.scrollToOffset({ animated: false, offset: 0 });
-        await delay(1200);
-        await measure(393, true, variant);
-      }
+      await runVariantCases(["short", "attachment"]);
     })();
     return () => {
       cancelled = true;
@@ -155,5 +191,5 @@ function Demo() {
       </ThemeProvider>
     </BetaLayoutContext.Provider>
   );
-}
+};
 registerRootComponent(Demo);

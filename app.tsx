@@ -51,7 +51,6 @@ import { OpenCodeLogo } from "./src/components/open-code-logo";
 import { ProjectDirectoryBrowser } from "./src/components/project-directory-browser";
 import { ShellIcon } from "./src/components/shell-icon";
 import {
-  Button,
   Busy,
   confirmAction,
   ErrorNotice,
@@ -101,40 +100,146 @@ const destinations: { id: Tab; label: string }[] = [
   { id: "workspace", label: "Workspace" },
   { id: "settings", label: "Settings" },
 ];
+const fonts = {
+  IBMPlexMono: require("./assets/fonts/IBMPlexMono-Text.ttf"),
+  Inter: require("./assets/fonts/Inter.ttf"),
+};
+const noop = (): null => null;
+const lastPathSegment = /[^/]+(?=\/*$)/u;
 
-export default function app() {
-  const { width } = useWindowDimensions();
-  const betaLayout = Platform.OS === "android" && width < 920;
-  const [fontsReady, fontError] = useFonts({
-    IBMPlexMono: require("./assets/fonts/IBMPlexMono-Text.ttf"),
-    Inter: require("./assets/fonts/Inter.ttf"),
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    betaOnboarding: { justifyContent: "center", paddingVertical: 32 },
+    body: { flex: 1, flexDirection: "row", minHeight: 0 },
+    boot: { alignItems: "center", flex: 1, justifyContent: "center" },
+    contextDetail: { fontSize: 11, lineHeight: 16 },
+    contextText: { flex: 1, gap: 1, minWidth: 0 },
+    drawer: {
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      borderRightWidth: 1,
+      height: "100%",
+    },
+    full: { flex: 1, minHeight: 0, minWidth: 0 },
+    iconButton: {
+      alignItems: "center",
+      borderRadius: 8,
+      height: Platform.OS === "android" ? 48 : 44,
+      justifyContent: "center",
+      width: Platform.OS === "android" ? 48 : 44,
+    },
+    main: { flex: 1, minHeight: 0, minWidth: 0 },
+    navigationBrand: {
+      alignItems: "center",
+      flexDirection: "row",
+      height: Platform.OS === "android" ? 48 : 64,
+      justifyContent: "space-between",
+      paddingHorizontal: pageInset,
+    },
+    navigationFooter: {
+      borderColor: colors.border,
+      borderTopWidth: 1,
+      gap: 4,
+      paddingHorizontal: pageInset,
+      paddingTop: 8,
+    },
+    navigationLink: {
+      alignItems: "center",
+      borderRadius: 8,
+      flex: 1,
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "center",
+      minHeight: Platform.OS === "android" ? 48 : 44,
+    },
+    navigationLinkText: {
+      color: colors.muted,
+      fontFamily: sans,
+      fontSize: 13,
+      lineHeight: 19,
+    },
+    navigationLinks: { flexDirection: "row", gap: 4 },
+    navigationSessions: { flex: 1, marginTop: 8, minHeight: 0 },
+    onboarding: {
+      alignSelf: "center",
+      flexGrow: 1,
+      gap: 16,
+      maxWidth: 520,
+      padding: 24,
+      paddingVertical: 40,
+      width: "100%",
+    },
+    pressed: { backgroundColor: colors.selected },
+    projectChoice: {
+      alignItems: "center",
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginHorizontal: pageInset,
+      minHeight: Platform.OS === "android" ? 48 : 56,
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+    },
+    projectName: { fontSize: 14, fontWeight: "500" },
+    safe: { backgroundColor: colors.bg, flex: 1 },
+    selectedDestination: { backgroundColor: colors.panel },
+    serverChoice: {
+      alignItems: "center",
+      borderRadius: 8,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 48,
+      paddingHorizontal: 16,
+    },
+    serverName: { fontSize: 13, fontWeight: "500" },
+    shell: { flex: 1, flexDirection: "row", minHeight: 0 },
+    sidebar: {
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      borderRightWidth: 1,
+      width: 288,
+    },
+    welcome: {
+      alignItems: "center",
+      flex: 1,
+      gap: 20,
+      justifyContent: "center",
+      padding: 32,
+    },
+    welcomeDetail: { lineHeight: 24, maxWidth: 320, textAlign: "center" },
   });
-  if (!fontsReady && !fontError) {
-    return <View style={{ backgroundColor: "#080808", flex: 1 }} />;
-  }
-  return (
-    <SafeAreaProvider>
-      <KeyboardProvider
-        statusBarTranslucent
-        navigationBarTranslucent
-        preserveEdgeToEdge
-      >
-        <BetaLayoutContext.Provider value={betaLayout}>
-          <ThemeProvider>
-            <SheetCoordinatorProvider>
-              <UnsavedProvider>
-                <ThemedStatusBar />
-                <MobileApp />
-              </UnsavedProvider>
-            </SheetCoordinatorProvider>
-          </ThemeProvider>
-        </BetaLayoutContext.Provider>
-      </KeyboardProvider>
-    </SafeAreaProvider>
-  );
-}
 
-function ThemedStatusBar() {
+type ServerClient = NonNullable<ReturnType<typeof createClient>>;
+
+const getWorkspaceLocation = (
+  nextClient: ServerClient,
+  workspace: { directory?: string } | null | undefined,
+  signal: AbortSignal,
+  onFallback: () => void
+) =>
+  nextClient.location
+    .get(
+      workspace?.directory
+        ? { location: { directory: workspace.directory } }
+        : undefined,
+      { signal }
+    )
+    .catch((error_) => {
+      if (
+        signal.aborted ||
+        !workspace?.directory ||
+        !isLocationNotFoundError(error_)
+      ) {
+        throw error_;
+      }
+      onFallback();
+      return nextClient.location.get(undefined, { signal });
+    });
+
+const ThemedStatusBar = () => {
   const { scheme, colors } = useTheme();
   const background = colors.frame;
   useEffect(() => {
@@ -143,9 +248,9 @@ function ThemedStatusBar() {
     }
   }, [background]);
   return <StatusBar style={scheme === "dark" ? "light" : "dark"} />;
-}
+};
 
-function MobileApp() {
+const MobileApp = () => {
   const { colors } = useTheme();
   const betaLayout = useBetaLayout();
   const styles = useThemedStyles(createStyles);
@@ -222,14 +327,13 @@ function MobileApp() {
   const navigationPresented = useRef(false);
   const serverSheetRequest = useRef(0);
   const automaticServerRequest = useRef<number | null>(null);
-  const showServerSheet = useRef<() => void>(() => {});
+  const showServerSheet = useRef<() => void>(noop);
   const recoveringConnection = useRef<{
     connection: Connection;
     message: string;
   } | null>(null);
-  const recoverConnection = useRef<
-    (connection: Connection, cause: unknown) => void
-  >(() => {});
+  const recoverConnection =
+    useRef<(connection: Connection, cause: unknown) => void>(noop);
   const connectingRef = useRef(false);
   const selection = useRef(0);
   const selectedSessionRef = useRef(sessionID);
@@ -297,8 +401,9 @@ function MobileApp() {
         if (!controller.signal.aborted) {
           recordSessionInfo(session);
         }
+        return null;
       })
-      .catch(() => {});
+      .catch(noop);
     return () => controller.abort();
   }, [betaLayout, client, sessionID, recordSessionInfo]);
 
@@ -313,7 +418,8 @@ function MobileApp() {
         return;
       }
       connectingRef.current = true;
-      const request = ++epoch.current;
+      epoch.current += 1;
+      const request = epoch.current;
       setConnecting(true);
       setConnectionError(null);
       try {
@@ -344,30 +450,18 @@ function MobileApp() {
             }
           : await loadWorkspace(connected.id);
         let restoredSessionID = workspace?.sessionID;
-        const nextClient =
-          result.backend === "opencode" ? createClient(connected) : null;
         const location =
           result.backend === "pi"
             ? { directory: result.info.session.cwd }
             : await withServerDeadline((signal) =>
-                nextClient!.location
-                  .get(
-                    workspace?.directory
-                      ? { location: { directory: workspace.directory } }
-                      : undefined,
-                    { signal }
-                  )
-                  .catch((error_) => {
-                    if (
-                      signal.aborted ||
-                      !workspace?.directory ||
-                      !isLocationNotFoundError(error_)
-                    ) {
-                      throw error_;
-                    }
+                getWorkspaceLocation(
+                  createClient(connected),
+                  workspace,
+                  signal,
+                  () => {
                     restoredSessionID = undefined;
-                    return nextClient!.location.get(undefined, { signal });
-                  })
+                  }
+                )
               );
         if (result.backend === "pi") {
           restoredSessionID = result.info.session.id;
@@ -467,13 +561,14 @@ function MobileApp() {
     Promise.all([loadConnections(), loadActiveConnectionId()])
       .then(async ([saved, id]) => {
         if (!live) {
-          return;
+          return null;
         }
         setConnections(saved);
         const last = saved.find((item) => item.id === id);
         if (last) {
           await selectServer(last, saved);
         }
+        return null;
       })
       .catch((error_) => {
         if (live) {
@@ -484,10 +579,11 @@ function MobileApp() {
         if (live) {
           setBooting(false);
         }
-      });
+      })
+      .catch(noop);
     return () => {
       live = false;
-      epoch.current++;
+      epoch.current += 1;
     };
   }, []);
 
@@ -500,7 +596,7 @@ function MobileApp() {
         const parsed = new URL(url);
         if (
           parsed.protocol !== "opencoode:" &&
-          !/\/auth\/connect\/[^/]+\/?$/.test(parsed.pathname)
+          !/\/auth\/connect\/[^/]+\/?$/u.test(parsed.pathname)
         ) {
           return;
         }
@@ -521,14 +617,20 @@ function MobileApp() {
         setError("The connection link is invalid");
       }
     };
-    Linking.getInitialURL()
-      .then(acceptLink)
-      .catch(() => {});
+    Linking.getInitialURL().then(acceptLink).catch(noop);
     const subscription = Linking.addEventListener("url", (event) =>
       acceptLink(event.url)
     );
     return () => subscription.remove();
   }, []);
+
+  const showBetaHome = () => {
+    selection.current += 1;
+    openingSessionRef.current = null;
+    setTab("sessions");
+    setBetaHome(true);
+    setNavigationOpen(false);
+  };
 
   useEffect(() => {
     const back = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -550,7 +652,8 @@ function MobileApp() {
           return false;
         }
         const request = epoch.current;
-        const navigation = ++selection.current;
+        selection.current += 1;
+        const navigation = selection.current;
         void confirmNavigation().then((leave) => {
           if (
             leave &&
@@ -562,6 +665,7 @@ function MobileApp() {
             setSessionID(null);
             setPendingLocation(null);
           }
+          return null;
         });
         return true;
       }
@@ -583,12 +687,13 @@ function MobileApp() {
   ]);
 
   const changeDirectory = useCallback(
-    (next: string) => {
+    (nextDirectory: string) => {
       if (activeRef.current !== active) {
         return;
       }
       const request = epoch.current;
-      const navigation = ++selection.current;
+      selection.current += 1;
+      const navigation = selection.current;
       void confirmNavigation().then((leave) => {
         if (
           !leave ||
@@ -596,22 +701,26 @@ function MobileApp() {
           request !== epoch.current ||
           navigation !== selection.current
         ) {
-          return;
+          return null;
         }
-        directoryRef.current = next;
+        directoryRef.current = nextDirectory;
         selectedSessionRef.current = null;
         setBetaHome(true);
         if (betaLayout) {
           setTab("sessions");
-          setBetaHomeProject({ directory: next, revision: navigation });
+          setBetaHomeProject({
+            directory: nextDirectory,
+            revision: navigation,
+          });
         }
-        setDirectory(next);
-        setNewDirectory(next);
+        setDirectory(nextDirectory);
+        setNewDirectory(nextDirectory);
         setSessionID(null);
         setAttachmentPath(undefined);
         setAttachmentContext(undefined);
         setProjectsOpen(false);
         setPendingLocation(null);
+        return null;
       });
     },
     [active, confirmNavigation, betaLayout]
@@ -687,12 +796,18 @@ function MobileApp() {
         return false;
       }
       const request = epoch.current;
-      const navigation = ++selection.current;
+      selection.current += 1;
+      const navigation = selection.current;
       openingSessionRef.current = id;
       const current = () =>
         activeRef.current === active &&
         request === epoch.current &&
         navigation === selection.current;
+      const closeNavigation = () => {
+        if (!keepNavigation) {
+          setNavigationOpen(false);
+        }
+      };
       try {
         if (id === selectedSessionRef.current) {
           const next = await syncSelectedLocation();
@@ -701,9 +816,7 @@ function MobileApp() {
           }
           setTab("sessions");
           setBetaHome(false);
-          if (!keepNavigation) {
-            setNavigationOpen(false);
-          }
+          closeNavigation();
           return true;
         }
         const selected = id
@@ -730,9 +843,7 @@ function MobileApp() {
         if (selected) {
           recordSessionInfo(selected);
         }
-        if (!keepNavigation) {
-          setNavigationOpen(false);
-        }
+        closeNavigation();
         return true;
       } catch (error_) {
         if (current()) {
@@ -748,13 +859,14 @@ function MobileApp() {
     [active, client, confirmNavigation, syncSelectedLocation, recordSessionInfo]
   );
 
-  async function createBetaSession(target = directoryRef.current) {
+  const createBetaSession = async (target = directoryRef.current) => {
     if (!client || creatingSessionRef.current) {
       return;
     }
     const owner = activeRef.current;
     const request = epoch.current;
-    const navigation = ++selection.current;
+    selection.current += 1;
+    const navigation = selection.current;
     openingSessionRef.current = null;
     const current = () =>
       owner === activeRef.current &&
@@ -792,11 +904,11 @@ function MobileApp() {
       creatingSessionRef.current = false;
       setCreatingSession(false);
     }
-  }
+  };
 
-  async function closeBetaTab(id: string) {
+  const closeBetaTab = async (id: string) => {
     if (openingSessionRef.current === id) {
-      selection.current++;
+      selection.current += 1;
       openingSessionRef.current = null;
     }
     if (id === selectedSessionRef.current) {
@@ -810,7 +922,8 @@ function MobileApp() {
       } else {
         const owner = activeRef.current;
         const request = epoch.current;
-        const navigation = ++selection.current;
+        selection.current += 1;
+        const navigation = selection.current;
         if (!(await confirmNavigation())) {
           return;
         }
@@ -829,17 +942,9 @@ function MobileApp() {
       }
     }
     setOpenTabs((current) => current.filter((item) => item.id !== id));
-  }
+  };
 
-  function showBetaHome() {
-    selection.current++;
-    openingSessionRef.current = null;
-    setTab("sessions");
-    setBetaHome(true);
-    setNavigationOpen(false);
-  }
-
-  function afterBetaNavigation(action: () => void) {
+  const afterBetaNavigation = (action: () => void) => {
     const owner = activeRef.current;
     const request = epoch.current;
     pendingBetaAction.current = () => {
@@ -848,20 +953,11 @@ function MobileApp() {
       }
     };
     setNavigationOpen(false);
-  }
+  };
 
-  function openBetaPane(pane: SessionPane) {
-    if (pane === "Session") {
-      void changeTab("sessions");
-      return;
-    }
-    setWorkspaceSection(pane);
-    void changeTab("workspace");
-  }
-
-  async function changeTab(next: Tab) {
+  const changeTab = async (next: Tab) => {
     if (betaLayout) {
-      selection.current++;
+      selection.current += 1;
       openingSessionRef.current = null;
     }
     if (next === "sessions" || next === tab) {
@@ -888,48 +984,21 @@ function MobileApp() {
     setVisited((current) => ({ ...current, [next]: true }));
     setTab(next);
     setNavigationOpen(false);
-  }
+  };
 
-  async function openProjects() {
-    if (!client) {
+  const openBetaPane = (pane: SessionPane) => {
+    if (pane === "Session") {
+      void changeTab("sessions");
       return;
     }
-    showNavigationSheet("projects");
-    setProjectBusy(true);
-    setProjectError(null);
-    const owner = activeRef.current;
-    try {
-      const result = await client.project.list();
-      if (activeRef.current === owner) {
-        setProjects(result);
-      }
-    } catch (error_) {
-      if (activeRef.current === owner) {
-        setProjectError(errorMessage(error_));
-      }
-    } finally {
-      if (activeRef.current === owner) {
-        setProjectBusy(false);
-      }
-    }
-  }
+    setWorkspaceSection(pane);
+    void changeTab("workspace");
+  };
 
-  function openNavigation() {
-    Keyboard.dismiss();
-    if (pendingNavigationSheet.current?.kind === "servers") {
-      serverSheetRequest.current += 1;
-      automaticServerRequest.current = null;
-      resumeSheets();
-    }
-    pendingNavigationSheet.current = null;
-    navigationPresented.current = !wide;
-    setNavigationOpen(true);
-  }
-
-  async function showNavigationSheet(
+  const showNavigationSheet = async (
     kind: "servers" | "projects",
     automatic = false
-  ) {
+  ) => {
     let serverRequest: number | undefined;
     if (kind === "servers") {
       if (!automatic) {
@@ -940,7 +1009,8 @@ function MobileApp() {
         resumeSheets();
         return;
       }
-      const request = ++serverSheetRequest.current;
+      serverSheetRequest.current += 1;
+      const request = serverSheetRequest.current;
       serverRequest = request;
       if (automatic) {
         automaticServerRequest.current = request;
@@ -973,12 +1043,49 @@ function MobileApp() {
     } else {
       setProjectsOpen(true);
     }
-  }
+  };
+
+  const openProjects = async () => {
+    if (!client) {
+      return;
+    }
+    showNavigationSheet("projects");
+    setProjectBusy(true);
+    setProjectError(null);
+    const owner = activeRef.current;
+    try {
+      const result = await client.project.list();
+      if (activeRef.current === owner) {
+        setProjects(result);
+      }
+    } catch (error_) {
+      if (activeRef.current === owner) {
+        setProjectError(errorMessage(error_));
+      }
+    } finally {
+      if (activeRef.current === owner) {
+        setProjectBusy(false);
+      }
+    }
+  };
+
+  const openNavigation = () => {
+    Keyboard.dismiss();
+    if (pendingNavigationSheet.current?.kind === "servers") {
+      serverSheetRequest.current += 1;
+      automaticServerRequest.current = null;
+      resumeSheets();
+    }
+    pendingNavigationSheet.current = null;
+    navigationPresented.current = !wide;
+    setNavigationOpen(true);
+  };
+
   showServerSheet.current = () => {
     void showNavigationSheet("servers");
   };
 
-  function onNavigationDismissed() {
+  const onNavigationDismissed = () => {
     navigationPresented.current = false;
     const pending = pendingNavigationSheet.current;
     pendingNavigationSheet.current = null;
@@ -1006,7 +1113,7 @@ function MobileApp() {
     } else {
       setProjectsOpen(true);
     }
-  }
+  };
 
   recoverConnection.current = (connection, cause) => {
     if (
@@ -1049,23 +1156,21 @@ function MobileApp() {
       const controller = new AbortController();
       let deadline: ReturnType<typeof setTimeout> | undefined;
       try {
-        const result = await Promise.race([
-          client.server.info({ signal: controller.signal }),
-          new Promise<never>((_, reject) => {
-            cancelProbe = () => {
-              controller.abort();
-              reject(new Error("The connection check was canceled"));
-            };
-            deadline = setTimeout(() => {
-              reject(
-                new Error(
-                  "OpenCode did not respond within five seconds. Check the server address and your network."
-                )
-              );
-              controller.abort();
-            }, 5000);
-          }),
-        ]);
+        const pending = client.server.info({ signal: controller.signal });
+        const timeout = Promise.withResolvers<never>();
+        cancelProbe = () => {
+          controller.abort();
+          timeout.reject(new Error("The connection check was canceled"));
+        };
+        deadline = setTimeout(() => {
+          timeout.reject(
+            new Error(
+              "OpenCode did not respond within five seconds. Check the server address and your network."
+            )
+          );
+          controller.abort();
+        }, 5000);
+        const result = await Promise.race([pending, timeout.promise]);
         if (!current()) {
           return;
         }
@@ -1147,14 +1252,14 @@ function MobileApp() {
     resumeSheets,
   ]);
 
-  async function openDirectory(nextDirectory = newDirectory) {
+  const openDirectory = async (nextDirectory = newDirectory) => {
     if (!client) {
       return;
     }
     const target = nextDirectory.trim();
     if (
       !target.startsWith("/") &&
-      !/^[A-Za-z]:[\\/]/.test(target) &&
+      !/^[A-Za-z]:[\\/]/u.test(target) &&
       !target.startsWith("\\\\")
     ) {
       setProjectError("Enter an absolute directory on the server");
@@ -1182,9 +1287,9 @@ function MobileApp() {
         setProjectBusy(false);
       }
     }
-  }
+  };
 
-  async function removeConnection(connection: Connection) {
+  const removeConnection = async (connection: Connection) => {
     if (
       activeRef.current?.id === connection.id &&
       !(await confirmNavigation())
@@ -1203,7 +1308,7 @@ function MobileApp() {
       const next = connections.filter((item) => item.id !== connection.id);
       await saveConnections(next);
       if (activeRef.current?.id === connection.id) {
-        ++epoch.current;
+        epoch.current += 1;
         await saveActiveConnectionId(null);
         selectedSessionRef.current = null;
         directoryRef.current = "";
@@ -1219,12 +1324,12 @@ function MobileApp() {
     } catch (error_) {
       setConnectionError(errorMessage(error_));
     }
-  }
+  };
 
-  async function attachFile(
+  const attachFile = async (
     path: string,
     contextText?: string
-  ): Promise<boolean> {
+  ): Promise<boolean> => {
     if (!client) {
       return false;
     }
@@ -1238,14 +1343,25 @@ function MobileApp() {
           return false;
         }
         if (nextDirectory !== directory) {
-          throw new Error(
-            "The session moved to another directory. Choose the file again in its current workspace."
-          );
+          if (
+            activeRef.current === owner &&
+            epoch.current === request &&
+            selection.current === navigation
+          ) {
+            setError(
+              "The session moved to another directory. Choose the file again in its current workspace."
+            );
+          }
+          return false;
         }
       }
-      const selected =
-        sessionID ||
-        (await client.session.create({ location: { directory } })).id;
+      let selected = sessionID;
+      if (!selected) {
+        const created = await client.session.create({
+          location: { directory },
+        });
+        selected = created.id;
+      }
       if (
         activeRef.current !== owner ||
         epoch.current !== request ||
@@ -1271,7 +1387,7 @@ function MobileApp() {
       }
       return false;
     }
-  }
+  };
 
   const serverForm = (
     <ConnectionFlow
@@ -1293,7 +1409,7 @@ function MobileApp() {
     />
   );
 
-  const projectLabel = directory.split("/").filter(Boolean).pop() || "Project";
+  const projectLabel = lastPathSegment.exec(directory)?.[0] || "Project";
   const returnLabel = sessionID ? "Chat" : "Sessions";
   const returnToSessions = () => {
     void changeTab("sessions");
@@ -1310,20 +1426,7 @@ function MobileApp() {
     messageSelected && tab === "sessions" && !betaHome && !!sessionID;
   const selectedPane: SessionPane =
     tab === "workspace" ? workspaceSection : "Session";
-  const requestSessionPanel = (panel: "stats" | "actions") => {
-    if (!sessionID) {
-      return;
-    }
-    afterBetaMenu(() => {
-      setTab("sessions");
-      setSessionPanelRequest({
-        id: ++panelRequestID.current,
-        panel,
-        sessionID,
-      });
-    });
-  };
-  function afterBetaMenu(action: () => void) {
+  const afterBetaMenu = (action: () => void) => {
     const owner = activeRef.current;
     const request = epoch.current;
     pendingBetaAction.current = () => {
@@ -1332,7 +1435,21 @@ function MobileApp() {
       }
     };
     setBetaMoreOpen(false);
-  }
+  };
+  const requestSessionPanel = (panel: "stats" | "actions") => {
+    if (!sessionID) {
+      return;
+    }
+    afterBetaMenu(() => {
+      setTab("sessions");
+      panelRequestID.current += 1;
+      setSessionPanelRequest({
+        id: panelRequestID.current,
+        panel,
+        sessionID,
+      });
+    });
+  };
   const openServers = () => {
     setConnectionError(null);
     setForm({ id: "", name: "", token: "", url: "" });
@@ -1361,7 +1478,9 @@ function MobileApp() {
           accessibilityRole="button"
           accessibilityLabel={`Switch project directory. Current project: ${projectLabel}`}
           accessibilityHint={directory}
-          onPress={() => void openProjects()}
+          onPress={() => {
+            void openProjects();
+          }}
           style={({ pressed }) => [
             styles.projectChoice,
             pressed && styles.pressed,
@@ -1464,7 +1583,7 @@ function MobileApp() {
       ]}
       edges={["top", "left", "right", "bottom"]}
     >
-      {active?.backend === "pi" ? (
+      {active?.backend === "pi" && (
         <PiWorkspace
           key={`${active.id}:${connectionRevision}`}
           connection={active}
@@ -1472,7 +1591,8 @@ function MobileApp() {
           onManageServers={openServers}
           onConnectionLost={onPiConnectionLost}
         />
-      ) : !client || !active ? (
+      )}
+      {active?.backend !== "pi" && (!client || !active) && (
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior="padding"
@@ -1494,7 +1614,8 @@ function MobileApp() {
             {serverForm}
           </ScrollView>
         </KeyboardAvoidingView>
-      ) : (
+      )}
+      {active?.backend !== "pi" && client && active && (
         <View style={styles.shell}>
           {wide && <View style={styles.sidebar}>{navigation}</View>}
           <View style={styles.main}>
@@ -1590,10 +1711,10 @@ function MobileApp() {
                       betaLayout && betaHome && { display: "none" },
                     ]}
                   >
-                    {sessionID ? (
+                    {sessionID && chatBackend ? (
                       <ChatScreen
                         key={`${active.id}:${connectionRevision}:${sessionID}`}
-                        backend={chatBackend!}
+                        backend={chatBackend}
                         sessionID={sessionID}
                         serverID={active.id}
                         draftKey={`${active.id}:${sessionID}`}
@@ -1784,109 +1905,35 @@ function MobileApp() {
       </Sheet>
     </SafeAreaView>
   );
-}
+};
 
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    betaOnboarding: { justifyContent: "center", paddingVertical: 32 },
-    body: { flex: 1, flexDirection: "row", minHeight: 0 },
-    boot: { alignItems: "center", flex: 1, justifyContent: "center" },
-    contextDetail: { fontSize: 11, lineHeight: 16 },
-    contextText: { flex: 1, gap: 1, minWidth: 0 },
-    drawer: {
-      backgroundColor: colors.bg,
-      borderColor: colors.border,
-      borderRightWidth: 1,
-      height: "100%",
-    },
-    full: { flex: 1, minHeight: 0, minWidth: 0 },
-    iconButton: {
-      alignItems: "center",
-      borderRadius: 8,
-      height: Platform.OS === "android" ? 48 : 44,
-      justifyContent: "center",
-      width: Platform.OS === "android" ? 48 : 44,
-    },
-    main: { flex: 1, minHeight: 0, minWidth: 0 },
-    navigationBrand: {
-      alignItems: "center",
-      flexDirection: "row",
-      height: Platform.OS === "android" ? 48 : 64,
-      justifyContent: "space-between",
-      paddingHorizontal: pageInset,
-    },
-    navigationFooter: {
-      borderColor: colors.border,
-      borderTopWidth: 1,
-      gap: 4,
-      paddingHorizontal: pageInset,
-      paddingTop: 8,
-    },
-    navigationLink: {
-      alignItems: "center",
-      borderRadius: 8,
-      flex: 1,
-      flexDirection: "row",
-      gap: 8,
-      justifyContent: "center",
-      minHeight: Platform.OS === "android" ? 48 : 44,
-    },
-    navigationLinkText: {
-      color: colors.muted,
-      fontFamily: sans,
-      fontSize: 13,
-      lineHeight: 19,
-    },
-    navigationLinks: { flexDirection: "row", gap: 4 },
-    navigationSessions: { flex: 1, marginTop: 8, minHeight: 0 },
-    onboarding: {
-      alignSelf: "center",
-      flexGrow: 1,
-      gap: 16,
-      maxWidth: 520,
-      padding: 24,
-      paddingVertical: 40,
-      width: "100%",
-    },
-    pressed: { backgroundColor: colors.selected },
-    projectChoice: {
-      alignItems: "center",
-      backgroundColor: colors.panel,
-      borderColor: colors.border,
-      borderRadius: 8,
-      borderWidth: 1,
-      flexDirection: "row",
-      gap: 10,
-      marginHorizontal: pageInset,
-      minHeight: Platform.OS === "android" ? 48 : 56,
-      paddingHorizontal: 15,
-      paddingVertical: 10,
-    },
-    projectName: { fontSize: 14, fontWeight: "500" },
-    safe: { backgroundColor: colors.bg, flex: 1 },
-    selectedDestination: { backgroundColor: colors.panel },
-    serverChoice: {
-      alignItems: "center",
-      borderRadius: 8,
-      flexDirection: "row",
-      gap: 10,
-      minHeight: 48,
-      paddingHorizontal: 16,
-    },
-    serverName: { fontSize: 13, fontWeight: "500" },
-    shell: { flex: 1, flexDirection: "row", minHeight: 0 },
-    sidebar: {
-      backgroundColor: colors.bg,
-      borderColor: colors.border,
-      borderRightWidth: 1,
-      width: 288,
-    },
-    welcome: {
-      alignItems: "center",
-      flex: 1,
-      gap: 20,
-      justifyContent: "center",
-      padding: 32,
-    },
-    welcomeDetail: { lineHeight: 24, maxWidth: 320, textAlign: "center" },
-  });
+const App = () => {
+  const { width } = useWindowDimensions();
+  const betaLayout = Platform.OS === "android" && width < 920;
+  const [fontsReady, fontError] = useFonts(fonts);
+  if (!fontsReady && !fontError) {
+    return <View style={{ backgroundColor: "#080808", flex: 1 }} />;
+  }
+  return (
+    <SafeAreaProvider>
+      <KeyboardProvider
+        statusBarTranslucent
+        navigationBarTranslucent
+        preserveEdgeToEdge
+      >
+        <BetaLayoutContext.Provider value={betaLayout}>
+          <ThemeProvider>
+            <SheetCoordinatorProvider>
+              <UnsavedProvider>
+                <ThemedStatusBar />
+                <MobileApp />
+              </UnsavedProvider>
+            </SheetCoordinatorProvider>
+          </ThemeProvider>
+        </BetaLayoutContext.Provider>
+      </KeyboardProvider>
+    </SafeAreaProvider>
+  );
+};
+
+export default App;

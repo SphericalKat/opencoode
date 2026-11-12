@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 const app = JSON.parse(await readFile("app.json", "utf-8"));
 const pkg = JSON.parse(await readFile("package.json", "utf-8"));
 const { version } = app.expo;
-const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+const match = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$/u.exec(version);
 if (!match || version !== pkg.version) {
   throw new Error(
     "app.json and package.json must contain the same stable version"

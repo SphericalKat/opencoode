@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import type {
   OpenCodeEvent,
@@ -61,10 +62,10 @@ test("chat displays text and reasoning deltas with independent fragment ordinals
       type: "session.text.ended",
     },
   ];
-  const messages = events.reduce(
-    (current, event) => projectLiveEvent(current, event, "s1"),
-    [] as SessionMessageInfo[]
-  );
+  let messages: SessionMessageInfo[] = [];
+  for (const event of events) {
+    messages = projectLiveEvent(messages, event, "s1");
+  }
   const message = messages[0] as SessionMessageAssistant;
   assert.deepEqual(message.content, [
     { text: "Think", type: "reasoning" },
@@ -133,10 +134,11 @@ test("chat updates the right concurrent tool and preserves the terminal result",
       type: "session.tool.success",
     },
   ];
-  const message = events.reduce(
-    (current, event) => projectLiveEvent(current, event, "s1"),
-    [] as SessionMessageInfo[]
-  )[0] as SessionMessageAssistant;
+  let projected: SessionMessageInfo[] = [];
+  for (const event of events) {
+    projected = projectLiveEvent(projected, event, "s1");
+  }
+  const message = projected[0] as SessionMessageAssistant;
   const [first, second] = message.content;
   assert.equal(first.type, "tool");
   if (first.type === "tool") {
@@ -169,7 +171,7 @@ test("composer routes registered commands and shell input while preserving absol
   });
   assert.deepEqual(parseComposer("!", []), { text: "!", type: "prompt" });
   assert.equal(serverFileUri("/a/file #1.ts"), "file:///a/file%20%231.ts");
-  assert.throws(() => serverFileUri("../phone/file"), /absolute/);
+  assert.throws(() => serverFileUri("../phone/file"), /absolute/u);
 });
 
 test("message pages deduplicate overlap and retain the latest content in chronological order", () => {
@@ -193,10 +195,11 @@ test("batched token updates flush before the authoritative text end and cannot a
   let messages: SessionMessageInfo[] = [];
   const batch = createStreamBatch<OpenCodeEvent>(
     (events) => {
-      messages = events.reduce(
-        (current, event) => projectLiveEvent(current, event, "s1"),
-        messages
-      );
+      let current = messages;
+      for (const event of events) {
+        current = projectLiveEvent(current, event, "s1");
+      }
+      messages = current;
     },
     { delayMs: 50 }
   );
@@ -241,7 +244,7 @@ test("batched token updates flush before the authoritative text end and cannot a
   assert.deepEqual((messages[0] as SessionMessageAssistant).content, [
     { text: "Hello world!", type: "text" },
   ]);
-  await new Promise((resolve) => setTimeout(resolve, 80));
+  await delay(80);
   assert.deepEqual((messages[0] as SessionMessageAssistant).content, [
     { text: "Hello world!", type: "text" },
   ]);
