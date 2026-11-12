@@ -5,7 +5,7 @@ import Svg, { Path, Rect } from "react-native-svg";
 
 import { errorMessage } from "../lib/client";
 import { useTheme } from "../lib/theme";
-import { Label } from "./ui";
+import { BodyText } from "./ui";
 
 export function ResponseFooter({
   text,
@@ -69,11 +69,15 @@ export function ResponseFooter({
           </Svg>
         </Pressable>
         {(copied || elapsedSeconds !== undefined) && (
-          <Label muted accessibilityLiveRegion="polite" style={styles.detail}>
+          <BodyText
+            muted
+            accessibilityLiveRegion="polite"
+            style={styles.detail}
+          >
             {copied ? "Copied" : ""}
             {copied && elapsedSeconds !== undefined ? " · " : ""}
             {elapsedSeconds === undefined ? "" : `${elapsedSeconds}s`}
-          </Label>
+          </BodyText>
         )}
       </View>
       {error && (

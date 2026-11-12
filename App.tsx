@@ -56,7 +56,7 @@ import {
   confirmAction,
   ErrorNotice,
   Heading,
-  Label,
+  BodyText,
   sans,
   Sheet,
 } from "./src/components/ui";
@@ -1369,18 +1369,18 @@ function MobileApp() {
         >
           <NavIcon name="workspace" color={colors.muted} size={18} />
           <View style={styles.contextText}>
-            <Label numberOfLines={1} style={styles.projectName}>
+            <BodyText numberOfLines={1} style={styles.projectName}>
               {projectLabel}
-            </Label>
+            </BodyText>
             {Platform.OS !== "android" && (
-              <Label
+              <BodyText
                 muted
                 numberOfLines={1}
                 ellipsizeMode="middle"
                 style={styles.contextDetail}
               >
                 {directory}
-              </Label>
+              </BodyText>
             )}
           </View>
           <ShellIcon name="chevron" size={14} color={colors.faint} />
@@ -1408,12 +1408,12 @@ function MobileApp() {
           >
             <ShellIcon name="server" color={colors.muted} size={18} />
             <View style={styles.contextText}>
-              <Label numberOfLines={1} style={styles.serverName}>
+              <BodyText numberOfLines={1} style={styles.serverName}>
                 {active.name}
-              </Label>
-              <Label muted style={styles.contextDetail}>
+              </BodyText>
+              <BodyText muted style={styles.contextDetail}>
                 OpenCode {info?.version ? `· v${info.version}` : ""}
-              </Label>
+              </BodyText>
             </View>
             <ShellIcon name="chevron" size={14} color={colors.faint} />
           </Pressable>
@@ -1434,7 +1434,9 @@ function MobileApp() {
                 ]}
               >
                 <NavIcon name={item.id} color={colors.muted} size={16} />
-                <Label style={styles.navigationLinkText}>{item.label}</Label>
+                <BodyText style={styles.navigationLinkText}>
+                  {item.label}
+                </BodyText>
               </Pressable>
             ))}
           </View>
@@ -1448,7 +1450,7 @@ function MobileApp() {
         <View style={styles.boot}>
           <OpenCodeLogo width={160} />
           <Busy />
-          <Label muted>Restoring your workspace</Label>
+          <BodyText muted>Restoring your workspace</BodyText>
         </View>
       </SafeAreaView>
     );
@@ -1486,7 +1488,7 @@ function MobileApp() {
             {!betaLayout && (
               <View style={{ gap: 16, marginBottom: 20 }}>
                 <OpenCodeLogo width={180} />
-                <Label muted>Mobile client</Label>
+                <BodyText muted>Mobile client</BodyText>
               </View>
             )}
             {serverForm}
@@ -1623,10 +1625,10 @@ function MobileApp() {
                       <View style={styles.welcome}>
                         <OpenCodeLogo width={160} />
                         <Heading>Start a session</Heading>
-                        <Label muted style={styles.welcomeDetail}>
+                        <BodyText muted style={styles.welcomeDetail}>
                           Choose a conversation, or create a new session in{" "}
                           {projectLabel}.
-                        </Label>
+                        </BodyText>
                       </View>
                     )}
                   </View>

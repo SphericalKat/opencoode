@@ -10,7 +10,7 @@ import {
   Card,
   ErrorNotice,
   Field,
-  Label,
+  BodyText,
   Row,
   confirmAction,
 } from "./ui";
@@ -107,13 +107,13 @@ export function Instructions({
 
   return (
     <View style={{ gap: 14 }}>
-      <Label muted>
+      <BodyText muted>
         These instructions stay with this session through compaction and
         reverts. Changes reach the agent at its next step.
-      </Label>
-      <Label muted>
+      </BodyText>
+      <BodyText muted>
         This feature needs the experimental instruction API on the server.
-      </Label>
+      </BodyText>
       <Button
         title="Refresh instructions"
         compact
@@ -130,16 +130,16 @@ export function Instructions({
       />
       {loading && <Busy />}
       {!loading && !error && entries.length === 0 && (
-        <Label muted>No saved instruction entries</Label>
+        <BodyText muted>No saved instruction entries</BodyText>
       )}
       {entries.map((entry) => (
         <Card key={entry.key}>
-          <Label style={{ fontWeight: "600" }}>{entry.key}</Label>
-          <Label selectable>
+          <BodyText style={{ fontWeight: "600" }}>{entry.key}</BodyText>
+          <BodyText selectable>
             {typeof entry.value === "string"
               ? entry.value
               : JSON.stringify(entry.value, null, 2)}
-          </Label>
+          </BodyText>
           <Row>
             <Button
               title="Edit"
@@ -182,11 +182,11 @@ export function Instructions({
         </Card>
       ))}
       <Card>
-        <Label style={{ fontWeight: "600" }}>
+        <BodyText style={{ fontWeight: "600" }}>
           {entries.some((entry) => entry.key === key.trim())
             ? "Update instruction"
             : "Add instruction"}
-        </Label>
+        </BodyText>
         <Field
           label="Instruction name"
           value={key}

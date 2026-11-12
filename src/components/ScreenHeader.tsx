@@ -11,7 +11,7 @@ import { pageInset } from "../lib/layout";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { ShellIcon } from "./ShellIcon";
-import { Label } from "./ui";
+import { BodyText } from "./ui";
 
 export function ScreenHeader({
   title,
@@ -42,9 +42,13 @@ export function ScreenHeader({
           <ShellIcon name="back" color={colors.text} size={22} />
         </Pressable>
       )}
-      <Label accessibilityRole="header" numberOfLines={1} style={styles.title}>
+      <BodyText
+        accessibilityRole="header"
+        numberOfLines={1}
+        style={styles.title}
+      >
         {title}
-      </Label>
+      </BodyText>
       {onRefresh && (
         <Pressable
           accessibilityRole="button"

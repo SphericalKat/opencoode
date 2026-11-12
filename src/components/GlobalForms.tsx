@@ -5,7 +5,7 @@ import { AppState, View } from "react-native";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { SessionForms } from "./SessionForms";
-import { Button, Busy, ErrorNotice, Heading, Label, Row } from "./ui";
+import { Button, Busy, ErrorNotice, Heading, BodyText, Row } from "./ui";
 
 export function GlobalForms({
   client,
@@ -154,7 +154,7 @@ export function GlobalForms({
       <ErrorNotice error={error} onRetry={() => refreshRef.current()} />
       {loading && <Busy />}
       {!loading && !error && !forms.length && (
-        <Label muted>No pending MCP questions</Label>
+        <BodyText muted>No pending MCP questions</BodyText>
       )}
       <SessionForms
         client={client}

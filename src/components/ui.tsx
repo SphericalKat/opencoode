@@ -49,7 +49,7 @@ export const sans = "Inter";
 export const mono = "IBMPlexMono";
 export const touchTarget = Platform.OS === "android" ? 48 : 44;
 
-export function Label({
+export function BodyText({
   children,
   muted,
   style,
@@ -164,9 +164,9 @@ export function Field({
   return (
     <View style={[{ gap: 8 }, containerStyle]}>
       {label && (
-        <Label muted style={styles.fieldLabel}>
+        <BodyText muted style={styles.fieldLabel}>
           {label}
-        </Label>
+        </BodyText>
       )}
       <TextInput
         accessibilityLabel={label ?? props.placeholder}
@@ -217,13 +217,15 @@ export function Empty({ title, detail }: { title: string; detail?: string }) {
   const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.empty}>
-      <Label style={{ fontSize: 17, fontWeight: "500", textAlign: "center" }}>
+      <BodyText
+        style={{ fontSize: 17, fontWeight: "500", textAlign: "center" }}
+      >
         {title}
-      </Label>
+      </BodyText>
       {detail && (
-        <Label muted style={{ lineHeight: 23, textAlign: "center" }}>
+        <BodyText muted style={{ lineHeight: 23, textAlign: "center" }}>
           {detail}
-        </Label>
+        </BodyText>
       )}
     </View>
   );
@@ -242,7 +244,7 @@ export function ErrorNotice({
   }
   return (
     <View accessibilityRole="alert" style={styles.error}>
-      <Label style={{ color: colors.danger, flex: 1 }}>{error}</Label>
+      <BodyText style={{ color: colors.danger, flex: 1 }}>{error}</BodyText>
       {onRetry && <Button title="Retry" compact onPress={onRetry} />}
     </View>
   );
@@ -352,23 +354,23 @@ export function Sheet({
           style={[styles.sheetHeader, betaLayout && styles.betaSheetHeader]}
         >
           {betaLayout ? (
-            <Label accessibilityRole="header" style={styles.betaSheetTitle}>
+            <BodyText accessibilityRole="header" style={styles.betaSheetTitle}>
               {title}
-            </Label>
+            </BodyText>
           ) : (
             <Heading>{title}</Heading>
           )}
           <Button title="Done" compact onPress={onClose} />
         </View>
       ) : (
-        <Label accessibilityRole="header" style={styles.hiddenHeading}>
+        <BodyText accessibilityRole="header" style={styles.hiddenHeading}>
           {title}
-        </Label>
+        </BodyText>
       )}
       {recoveryPending && !allowDuringRecovery && (
-        <Label accessibilityRole="alert" style={styles.recoveryNotice}>
+        <BodyText accessibilityRole="alert" style={styles.recoveryNotice}>
           Close this panel to open the connection wizard.
-        </Label>
+        </BodyText>
       )}
       {scroll ? (
         <ScrollView
@@ -529,7 +531,7 @@ export function Disclosure({
           pressed && styles.ghostPressed,
         ]}
       >
-        <Label style={{ flex: 1, fontWeight: "500" }}>{title}</Label>
+        <BodyText style={{ flex: 1, fontWeight: "500" }}>{title}</BodyText>
         <MotionDisclosureChevron open={open}>
           <ShellIcon name="chevron" color={colors.muted} size={16} />
         </MotionDisclosureChevron>

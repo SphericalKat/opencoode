@@ -13,7 +13,7 @@ import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { NavIcon } from "./Icons";
 import { ShellIcon } from "./ShellIcon";
-import { Label, Sheet } from "./ui";
+import { BodyText, Sheet } from "./ui";
 
 export interface OpenSessionTab {
   id: string;
@@ -60,7 +60,9 @@ function ProjectBadge({ directory }: { directory: string }) {
   const name = directory.split(/[\\/]/).filter(Boolean).pop() || "Project";
   return (
     <View style={styles.badge}>
-      <Label style={styles.badgeText}>{name.slice(0, 1).toUpperCase()}</Label>
+      <BodyText style={styles.badgeText}>
+        {name.slice(0, 1).toUpperCase()}
+      </BodyText>
     </View>
   );
 }
@@ -90,15 +92,15 @@ export function BetaTabStrip({
       ) : (
         <HomeIcon color={colors.muted} />
       )}
-      <Label numberOfLines={1} style={styles.stripTitle}>
+      <BodyText numberOfLines={1} style={styles.stripTitle}>
         {current?.title || "Home"}
-      </Label>
+      </BodyText>
       {busy ? (
         <ActivityIndicator size="small" color={colors.muted} />
       ) : (
-        <Label muted style={styles.count}>
+        <BodyText muted style={styles.count}>
           {count}
-        </Label>
+        </BodyText>
       )}
     </Pressable>
   );
@@ -142,14 +144,14 @@ export function BetaSessionNavigation({
                 pressed && styles.pressed,
               ]}
             >
-              <Label
+              <BodyText
                 style={[
                   styles.tabText,
                   { color: pane === item ? colors.text : colors.muted },
                 ]}
               >
                 {item}
-              </Label>
+              </BodyText>
             </Pressable>
           ))}
         <Pressable
@@ -162,9 +164,9 @@ export function BetaSessionNavigation({
             pressed && styles.pressed,
           ]}
         >
-          <Label style={styles.tabText}>
+          <BodyText style={styles.tabText}>
             {pane !== "Session" && pane !== "Changes" ? pane : "More…"}
-          </Label>
+          </BodyText>
         </Pressable>
       </View>
       <Pressable
@@ -175,9 +177,9 @@ export function BetaSessionNavigation({
         style={({ pressed }) => [styles.project, pressed && styles.pressed]}
       >
         <ProjectBadge directory={directory} />
-        <Label muted numberOfLines={1} style={styles.projectName}>
+        <BodyText muted numberOfLines={1} style={styles.projectName}>
           {directory.split(/[\\/]/).filter(Boolean).pop() || directory}
-        </Label>
+        </BodyText>
       </Pressable>
     </>
   );
@@ -265,9 +267,9 @@ export function BetaTabsSheet({
             ]}
           >
             <ProjectBadge directory={item.directory} />
-            <Label numberOfLines={1} style={styles.openTabTitle}>
+            <BodyText numberOfLines={1} style={styles.openTabTitle}>
               {item.title}
-            </Label>
+            </BodyText>
           </Pressable>
           {onCloseTab && (
             <Pressable
@@ -286,9 +288,9 @@ export function BetaTabsSheet({
       ))}
       {recent.some((item) => !tabs.some((tab) => tab.id === item.id)) && (
         <>
-          <Label muted style={styles.recentTitle}>
+          <BodyText muted style={styles.recentTitle}>
             Recent sessions
-          </Label>
+          </BodyText>
           {recent
             .filter((item) => !tabs.some((tab) => tab.id === item.id))
             .map((item) => (
@@ -303,9 +305,9 @@ export function BetaTabsSheet({
                 ]}
               >
                 <ProjectBadge directory={item.directory} />
-                <Label numberOfLines={1} style={styles.openTabTitle}>
+                <BodyText numberOfLines={1} style={styles.openTabTitle}>
                   {item.title}
-                </Label>
+                </BodyText>
               </Pressable>
             ))}
         </>
@@ -316,7 +318,7 @@ export function BetaTabsSheet({
         style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
       >
         <ShellIcon name="compose" size={16} color={colors.muted} />
-        <Label style={styles.menuText}>New session</Label>
+        <BodyText style={styles.menuText}>New session</BodyText>
       </Pressable>
       <View style={styles.divider} />
       {onHome && (
@@ -326,7 +328,7 @@ export function BetaTabsSheet({
           style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
         >
           <HomeIcon color={colors.muted} />
-          <Label style={styles.menuText}>Home</Label>
+          <BodyText style={styles.menuText}>Home</BodyText>
         </Pressable>
       )}
       <Pressable
@@ -337,12 +339,12 @@ export function BetaTabsSheet({
       >
         <ShellIcon name="server" size={16} color={colors.muted} />
         <View style={styles.serverText}>
-          <Label numberOfLines={1} style={styles.serverName}>
+          <BodyText numberOfLines={1} style={styles.serverName}>
             {serverLabel}
-          </Label>
-          <Label muted style={styles.serverDetail}>
+          </BodyText>
+          <BodyText muted style={styles.serverDetail}>
             Current server
-          </Label>
+          </BodyText>
         </View>
         <ShellIcon name="chevron" size={14} color={colors.muted} />
       </Pressable>
@@ -356,7 +358,7 @@ export function BetaTabsSheet({
           ]}
         >
           <NavIcon name="settings" color={colors.muted} size={16} />
-          <Label style={styles.menuText}>Settings</Label>
+          <BodyText style={styles.menuText}>Settings</BodyText>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -366,10 +368,10 @@ export function BetaTabsSheet({
             pressed && styles.pressed,
           ]}
         >
-          <Label muted style={styles.menuText}>
+          <BodyText muted style={styles.menuText}>
             ⓘ
-          </Label>
-          <Label style={styles.menuText}>Help</Label>
+          </BodyText>
+          <BodyText style={styles.menuText}>Help</BodyText>
         </Pressable>
       </View>
     </Sheet>
@@ -414,8 +416,8 @@ export function BetaMoreSheet({
             onPress={() => onView(view)}
             style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}
           >
-            <Label style={styles.moreText}>{view}</Label>
-            <Label muted>{pane === view ? "✓" : ""}</Label>
+            <BodyText style={styles.moreText}>{view}</BodyText>
+            <BodyText muted>{pane === view ? "✓" : ""}</BodyText>
           </Pressable>
         ))}
       {onUsage && (
@@ -424,7 +426,7 @@ export function BetaMoreSheet({
           onPress={onUsage}
           style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}
         >
-          <Label style={styles.moreText}>Usage</Label>
+          <BodyText style={styles.moreText}>Usage</BodyText>
         </Pressable>
       )}
       {onDetails && (
@@ -433,7 +435,7 @@ export function BetaMoreSheet({
           onPress={onDetails}
           style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}
         >
-          <Label style={styles.moreText}>Session details</Label>
+          <BodyText style={styles.moreText}>Session details</BodyText>
           <ShellIcon name="chevron" size={14} color={colors.muted} />
         </Pressable>
       )}

@@ -21,7 +21,7 @@ import { MessageActionsContext } from "../lib/messageActions";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { ArtifactContent, isImageArtifact } from "./ArtifactContent";
-import { Disclosure, ErrorNotice, Label, mono, touchTarget } from "./ui";
+import { Disclosure, ErrorNotice, BodyText, mono, touchTarget } from "./ui";
 
 type Arguments = Record<string, JsonValue>;
 interface Section {
@@ -255,9 +255,9 @@ function CopyAction({ value, label }: { value: string; label: string }) {
         </Svg>
       </Pressable>
       {error && (
-        <Label accessibilityRole="alert" style={styles.copyError}>
+        <BodyText accessibilityRole="alert" style={styles.copyError}>
           {error}
-        </Label>
+        </BodyText>
       )}
     </View>
   );
@@ -286,9 +286,9 @@ function CodeSection({
     <View style={[output && styles.output, divided && styles.divider]}>
       {section.label ? (
         <View style={styles.sectionHeader}>
-          <Label muted style={styles.sectionLabel}>
+          <BodyText muted style={styles.sectionLabel}>
             {section.label}
-          </Label>
+          </BodyText>
           <CopyAction
             value={section.text}
             label={
@@ -339,10 +339,10 @@ function CodeSection({
               }}
               style={styles.more}
             >
-              <Label muted>
+              <BodyText muted>
                 Show more text ({(section.text.length - limit).toLocaleString()}{" "}
                 characters left)
-              </Label>
+              </BodyText>
             </Pressable>
           )}
         </ScrollView>
@@ -415,9 +415,9 @@ export const ToolCallDetails = memo(
             />
           )}
           {state.status === "streaming" && (
-            <Label muted style={styles.pending}>
+            <BodyText muted style={styles.pending}>
               Receiving tool arguments
-            </Label>
+            </BodyText>
           )}
           {!!output && (
             <CodeSection
@@ -428,9 +428,9 @@ export const ToolCallDetails = memo(
             />
           )}
           {!output && !content.length && state.status === "completed" && (
-            <Label muted style={[styles.pending, styles.divider]}>
+            <BodyText muted style={[styles.pending, styles.divider]}>
               No output
-            </Label>
+            </BodyText>
           )}
         </View>
         {files.map((file, index) => (

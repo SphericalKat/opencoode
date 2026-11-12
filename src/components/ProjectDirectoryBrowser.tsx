@@ -14,7 +14,7 @@ import {
   Empty,
   ErrorNotice,
   Field,
-  Label,
+  BodyText,
   mono,
   Row,
   confirmAction,
@@ -224,7 +224,7 @@ export function ProjectDirectoryBrowser({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Label
+        <BodyText
           selectable
           numberOfLines={1}
           ellipsizeMode="middle"
@@ -232,7 +232,7 @@ export function ProjectDirectoryBrowser({
           style={styles.path}
         >
           {path}
-        </Label>
+        </BodyText>
         <Row style={{ flexWrap: "nowrap" }}>
           {recent ? (
             <Button
@@ -293,14 +293,14 @@ export function ProjectDirectoryBrowser({
           }
         />
         {notice && (
-          <Label
+          <BodyText
             accessibilityLiveRegion="polite"
             style={{ color: colors.success }}
           >
             {notice}
-          </Label>
+          </BodyText>
         )}
-        {recent && <Label muted>Recent projects</Label>}
+        {recent && <BodyText muted>Recent projects</BodyText>}
       </View>
       {recent ? (
         <FlatList
@@ -335,19 +335,19 @@ export function ProjectDirectoryBrowser({
             >
               <NavIcon name="workspace" color={colors.muted} size={18} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Label numberOfLines={2}>
+                <BodyText numberOfLines={2}>
                   {item.name || fileName(item.canonical)}
-                </Label>
-                <Label
+                </BodyText>
+                <BodyText
                   muted
                   numberOfLines={1}
                   ellipsizeMode="middle"
                   style={styles.detail}
                 >
                   {item.canonical}
-                </Label>
+                </BodyText>
               </View>
-              <Label muted>›</Label>
+              <BodyText muted>›</BodyText>
             </Pressable>
           )}
         />
@@ -384,10 +384,10 @@ export function ProjectDirectoryBrowser({
               ]}
             >
               <NavIcon name="workspace" color={colors.muted} size={18} />
-              <Label numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>
+              <BodyText numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>
                 {fileName(item.path)}
-              </Label>
-              <Label muted>›</Label>
+              </BodyText>
+              <BodyText muted>›</BodyText>
             </Pressable>
           )}
         />

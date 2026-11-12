@@ -42,7 +42,7 @@ import {
   confirmAction,
   Empty,
   ErrorNotice,
-  Label,
+  BodyText,
   mono,
   Row,
   Sheet,
@@ -244,7 +244,9 @@ function Terminals(props: Props) {
           />
         ))}
         {!loading && sessions.length === 0 && (
-          <Label muted>Create a session from the Sessions tab first.</Label>
+          <BodyText muted>
+            Create a session from the Sessions tab first.
+          </BodyText>
         )}
         {sessionCursor && (
           <Button
@@ -560,7 +562,7 @@ function TerminalList({
                 selectedID === terminal.id && styles.selectedTab,
               ]}
             >
-              <Label
+              <BodyText
                 style={{
                   color:
                     terminal.status === "running"
@@ -570,7 +572,7 @@ function TerminalList({
               >
                 {terminal.status === "running" ? "●" : "○"}{" "}
                 {terminal.title || terminal.command}
-              </Label>
+              </BodyText>
             </Pressable>
           ))}
         </ScrollView>
@@ -1270,7 +1272,7 @@ function TerminalSession({
   const content = (
     <View style={styles.session}>
       <Row style={styles.connectionBar}>
-        <Label muted style={{ flex: 1, fontSize: 12 }}>
+        <BodyText muted style={{ flex: 1, fontSize: 12 }}>
           {status === "connected"
             ? `${mode === "desktop" ? (controller ? "In control" : "View only") : "Connected"} · ${size.cols} × ${size.rows}`
             : active
@@ -1278,7 +1280,7 @@ function TerminalSession({
                 ? "Connect to shell…"
                 : "Disconnected"
               : "Paused in background"}
-        </Label>
+        </BodyText>
         {mode === "desktop" && status === "connected" && !controller && (
           <Button title="Take control" compact onPress={takeControl} />
         )}
@@ -1290,17 +1292,17 @@ function TerminalSession({
       </Row>
       {fullscreen && (
         <Row style={styles.connectionBar}>
-          <Label muted style={{ flex: 1 }} numberOfLines={1}>
+          <BodyText muted style={{ flex: 1 }} numberOfLines={1}>
             {terminal.title || terminal.command}
-          </Label>
+          </BodyText>
           <Button title="Reconnect" compact onPress={reconnect} />
         </Row>
       )}
       {recoveryPending ? (
         <View style={styles.notice}>
-          <Label accessibilityRole="alert">
+          <BodyText accessibilityRole="alert">
             Close this panel to open the connection wizard.
-          </Label>
+          </BodyText>
         </View>
       ) : (
         error && (

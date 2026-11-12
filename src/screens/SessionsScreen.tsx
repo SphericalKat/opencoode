@@ -25,7 +25,7 @@ import {
   Empty,
   ErrorNotice,
   Field,
-  Label,
+  BodyText,
   Row,
   Sheet,
   confirmAction,
@@ -783,7 +783,7 @@ export function SessionsScreen({
       ) : (
         <ShellIcon name="compose" color={colors.muted} size={14} />
       )}
-      <Label style={styles.betaNewLabel}>New session</Label>
+      <BodyText style={styles.betaNewLabel}>New session</BodyText>
     </Pressable>
   );
 
@@ -828,13 +828,13 @@ export function SessionsScreen({
                 strokeLinejoin="round"
               />
             </Svg>
-            <Label numberOfLines={1} style={styles.projectSelectorLabel}>
+            <BodyText numberOfLines={1} style={styles.projectSelectorLabel}>
               {projectDirectory
                 ? projects.find(
                     (project) => project.canonical === projectDirectory
                   )?.name || directoryName(projectDirectory)
                 : "All projects"}
-            </Label>
+            </BodyText>
             <View style={styles.projectChevron}>
               <ShellIcon name="chevron" color={colors.faint} size={10} />
             </View>
@@ -855,7 +855,7 @@ export function SessionsScreen({
               </Pressable>
             )}
             <View style={styles.headingText}>
-              <Label
+              <BodyText
                 accessibilityRole="header"
                 numberOfLines={1}
                 style={[
@@ -869,7 +869,7 @@ export function SessionsScreen({
                   : compact
                     ? "Your sessions"
                     : "Sessions"}
-              </Label>
+              </BodyText>
             </View>
             <Pressable
               accessibilityRole="button"
@@ -973,9 +973,9 @@ export function SessionsScreen({
                 onPress={chooseHistory}
                 style={styles.filter}
               >
-                <Label muted style={styles.filterText}>
+                <BodyText muted style={styles.filterText}>
                   {archived ? "Archived" : "Recent"} ⌄
-                </Label>
+                </BodyText>
               </Pressable>
             )}
           </Row>
@@ -987,8 +987,8 @@ export function SessionsScreen({
           }}
         />
         <ErrorNotice error={error} />
-        {statusError && <Label muted>{statusError}</Label>}
-        {streamError && <Label muted>{streamError}</Label>}
+        {statusError && <BodyText muted>{statusError}</BodyText>}
+        {streamError && <BodyText muted>{streamError}</BodyText>}
       </View>
       <FlatList
         data={sessions}
@@ -1007,7 +1007,7 @@ export function SessionsScreen({
         ListHeaderComponent={
           betaHome ? (
             <View style={styles.betaGroupHeader}>
-              <Label
+              <BodyText
                 accessibilityRole="header"
                 muted
                 style={styles.betaGroupLabel}
@@ -1019,7 +1019,7 @@ export function SessionsScreen({
                     : sessions.length
                       ? sessionDateGroup(sessions[0].time.updated)
                       : "Today"}
-              </Label>
+              </BodyText>
               {newSessionAction}
             </View>
           ) : undefined
@@ -1081,7 +1081,7 @@ export function SessionsScreen({
           return (
             <View>
               {startsGroup && (
-                <Label
+                <BodyText
                   accessibilityRole="header"
                   muted
                   style={[
@@ -1091,7 +1091,7 @@ export function SessionsScreen({
                   ]}
                 >
                   {group}
-                </Label>
+                </BodyText>
               )}
               <View
                 style={[
@@ -1124,9 +1124,9 @@ export function SessionsScreen({
                 >
                   {betaHome && (
                     <View style={styles.projectBadge}>
-                      <Label style={styles.projectBadgeLabel}>
+                      <BodyText style={styles.projectBadgeLabel}>
                         {name.charAt(0).toUpperCase()}
-                      </Label>
+                      </BodyText>
                     </View>
                   )}
                   <View
@@ -1135,7 +1135,7 @@ export function SessionsScreen({
                       betaHome && styles.betaSessionText,
                     ]}
                   >
-                    <Label
+                    <BodyText
                       numberOfLines={1}
                       style={[
                         styles.sessionTitle,
@@ -1143,18 +1143,18 @@ export function SessionsScreen({
                       ]}
                     >
                       {item.title || "Untitled session"}
-                    </Label>
+                    </BodyText>
                     {betaHome ? (
                       <View style={styles.betaMetadataRow}>
-                        <Label
+                        <BodyText
                           muted
                           numberOfLines={1}
                           style={[styles.betaMetadata, styles.betaProjectName]}
                         >
                           {name}
-                        </Label>
+                        </BodyText>
                         {visibleStatus || unread ? (
-                          <Label
+                          <BodyText
                             muted
                             numberOfLines={1}
                             style={styles.betaMetadata}
@@ -1164,11 +1164,11 @@ export function SessionsScreen({
                             {[visibleStatus, unread ? "Unread" : undefined]
                               .filter(Boolean)
                               .join(" · ")}
-                          </Label>
+                          </BodyText>
                         ) : null}
                       </View>
                     ) : (
-                      <Label muted numberOfLines={1} style={styles.metadata}>
+                      <BodyText muted numberOfLines={1} style={styles.metadata}>
                         {[
                           visibleStatus,
                           unread ? "Unread" : undefined,
@@ -1177,7 +1177,7 @@ export function SessionsScreen({
                         ]
                           .filter(Boolean)
                           .join(" · ")}
-                      </Label>
+                      </BodyText>
                     )}
                   </View>
                 </Pressable>
@@ -1229,8 +1229,8 @@ export function SessionsScreen({
           }}
           style={styles.menuRow}
         >
-          <Label>All projects</Label>
-          <Label muted>{projectDirectory ? "" : "✓"}</Label>
+          <BodyText>All projects</BodyText>
+          <BodyText muted>{projectDirectory ? "" : "✓"}</BodyText>
         </Pressable>
         {projectsLoading && <Busy />}
         <ErrorNotice
@@ -1253,16 +1253,16 @@ export function SessionsScreen({
             style={styles.menuRow}
           >
             <View style={styles.projectOption}>
-              <Label numberOfLines={1}>
+              <BodyText numberOfLines={1}>
                 {project.name || directoryName(project.canonical)}
-              </Label>
-              <Label muted numberOfLines={1} style={styles.metadata}>
+              </BodyText>
+              <BodyText muted numberOfLines={1} style={styles.metadata}>
                 {project.canonical}
-              </Label>
+              </BodyText>
             </View>
-            <Label muted>
+            <BodyText muted>
               {projectDirectory === project.canonical ? "✓" : ""}
-            </Label>
+            </BodyText>
           </Pressable>
         ))}
         <Button
@@ -1310,12 +1310,12 @@ export function SessionsScreen({
               onChangeText={setTitle}
               editable={!creating}
             />
-            <Label muted>
+            <BodyText muted>
               You can choose a model and agent in the conversation.
-            </Label>
+            </BodyText>
             <Card>
-              <Label muted>Remote directory</Label>
-              <Label selectable>{creationDirectory}</Label>
+              <BodyText muted>Remote directory</BodyText>
+              <BodyText selectable>{creationDirectory}</BodyText>
             </Card>
             <ErrorNotice error={sheetError} />
             <Button
@@ -1345,8 +1345,10 @@ export function SessionsScreen({
                   }}
                   style={styles.menuRow}
                 >
-                  <Label>{item.title}</Label>
-                  <Label muted>{archived === item.value ? "✓" : ""}</Label>
+                  <BodyText>{item.title}</BodyText>
+                  <BodyText muted>
+                    {archived === item.value ? "✓" : ""}
+                  </BodyText>
                 </Pressable>
               ))}
             </View>
@@ -1387,7 +1389,7 @@ export function SessionsScreen({
                       (pressed || action.disabled) && styles.pressed,
                     ]}
                   >
-                    <Label>{action.title}</Label>
+                    <BodyText>{action.title}</BodyText>
                   </Pressable>
                 ))}
               </>
@@ -1400,13 +1402,13 @@ export function SessionsScreen({
         title="Manage session"
         onClose={() => setSelected(undefined)}
       >
-        <Label selectable style={{ fontSize: 17, fontWeight: "500" }}>
+        <BodyText selectable style={{ fontSize: 17, fontWeight: "500" }}>
           {selected?.title || "Untitled session"}
-        </Label>
+        </BodyText>
         {selected && (
-          <Label muted>
+          <BodyText muted>
             Updated {new Date(selected.time.updated).toLocaleString()}
-          </Label>
+          </BodyText>
         )}
         <Field
           label="Session title"
@@ -1476,14 +1478,14 @@ export function SessionsScreen({
             )
           }
         />
-        <Label muted>
+        <BodyText muted>
           A move during active work takes effect at a safe server boundary.
-        </Label>
+        </BodyText>
         <Button title="Export JSON" disabled={busy} onPress={exportSession} />
-        <Label muted>
+        <BodyText muted>
           Export and import require a server with the experimental transcript
           API.
-        </Label>
+        </BodyText>
         <Button
           title="Delete session"
           variant="danger"

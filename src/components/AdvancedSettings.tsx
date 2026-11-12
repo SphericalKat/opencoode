@@ -25,7 +25,7 @@ import {
   Empty,
   ErrorNotice,
   Field,
-  Label,
+  BodyText,
   Row,
   sans,
 } from "./ui";
@@ -106,9 +106,9 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
   return (
     <ScrollView contentContainerStyle={{ gap: 14, padding: 18 }}>
       <Row>
-        <Label style={{ flex: 1, fontSize: 19, fontWeight: "600" }}>
+        <BodyText style={{ flex: 1, fontSize: 19, fontWeight: "600" }}>
           Server usage
-        </Label>
+        </BodyText>
         <Button
           title="Refresh"
           compact
@@ -120,7 +120,7 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
       {loading && !info && <Busy />}
       {info && (
         <>
-          <Label muted>{info.workspace.name || info.workspace.id}</Label>
+          <BodyText muted>{info.workspace.name || info.workspace.id}</BodyText>
           <Button
             title="Open usage dashboard"
             onPress={() => {
@@ -138,22 +138,22 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
           )}
           {info.budgets.map((budget) => (
             <Card key={budget.id}>
-              <Label style={{ fontWeight: "600" }}>
+              <BodyText style={{ fontWeight: "600" }}>
                 {budget.vendors.join(", ") || "Model budget"}
-              </Label>
-              <Label>
+              </BodyText>
+              <BodyText>
                 ${budget.spent.toFixed(2)} of ${budget.limit.toFixed(2)}
-              </Label>
-              <Label muted>
+              </BodyText>
+              <BodyText muted>
                 Resets {new Date(budget.resetsAt).toLocaleString()}
-              </Label>
+              </BodyText>
               {budget.models.map((model) => (
-                <Label key={`${model.providerID}/${model.modelID}`} muted>
+                <BodyText key={`${model.providerID}/${model.modelID}`} muted>
                   {model.name}
                   {model.spent === undefined
                     ? ""
                     : ` · $${model.spent.toFixed(2)}`}
-                </Label>
+                </BodyText>
               ))}
             </Card>
           ))}
@@ -175,12 +175,12 @@ function Meter({ label, meter }: { label: string; meter: UsageLimitsMeter }) {
   return (
     <Card>
       <Row style={{ justifyContent: "space-between" }}>
-        <Label>{label}</Label>
-        <Label
+        <BodyText>{label}</BodyText>
+        <BodyText
           style={{ color: meter.limited ? colors.danger : colors.success }}
         >
           {Math.round(percent)}% used
-        </Label>
+        </BodyText>
       </Row>
       <View
         accessibilityRole="progressbar"
@@ -200,7 +200,9 @@ function Meter({ label, meter }: { label: string; meter: UsageLimitsMeter }) {
           }}
         />
       </View>
-      <Label muted>Resets {new Date(meter.resetsAt).toLocaleString()}</Label>
+      <BodyText muted>
+        Resets {new Date(meter.resetsAt).toLocaleString()}
+      </BodyText>
     </Card>
   );
 }
@@ -270,8 +272,12 @@ function WebSearch({
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ gap: 14, padding: 18 }}
     >
-      <Label style={{ fontSize: 19, fontWeight: "600" }}>Search the web</Label>
-      <Label muted>Use the web search providers on your OpenCode server.</Label>
+      <BodyText style={{ fontSize: 19, fontWeight: "600" }}>
+        Search the web
+      </BodyText>
+      <BodyText muted>
+        Use the web search providers on your OpenCode server.
+      </BodyText>
       <Field
         label="Search query"
         value={query}
@@ -310,10 +316,10 @@ function WebSearch({
       <ErrorNotice error={error} />
       {results?.map((result, index) => (
         <Card key={`${result.url}:${index}`}>
-          <Label style={{ fontSize: 17, fontWeight: "600" }}>
+          <BodyText style={{ fontSize: 17, fontWeight: "600" }}>
             {result.title || result.url}
-          </Label>
-          <Label muted>{result.url}</Label>
+          </BodyText>
+          <BodyText muted>{result.url}</BodyText>
           {result.content && (
             <Text
               selectable
@@ -499,15 +505,15 @@ function Generate({
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ gap: 14, padding: 18 }}
     >
-      <Label style={{ fontSize: 19, fontWeight: "600" }}>Generate</Label>
-      <Label muted>
+      <BodyText style={{ fontSize: 19, fontWeight: "600" }}>Generate</BodyText>
+      <BodyText muted>
         Create a standalone result through your server. Requests use your
         connected provider and can incur charges.
-      </Label>
-      <Label muted>
+      </BodyText>
+      <BodyText muted>
         Standalone generation uses the server global configuration. Project-only
         model settings do not apply.
-      </Label>
+      </BodyText>
       <Row>
         <Button
           title="Text"
@@ -531,13 +537,13 @@ function Generate({
         />
       </Row>
       <Field label="Find a model" value={query} onChangeText={setQuery} />
-      <Label muted>
+      <BodyText muted>
         {model
           ? `${model.name} · ${model.providerID}`
           : kind === "text"
             ? "Server default model"
             : "Choose an available image model"}
-      </Label>
+      </BodyText>
       <ScrollView horizontal contentContainerStyle={{ gap: 8 }}>
         {kind === "text" && (
           <Button
@@ -558,10 +564,10 @@ function Generate({
         ))}
       </ScrollView>
       {kind === "image" && !available.length && (
-        <Label muted>
+        <BodyText muted>
           No image models are connected. Add one through Accounts or your server
           configuration.
-        </Label>
+        </BodyText>
       )}
       <Field
         label="Prompt"
@@ -638,7 +644,7 @@ function Generate({
         </Card>
       ))}
       {images?.cost !== undefined && (
-        <Label muted>Cost: ${images.cost.toFixed(4)}</Label>
+        <BodyText muted>Cost: ${images.cost.toFixed(4)}</BodyText>
       )}
     </ScrollView>
   );

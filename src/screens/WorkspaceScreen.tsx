@@ -32,7 +32,7 @@ import {
   Empty,
   ErrorNotice,
   Field,
-  Label,
+  BodyText,
   mono,
   Row,
   Sheet,
@@ -108,9 +108,9 @@ function Workspace({
           />
         ) : (
           <View style={styles.header}>
-            <Label accessibilityRole="header" style={styles.title}>
+            <BodyText accessibilityRole="header" style={styles.title}>
               Workspace
-            </Label>
+            </BodyText>
           </View>
         ))}
       {!hideChrome && (
@@ -134,7 +134,7 @@ function Workspace({
                 ]}
                 onPress={() => setTab(item)}
               >
-                <Label
+                <BodyText
                   style={{
                     color: activeTab === item ? colors.text : colors.muted,
                     fontSize: 14,
@@ -142,7 +142,7 @@ function Workspace({
                   }}
                 >
                   {item}
-                </Label>
+                </BodyText>
               </Pressable>
             )
           )}
@@ -602,14 +602,14 @@ function Files({
             disabled={!path || searching}
             onPress={() => setPath(parentPath(path))}
           />
-          <Label
+          <BodyText
             muted
             numberOfLines={1}
             ellipsizeMode="middle"
             style={{ flex: 1, fontFamily: mono, fontSize: 13, minWidth: 0 }}
           >
             {searching ? "Search · up to 200" : path || "/"}
-          </Label>
+          </BodyText>
           <Button
             title="Refresh"
             compact
@@ -668,19 +668,19 @@ function Files({
                 {item.type === "directory" ? "▱" : "≡"}
               </Text>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Label numberOfLines={2}>{fileName(item.path)}</Label>
+                <BodyText numberOfLines={2}>{fileName(item.path)}</BodyText>
                 {searching && (
-                  <Label
+                  <BodyText
                     muted
                     numberOfLines={2}
                     ellipsizeMode="middle"
                     style={{ fontSize: 12 }}
                   >
                     {item.path}
-                  </Label>
+                  </BodyText>
                 )}
               </View>
-              <Label muted>{item.type === "directory" ? "›" : ""}</Label>
+              <BodyText muted>{item.type === "directory" ? "›" : ""}</BodyText>
             </Pressable>
           )}
         />
@@ -695,7 +695,7 @@ function Files({
       >
         {file && (
           <View style={styles.editor}>
-            <Label
+            <BodyText
               selectable
               muted
               numberOfLines={2}
@@ -703,7 +703,7 @@ function Files({
               style={{ fontFamily: mono, fontSize: 12 }}
             >
               {file.path}
-            </Label>
+            </BodyText>
             <Row
               style={{ flexWrap: "nowrap", justifyContent: "space-between" }}
             >
@@ -816,9 +816,9 @@ function Files({
                   )}
                 </Row>
                 {file.original && selection.end > selection.start && (
-                  <Label muted style={{ fontSize: 12 }}>
+                  <BodyText muted style={{ fontSize: 12 }}>
                     Selected text: {selection.end - selection.start} characters
-                  </Label>
+                  </BodyText>
                 )}
               </>
             )}
@@ -874,15 +874,15 @@ function Files({
             ) : (
               file.bytes && (
                 <View style={styles.mediaPreview}>
-                  <Label>
+                  <BodyText>
                     {file.mime} · {(file.bytes.length / 1024).toFixed(1)} KiB
-                  </Label>
-                  <Label muted>
+                  </BodyText>
+                  <BodyText muted>
                     {file.notice ||
                       (imageMime(file.bytes)
                         ? "This image exceeds the 8 MiB preview limit."
                         : "Save or share this file to open it in a compatible app.")}
-                  </Label>
+                  </BodyText>
                   <Button
                     title={
                       Platform.OS === "web" ? "Download file" : "Save or share"
@@ -896,10 +896,10 @@ function Files({
               )
             )}
             {file.original && (
-              <Label muted style={{ fontSize: 12 }}>
+              <BodyText muted style={{ fontSize: 12 }}>
                 If the server file changes, copy your edits before you reload
                 the file.
-              </Label>
+              </BodyText>
             )}
           </View>
         )}
@@ -1078,13 +1078,13 @@ function Changes({
     <View style={styles.screen}>
       <View style={styles.controls}>
         <Row style={{ flexWrap: "nowrap" }}>
-          <Label
+          <BodyText
             numberOfLines={1}
             ellipsizeMode="middle"
             style={{ flex: 1, fontFamily: mono, minWidth: 0 }}
           >
             ⑂ {info?.branch.current || "No branch"}
-          </Label>
+          </BodyText>
           <Button
             title="Branches"
             compact
@@ -1165,15 +1165,19 @@ function Changes({
               }}
             >
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Label numberOfLines={2} ellipsizeMode="middle">
+                <BodyText numberOfLines={2} ellipsizeMode="middle">
                   {item.file}
-                </Label>
-                <Label muted style={{ fontSize: 12 }}>
+                </BodyText>
+                <BodyText muted style={{ fontSize: 12 }}>
                   {item.status}
-                </Label>
+                </BodyText>
               </View>
-              <Label style={{ color: colors.success }}>+{item.additions}</Label>
-              <Label style={{ color: colors.danger }}>−{item.deletions}</Label>
+              <BodyText style={{ color: colors.success }}>
+                +{item.additions}
+              </BodyText>
+              <BodyText style={{ color: colors.danger }}>
+                −{item.deletions}
+              </BodyText>
             </Pressable>
           )}
         />
@@ -1187,9 +1191,9 @@ function Changes({
       >
         {reviewVisible && review ? (
           <>
-            <Label selectable style={{ fontFamily: mono }}>
+            <BodyText selectable style={{ fontFamily: mono }}>
               {review.file}
-            </Label>
+            </BodyText>
             <Field
               label="Comment for OpenCode"
               multiline
@@ -1223,15 +1227,15 @@ function Changes({
             )}
             {diff?.map((file) => (
               <Card key={file.file}>
-                <Label selectable style={{ fontFamily: mono }}>
+                <BodyText selectable style={{ fontFamily: mono }}>
                   {file.file}
-                </Label>
-                <Label muted>
+                </BodyText>
+                <BodyText muted>
                   +{file.additions} −{file.deletions} · {file.status}
-                </Label>
+                </BodyText>
                 <Patch patch={file.patch} />
                 {file.more && (
-                  <Label muted>The server truncated this diff.</Label>
+                  <BodyText muted>The server truncated this diff.</BodyText>
                 )}
                 {onAttachFile && (
                   <Button
@@ -1256,7 +1260,7 @@ function Changes({
         title="Branches"
         onClose={() => setBranchesVisible(false)}
       >
-        <Label muted>Select a branch as the comparison base.</Label>
+        <BodyText muted>Select a branch as the comparison base.</BodyText>
         {branches.map((branch) => (
           <Button
             key={branch}
@@ -1367,9 +1371,9 @@ function Worktrees({
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Row>
-        <Label muted style={{ flex: 1 }}>
+        <BodyText muted style={{ flex: 1 }}>
           Isolated Git workspaces
-        </Label>
+        </BodyText>
         <Button
           title="Create"
           compact
@@ -1393,10 +1397,12 @@ function Worktrees({
         <>
           {location && (
             <Card>
-              <Label style={{ fontWeight: "600" }}>Project checkout</Label>
-              <Label muted style={{ fontFamily: mono, fontSize: 13 }}>
+              <BodyText style={{ fontWeight: "600" }}>
+                Project checkout
+              </BodyText>
+              <BodyText muted style={{ fontFamily: mono, fontSize: 13 }}>
                 {location.project.directory}
-              </Label>
+              </BodyText>
               <Button
                 title={
                   directory === location.project.directory
@@ -1416,16 +1422,16 @@ function Worktrees({
           )}
           {trees.map((tree) => (
             <Card key={tree.directory}>
-              <Label style={{ fontWeight: "600" }}>
+              <BodyText style={{ fontWeight: "600" }}>
                 {fileName(tree.directory)}
-              </Label>
-              <Label
+              </BodyText>
+              <BodyText
                 selectable
                 muted
                 style={{ fontFamily: mono, fontSize: 13 }}
               >
                 {tree.directory}
-              </Label>
+              </BodyText>
               <Row>
                 <Button
                   title={
@@ -1479,7 +1485,7 @@ function Worktrees({
           onChangeText={setFrom}
           editable={!busy}
         />
-        <Label muted>The server chooses defaults for blank fields.</Label>
+        <BodyText muted>The server chooses defaults for blank fields.</BodyText>
         <Button
           title="Create and open"
           variant="primary"

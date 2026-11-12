@@ -96,7 +96,7 @@ import {
   Field,
   Heading,
   JsonView,
-  Label,
+  BodyText,
   mono,
   Row,
   Sheet,
@@ -2377,12 +2377,12 @@ function ChatSession({
                 onOpenNavigation && styles.headerTitleWithNavigation,
               ]}
             >
-              <Label numberOfLines={1} style={styles.sessionTitle}>
+              <BodyText numberOfLines={1} style={styles.sessionTitle}>
                 {loading ? "Loading session" : "Session unavailable"}
-              </Label>
-              <Label numberOfLines={1} muted style={styles.projectLabel}>
+              </BodyText>
+              <BodyText numberOfLines={1} muted style={styles.projectLabel}>
                 {projectLabel || "OpenCode"}
-              </Label>
+              </BodyText>
             </View>
           </View>
         )}
@@ -2419,9 +2419,12 @@ function ChatSession({
                     onPress={() => setSelectedMessageID(null)}
                   />
                 </View>
-                <Label accessibilityRole="header" style={styles.selectionCount}>
+                <BodyText
+                  accessibilityRole="header"
+                  style={styles.selectionCount}
+                >
                   1 selected
-                </Label>
+                </BodyText>
                 <Button
                   title="Copy"
                   compact
@@ -2483,13 +2486,13 @@ function ChatSession({
                     onOpenNavigation && styles.headerTitleWithNavigation,
                   ]}
                 >
-                  <Label
+                  <BodyText
                     numberOfLines={1}
                     accessibilityLabel={session.title || "New session"}
                     style={styles.sessionTitle}
                   >
                     {session.title || "New session"}
-                  </Label>
+                  </BodyText>
                   <View style={styles.headerSubtitle}>
                     {showHeaderActivity && (
                       <WorkingIndicator
@@ -2498,7 +2501,11 @@ function ChatSession({
                         size={12}
                       />
                     )}
-                    <Label numberOfLines={1} muted style={styles.projectLabel}>
+                    <BodyText
+                      numberOfLines={1}
+                      muted
+                      style={styles.projectLabel}
+                    >
                       {showHeaderActivity
                         ? activity.label
                         : projectLabel ||
@@ -2507,7 +2514,7 @@ function ChatSession({
                             .filter(Boolean)
                             .pop() ||
                           session.location.directory}
-                    </Label>
+                    </BodyText>
                   </View>
                 </View>
                 <View style={styles.headerTrailing}>
@@ -2545,8 +2552,10 @@ function ChatSession({
         )}
         {opencodeClient && session.revert && (
           <View style={styles.revert}>
-            <Label>A revert is staged</Label>
-            <Label muted>Later messages are excluded from the context.</Label>
+            <BodyText>A revert is staged</BodyText>
+            <BodyText muted>
+              Later messages are excluded from the context.
+            </BodyText>
             <Row>
               <Button
                 title="Restore"
@@ -2631,9 +2640,9 @@ function ChatSession({
                 <View style={{ gap: 12 }}>
                   {opencodeClient && capabilities.inbox && inbox.length > 0 && (
                     <Card>
-                      <Label muted style={styles.eyebrow}>
+                      <BodyText muted style={styles.eyebrow}>
                         PENDING INPUTS · {inbox.length}
-                      </Label>
+                      </BodyText>
                       {inbox.map((item) => (
                         <View key={item.id} style={{ gap: 8 }}>
                           {item.type === "synthetic" ? (
@@ -2646,20 +2655,20 @@ function ChatSession({
                               <MessageText text={item.payload.text} />
                             </Disclosure>
                           ) : (
-                            <Label numberOfLines={3}>
+                            <BodyText numberOfLines={3}>
                               {item.type === "user"
                                 ? item.payload.text
                                 : item.type === "compaction"
                                   ? "Compact context"
                                   : "Move session"}
-                            </Label>
+                            </BodyText>
                           )}
                           <Row>
-                            <Label muted>
+                            <BodyText muted>
                               {item.delivery === "steer"
                                 ? "Steer current work"
                                 : "After current work"}
-                            </Label>
+                            </BodyText>
                             <Button
                               disabled={pending}
                               title={
@@ -2723,7 +2732,7 @@ function ChatSession({
                     )}
                   {activityNotice && (
                     <Card>
-                      <Label muted>{activityNotice}</Label>
+                      <BodyText muted>{activityNotice}</BodyText>
                     </Card>
                   )}
                 </View>
@@ -2859,7 +2868,7 @@ function ChatSession({
                   >
                     {betaLayout && providerLabel && (
                       <>
-                        <Label
+                        <BodyText
                           numberOfLines={1}
                           style={[
                             styles.betaTriggerText,
@@ -2867,13 +2876,13 @@ function ChatSession({
                           ]}
                         >
                           {providerLabel}
-                        </Label>
-                        <Label muted style={styles.betaTriggerText}>
+                        </BodyText>
+                        <BodyText muted style={styles.betaTriggerText}>
                           /
-                        </Label>
+                        </BodyText>
                       </>
                     )}
-                    <Label
+                    <BodyText
                       numberOfLines={1}
                       style={[
                         styles.modelTriggerText,
@@ -2884,7 +2893,7 @@ function ChatSession({
                       {currentModel?.name ||
                         session.model?.id ||
                         "Server default"}
-                    </Label>
+                    </BodyText>
                     <ChatGlyph
                       name="down"
                       size={betaLayout ? 12 : 14}
@@ -2903,9 +2912,12 @@ function ChatSession({
                         pressed && { opacity: 0.6 },
                       ]}
                     >
-                      <Label numberOfLines={1} style={styles.betaTriggerText}>
+                      <BodyText
+                        numberOfLines={1}
+                        style={styles.betaTriggerText}
+                      >
                         {session.model?.variant || "Default"}
-                      </Label>
+                      </BodyText>
                       <ChatGlyph name="down" size={12} color={colors.muted} />
                     </Pressable>
                   )}
@@ -2988,9 +3000,9 @@ function ChatSession({
           title="Session"
           onClose={() => setPanel(null)}
         >
-          <Label selectable style={{ fontSize: 19, lineHeight: 26 }}>
+          <BodyText selectable style={{ fontSize: 19, lineHeight: 26 }}>
             {session.title || "New session"}
-          </Label>
+          </BodyText>
           <ErrorNotice error={error} />
           {opencodeClient &&
             (capabilities.diff ||
@@ -2998,7 +3010,7 @@ function ChatSession({
               capabilities.children ||
               capabilities.sideQuestion) && (
               <>
-                <Label muted>Tools</Label>
+                <BodyText muted>Tools</BodyText>
                 <View>
                   {capabilities.diff && (
                     <PanelLink
@@ -3036,7 +3048,7 @@ function ChatSession({
                 </View>
               </>
             )}
-          <Label muted>Configure</Label>
+          <BodyText muted>Configure</BodyText>
           <View>
             {opencodeClient && capabilities.agents && (
               <PanelLink
@@ -3062,7 +3074,7 @@ function ChatSession({
             (opencodeClient &&
               (capabilities.context || capabilities.export))) && (
             <>
-              <Label muted>Details</Label>
+              <BodyText muted>Details</BodyText>
               <View>
                 {capabilities.statistics && (
                   <PanelLink
@@ -3320,7 +3332,7 @@ function ChatSession({
                 ListHeaderComponent={
                   currentModel?.variants.length ? (
                     <View style={styles.variants}>
-                      <Label muted>Variant · {currentModel.name}</Label>
+                      <BodyText muted>Variant · {currentModel.name}</BodyText>
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -3380,13 +3392,20 @@ function ChatSession({
                       ]}
                     >
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Label numberOfLines={2} style={{ fontWeight: "500" }}>
+                        <BodyText
+                          numberOfLines={2}
+                          style={{ fontWeight: "500" }}
+                        >
                           {model.name}
-                        </Label>
-                        <Label muted numberOfLines={1} style={{ fontSize: 13 }}>
+                        </BodyText>
+                        <BodyText
+                          muted
+                          numberOfLines={1}
+                          style={{ fontSize: 13 }}
+                        >
                           {model.providerID} ·{" "}
                           {model.limit.context.toLocaleString()} context
-                        </Label>
+                        </BodyText>
                       </View>
                       <ChatIconButton
                         name="star"
@@ -3485,9 +3504,11 @@ function ChatSession({
               .filter((agent) => !agent.hidden && agent.mode !== "subagent")
               .map((agent) => (
                 <Card key={agent.id}>
-                  <Label style={{ fontWeight: "600" }}>{agent.name}</Label>
+                  <BodyText style={{ fontWeight: "600" }}>
+                    {agent.name}
+                  </BodyText>
                   {agent.description && (
-                    <Label muted>{agent.description}</Label>
+                    <BodyText muted>{agent.description}</BodyText>
                   )}
                   <Button
                     title={
@@ -3560,7 +3581,7 @@ function ChatSession({
           )}
           {capabilities.delivery && (
             <>
-              <Label muted>Message delivery</Label>
+              <BodyText muted>Message delivery</BodyText>
               <Row>
                 <Button
                   title="Steer current work"
@@ -3576,9 +3597,9 @@ function ChatSession({
             </>
           )}
           {capabilities.shell && (
-            <Label muted>
+            <BodyText muted>
               Start a message with ! to run a shell command on the server.
-            </Label>
+            </BodyText>
           )}
         </Sheet>
         <Sheet
@@ -3739,14 +3760,14 @@ function ChatSession({
           title="Commands & skills"
           onClose={() => setPanel(null)}
         >
-          <Label muted>
+          <BodyText muted>
             Commands run on the server. Skills join your next message.
-          </Label>
+          </BodyText>
           <Card>
-            <Label style={{ fontFamily: mono }}>/btw</Label>
-            <Label muted>
+            <BodyText style={{ fontFamily: mono }}>/btw</BodyText>
+            <BodyText muted>
               Ask about this session without a change to its history.
-            </Label>
+            </BodyText>
             <Button
               title="Use side question"
               compact
@@ -3759,9 +3780,9 @@ function ChatSession({
           </Card>
           {commands.map((command) => (
             <Card key={command.name}>
-              <Label style={{ fontFamily: mono }}>/{command.name}</Label>
+              <BodyText style={{ fontFamily: mono }}>/{command.name}</BodyText>
               {command.description && (
-                <Label muted>{command.description}</Label>
+                <BodyText muted>{command.description}</BodyText>
               )}
               <Button
                 title="Use command"
@@ -3775,8 +3796,10 @@ function ChatSession({
           ))}
           {skills.map((skill) => (
             <Card key={skill.id}>
-              <Label>{skill.name}</Label>
-              {skill.description && <Label muted>{skill.description}</Label>}
+              <BodyText>{skill.name}</BodyText>
+              {skill.description && (
+                <BodyText muted>{skill.description}</BodyText>
+              )}
               <Button
                 title="Attach skill"
                 compact
@@ -3803,9 +3826,9 @@ function ChatSession({
           title="Files & agents"
           onClose={() => setPanel(null)}
         >
-          <Label muted>
+          <BodyText muted>
             Attach files from the server or ask a subagent to help.
-          </Label>
+          </BodyText>
           <Field
             label="Find a server file"
             value={fileQuery}
@@ -3834,8 +3857,10 @@ function ChatSession({
             .filter((agent) => !agent.hidden)
             .map((agent) => (
               <Card key={agent.id}>
-                <Label>{agent.name}</Label>
-                {agent.description && <Label muted>{agent.description}</Label>}
+                <BodyText>{agent.name}</BodyText>
+                {agent.description && (
+                  <BodyText muted>{agent.description}</BodyText>
+                )}
                 <Button
                   title="Mention agent"
                   compact
@@ -3861,19 +3886,19 @@ function ChatSession({
           ) : diffs.length ? (
             diffs.map((diff) => (
               <Card key={diff.file}>
-                <Label style={{ fontFamily: mono }}>{diff.file}</Label>
+                <BodyText style={{ fontFamily: mono }}>{diff.file}</BodyText>
                 <Row>
-                  <Label style={{ color: colors.success }}>
+                  <BodyText style={{ color: colors.success }}>
                     +{diff.additions}
-                  </Label>
-                  <Label style={{ color: colors.danger }}>
+                  </BodyText>
+                  <BodyText style={{ color: colors.danger }}>
                     −{diff.deletions}
-                  </Label>
-                  <Label muted>{diff.status}</Label>
+                  </BodyText>
+                  <BodyText muted>{diff.status}</BodyText>
                 </Row>
                 <CodeBlock code={diff.patch} />
                 {diff.more && (
-                  <Label muted>The server truncated this diff.</Label>
+                  <BodyText muted>The server truncated this diff.</BodyText>
                 )}
               </Card>
             ))
@@ -3890,9 +3915,9 @@ function ChatSession({
             <Busy />
           ) : (
             <>
-              <Label muted>
+              <BodyText muted>
                 {context.length} messages in the current context
-              </Label>
+              </BodyText>
               {context.map((message) => (
                 <MessageRow
                   key={message.id}
@@ -4262,9 +4287,9 @@ const MessageContent = memo(
           <MessageText text={message.text} selectable={selectable} />
           {message.files?.map((file, index) => (
             <View key={index} style={{ gap: 8 }}>
-              <Label muted style={{ fontFamily: mono, fontSize: 13 }}>
+              <BodyText muted style={{ fontFamily: mono, fontSize: 13 }}>
                 ↳ {file.name || file.mime}
-              </Label>
+              </BodyText>
               {file.mime.startsWith("image/") && (
                 <Image
                   source={{ uri: `data:${file.mime};base64,${file.data}` }}
@@ -4276,9 +4301,9 @@ const MessageContent = memo(
             </View>
           ))}
           {message.skills?.map((skill) => (
-            <Label key={skill.id} muted>
+            <BodyText key={skill.id} muted>
               Skill: {skill.name}
-            </Label>
+            </BodyText>
           ))}
         </UserMessageBubble>
       );
@@ -4294,7 +4319,7 @@ const MessageContent = memo(
             selectable={selectable}
           />
           {message.output?.truncated && (
-            <Label muted>Output truncated by the server</Label>
+            <BodyText muted>Output truncated by the server</BodyText>
           )}
         </Disclosure>
       );
@@ -4314,24 +4339,24 @@ const MessageContent = memo(
     }
     if (message.type === "agent-switched") {
       return (
-        <Label muted style={styles.notice}>
+        <BodyText muted style={styles.notice}>
           Agent → {message.agent}
-        </Label>
+        </BodyText>
       );
     }
     if (message.type === "model-switched") {
       return (
-        <Label muted style={styles.notice}>
+        <BodyText muted style={styles.notice}>
           Model → {message.model.id}
           {message.model.variant ? ` · ${message.model.variant}` : ""}
-        </Label>
+        </BodyText>
       );
     }
     if (message.type === "location-switched") {
       return (
-        <Label muted style={styles.notice}>
+        <BodyText muted style={styles.notice}>
           Directory → {message.location.directory}
-        </Label>
+        </BodyText>
       );
     }
     if (message.type === "skill") {
@@ -4404,9 +4429,9 @@ function CodeBlock({
   return (
     <View style={styles.code}>
       <Row style={{ justifyContent: "space-between", paddingHorizontal: 12 }}>
-        <Label muted style={{ fontSize: 12 }}>
+        <BodyText muted style={{ fontSize: 12 }}>
           {language || "TEXT"}
-        </Label>
+        </BodyText>
         <Button
           title={copied ? "Copied" : "Copy"}
           compact
@@ -4444,7 +4469,7 @@ function PanelLink({ title, onPress }: { title: string; onPress: () => void }) {
         paddingVertical: 10,
       })}
     >
-      <Label style={{ flex: 1 }}>{title}</Label>
+      <BodyText style={{ flex: 1 }}>{title}</BodyText>
       <ShellIcon name="chevron" size={16} color={colors.muted} />
     </Pressable>
   );

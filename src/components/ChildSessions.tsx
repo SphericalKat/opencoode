@@ -11,7 +11,7 @@ import {
   Card,
   Empty,
   ErrorNotice,
-  Label,
+  BodyText,
   Row,
   confirmAction,
 } from "./ui";
@@ -346,10 +346,10 @@ export function ChildSessions({
         />
       </Row>
       <ErrorNotice error={error} onRetry={() => refreshRef.current()} />
-      <Label muted>
+      <BodyText muted>
         {running} running · {items.length}
         {cursor ? "+" : ""} child sessions
-      </Label>
+      </BodyText>
       {loading && !items.length && <Busy />}
       {!loading && !error && !items.length && (
         <Empty
@@ -371,10 +371,13 @@ export function ChildSessions({
         return (
           <Card key={item.id}>
             <Row style={{ justifyContent: "space-between" }}>
-              <Label numberOfLines={2} style={{ flex: 1, fontWeight: "500" }}>
+              <BodyText
+                numberOfLines={2}
+                style={{ flex: 1, fontWeight: "500" }}
+              >
                 {item.title || "Child session"}
-              </Label>
-              <Label
+              </BodyText>
+              <BodyText
                 style={{
                   color: isActive
                     ? colors.success
@@ -384,16 +387,16 @@ export function ChildSessions({
                 }}
               >
                 {status}
-              </Label>
+              </BodyText>
             </Row>
-            <Label muted>
+            <BodyText muted>
               {item.agent || "Server default agent"} ·{" "}
               {item.tokens.output.toLocaleString()} output tokens · $
               {item.cost.toFixed(3)}
-            </Label>
-            <Label muted style={{ fontSize: 13 }}>
+            </BodyText>
+            <BodyText muted style={{ fontSize: 13 }}>
               Updated {new Date(item.time.updated).toLocaleString()}
-            </Label>
+            </BodyText>
             <Row>
               <Button
                 title="Open session"

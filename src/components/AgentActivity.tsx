@@ -12,7 +12,7 @@ import type { AgentActivity } from "../lib/activity";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { WorkingIndicator } from "./motion";
-import { Label } from "./ui";
+import { BodyText } from "./ui";
 
 export const AgentActivityBar = memo(
   ({
@@ -89,7 +89,7 @@ export const AgentActivityBar = memo(
       <>
         {Platform.OS === "web" && (
           <View aria-live="polite" style={styles.announcement}>
-            <Label>{announcement || "Agent is ready"}</Label>
+            <BodyText>{announcement || "Agent is ready"}</BodyText>
           </View>
         )}
         {show && (
@@ -125,9 +125,9 @@ export const AgentActivityBar = memo(
                       size={14}
                     />
                   ))}
-                <Label muted numberOfLines={1} style={styles.label}>
+                <BodyText muted numberOfLines={1} style={styles.label}>
                   {label}
-                </Label>
+                </BodyText>
               </View>
               {blocked && (
                 <Pressable
@@ -136,7 +136,7 @@ export const AgentActivityBar = memo(
                   onPress={onReview}
                   style={styles.action}
                 >
-                  <Label style={styles.actionText}>Review ↓</Label>
+                  <BodyText style={styles.actionText}>Review ↓</BodyText>
                 </Pressable>
               )}
               {retry && (
@@ -147,14 +147,14 @@ export const AgentActivityBar = memo(
                   onPress={() => setShowError((value) => !value)}
                   style={styles.action}
                 >
-                  <Label muted style={styles.actionText}>
+                  <BodyText muted style={styles.actionText}>
                     {showError ? "Less" : "Details"}
-                  </Label>
+                  </BodyText>
                 </Pressable>
               )}
             </View>
             {retry && showError && (
-              <Label style={styles.retryError}>{retry.message}</Label>
+              <BodyText style={styles.retryError}>{retry.message}</BodyText>
             )}
           </View>
         )}

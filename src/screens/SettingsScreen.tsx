@@ -59,7 +59,7 @@ import {
   Field,
   Heading,
   JsonView,
-  Label,
+  BodyText,
   mono,
   sans,
   Row,
@@ -433,12 +433,12 @@ export function SettingsScreen({
                 <View style={styles.detail}>
                   {wide && (
                     <Row style={styles.detailHeader}>
-                      <Label
+                      <BodyText
                         accessibilityRole="header"
                         style={styles.detailTitle}
                       >
                         {selected}
-                      </Label>
+                      </BodyText>
                     </Row>
                   )}
                   {renderSection(selected)}
@@ -504,7 +504,7 @@ function SettingsIndex({
       {wide && (
         <View style={styles.indexHeader}>
           <Heading>Settings</Heading>
-          <Label muted>Preferences, connections, and tools</Label>
+          <BodyText muted>Preferences, connections, and tools</BodyText>
         </View>
       )}
       {sectionGroups.map((group) => {
@@ -516,9 +516,9 @@ function SettingsIndex({
         return (
           <View key={group.title} style={styles.group}>
             {!(items.length === 1 && items[0] === group.title) && (
-              <Label muted style={styles.groupTitle}>
+              <BodyText muted style={styles.groupTitle}>
                 {group.title.toUpperCase()}
-              </Label>
+              </BodyText>
             )}
             <View style={styles.groupPanel}>
               {manageServers && (
@@ -532,12 +532,12 @@ function SettingsIndex({
                   ]}
                 >
                   <View style={styles.detail}>
-                    <Label style={styles.sectionName}>Servers</Label>
-                    <Label muted style={styles.sectionDescription}>
+                    <BodyText style={styles.sectionName}>Servers</BodyText>
+                    <BodyText muted style={styles.sectionDescription}>
                       {serverLabel
                         ? `${serverLabel} · Scan or paste a link`
                         : "Scan, paste a link, or switch servers"}
-                    </Label>
+                    </BodyText>
                   </View>
                   <ShellIcon name="chevron" size={16} color={colors.muted} />
                 </Pressable>
@@ -560,14 +560,14 @@ function SettingsIndex({
                     <View pointerEvents="none" style={styles.sectionDivider} />
                   )}
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Label style={styles.sectionName}>{item}</Label>
-                    <Label
+                    <BodyText style={styles.sectionName}>{item}</BodyText>
+                    <BodyText
                       muted
                       numberOfLines={1}
                       style={styles.sectionDescription}
                     >
                       {sectionDescriptions[item]}
-                    </Label>
+                    </BodyText>
                   </View>
                   <ShellIcon name="chevron" size={16} color={colors.muted} />
                 </Pressable>
@@ -837,10 +837,10 @@ export function AppearanceSettings() {
     <>
       <View style={styles.betaAppearanceCard}>
         <View style={styles.detail}>
-          <Label style={styles.betaSettingTitle}>Palette</Label>
-          <Label muted style={styles.betaDescription}>
+          <BodyText style={styles.betaSettingTitle}>Palette</BodyText>
+          <BodyText muted style={styles.betaDescription}>
             Choose the app colors.
-          </Label>
+          </BodyText>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -851,7 +851,7 @@ export function AppearanceSettings() {
           style={styles.betaChooserTarget}
         >
           <View style={styles.betaSettingChooser}>
-            <Label style={styles.betaBackLabel}>{paletteLabel}</Label>
+            <BodyText style={styles.betaBackLabel}>{paletteLabel}</BodyText>
             <View style={{ transform: [{ rotate: "90deg" }] }}>
               <ShellIcon name="chevron" size={12} color={colors.text} />
             </View>
@@ -893,11 +893,11 @@ export function AppearanceSettings() {
                 .finally(() => setBusy(false));
             }}
           >
-            <Label style={[styles.betaBackLabel, styles.detail]}>
+            <BodyText style={[styles.betaBackLabel, styles.detail]}>
               {option.name}
-            </Label>
+            </BodyText>
             {palette === option.id && (
-              <Label accessibilityElementsHidden>✓</Label>
+              <BodyText accessibilityElementsHidden>✓</BodyText>
             )}
           </Pressable>
         ))}
@@ -915,10 +915,10 @@ export function AppearanceSettings() {
       <Page error={error}>
         <View style={styles.betaAppearanceCard}>
           <View style={styles.detail}>
-            <Label style={styles.betaSettingTitle}>Color scheme</Label>
-            <Label muted style={styles.betaDescription}>
+            <BodyText style={styles.betaSettingTitle}>Color scheme</BodyText>
+            <BodyText muted style={styles.betaDescription}>
               Choose the color scheme for the app.
-            </Label>
+            </BodyText>
           </View>
           <Pressable
             accessibilityRole="button"
@@ -932,7 +932,7 @@ export function AppearanceSettings() {
               {busy ? (
                 <ActivityIndicator size="small" color={colors.muted} />
               ) : (
-                <Label style={styles.betaBackLabel}>{choiceLabel}</Label>
+                <BodyText style={styles.betaBackLabel}>{choiceLabel}</BodyText>
               )}
               <View style={{ transform: [{ rotate: "90deg" }] }}>
                 <ShellIcon name="chevron" size={12} color={colors.text} />
@@ -982,15 +982,15 @@ export function AppearanceSettings() {
                   .finally(() => setBusy(false));
               }}
             >
-              <Label style={[styles.betaBackLabel, styles.detail]}>
+              <BodyText style={[styles.betaBackLabel, styles.detail]}>
                 {value === "system"
                   ? "System"
                   : value === "light"
                     ? "Light"
                     : "Dark"}
-              </Label>
+              </BodyText>
               {appearance === value && (
-                <Label accessibilityElementsHidden>✓</Label>
+                <BodyText accessibilityElementsHidden>✓</BodyText>
               )}
             </Pressable>
           ))}
@@ -1000,7 +1000,9 @@ export function AppearanceSettings() {
   }
   return (
     <Page error={error}>
-      <Label muted>Use your device theme or choose a fixed color scheme.</Label>
+      <BodyText muted>
+        Use your device theme or choose a fixed color scheme.
+      </BodyText>
       {(["system", "light", "dark"] as const).map((value) => (
         <Button
           key={value}
@@ -1019,7 +1021,7 @@ export function AppearanceSettings() {
           }}
         />
       ))}
-      <Label muted>Current theme: {scheme}</Label>
+      <BodyText muted>Current theme: {scheme}</BodyText>
       {palettePicker}
     </Page>
   );
@@ -1094,19 +1096,19 @@ function Accounts({
       </Row>
       <ErrorNotice error={actionError} />
       {!!data?.credentials.length && (
-        <Label style={styles.sectionLabel}>SAVED ACCOUNTS</Label>
+        <BodyText style={styles.sectionLabel}>SAVED ACCOUNTS</BodyText>
       )}
       {data?.credentials.map((item) => (
         <Card key={item.id}>
           <Row style={{ justifyContent: "space-between" }}>
             <View style={{ flex: 1 }}>
-              <Label style={styles.name}>
+              <BodyText style={styles.name}>
                 {item.label || item.integrationID}
-              </Label>
-              <Label muted>
+              </BodyText>
+              <BodyText muted>
                 {item.integrationID} · {item.value.type}
                 {item.active ? " · Active" : ""}
-              </Label>
+              </BodyText>
             </View>
             <Button
               title="Manage"
@@ -1120,36 +1122,36 @@ function Accounts({
           </Row>
         </Card>
       ))}
-      <Label style={styles.sectionLabel}>CONNECT AN ACCOUNT</Label>
+      <BodyText style={styles.sectionLabel}>CONNECT AN ACCOUNT</BodyText>
       {integrations.slice(0, limit).map((item) => (
         <Card key={item.id}>
           <Row style={{ justifyContent: "space-between" }}>
             <View style={{ flex: 1 }}>
-              <Label style={styles.name}>{item.name}</Label>
-              <Label muted>
+              <BodyText style={styles.name}>{item.name}</BodyText>
+              <BodyText muted>
                 {item.connections.length
                   ? `${item.connections.length} connection${item.connections.length === 1 ? "" : "s"}`
                   : "Not connected"}
-              </Label>
+              </BodyText>
             </View>
             <Button title="Connect" compact onPress={() => setSelected(item)} />
           </Row>
           {item.connections.map(
             (connection, index) =>
               connection.status && (
-                <Label key={index} style={{ color: colors.danger }}>
+                <BodyText key={index} style={{ color: colors.danger }}>
                   {connection.status.message}
-                </Label>
+                </BodyText>
               )
           )}
         </Card>
       ))}
       {integrations.length > limit && (
         <>
-          <Label muted>
+          <BodyText muted>
             Showing {limit} of {integrations.length} integrations. Search or
             load more.
-          </Label>
+          </BodyText>
           <Button
             title="Load more integrations"
             onPress={() => setLimit((value) => value + 40)}
@@ -1185,7 +1187,7 @@ function Accounts({
         }}
       >
         <ErrorNotice error={actionError} />
-        <Label muted>{credential?.integrationID}</Label>
+        <BodyText muted>{credential?.integrationID}</BodyText>
         <Field
           label="Account name"
           value={label}
@@ -1421,10 +1423,10 @@ function ConnectIntegration({
       <ErrorNotice error={error} />
       {!attempt && (
         <>
-          <Label muted>
+          <BodyText muted>
             Choose a connection method. Credentials stay on your OpenCode
             server.
-          </Label>
+          </BodyText>
           {integration.methods.map((item, index) => (
             <Button
               key={index}
@@ -1446,10 +1448,10 @@ function ConnectIntegration({
             />
           ))}
           {method?.type === "env" && (
-            <Label muted>
+            <BodyText muted>
               Set these environment variables on the server, then restart
               OpenCode.
-            </Label>
+            </BodyText>
           )}
           {method && method.type !== "env" && (
             <>
@@ -1476,12 +1478,12 @@ function ConnectIntegration({
               )}
               {method.type === "command" && (
                 <Card>
-                  <Label muted>
+                  <BodyText muted>
                     This starts the sign-in command on your server.
-                  </Label>
-                  <Label style={{ fontFamily: mono }}>
+                  </BodyText>
+                  <BodyText style={{ fontFamily: mono }}>
                     {method.command.join(" ")}
-                  </Label>
+                  </BodyText>
                 </Card>
               )}
               <Button
@@ -1499,12 +1501,12 @@ function ConnectIntegration({
       )}
       {attempt && (
         <>
-          <Label style={styles.name}>
+          <BodyText style={styles.name}>
             {status === "pending" ? "Complete the sign-in" : status}
-          </Label>
+          </BodyText>
           {attempt.kind === "oauth" && (
             <>
-              <Label>{attempt.data.instructions}</Label>
+              <BodyText>{attempt.data.instructions}</BodyText>
               <Button
                 title="Open sign-in page"
                 onPress={() => void open(attempt.data.url)}
@@ -1538,10 +1540,10 @@ function ConnectIntegration({
             </>
           )}
           {attempt.kind === "command" && (
-            <Label muted>
+            <BodyText muted>
               Complete any browser or terminal steps on the server. This page
               checks the result automatically.
-            </Label>
+            </BodyText>
           )}
           <Button title="Check status" compact onPress={() => void check()} />
           <Button
@@ -1638,22 +1640,22 @@ function Models({
           />
         )}
       </Row>
-      <Label muted>
+      <BodyText muted>
         Select a model inside a chat to use it.
         {client
           ? " Edit configuration to change server defaults or custom providers."
           : ""}
-      </Label>
-      <Label style={styles.sectionLabel}>{models.length} MODELS</Label>
+      </BodyText>
+      <BodyText style={styles.sectionLabel}>{models.length} MODELS</BodyText>
       {models.slice(0, limit).map((item) => (
         <Card key={`${item.providerID}/${item.id}`}>
           <Row style={{ justifyContent: "space-between" }}>
             <View style={{ flex: 1 }}>
-              <Label style={styles.name}>{item.name}</Label>
-              <Label muted>
+              <BodyText style={styles.name}>{item.name}</BodyText>
+              <BodyText muted>
                 {item.providerID} ·{" "}
                 {item.enabled ? "Available" : "Not connected"}
-              </Label>
+              </BodyText>
             </View>
             <Button title="Details" compact onPress={() => setSelected(item)} />
           </Row>
@@ -1661,9 +1663,9 @@ function Models({
       ))}
       {models.length > limit && (
         <>
-          <Label muted>
+          <BodyText muted>
             Showing {limit} of {models.length} models.
-          </Label>
+          </BodyText>
           <Button
             title="Load more models"
             onPress={() => setLimit((value) => value + 40)}
@@ -1693,10 +1695,10 @@ function Models({
         <Disclosure title={`Providers (${data?.providers?.length ?? 0})`}>
           {data?.providers?.map((item) => (
             <View key={item.id} style={{ gap: 4 }}>
-              <Label>{item.name}</Label>
-              <Label muted>
+              <BodyText>{item.name}</BodyText>
+              <BodyText muted>
                 {item.id} · {item.activation}
-              </Label>
+              </BodyText>
             </View>
           ))}
         </Disclosure>
@@ -1708,20 +1710,20 @@ function Models({
       >
         {selected && (
           <>
-            <Label muted>
+            <BodyText muted>
               {selected.providerID}/{selected.id}
-            </Label>
-            <Label>
+            </BodyText>
+            <BodyText>
               Context: {selected.limit.context.toLocaleString()} tokens
               {client
                 ? ` · Output: ${selected.limit.output.toLocaleString()} tokens`
                 : ""}
-            </Label>
-            <Label>
+            </BodyText>
+            <BodyText>
               Variants:{" "}
               {selected.variants.map((item) => item.id).join(", ") ||
                 (client ? "Default" : "Unavailable")}
-            </Label>
+            </BodyText>
             {client ? (
               <>
                 <Disclosure title="Capabilities">
@@ -1732,9 +1734,9 @@ function Models({
                 </Disclosure>
               </>
             ) : (
-              <Label muted>
+              <BodyText muted>
                 Output limits and prices are unavailable from this server.
-              </Label>
+              </BodyText>
             )}
             <Disclosure title="Details">
               <JsonView value={details} />
@@ -1810,10 +1812,10 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
         <Card key={item.name}>
           <Row style={{ justifyContent: "space-between" }}>
             <View style={{ flex: 1 }}>
-              <Label style={styles.name}>{item.title || item.name}</Label>
-              <Label muted>
+              <BodyText style={styles.name}>{item.title || item.name}</BodyText>
+              <BodyText muted>
                 {item.name} · {item.status.status.replace("_", " ")}
-              </Label>
+              </BodyText>
             </View>
             <Button
               title={
@@ -1834,13 +1836,15 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
             />
           </Row>
           {"error" in item.status && (
-            <Label style={{ color: colors.danger }}>{item.status.error}</Label>
+            <BodyText style={{ color: colors.danger }}>
+              {item.status.error}
+            </BodyText>
           )}
           {item.status.status === "needs_auth" && (
-            <Label muted>
+            <BodyText muted>
               Connect its account in the Accounts tab. The integration name is{" "}
               {item.integrationID || item.name}.
-            </Label>
+            </BodyText>
           )}
           <Button
             title="Remove"
@@ -1928,7 +1932,7 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
               onChangeText={setCommand}
               placeholder='["npx", "-y", "your-mcp-server"]'
             />
-            <Label muted>The command runs on the OpenCode server.</Label>
+            <BodyText muted>The command runs on the OpenCode server.</BodyText>
           </>
         )}
         <Button
@@ -2026,12 +2030,14 @@ function Configuration({
   };
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Label muted>
+      <BodyText muted>
         These files define agents, models, providers, permissions, tools, and
         other server options.
-      </Label>
+      </BodyText>
       <ErrorNotice error={errorAction} />
-      {notice && <Label style={{ color: colors.success }}>{notice}</Label>}
+      {notice && (
+        <BodyText style={{ color: colors.success }}>{notice}</BodyText>
+      )}
       <Button
         title="Reload server configuration"
         busy={busy}
@@ -2073,14 +2079,14 @@ function Configuration({
       />
       {data?.entries.map((entry, index) => (
         <Card key={index}>
-          <Label style={{ fontFamily: mono, fontSize: 13 }}>
+          <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
             {entry.path || "Runtime configuration"}
-          </Label>
-          <Label muted>
+          </BodyText>
+          <BodyText muted>
             {entry.type === "directory"
               ? "Configuration directory"
               : "Configuration document"}
-          </Label>
+          </BodyText>
           {entry.type === "document" && (
             <>
               <Disclosure title="Read effective values">
@@ -2114,9 +2120,9 @@ function Configuration({
         </Card>
       ))}
       <Disclosure title="Default shell">
-        <Label muted>
+        <BodyText muted>
           This sets the shell for commands on your OpenCode server.
-        </Label>
+        </BodyText>
         <Button
           title="Use system default"
           busy={busy}
@@ -2173,9 +2179,9 @@ function Configuration({
           }
         }}
       >
-        <Label style={{ fontFamily: mono, fontSize: 13 }}>
+        <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
           {editing?.path}
-        </Label>
+        </BodyText>
         <ErrorNotice error={errorAction} />
         <Field
           label="JSON or JSONC"
@@ -2264,12 +2270,16 @@ function Skills({ client, directory }: { client: Client; directory: string }) {
           />
         )}
       </Row>
-      <Label muted>Use slash commands and skills from the chat composer.</Label>
-      <Label style={styles.sectionLabel}>SKILLS · {skills.length}</Label>
+      <BodyText muted>
+        Use slash commands and skills from the chat composer.
+      </BodyText>
+      <BodyText style={styles.sectionLabel}>SKILLS · {skills.length}</BodyText>
       {skills.map((item) => (
         <Disclosure key={item.id} title={item.name}>
-          <Label muted>{item.description}</Label>
-          <Label style={{ fontFamily: mono, fontSize: 13 }}>{item.path}</Label>
+          <BodyText muted>{item.description}</BodyText>
+          <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
+            {item.path}
+          </BodyText>
           <Text
             selectable
             style={{ color: colors.text, fontSize: 15, lineHeight: 22 }}
@@ -2278,11 +2288,13 @@ function Skills({ client, directory }: { client: Client; directory: string }) {
           </Text>
         </Disclosure>
       ))}
-      <Label style={styles.sectionLabel}>COMMANDS · {commands.length}</Label>
+      <BodyText style={styles.sectionLabel}>
+        COMMANDS · {commands.length}
+      </BodyText>
       {commands.map((item) => (
         <Card key={item.name}>
-          <Label style={styles.name}>/{item.name}</Label>
-          <Label muted>{item.description}</Label>
+          <BodyText style={styles.name}>/{item.name}</BodyText>
+          <BodyText muted>{item.description}</BodyText>
         </Card>
       ))}
       {data &&
@@ -2328,11 +2340,13 @@ function Plugins({ client, directory }: { client: Client; directory: string }) {
   };
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Label muted>
+      <BodyText muted>
         Edit the plugins list in your configuration to add or disable a plugin.
-      </Label>
+      </BodyText>
       <ErrorNotice error={errorAction} />
-      {notice && <Label style={{ color: colors.success }}>{notice}</Label>}
+      {notice && (
+        <BodyText style={{ color: colors.success }}>{notice}</BodyText>
+      )}
       <Button
         title="Check package updates"
         busy={busy}
@@ -2349,22 +2363,24 @@ function Plugins({ client, directory }: { client: Client; directory: string }) {
       />
       {data?.map((item, index) => (
         <Card key={`${item.id}:${index}`}>
-          <Label style={styles.name}>
+          <BodyText style={styles.name}>
             {item.id ||
               (item.source.type === "package" ? item.source.target : "Plugin")}
-          </Label>
-          <Label muted>
+          </BodyText>
+          <BodyText muted>
             {item.source.type} · {item.state.status}
-          </Label>
+          </BodyText>
           {item.state.status === "failed" && (
-            <Label style={{ color: colors.danger }}>{item.state.error}</Label>
+            <BodyText style={{ color: colors.danger }}>
+              {item.state.error}
+            </BodyText>
           )}
           {item.source.type === "package" && (
             <>
-              <Label muted>
+              <BodyText muted>
                 {item.source.target}
                 {item.source.version ? ` · ${item.source.version}` : ""}
-              </Label>
+              </BodyText>
               <Button
                 title={
                   item.source.outdated
@@ -2392,17 +2408,17 @@ function Plugins({ client, directory }: { client: Client; directory: string }) {
               />
             </>
           )}
-          <Label muted>
+          <BodyText muted>
             {Object.entries(item.features)
               .filter(([, enabled]) => enabled)
               .map(([feature]) => feature)
               .join(" · ")}
-          </Label>
+          </BodyText>
           {item.features.gui && (
-            <Label muted>
+            <BodyText muted>
               This plugin includes a desktop web interface. Its tools and
               commands remain available through the server.
-            </Label>
+            </BodyText>
           )}
         </Card>
       ))}
@@ -2454,15 +2470,15 @@ function Permissions({
   };
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Label muted>
+      <BodyText muted>
         These are the approvals that you saved with “Always allow” in this
         project.
-      </Label>
+      </BodyText>
       <ErrorNotice error={errorAction} />
       {data?.map((item) => (
         <Card key={item.id}>
-          <Label style={styles.name}>{item.action}</Label>
-          <Label style={{ fontFamily: mono }}>{item.resource}</Label>
+          <BodyText style={styles.name}>{item.action}</BodyText>
+          <BodyText style={{ fontFamily: mono }}>{item.resource}</BodyText>
           <Row>
             <Button
               title="Edit"

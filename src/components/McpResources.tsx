@@ -16,7 +16,7 @@ import {
   Empty,
   ErrorNotice,
   Field,
-  Label,
+  BodyText,
   mono,
   Row,
   sans,
@@ -102,7 +102,9 @@ export function McpResources({ client, location, onAttachContext }: Props) {
   return (
     <View style={{ gap: 14 }}>
       <Row style={{ justifyContent: "space-between" }}>
-        <Label style={{ fontSize: 18, fontWeight: "600" }}>MCP resources</Label>
+        <BodyText style={{ fontSize: 18, fontWeight: "600" }}>
+          MCP resources
+        </BodyText>
         <Button
           title="Refresh resources"
           compact
@@ -111,10 +113,10 @@ export function McpResources({ client, location, onAttachContext }: Props) {
           onPress={() => void refresh()}
         />
       </Row>
-      <Label muted>
+      <BodyText muted>
         OpenCode supplies catalog metadata here. Add a reference to your draft.
         The agent can resolve it if its server tools support resource reads.
-      </Label>
+      </BodyText>
       <Field
         label="Find a resource"
         placeholder="Name, server, or URI"
@@ -142,9 +144,9 @@ export function McpResources({ client, location, onAttachContext }: Props) {
         )}
       {matches.length > limit && (
         <>
-          <Label muted>
+          <BodyText muted>
             Showing {limit} of {matches.length} matches
-          </Label>
+          </BodyText>
           <Button
             title="Load more resources"
             onPress={() => setLimit((value) => value + 15)}
@@ -175,11 +177,11 @@ function ResourceCard({
   const { colors } = useTheme();
   return (
     <Card>
-      <Label style={{ fontWeight: "600" }}>{resource.name}</Label>
-      <Label muted>
+      <BodyText style={{ fontWeight: "600" }}>{resource.name}</BodyText>
+      <BodyText muted>
         {resource.server}
         {resource.mimeType ? ` · ${resource.mimeType}` : ""}
-      </Label>
+      </BodyText>
       <Text
         selectable
         style={{
@@ -221,8 +223,8 @@ function TemplateCard({
   const unresolved = /[{}]/.test(uri);
   return (
     <Card>
-      <Label style={{ fontWeight: "600" }}>{resource.name}</Label>
-      <Label muted>{resource.server} · Resource template</Label>
+      <BodyText style={{ fontWeight: "600" }}>{resource.name}</BodyText>
+      <BodyText muted>{resource.server} · Resource template</BodyText>
       <Text
         selectable
         style={{
@@ -234,20 +236,22 @@ function TemplateCard({
       >
         {resource.uriTemplate}
       </Text>
-      {resource.description && <Label muted>{resource.description}</Label>}
+      {resource.description && (
+        <BodyText muted>{resource.description}</BodyText>
+      )}
       <Field
         label={`Resource URI for ${resource.name}`}
         value={uri}
         onChangeText={setUri}
         placeholder="Enter a complete URI from this template"
       />
-      <Label muted>
+      <BodyText muted>
         Replace each template parameter with the value that you need.
-      </Label>
+      </BodyText>
       {unresolved && (
-        <Label style={{ color: colors.danger }}>
+        <BodyText style={{ color: colors.danger }}>
           Replace all template parameters before you add the reference.
-        </Label>
+        </BodyText>
       )}
       <Button
         title="Add template reference"

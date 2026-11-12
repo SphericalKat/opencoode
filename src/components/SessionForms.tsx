@@ -16,7 +16,7 @@ import {
   ErrorNotice,
   Field,
   Heading,
-  Label,
+  BodyText,
   Row,
   mono,
 } from "./ui";
@@ -65,13 +65,15 @@ export function DynamicFields({
         const value = values[field.key];
         return (
           <View key={field.key} style={{ gap: 8 }}>
-            <Label style={{ fontWeight: "600" }}>{label}</Label>
-            {field.description && <Label muted>{field.description}</Label>}
+            <BodyText style={{ fontWeight: "600" }}>{label}</BodyText>
+            {field.description && (
+              <BodyText muted>{field.description}</BodyText>
+            )}
             {field.type === "external" ? (
               <>
-                <Label muted style={{ fontFamily: mono, fontSize: 13 }}>
+                <BodyText muted style={{ fontFamily: mono, fontSize: 13 }}>
                   {field.url}
-                </Label>
+                </BodyText>
                 <Button
                   title="Open link"
                   onPress={() => void open(field.url)}
@@ -230,9 +232,9 @@ export function DynamicFields({
               />
             )}
             {errors[field.key] && (
-              <Label style={{ color: colors.danger }}>
+              <BodyText style={{ color: colors.danger }}>
                 {errors[field.key]}
-              </Label>
+              </BodyText>
             )}
           </View>
         );
@@ -363,18 +365,18 @@ function PendingPermission({
   };
   return (
     <Card style={{ borderColor: colors.success }}>
-      <Label style={{ color: colors.success, fontWeight: "600" }}>
+      <BodyText style={{ color: colors.success, fontWeight: "600" }}>
         Permission required
-      </Label>
+      </BodyText>
       <Heading>{permission.action}</Heading>
-      {permission.message && <Label>{permission.message}</Label>}
+      {permission.message && <BodyText>{permission.message}</BodyText>}
       {permission.resources.map((resource, index) => (
-        <Label
+        <BodyText
           key={`${index}-${resource}`}
           style={{ fontFamily: mono, fontSize: 13 }}
         >
           {resource}
-        </Label>
+        </BodyText>
       ))}
       <Field
         label="Reply message (optional)"
@@ -403,9 +405,9 @@ function PendingPermission({
         />
       </Row>
       {permission.save && permission.save.length > 0 && (
-        <Label muted>
+        <BodyText muted>
           Always allow saves permission for: {permission.save.join(", ")}
-        </Label>
+        </BodyText>
       )}
     </Card>
   );

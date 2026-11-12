@@ -12,7 +12,7 @@ import {
   Card,
   ErrorNotice,
   Field,
-  Label,
+  BodyText,
   Row,
   confirmAction,
 } from "./ui";
@@ -144,10 +144,10 @@ export function Schedules({
 
   return (
     <View style={{ gap: 14 }}>
-      <Label muted>
+      <BodyText muted>
         Schedules run on the server. They need OpenCode 2.2.1 or later and
         experimental.schedules in this session configuration.
-      </Label>
+      </BodyText>
       <Row>
         <Button
           title={adding ? "Cancel new schedule" : "+ Schedule prompt"}
@@ -172,7 +172,7 @@ export function Schedules({
       />
       {loading && <Busy />}
       {!loading && !error && items.length === 0 && (
-        <Label muted>No schedules for this session</Label>
+        <BodyText muted>No schedules for this session</BodyText>
       )}
       {adding && (
         <Card>
@@ -252,10 +252,10 @@ export function Schedules({
                 value={draft.until}
                 onChangeText={(value) => change("until", value)}
               />
-              <Label muted>
+              <BodyText muted>
                 The schedule stops at the first limit. Without limits, it
                 repeats until you pause or delete it.
-              </Label>
+              </BodyText>
             </>
           )}
           <Button
@@ -280,24 +280,24 @@ export function Schedules({
       )}
       {items.map((item) => (
         <Card key={item.id}>
-          <Label style={{ fontSize: 17, fontWeight: "600" }}>
+          <BodyText style={{ fontSize: 17, fontWeight: "600" }}>
             {item.name || "Scheduled prompt"}
-          </Label>
-          <Label>
+          </BodyText>
+          <BodyText>
             {triggerLabel(item)} · {item.tz}
-          </Label>
-          <Label muted>
+          </BodyText>
+          <BodyText muted>
             {item.status} · {item.runCount} runs
             {item.remainingRuns === undefined
               ? ""
               : ` · ${item.remainingRuns} remaining`}
-          </Label>
+          </BodyText>
           {item.nextDueAt !== undefined && (
-            <Label muted>
+            <BodyText muted>
               Next: {new Date(item.nextDueAt).toLocaleString()}
-            </Label>
+            </BodyText>
           )}
-          <Label numberOfLines={3}>{item.action.prompt}</Label>
+          <BodyText numberOfLines={3}>{item.action.prompt}</BodyText>
           <Row>
             <Button
               title="Details"
@@ -363,22 +363,22 @@ export function Schedules({
           </Row>
           {detail?.id === item.id && (
             <View style={{ gap: 8 }}>
-              <Label selectable>{detail.action.prompt}</Label>
-              <Label muted>Current status: {detail.status}</Label>
+              <BodyText selectable>{detail.action.prompt}</BodyText>
+              <BodyText muted>Current status: {detail.status}</BodyText>
               {detail.lastFiredAt !== undefined && (
-                <Label muted>
+                <BodyText muted>
                   Last run: {new Date(detail.lastFiredAt).toLocaleString()} ·{" "}
                   {detail.lastOutcome || "No outcome reported"}
-                </Label>
+                </BodyText>
               )}
               {detail.endsAt !== undefined && (
-                <Label muted>
+                <BodyText muted>
                   Ends: {new Date(detail.endsAt).toLocaleString()}
-                </Label>
+                </BodyText>
               )}
-              <Label selectable muted>
+              <BodyText selectable muted>
                 {detail.id}
-              </Label>
+              </BodyText>
               <Button
                 title="Hide details"
                 compact

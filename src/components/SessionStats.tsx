@@ -2,7 +2,7 @@ import type { SessionInfo } from "@opencode/client";
 import React from "react";
 import { View } from "react-native";
 
-import { Card, Label, Row } from "./ui";
+import { Card, BodyText, Row } from "./ui";
 
 export function SessionStats({
   session,
@@ -20,42 +20,44 @@ export function SessionStats({
   ] as const;
   return (
     <View style={{ gap: 14 }}>
-      <Label muted>Usage totals recorded by the server for this session.</Label>
+      <BodyText muted>
+        Usage totals recorded by the server for this session.
+      </BodyText>
       <Card>
         <Row style={{ justifyContent: "space-between" }}>
-          <Label>Cost</Label>
-          <Label style={{ fontSize: 23, fontWeight: "500" }}>
+          <BodyText>Cost</BodyText>
+          <BodyText style={{ fontSize: 23, fontWeight: "500" }}>
             ${session.cost.toFixed(4)}
-          </Label>
+          </BodyText>
         </Row>
         {usage.map(([name, value]) => (
           <Row key={name} style={{ justifyContent: "space-between" }}>
-            <Label muted>{name}</Label>
-            <Label>{value.toLocaleString()}</Label>
+            <BodyText muted>{name}</BodyText>
+            <BodyText>{value.toLocaleString()}</BodyText>
           </Row>
         ))}
       </Card>
       <Card>
         <Row style={{ justifyContent: "space-between" }}>
-          <Label muted>Status</Label>
-          <Label>{running ? "Running" : session.outcome || "Idle"}</Label>
+          <BodyText muted>Status</BodyText>
+          <BodyText>{running ? "Running" : session.outcome || "Idle"}</BodyText>
         </Row>
-        <Label muted>Agent</Label>
-        <Label>{session.agent || "Server default"}</Label>
-        <Label muted>Model</Label>
-        <Label>
+        <BodyText muted>Agent</BodyText>
+        <BodyText>{session.agent || "Server default"}</BodyText>
+        <BodyText muted>Model</BodyText>
+        <BodyText>
           {session.model
             ? `${session.model.providerID} / ${session.model.id}${session.model.variant ? ` · ${session.model.variant}` : ""}`
             : "Server default"}
-        </Label>
-        <Label muted>Created</Label>
-        <Label>{new Date(session.time.created).toLocaleString()}</Label>
-        <Label muted>Last updated</Label>
-        <Label>{new Date(session.time.updated).toLocaleString()}</Label>
+        </BodyText>
+        <BodyText muted>Created</BodyText>
+        <BodyText>{new Date(session.time.created).toLocaleString()}</BodyText>
+        <BodyText muted>Last updated</BodyText>
+        <BodyText>{new Date(session.time.updated).toLocaleString()}</BodyText>
         {session.time.idle !== undefined && (
           <>
-            <Label muted>Last idle</Label>
-            <Label>{new Date(session.time.idle).toLocaleString()}</Label>
+            <BodyText muted>Last idle</BodyText>
+            <BodyText>{new Date(session.time.idle).toLocaleString()}</BodyText>
           </>
         )}
       </Card>

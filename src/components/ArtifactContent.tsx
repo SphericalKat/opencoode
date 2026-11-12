@@ -9,7 +9,7 @@ import type { Client } from "../lib/client";
 import { useNativePresentation } from "../lib/sheets";
 import { useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import { Button, ErrorNotice, Label, Row, Sheet } from "./ui";
+import { Button, ErrorNotice, BodyText, Row, Sheet } from "./ui";
 
 interface Props {
   content: ToolFileContent;
@@ -267,14 +267,14 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
           </Pressable>
         ) : (
           <View style={styles.placeholder}>
-            <Label muted accessibilityRole="status">
+            <BodyText muted accessibilityRole="status">
               {busy ? "Loading image…" : "Image unavailable"}
-            </Label>
+            </BodyText>
           </View>
         )}
-        <Label numberOfLines={2} style={styles.mime}>
+        <BodyText numberOfLines={2} style={styles.mime}>
           {filename}
-        </Label>
+        </BodyText>
         <ErrorNotice error={error} />
         {!preview && (
           <Row>
@@ -326,12 +326,12 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
 
   return (
     <View style={styles.container}>
-      <Label numberOfLines={2} style={styles.name}>
+      <BodyText numberOfLines={2} style={styles.name}>
         {filename}
-      </Label>
-      <Label muted style={styles.mime}>
+      </BodyText>
+      <BodyText muted style={styles.mime}>
         {content.mime}
-      </Label>
+      </BodyText>
       {target ? (
         <>
           {preview && (
@@ -378,7 +378,7 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
           </Row>
         </>
       ) : (
-        <Label muted>This attachment URI is not supported.</Label>
+        <BodyText muted>This attachment URI is not supported.</BodyText>
       )}
       <ErrorNotice error={error} />
     </View>

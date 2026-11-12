@@ -5,7 +5,7 @@ import { AppState, View } from "react-native";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { Markdown } from "./Markdown";
-import { Button, Card, ErrorNotice, Field, Label, Row } from "./ui";
+import { Button, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
 export function SideQuestion({
   client,
@@ -126,10 +126,10 @@ export function SideQuestion({
 
   return (
     <View style={{ gap: 18 }}>
-      <Label muted>
+      <BodyText muted>
         Ask a question with the current session context. OpenCode returns a
         separate answer without a change to the session history.
-      </Label>
+      </BodyText>
       <Field
         label="Side question"
         multiline
@@ -150,11 +150,11 @@ export function SideQuestion({
       <ErrorNotice error={error} />
       {answer && (
         <Card>
-          <Label muted>{answer.question}</Label>
+          <BodyText muted>{answer.question}</BodyText>
           {answer.text ? (
             <Markdown text={answer.text} />
           ) : (
-            <Label muted>OpenCode returned an empty answer.</Label>
+            <BodyText muted>OpenCode returned an empty answer.</BodyText>
           )}
           <Row>
             <Button

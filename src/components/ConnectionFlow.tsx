@@ -30,7 +30,7 @@ import {
   ErrorNotice,
   Field,
   Heading,
-  Label,
+  BodyText,
   mono,
   Row,
   touchTarget,
@@ -406,9 +406,9 @@ export function ConnectionFlow({
   const savedServers = !!connections.length && (
     <View style={styles.saved}>
       <Row style={{ justifyContent: "space-between" }}>
-        <Label muted style={styles.instruction}>
+        <BodyText muted style={styles.instruction}>
           Your servers
-        </Label>
+        </BodyText>
         {step === "servers" ? (
           <Button
             title="Add server"
@@ -440,26 +440,26 @@ export function ConnectionFlow({
           >
             <ShellIcon name="server" color={colors.muted} size={20} />
             <View style={styles.serverText}>
-              <Label numberOfLines={1} style={styles.serverName}>
+              <BodyText numberOfLines={1} style={styles.serverName}>
                 {connection.name}
-              </Label>
-              <Label
+              </BodyText>
+              <BodyText
                 muted
                 numberOfLines={1}
                 ellipsizeMode="middle"
                 style={styles.small}
               >
                 {connection.url}
-              </Label>
+              </BodyText>
             </View>
             {unavailableID === connection.id ? (
-              <Label style={[styles.small, { color: colors.danger }]}>
+              <BodyText style={[styles.small, { color: colors.danger }]}>
                 Retry
-              </Label>
+              </BodyText>
             ) : activeID === connection.id ? (
-              <Label muted style={styles.small}>
+              <BodyText muted style={styles.small}>
                 Current
-              </Label>
+              </BodyText>
             ) : (
               <ShellIcon name="chevron" color={colors.faint} size={16} />
             )}
@@ -512,7 +512,7 @@ export function ConnectionFlow({
       {back && <View style={styles.back}>{back}</View>}
       {unavailableID && step === "home" && error && !localError ? (
         <Card>
-          <Label accessibilityRole="alert">{error}</Label>
+          <BodyText accessibilityRole="alert">{error}</BodyText>
         </Card>
       ) : (
         <ErrorNotice error={localError || error} />
@@ -533,12 +533,12 @@ export function ConnectionFlow({
       {submission || connecting ? (
         <Card>
           <Busy />
-          <Label style={styles.center}>
+          <BodyText style={styles.center}>
             Connecting to {serverName(submission?.[0]?.url || form.url)}
-          </Label>
-          <Label muted style={styles.center}>
+          </BodyText>
+          <BodyText muted style={styles.center}>
             Opening your workspace
-          </Label>
+          </BodyText>
         </Card>
       ) : step === "servers" ? (
         savedServers
@@ -548,12 +548,12 @@ export function ConnectionFlow({
             <View style={styles.betaLogo}>
               <OpenCodeLogo width={160} />
             </View>
-            <Label accessibilityRole="header" style={styles.betaTitle}>
+            <BodyText accessibilityRole="header" style={styles.betaTitle}>
               Connect to a server
-            </Label>
-            <Label muted style={styles.betaHint}>
+            </BodyText>
+            <BodyText muted style={styles.betaHint}>
               Paste a pairing link from your computer, or scan its QR code.
-            </Label>
+            </BodyText>
           </View>
           <Field
             label="Pairing link"
@@ -587,9 +587,9 @@ export function ConnectionFlow({
             />
           </View>
           <Row style={styles.betaPassword}>
-            <Label muted style={styles.betaHint}>
+            <BodyText muted style={styles.betaHint}>
               No pairing link?
-            </Label>
+            </BodyText>
             <Button
               title="Use password"
               variant="ghost"
@@ -602,14 +602,14 @@ export function ConnectionFlow({
             />
           </Row>
           <View style={styles.betaInstructions}>
-            <Label muted style={styles.betaHint}>
+            <BodyText muted style={styles.betaHint}>
               OpenCode: run this on the server computer. Pi: use /mobile in an
               active session with the companion extension installed.
-            </Label>
+            </BodyText>
             <View style={styles.betaCommand}>
-              <Label selectable style={styles.command}>
+              <BodyText selectable style={styles.command}>
                 opencode pair
-              </Label>
+              </BodyText>
             </View>
           </View>
           {unavailableID && savedServers}
@@ -617,7 +617,9 @@ export function ConnectionFlow({
       ) : step === "scan" ? (
         <>
           <Heading>Scan a pairing QR code</Heading>
-          <Label muted>Point your camera at the code on your computer.</Label>
+          <BodyText muted>
+            Point your camera at the code on your computer.
+          </BodyText>
           <View style={styles.camera}>
             <CameraView
               style={StyleSheet.absoluteFill}
@@ -668,9 +670,9 @@ export function ConnectionFlow({
       ) : step === "pair" ? (
         <>
           <Heading>Paste a pairing link</Heading>
-          <Label muted>
+          <BodyText muted>
             Copy the pairing link from the server on your computer.
-          </Label>
+          </BodyText>
           <Field
             label="Pairing link"
             placeholder="http://your-computer:4096/auth/connect/…"
@@ -702,7 +704,9 @@ export function ConnectionFlow({
       ) : step === "address" ? (
         <>
           <Heading>Enter the server address</Heading>
-          <Label muted>Use your computer’s LAN or private VPN address.</Label>
+          <BodyText muted>
+            Use your computer’s LAN or private VPN address.
+          </BodyText>
           <Field
             label="Server address"
             placeholder="http://192.168.1.20:4096"
@@ -724,14 +728,14 @@ export function ConnectionFlow({
             disabled={!form.url.trim() || busy}
             onPress={() => nextAddress(true)}
           />
-          <Label muted style={styles.small}>
+          <BodyText muted style={styles.small}>
             On a phone, localhost refers to the phone. Use HTTPS outside a
             trusted network.
-          </Label>
+          </BodyText>
           <Disclosure title="Start a server">
-            <Label selectable style={styles.command}>
+            <BodyText selectable style={styles.command}>
               opencode serve --hostname 0.0.0.0 --port 4096
-            </Label>
+            </BodyText>
           </Disclosure>
         </>
       ) : step === "password" ? (
@@ -739,9 +743,9 @@ export function ConnectionFlow({
           <Heading>
             {form.id ? "Update your server" : "Enter the server password"}
           </Heading>
-          <Label muted numberOfLines={2}>
+          <BodyText muted numberOfLines={2}>
             {form.url}
-          </Label>
+          </BodyText>
           <Field
             label="Server password"
             placeholder="Server password"
@@ -763,9 +767,9 @@ export function ConnectionFlow({
             disabled={busy}
             onPress={connectManual}
           />
-          <Label muted style={styles.small}>
+          <BodyText muted style={styles.small}>
             Leave this blank if your server does not require a password.
-          </Label>
+          </BodyText>
           <Disclosure title="Connection details">
             <Field
               label="Name"
@@ -792,11 +796,11 @@ export function ConnectionFlow({
                   ? "Add a server"
                   : "Connect to a server"}
             </Heading>
-            <Label muted style={styles.center}>
+            <BodyText muted style={styles.center}>
               {unavailableID
                 ? "Retry a saved server or pair with a server again."
                 : "Your computer does the work. Pick up the conversation here."}
-            </Label>
+            </BodyText>
           </View>
           <View style={styles.actions}>
             <Button
@@ -817,15 +821,15 @@ export function ConnectionFlow({
             />
           </View>
           <Card>
-            <Label style={styles.instruction}>On your computer</Label>
-            <Label muted>
+            <BodyText style={styles.instruction}>On your computer</BodyText>
+            <BodyText muted>
               OpenCode: run the command below. Pi: use /mobile in an active
               session with the companion extension installed. Then scan the QR
               code or paste the pairing link.
-            </Label>
-            <Label selectable style={styles.command}>
+            </BodyText>
+            <BodyText selectable style={styles.command}>
               opencode pair
-            </Label>
+            </BodyText>
           </Card>
           <Button
             title="Connect with a server address"
@@ -840,11 +844,11 @@ export function ConnectionFlow({
         </>
       )}
       {step !== "scan" && step !== "servers" && (
-        <Label muted style={styles.privacy}>
+        <BodyText muted style={styles.privacy}>
           {Platform.OS === "web"
             ? "Connections stay in this tab. Your server must allow this browser origin with --cors."
             : "Your server credentials stay in secure storage on this device."}
-        </Label>
+        </BodyText>
       )}
     </MotionContent>
   );

@@ -36,7 +36,7 @@ import {
   toolDetail,
   toolDisplayName,
 } from "./ToolCallDetails";
-import { ErrorNotice, Label, mono } from "./ui";
+import { ErrorNotice, BodyText, mono } from "./ui";
 
 export type TranscriptItem =
   | { type: "message"; id: string; message: SessionMessageInfo }
@@ -179,9 +179,9 @@ function ToolResultImages({
   return (
     <View>
       {label && (
-        <Label muted numberOfLines={2} style={styles.imageLabel}>
+        <BodyText muted numberOfLines={2} style={styles.imageLabel}>
           {label}
-        </Label>
+        </BodyText>
       )}
       <View style={styles.images}>
         {images.map((image, index) => (
@@ -263,11 +263,11 @@ export const AssistantActivityPart = memo(
             pressed && { backgroundColor: colors.raised },
           ]}
         >
-          <Label style={styles.activityTitle}>{title}</Label>
+          <BodyText style={styles.activityTitle}>{title}</BodyText>
           {duration && (
-            <Label muted style={styles.duration}>
+            <BodyText muted style={styles.duration}>
               {duration}
-            </Label>
+            </BodyText>
           )}
           <Chevron open={open} />
           {busy && (
@@ -278,9 +278,9 @@ export const AssistantActivityPart = memo(
             />
           )}
           {!open && detail && (
-            <Label muted numberOfLines={1} style={styles.preview}>
+            <BodyText muted numberOfLines={1} style={styles.preview}>
               {detail}
-            </Label>
+            </BodyText>
           )}
         </Pressable>
         <MotionDisclosureBody
@@ -575,9 +575,9 @@ function ActivityGroupHeader({
         pressed && { backgroundColor: colors.raised },
       ]}
     >
-      <Label muted style={styles.groupTitle}>
+      <BodyText muted style={styles.groupTitle}>
         Used <Text style={{ color: colors.text }}>{labels}</Text>
-      </Label>
+      </BodyText>
       <Chevron open={open} />
     </Pressable>
   );

@@ -12,7 +12,7 @@ import {
   confirmAction,
   Empty,
   ErrorNotice,
-  Label,
+  BodyText,
   mono,
   Row,
 } from "./ui";
@@ -318,14 +318,14 @@ function Commands({
 
   return (
     <View style={{ gap: 14 }}>
-      <Label muted>
+      <BodyText muted>
         Commands belong to this session. Running commands refresh while this
         panel is open.
-      </Label>
+      </BodyText>
       <Row>
-        <Label style={{ flex: 1, fontWeight: "500" }}>
+        <BodyText style={{ flex: 1, fontWeight: "500" }}>
           {commands.length} running
-        </Label>
+        </BodyText>
         <Button
           title="Refresh"
           compact
@@ -353,16 +353,16 @@ function Commands({
       )}
       {commands.slice(0, limit).map((command) => (
         <Card key={command.id}>
-          <Label
+          <BodyText
             selectable
             numberOfLines={3}
             style={{ fontFamily: mono, fontSize: 13 }}
           >
             {command.command}
-          </Label>
-          <Label muted numberOfLines={2}>
+          </BodyText>
+          <BodyText muted numberOfLines={2}>
             {command.cwd}
-          </Label>
+          </BodyText>
           <Button
             title={selectedID === command.id ? "Selected" : "View output"}
             compact
@@ -384,18 +384,18 @@ function Commands({
           {selectedID === initialShellID &&
             initialDirectory &&
             initialDirectory !== directory && (
-              <Label muted>Output location: {initialDirectory}</Label>
+              <BodyText muted>Output location: {initialDirectory}</BodyText>
             )}
           {selected && (
             <>
-              <Label selectable style={{ fontFamily: mono, fontSize: 13 }}>
+              <BodyText selectable style={{ fontFamily: mono, fontSize: 13 }}>
                 {selected.command}
-              </Label>
-              <Label muted>
+              </BodyText>
+              <BodyText muted>
                 {selected.status}
                 {selected.exit === undefined ? "" : ` · Exit ${selected.exit}`}
                 {selected.signal ? ` · ${selected.signal}` : ""}
-              </Label>
+              </BodyText>
             </>
           )}
           <ErrorNotice
@@ -407,10 +407,10 @@ function Commands({
           {outputBusy && !page && <Busy />}
           {page && (
             <>
-              <Label muted>
+              <BodyText muted>
                 Bytes {page.start.toLocaleString()}–
                 {page.cursor.toLocaleString()} of {page.size.toLocaleString()}
-              </Label>
+              </BodyText>
               {page.output ? (
                 <ScrollView horizontal style={{ maxHeight: 360 }}>
                   <ScrollView nestedScrollEnabled style={{ maxHeight: 360 }}>
@@ -428,7 +428,7 @@ function Commands({
                   </ScrollView>
                 </ScrollView>
               ) : (
-                <Label muted>No output at this position</Label>
+                <BodyText muted>No output at this position</BodyText>
               )}
               <Row>
                 <Button
@@ -459,10 +459,10 @@ function Commands({
             </>
           )}
           {selected && selected.metadata.sessionID !== sessionID && (
-            <Label muted>
+            <BodyText muted>
               This command belongs to another session. Open that session to stop
               it or remove its output.
-            </Label>
+            </BodyText>
           )}
           {selected &&
             selected.id === selectedID &&
