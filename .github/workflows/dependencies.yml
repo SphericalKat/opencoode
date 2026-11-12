@@ -25,7 +25,7 @@ jobs:
         os: [ubuntu-latest, macos-15]
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/setup@v3.1.2
+      - uses: pnpm/setup@v3.2.0
         with:
           runtime: node@26
           cache: true
