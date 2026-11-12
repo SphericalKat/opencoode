@@ -120,6 +120,38 @@ const Meter = ({
   );
 };
 
+const fetchUsageInfo = async (
+  client: Client,
+  directory: string,
+  isActive: () => boolean,
+  apply: {
+    done: () => void;
+    error: (message: string) => void;
+    info: (info: UsageLimitsInfo | null) => void;
+  }
+) => {
+  try {
+    const result = await client.experimental.usage.limits({
+      location: { directory },
+    });
+    if (isActive()) {
+      apply.info(result.data);
+    }
+  } catch (error_) {
+    if (isActive()) {
+      apply.error(
+        error_ instanceof ClientError &&
+          error_.reason === "UnsupportedContentType"
+          ? "Usage limits require OpenCode 2.2.1 or later. Update your server to use this view."
+          : errorMessage(error_)
+      );
+    }
+  }
+  if (isActive()) {
+    apply.done();
+  }
+};
+
 const Usage = ({
   client,
   directory,
@@ -130,34 +162,21 @@ const Usage = ({
   useTheme();
   const [info, setInfo] = useState<UsageLimitsInfo | null>();
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const active = useRef(true);
+  const fetchUsage = () =>
+    fetchUsageInfo(client, directory, () => active.current, {
+      done: () => setLoading(false),
+      error: setError,
+      info: setInfo,
+    });
   const load = async () => {
     setLoading(true);
     setError(null);
-    try {
-      const result = await client.experimental.usage.limits({
-        location: { directory },
-      });
-      if (active.current) {
-        setInfo(result.data);
-      }
-    } catch (error_) {
-      if (active.current) {
-        setError(
-          error_ instanceof ClientError &&
-            error_.reason === "UnsupportedContentType"
-            ? "Usage limits require OpenCode 2.2.1 or later. Update your server to use this view."
-            : errorMessage(error_)
-        );
-      }
-    }
-    if (active.current) {
-      setLoading(false);
-    }
+    await fetchUsage();
   };
   const loadOnMount = useEffectEvent(() => {
-    void load();
+    void fetchUsage();
   });
   useEffect(() => {
     active.current = true;

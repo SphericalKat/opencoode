@@ -9,6 +9,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import type { ComponentType, NamedExoticComponent } from "react";
 import {
   Linking,
   PixelRatio,
@@ -633,13 +634,22 @@ const ListItem = memo(
     sameNode(previous.node, next.node)
 );
 
-const BlockView = ({ node, muted }: { node: Node; muted?: boolean }) => {
+interface BlockProps {
+  node: Node;
+  muted?: boolean;
+}
+
+const BlockView = ({
+  node,
+  muted,
+  Child,
+}: BlockProps & { Child: ComponentType<BlockProps> }) => {
   const styles = useMarkdownStyles();
   const selectable = useContext(SelectionContext);
   const { token, children } = node;
   const prose = [styles.text, muted && styles.muted];
   const renderBlocks = (items: Node[]) =>
-    items.map((item, index) => <Block key={index} node={item} muted={muted} />);
+    items.map((item, index) => <Child key={index} node={item} muted={muted} />);
   switch (token.type) {
     case "inline": {
       return (
@@ -734,8 +744,10 @@ const BlockView = ({ node, muted }: { node: Node; muted?: boolean }) => {
   }
 };
 
-const Block = memo(
-  BlockView,
+const Block: NamedExoticComponent<BlockProps> = memo(
+  function Block({ node, muted }: BlockProps) {
+    return <BlockView node={node} muted={muted} Child={Block} />;
+  },
   (previous, next) =>
     previous.muted === next.muted && sameNode(previous.node, next.node)
 );

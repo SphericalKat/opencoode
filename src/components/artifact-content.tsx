@@ -1,11 +1,12 @@
 import type { ToolFileContent } from "@opencode/client";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { objectKey } from "../lib/object-key";
 import { useNativePresentation } from "../lib/sheets";
 import { useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
@@ -176,6 +177,82 @@ const createStyles = (colors: ThemeColors) =>
     viewerImage: { flex: 1, minHeight: 0, width: "100%" },
   });
 
+interface ArtifactAction {
+  action: "preview" | "save";
+  filename: string;
+  mime: string;
+  presentNative: ReturnType<typeof useNativePresentation>;
+  read: () => Promise<Uint8Array>;
+  setError: (error: string | undefined) => void;
+  setPreview: (preview: string) => void;
+  signal: AbortSignal;
+}
+
+const saveArtifact = async (
+  { filename, mime, presentNative, signal }: ArtifactAction,
+  bytes: Uint8Array,
+  temporary: { file?: File }
+) => {
+  if (Platform.OS === "web") {
+    const url = URL.createObjectURL(
+      new Blob([new Uint8Array(bytes).buffer], { type: mime })
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return;
+  }
+  const file = new File(
+    Paths.cache,
+    `artifact-${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`
+  );
+  temporary.file = file;
+  await file.write(bytes);
+  const { uri } = file;
+  if (!signal.aborted) {
+    await presentNative(() =>
+      Sharing.shareAsync(uri, { dialogTitle: filename, mimeType: mime })
+    );
+  }
+};
+
+const runArtifactAction = async (request: ArtifactAction) => {
+  const { action, mime, read, setError, setPreview, signal } = request;
+  const temporary: { file?: File } = {};
+  try {
+    if (
+      action === "save" &&
+      Platform.OS !== "web" &&
+      !(await Sharing.isAvailableAsync())
+    ) {
+      throw new Error("File sharing is unavailable on this device");
+    }
+    const bytes = await read();
+    if (signal.aborted) {
+      return;
+    }
+    if (action === "preview") {
+      setPreview(dataUri(bytes, mime));
+    } else {
+      await saveArtifact(request, bytes, temporary);
+    }
+  } catch (error_) {
+    if (!signal.aborted) {
+      setError(errorMessage(error_));
+    }
+  } finally {
+    if (temporary.file?.exists) {
+      try {
+        await temporary.file.delete();
+      } catch {
+        // The temporary file is already gone or cannot be removed.
+      }
+    }
+  }
+};
+
 const Artifact = ({ content, client, directory, thumbnail }: Props) => {
   const styles = useThemedStyles(createStyles);
   const presentNative = useNativePresentation();
@@ -188,16 +265,6 @@ const Artifact = ({ content, client, directory, thumbnail }: Props) => {
   const [error, setError] = useState<string>();
   const controller = useRef(new AbortController());
   const running = useRef<AbortSignal | undefined>(undefined);
-  useEffect(() => {
-    const request = new AbortController();
-    controller.current = request;
-    running.current = undefined;
-    setPreview(undefined);
-    setExpanded(false);
-    setError(undefined);
-    setBusy(false);
-    return () => request.abort();
-  }, [client]);
   const segments = (
     content.name ||
     `attachment.${mime.split("/")[1]?.replaceAll(/[^A-Za-z\d]/gu, "") || "bin"}`
@@ -240,68 +307,35 @@ const Artifact = ({ content, client, directory, thumbnail }: Props) => {
     running.current = signal;
     setBusy(true);
     setError(undefined);
-    let temporary: File | undefined;
-    try {
-      if (
-        action === "save" &&
-        Platform.OS !== "web" &&
-        !(await Sharing.isAvailableAsync())
-      ) {
-        throw new Error("File sharing is unavailable on this device");
-      }
-      const bytes = await read(signal);
-      if (signal.aborted) {
-        return;
-      }
-      if (action === "preview") {
-        setPreview(dataUri(bytes, mime));
-      } else if (Platform.OS === "web") {
-        const url = URL.createObjectURL(
-          new Blob([new Uint8Array(bytes).buffer], { type: mime })
-        );
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = filename;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } else {
-        temporary = new File(
-          Paths.cache,
-          `artifact-${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`
-        );
-        await temporary.write(bytes);
-        const { uri } = temporary;
-        if (!signal.aborted) {
-          await presentNative(() =>
-            Sharing.shareAsync(uri, { dialogTitle: filename, mimeType: mime })
-          );
-        }
-      }
-    } catch (error_) {
+    await runArtifactAction({
+      action,
+      filename,
+      mime,
+      presentNative,
+      read: () => read(signal),
+      setError,
+      setPreview,
+      signal,
+    });
+    if (running.current === signal) {
+      running.current = undefined;
       if (!signal.aborted) {
-        setError(errorMessage(error_));
-      }
-    } finally {
-      if (temporary?.exists) {
-        try {
-          await temporary.delete();
-        } catch {
-          // The temporary file is already gone or cannot be removed.
-        }
-      }
-      if (running.current === signal) {
-        running.current = undefined;
-        if (!signal.aborted) {
-          setBusy(false);
-        }
+        setBusy(false);
       }
     }
   };
-  useEffect(() => {
+  const startPreview = useEffectEvent(() => {
     if (image) {
       void perform("preview");
     }
-  }, [client]);
+  });
+  useEffect(() => {
+    const request = new AbortController();
+    controller.current = request;
+    running.current = undefined;
+    startPreview();
+    return () => request.abort();
+  }, []);
 
   if (thumbnail) {
     return (
@@ -447,7 +481,7 @@ const Artifact = ({ content, client, directory, thumbnail }: Props) => {
 
 export const ArtifactContent = (props: Props) => (
   <Artifact
-    key={`${props.directory ?? ""}:${props.content.uri}:${props.content.mime}`}
+    key={`${props.client ? objectKey(props.client) : "none"}:${props.directory ?? ""}:${props.content.uri}:${props.content.mime}`}
     {...props}
   />
 );

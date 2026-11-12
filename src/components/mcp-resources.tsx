@@ -124,46 +124,72 @@ const TemplateCard = ({
   );
 };
 
+const fetchCatalog = async (
+  client: Client,
+  directory: string,
+  signal: AbortSignal
+): Promise<{ catalog: McpResourceCatalog } | { error: string }> => {
+  try {
+    const result = await client.mcp.resource.catalog(
+      { location: { directory } },
+      { signal }
+    );
+    return { catalog: result.data };
+  } catch (error_) {
+    return { error: errorMessage(error_) };
+  }
+};
+
 export const McpResources = ({ client, location, onAttachContext }: Props) => {
   const [catalog, setCatalog] = useState<McpResourceCatalog>();
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(15);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | undefined>(undefined);
   const { directory } = location;
 
-  const refresh = useCallback(async () => {
+  const load = useCallback(async () => {
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await client.mcp.resource.catalog(
-        { location: { directory } },
-        { signal: controller.signal }
-      );
-      if (!controller.signal.aborted) {
-        setCatalog(result.data);
+    const apply = (outcome: Awaited<ReturnType<typeof fetchCatalog>>) => {
+      if (controller.signal.aborted) {
+        return;
       }
-    } catch (error_) {
-      if (!controller.signal.aborted) {
-        setError(errorMessage(error_));
+      if ("catalog" in outcome) {
+        setCatalog(outcome.catalog);
+      } else {
+        setError(outcome.error);
       }
-    }
-    if (!controller.signal.aborted) {
       setLoading(false);
-    }
+    };
+    apply(await fetchCatalog(client, directory, controller.signal));
   }, [client, directory]);
 
-  useEffect(() => {
+  const refresh = () => {
+    setLoading(true);
+    setError(null);
+    return load();
+  };
+
+  const [seenScope, setSeenScope] = useState({ client, directory });
+  if (seenScope.client !== client || seenScope.directory !== directory) {
+    setSeenScope({ client, directory });
     setCatalog(undefined);
     setQuery("");
-    refresh();
+    setLoading(true);
+    setError(null);
+  }
+  const [seenQuery, setSeenQuery] = useState(query);
+  if (seenQuery !== query) {
+    setSeenQuery(query);
+    setLimit(15);
+  }
+  useEffect(() => {
+    void load();
     return () => request.current?.abort();
-  }, [refresh]);
-  useEffect(() => setLimit(15), [query]);
+  }, [load]);
 
   const search = query.trim().toLowerCase();
   const matches = [

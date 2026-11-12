@@ -142,15 +142,24 @@ const AgentActivityBarView = ({
   const [now, setNow] = useState(Date.now);
   const [showError, setShowError] = useState(false);
   const retrying = retry !== undefined;
-  useEffect(() => {
+  const resetKey = `${retry?.at}:${retry?.attempt}:${retrying}:${animate}`;
+  const [previousResetKey, setPreviousResetKey] = useState(resetKey);
+  if (previousResetKey !== resetKey) {
+    setPreviousResetKey(resetKey);
     setShowError(false);
+  }
+  useEffect(() => {
     if (!retrying || !animate) {
       return;
     }
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [retry?.at, retry?.attempt, retrying, animate]);
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const timer = setInterval(tick, 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [retrying, animate]);
   const { blocked, needsAttention } = attentionState(
     activity,
     connected,

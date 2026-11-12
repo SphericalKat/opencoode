@@ -707,24 +707,21 @@ export const confirmAction = async (
   message: string,
   options: { confirmLabel?: string; destructive?: boolean } = {}
 ): Promise<boolean> => {
-  if (Platform.OS === "web") {
-    return window.confirm(`${title}\n\n${message}`);
-  }
-  return await new Promise((resolve) => {
-    Alert.alert(
-      title,
-      message,
-      [
-        { onPress: () => resolve(false), style: "cancel", text: "Cancel" },
-        {
-          onPress: () => resolve(true),
-          style: options.destructive === false ? "default" : "destructive",
-          text: options.confirmLabel || "Continue",
-        },
-      ],
-      { cancelable: true, onDismiss: () => resolve(false) }
-    );
-  });
+  const { promise, resolve } = Promise.withResolvers<boolean>();
+  Alert.alert(
+    title,
+    message,
+    [
+      { onPress: () => resolve(false), style: "cancel", text: "Cancel" },
+      {
+        onPress: () => resolve(true),
+        style: options.destructive === false ? "default" : "destructive",
+        text: options.confirmLabel || "Continue",
+      },
+    ],
+    { cancelable: true, onDismiss: () => resolve(false) }
+  );
+  return await promise;
 };
 export const JsonView = ({ value }: { value: unknown }) => {
   const { colors } = useTheme();
@@ -755,14 +752,18 @@ export const Disclosure = ({
   const styles = useThemedStyles(createStyles);
   const openMessageActions = useContext(MessageActionsContext);
   const disclosures = useContext(MessageDisclosureContext);
-  const [open, setOpen] = useState(() =>
-    disclosureKey ? (disclosures?.isOpen(disclosureKey) ?? false) : false
-  );
-  useLayoutEffect(() => {
-    setOpen(
-      disclosureKey ? (disclosures?.isOpen(disclosureKey) ?? false) : false
-    );
-  }, [disclosureKey, disclosures]);
+  const initialOpen = disclosureKey
+    ? (disclosures?.isOpen(disclosureKey) ?? false)
+    : false;
+  const [open, setOpen] = useState(initialOpen);
+  const [seenSource, setSeenSource] = useState({ disclosureKey, disclosures });
+  if (
+    seenSource.disclosureKey !== disclosureKey ||
+    seenSource.disclosures !== disclosures
+  ) {
+    setSeenSource({ disclosureKey, disclosures });
+    setOpen(initialOpen);
+  }
   return (
     <Card style={styles.disclosure}>
       <Pressable

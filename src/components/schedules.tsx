@@ -98,12 +98,19 @@ export const Schedules = ({
   const [detail, setDetail] = useState<ScheduleInfo>();
   const request = useRef(0);
   const scope = useRef({ client, sessionID });
-  if (
-    scope.current.client !== client ||
-    scope.current.sessionID !== sessionID
-  ) {
-    scope.current = { client, sessionID };
+  const [seenScope, setSeenScope] = useState({ client, sessionID });
+  if (seenScope.client !== client || seenScope.sessionID !== sessionID) {
+    setSeenScope({ client, sessionID });
+    setItems([]);
+    setDetail(undefined);
+    setAdding(false);
+    setDraft(emptyDraft);
+    setLoading(true);
+    setError(undefined);
   }
+  useEffect(() => {
+    scope.current = { client, sessionID };
+  }, [client, sessionID]);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -113,11 +120,9 @@ export const Schedules = ({
     };
   }, []);
 
-  const refresh = useCallback(async () => {
+  const load = useCallback(async () => {
     request.current += 1;
     const id = request.current;
-    setLoading(true);
-    setError(undefined);
     await runWithCleanup(
       async () => {
         try {
@@ -141,16 +146,18 @@ export const Schedules = ({
     );
   }, [client, sessionID]);
 
+  const refresh = async () => {
+    setLoading(true);
+    setError(undefined);
+    await load();
+  };
+
   useEffect(() => {
-    setItems([]);
-    setDetail(undefined);
-    setAdding(false);
-    setDraft(emptyDraft);
-    void refresh();
+    void load();
     return () => {
       request.current += 1;
     };
-  }, [refresh]);
+  }, [load]);
 
   const run = async (action: () => Promise<void>) => {
     if (busy) {

@@ -318,6 +318,32 @@ const homeTitle = (unavailableID?: string, activeID?: string) => {
   return activeID ? "Add a server" : "Connect to a server";
 };
 
+const useServersGuard = (
+  step: Step,
+  connectionCount: number,
+  unavailableID: string | undefined,
+  setStep: (next: Step) => void
+) => {
+  if (step === "servers" && (!connectionCount || unavailableID)) {
+    setStep("home");
+  }
+};
+
+const usePairingLinkText = (
+  pairingLink: string | null | undefined,
+  setPairingText: (text: string) => void,
+  setStep: (next: Step) => void
+) => {
+  const [handled, setHandled] = useState<string | null | undefined>();
+  if (handled !== pairingLink) {
+    setHandled(pairingLink);
+    if (pairingLink) {
+      setPairingText(pairingLink);
+      setStep("pair");
+    }
+  }
+};
+
 export const ConnectionFlow = ({
   form,
   connections,
@@ -571,21 +597,16 @@ export const ConnectionFlow = ({
     pairingConsumedRef.current = onPairingLinkConsumed;
   });
 
-  useEffect(() => {
-    if (step === "servers" && (!connections.length || unavailableID)) {
-      setStep("home");
-    }
-  }, [connections.length, unavailableID, step, setStep]);
+  useServersGuard(step, connections.length, unavailableID, setStep);
+  usePairingLinkText(pairingLink, setPairingText, setStep);
 
   useEffect(() => {
     if (!pairingLink) {
       return;
     }
-    setPairingText(pairingLink);
-    setStep("pair");
     acceptPairingRef.current(pairingLink);
     pairingConsumedRef.current();
-  }, [pairingLink, setStep]);
+  }, [pairingLink]);
 
   useEffect(() => {
     if (!submission) {

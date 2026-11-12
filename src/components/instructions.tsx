@@ -21,6 +21,33 @@ import {
   confirmAction,
 } from "./ui";
 
+const fetchInstructions = async (
+  client: Client,
+  sessionID: string,
+  isCurrent: () => boolean,
+  apply: {
+    done: () => void;
+    entries: (entries: InstructionEntryInfo[]) => void;
+    error: (message: string) => void;
+  }
+) => {
+  try {
+    const result = await client.experimental.session.instructions.entry.list({
+      sessionID,
+    });
+    if (isCurrent()) {
+      apply.entries(result);
+    }
+  } catch (error_) {
+    if (isCurrent()) {
+      apply.error(errorMessage(error_));
+    }
+  }
+  if (isCurrent()) {
+    apply.done();
+  }
+};
+
 export const Instructions = ({
   client,
   sessionID,
@@ -54,37 +81,40 @@ export const Instructions = ({
     };
   }, []);
 
-  const refresh = useCallback(async () => {
+  const load = useCallback(async () => {
     sequence.current += 1;
     const request = sequence.current;
+    await fetchInstructions(
+      client,
+      sessionID,
+      () => mounted.current && request === sequence.current,
+      { done: () => setLoading(false), entries: setEntries, error: setError }
+    );
+  }, [client, sessionID]);
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError(undefined);
-    try {
-      const result = await client.experimental.session.instructions.entry.list({
-        sessionID,
-      });
-      if (mounted.current && request === sequence.current) {
-        setEntries(result);
-      }
-    } catch (error_) {
-      if (mounted.current && request === sequence.current) {
-        setError(errorMessage(error_));
-      }
-    }
-    if (mounted.current && request === sequence.current) {
-      setLoading(false);
-    }
-  }, [client, sessionID]);
-  useEffect(() => {
+    await load();
+  }, [load]);
+  const [renderedScope, setRenderedScope] = useState({ client, sessionID });
+  if (
+    renderedScope.client !== client ||
+    renderedScope.sessionID !== sessionID
+  ) {
+    setRenderedScope({ client, sessionID });
     setEntries([]);
     setKey("");
     setValue("");
     setJson(false);
-    void refresh();
+    setLoading(true);
+    setError(undefined);
+  }
+  useEffect(() => {
+    void load();
     return () => {
       sequence.current += 1;
     };
-  }, [refresh]);
+  }, [load]);
 
   const run = async (operation: () => Promise<void>) => {
     if (busy) {

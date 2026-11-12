@@ -5,6 +5,7 @@ import { AppState, ScrollView, Text, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { objectKey } from "../lib/object-key";
 import { useTheme } from "../lib/theme";
 import {
   Button,
@@ -471,6 +472,8 @@ const Commands = ({
     AppState.currentState !== "background" &&
       AppState.currentState !== "inactive"
   );
+  const showLoading = loading && foreground;
+  const showOutputBusy = outputBusy && foreground;
   const listRequest = useRef<AbortController | undefined>(undefined);
   const outputRequest = useRef<AbortController | undefined>(undefined);
   const generation = useRef(0);
@@ -493,7 +496,7 @@ const Commands = ({
       listRequests.current?.abort();
       outputRequests.current?.abort();
     };
-  }, [client, sessionID, directory]);
+  }, []);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) =>
       setForeground(state === "active")
@@ -547,8 +550,6 @@ const Commands = ({
     if (!foreground) {
       listRequest.current?.abort();
       outputRequest.current?.abort();
-      setLoading(false);
-      setOutputBusy(false);
       return;
     }
     void refresh();
@@ -564,10 +565,14 @@ const Commands = ({
       listRequests.current?.abort();
     };
   }, [foreground, refresh, loadOutput]);
-  useEffect(() => {
+  const [seenSelectedID, setSeenSelectedID] = useState(selectedID);
+  if (seenSelectedID !== selectedID) {
+    setSeenSelectedID(selectedID);
     setSelected(undefined);
     setPage(undefined);
     setOutputError(undefined);
+  }
+  useEffect(() => {
     pageStart.current = 0;
     if (selectedID && previousForeground.current) {
       void loadOutput(selectedID);
@@ -639,7 +644,7 @@ const Commands = ({
         <Button
           title="Refresh"
           compact
-          busy={loading}
+          busy={showLoading}
           onPress={() => {
             void refresh();
             if (selectedID) {
@@ -654,8 +659,8 @@ const Commands = ({
           void refresh();
         }}
       />
-      {loading && !commands.length && <Busy />}
-      {!loading && !error && !commands.length && (
+      {showLoading && !commands.length && <Busy />}
+      {!showLoading && !error && !commands.length && (
         <Empty
           title="No running commands"
           detail="Open a shell message's full output to inspect a completed command."
@@ -696,7 +701,7 @@ const Commands = ({
           initialDirectory={initialDirectory}
           initialShellID={initialShellID}
           loadOutput={loadOutput}
-          outputBusy={outputBusy}
+          outputBusy={showOutputBusy}
           outputError={outputError}
           page={page}
           remove={remove}
@@ -713,6 +718,7 @@ const Commands = ({
 export const BackgroundCommands = (props: Props) => (
   <Commands
     key={JSON.stringify([
+      objectKey(props.client),
       props.sessionID,
       props.directory,
       props.initialShellID,

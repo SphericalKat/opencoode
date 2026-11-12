@@ -1,5 +1,5 @@
 import type { FileSystemEntry, Project } from "@opencode/client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Keyboard, Pressable, StyleSheet, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
@@ -280,6 +280,27 @@ const ListArea = ({
   );
 };
 
+const fetchFolders = async (
+  client: Client,
+  directory: string,
+  path: string,
+  signal: AbortSignal
+): Promise<
+  { base: string; folders: FileSystemEntry[] } | { error: string }
+> => {
+  try {
+    const result = await client.file.list(
+      { location: { directory }, path },
+      { signal }
+    );
+    const folders = result.data.filter((entry) => entry.type === "directory");
+    folders.sort((a, b) => fileName(a.path).localeCompare(fileName(b.path)));
+    return { base: result.location.directory, folders };
+  } catch (error_) {
+    return { error: errorMessage(error_) };
+  }
+};
+
 const ProjectDirectoryBrowser = ({
   client,
   directory,
@@ -301,10 +322,10 @@ const ProjectDirectoryBrowser = ({
   const [notice, setNotice] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
   const [recent, setRecent] = useState(false);
-  const [revision, setRevision] = useState(0);
   const [initializing, setInitializing] = useState(false);
   const mounted = useRef(true);
   const action = useRef<AbortController | null>(null);
+  const listRequest = useRef<AbortController | null>(null);
   const parent = normalizePath(`${path}/..`);
   const pending = busy || initializing;
 
@@ -316,40 +337,55 @@ const ProjectDirectoryBrowser = ({
     };
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const [seenLocation, setSeenLocation] = useState({
+    client,
+    directory,
+    path,
+  });
+  if (
+    seenLocation.client !== client ||
+    seenLocation.directory !== directory ||
+    seenLocation.path !== path
+  ) {
+    setSeenLocation({ client, directory, path });
     setLoading(true);
     setBrowseError(null);
     setActionError(null);
     setNotice(null);
-    const load = async () => {
-      try {
-        const result = await client.file.list(
-          { location: { directory }, path },
-          { signal: controller.signal }
-        );
-        if (controller.signal.aborted) {
-          return;
-        }
-        setBase(result.location.directory);
-        setFolders(
-          result.data
-            .filter((entry) => entry.type === "directory")
-            .sort((a, b) => fileName(a.path).localeCompare(fileName(b.path)))
-        );
-      } catch (error_) {
-        if (!controller.signal.aborted) {
-          setFolders([]);
-          setBrowseError(errorMessage(error_));
-        }
+  }
+
+  const loadFolders = useCallback(async () => {
+    listRequest.current?.abort();
+    const controller = new AbortController();
+    listRequest.current = controller;
+    const apply = (outcome: Awaited<ReturnType<typeof fetchFolders>>) => {
+      if (controller.signal.aborted) {
+        return;
       }
-      if (!controller.signal.aborted) {
-        setLoading(false);
+      if ("error" in outcome) {
+        setFolders([]);
+        setBrowseError(outcome.error);
+      } else {
+        setBase(outcome.base);
+        setFolders(outcome.folders);
       }
+      setLoading(false);
     };
-    load();
-    return () => controller.abort();
-  }, [client, directory, path, revision]);
+    apply(await fetchFolders(client, directory, path, controller.signal));
+  }, [client, directory, path]);
+
+  useEffect(() => {
+    void loadFolders();
+    return () => listRequest.current?.abort();
+  }, [loadFolders]);
+
+  const reload = () => {
+    setLoading(true);
+    setBrowseError(null);
+    setActionError(null);
+    setNotice(null);
+    void loadFolders();
+  };
 
   const browse = (next: string) => {
     Keyboard.dismiss();
@@ -362,7 +398,7 @@ const ProjectDirectoryBrowser = ({
     setRecent(false);
     setManual(false);
     if (normalized === path) {
-      setRevision((current) => current + 1);
+      reload();
     } else {
       setPath(normalized);
     }
@@ -494,9 +530,7 @@ const ProjectDirectoryBrowser = ({
         )}
         <ErrorNotice
           error={error || browseError || actionError}
-          onRetry={
-            pending ? undefined : () => setRevision((current) => current + 1)
-          }
+          onRetry={pending ? undefined : reload}
         />
         {notice && (
           <BodyText

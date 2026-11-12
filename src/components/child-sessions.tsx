@@ -134,6 +134,28 @@ export const ChildSessions = ({
     );
     return () => listener.remove();
   }, []);
+  const [seenScope, setSeenScope] = useState({
+    archived,
+    client,
+    foreground,
+    sessionID,
+  });
+  if (
+    seenScope.archived !== archived ||
+    seenScope.client !== client ||
+    seenScope.foreground !== foreground ||
+    seenScope.sessionID !== sessionID
+  ) {
+    setSeenScope({ archived, client, foreground, sessionID });
+    if (foreground) {
+      setItems([]);
+      setActiveIDs(new Set());
+      setCursor(undefined);
+      setError(undefined);
+      setLoadingMore(false);
+      setStoppingID(undefined);
+    }
+  }
   useEffect(() => {
     if (!foreground) {
       return;
@@ -143,15 +165,8 @@ export const ChildSessions = ({
     let nextCursor: string | undefined;
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let releaseRetry: (() => void) | undefined;
     let attempts = 0;
     let paging = false;
-    setItems([]);
-    setActiveIDs(new Set());
-    setCursor(undefined);
-    setError(undefined);
-    setLoadingMore(false);
-    setStoppingID(undefined);
     knownIDs.current.clear();
     const refresh = async () => {
       version += 1;
@@ -281,10 +296,6 @@ export const ChildSessions = ({
         );
       })();
     };
-    const armRetry = (resolve: () => void, delay: number) => {
-      releaseRetry = resolve;
-      retryTimer = setTimeout(resolve, delay);
-    };
     const handleEvent = (event: ChildSessionEvent) => {
       attempts = 0;
       if (
@@ -371,40 +382,41 @@ export const ChildSessions = ({
         );
       }
     };
-    void (async () => {
-      await refresh();
-      while (!controller.signal.aborted) {
-        try {
-          await followEvents(
-            subscribeChildSessionEvents(client, controller.signal),
-            controller.signal,
-            handleEvent
-          );
-        } catch (error_) {
-          if (controller.signal.aborted) {
-            break;
-          }
-          setError(errorMessage(error_));
-          const delay = retryDelay(attempts);
-          attempts += 1;
-          await new Promise<void>((resolve) => {
-            armRetry(resolve, delay);
-          });
-          if (!controller.signal.aborted) {
-            await refresh();
-          }
-        }
-      }
-    })().catch((error_) => {
+    const reportError = (error_: unknown) => {
       if (!controller.signal.aborted) {
         setError(errorMessage(error_));
       }
-    });
+    };
+    const connect = async (needsRefresh: boolean) => {
+      if (needsRefresh) {
+        await refresh();
+        if (controller.signal.aborted) {
+          return;
+        }
+      }
+      try {
+        await followEvents(
+          subscribeChildSessionEvents(client, controller.signal),
+          controller.signal,
+          handleEvent
+        );
+      } catch (error_) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setError(errorMessage(error_));
+        const delay = retryDelay(attempts);
+        attempts += 1;
+        retryTimer = setTimeout(() => {
+          void connect(true).catch(reportError);
+        }, delay);
+      }
+    };
+    connect(true).catch(reportError);
     return () => {
       controller.abort();
       clearTimeout(refreshTimer);
       clearTimeout(retryTimer);
-      releaseRetry?.();
       refreshRef.current = ignore;
       moreRef.current = ignore;
       stopRef.current = ignore;

@@ -4,10 +4,11 @@ import { AppState, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { objectKey } from "../lib/object-key";
 import { Markdown } from "./markdown";
 import { Button, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
-export const SideQuestion = ({
+const SideQuestionBody = ({
   client,
   sessionID,
   initialQuestion,
@@ -33,6 +34,14 @@ export const SideQuestion = ({
     onQuestionConsumed?.();
   });
 
+  const [seenQuestion, setSeenQuestion] = useState(initialQuestion);
+  if (seenQuestion !== initialQuestion) {
+    setSeenQuestion(initialQuestion);
+    if (initialQuestion !== undefined) {
+      setQuestion(initialQuestion);
+    }
+  }
+
   const cancel = () => {
     epoch.current += 1;
     request.current?.abort();
@@ -48,11 +57,6 @@ export const SideQuestion = ({
 
   useEffect(() => {
     mounted.current = true;
-    setQuestion(initialQuestion ?? "");
-    setAnswer(null);
-    setError(null);
-    setBusy(false);
-    setCopied(false);
     const subscription = AppState.addEventListener("change", (state) => {
       onAppStateChange(state);
     });
@@ -63,14 +67,13 @@ export const SideQuestion = ({
       request.current = null;
       subscription.remove();
     };
-  }, [client, sessionID]);
+  }, []);
 
   useEffect(() => {
     if (initialQuestion !== undefined) {
-      setQuestion(initialQuestion);
       consume();
     }
-  }, [client, sessionID, initialQuestion]);
+  }, [initialQuestion]);
 
   const ask = async () => {
     const prompt = question.trim();
@@ -183,3 +186,15 @@ export const SideQuestion = ({
     </View>
   );
 };
+
+export const SideQuestion = (props: {
+  client: Client;
+  sessionID: string;
+  initialQuestion?: string;
+  onQuestionConsumed?: () => void;
+}) => (
+  <SideQuestionBody
+    key={`${objectKey(props.client)}:${props.sessionID}`}
+    {...props}
+  />
+);

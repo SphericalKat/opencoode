@@ -164,13 +164,15 @@ const useDisclosure = (key: string, revealChild = false) => {
       disclosures?.isOpen(key) ||
       (revealChild && !disclosures?.isOpen(collapsedKey))
   );
-  useLayoutEffect(() => {
-    if (!revealChild || disclosures?.isOpen(collapsedKey)) {
-      return;
-    }
-    disclosures?.setOpen(key, true);
+  const reveals = revealChild && !disclosures?.isOpen(collapsedKey);
+  if (reveals && !open) {
     setOpen(true);
-  }, [revealChild, disclosures, collapsedKey, key]);
+  }
+  useLayoutEffect(() => {
+    if (reveals) {
+      disclosures?.setOpen(key, true);
+    }
+  }, [reveals, disclosures, key]);
   const toggle = () => {
     const next = disclosures ? disclosures.toggle(key) : !open;
     disclosures?.setOpen(collapsedKey, !next);

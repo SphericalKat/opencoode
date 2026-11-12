@@ -172,6 +172,9 @@ export const MotionDisclosureBody = ({
   useLayoutEffect(() => {
     requested.current = open;
   });
+  if (open && !presented) {
+    setPresented(true);
+  }
   const revision = useRef(0);
   const finishClose = useCallback((request: number) => {
     if (alive.current && request === revision.current && !requested.current) {
@@ -186,9 +189,6 @@ export const MotionDisclosureBody = ({
     revision.current += 1;
     const request = revision.current;
     cancelAnimation(progress);
-    if (open) {
-      setPresented(true);
-    }
     progress.set(
       withTiming(
         open ? 1 : 0,
@@ -440,6 +440,9 @@ export const MotionDrawer = ({
   const revision = useRef(0);
   const pendingDismiss = useRef(false);
   const dismissRef = useRef(onDismiss);
+  if (visible && !presented) {
+    setPresented(true);
+  }
   useLayoutEffect(() => {
     requested.current = visible;
     dismissRef.current = onDismiss;
@@ -486,7 +489,6 @@ export const MotionDrawer = ({
   useEffect(() => {
     if (visible) {
       pendingDismiss.current = false;
-      setPresented(true);
       if (showing.current) {
         animate(true);
       }
