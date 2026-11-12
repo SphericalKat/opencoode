@@ -282,11 +282,11 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { gap: 16 }, back: { alignSelf: 'flex-start', marginLeft: -10 }, center: { textAlign: 'center' },
     betaContainer: { width: '100%', maxWidth: 360, alignSelf: 'center' },
-    betaIntro: { alignItems: 'center', gap: 8, marginBottom: 12 }, betaLogo: { marginBottom: 28 }, betaTitle: { fontSize: 18, lineHeight: 24, fontWeight: '500', textAlign: 'center' }, betaHint: { fontSize: 13, lineHeight: 20, textAlign: 'center' },
-    betaInput: { minHeight: 48, paddingVertical: 10, paddingHorizontal: 12, fontSize: 14, borderRadius: 6 }, betaActions: { gap: 8 }, betaPassword: { justifyContent: 'center', gap: 4 },
+    betaIntro: { alignItems: 'center', gap: 8, marginBottom: 12 }, betaLogo: { marginBottom: 28 }, betaTitle: { fontSize: 19, lineHeight: 25, fontWeight: '500', textAlign: 'center' }, betaHint: { fontSize: 14, lineHeight: 21, textAlign: 'center' },
+    betaInput: { minHeight: 48, paddingVertical: 10, paddingHorizontal: 12, fontSize: 15, borderRadius: 6 }, betaActions: { gap: 8 }, betaPassword: { justifyContent: 'center', gap: 4 },
     betaInstructions: { alignItems: 'center', gap: 12, paddingTop: 16, marginTop: 4 }, betaCommand: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, backgroundColor: colors.input, paddingHorizontal: 16, paddingVertical: 6 },
-    intro: { gap: 12, alignItems: 'center', paddingTop: 8, paddingBottom: 8 }, actions: { gap: 4 }, instruction: { fontWeight: '500', fontSize: 13 }, command: { fontFamily: mono, fontSize: 12, color: colors.text, paddingVertical: 4 }, small: { fontSize: 12, lineHeight: 18 },
+    intro: { gap: 12, alignItems: 'center', paddingTop: 8, paddingBottom: 8 }, actions: { gap: 4 }, instruction: { fontWeight: '500', fontSize: 14 }, command: { fontFamily: mono, fontSize: 13, color: colors.text, paddingVertical: 4 }, small: { fontSize: 13, lineHeight: 19 },
     saved: { gap: 4 }, savedItem: { borderBottomWidth: 1, borderColor: colors.border }, server: { minHeight: touchTarget + 16, paddingVertical: 12, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 6 }, serverText: { flex: 1, minWidth: 0, gap: 2 }, serverName: { fontWeight: '500' }, manage: { paddingBottom: 10, paddingLeft: 32 },
-    camera: { width: '100%', aspectRatio: 1, maxHeight: 360, overflow: 'hidden', borderRadius: 12, backgroundColor: '#000000' }, viewfinder: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' }, frame: { position: 'absolute', width: '70%', aspectRatio: 1, borderWidth: 1.5, borderColor: '#ffffffbb', borderRadius: 12 }, privacy: { fontSize: 11, lineHeight: 17, textAlign: 'center', paddingTop: 4 },
+    camera: { width: '100%', aspectRatio: 1, maxHeight: 360, overflow: 'hidden', borderRadius: 12, backgroundColor: '#000000' }, viewfinder: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' }, frame: { position: 'absolute', width: '70%', aspectRatio: 1, borderWidth: 1.5, borderColor: '#ffffffbb', borderRadius: 12 }, privacy: { fontSize: 12, lineHeight: 18, textAlign: 'center', paddingTop: 4 },
   });
 }

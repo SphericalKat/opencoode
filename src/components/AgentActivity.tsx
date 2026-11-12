@@ -55,8 +55,8 @@ function createStyles(colors: ThemeColors) { return StyleSheet.create({
   bar: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6 },
   announcement: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 },
   summary: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  label: { fontSize: 13, lineHeight: 20, flexShrink: 1 },
+  label: { fontSize: 14, lineHeight: 21, flexShrink: 1 },
   action: { minHeight: Platform.OS === 'android' ? 48 : 44, paddingHorizontal: 8, justifyContent: 'center' },
-  actionText: { fontSize: 12, fontWeight: '500' },
-  retryError: { color: colors.danger, fontSize: 12, lineHeight: 18, paddingHorizontal: 6, paddingBottom: 10 },
+  actionText: { fontSize: 13, fontWeight: '500' },
+  retryError: { color: colors.danger, fontSize: 13, lineHeight: 19, paddingHorizontal: 6, paddingBottom: 10 },
 }); }

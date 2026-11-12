@@ -115,7 +115,7 @@ export function SettingsScreen({ client, modelCatalog = client?.model, directory
     <SettingsStack.Navigator screenOptions={{
       headerStyle: { backgroundColor: colors.bg },
       headerTintColor: colors.text,
-      headerTitleStyle: { color: colors.text, fontFamily: 'Inter', fontSize: 17, fontWeight: '600' },
+      headerTitleStyle: { color: colors.text, fontFamily: 'Inter', fontSize: 18, fontWeight: '600' },
       headerShadowVisible: false,
       contentStyle: { backgroundColor: colors.bg },
       animation: reducedMotion ? 'fade' : 'default',
@@ -497,12 +497,12 @@ function Configuration({ client, directory }: { client: Client; directory: strin
       try { const source = new TextDecoder().decode(await client.file.read({ location: { directory }, path }, { signal })); signal.throwIfAborted(); setEditing({ path, original: source }); setText(source); }
       catch (e) { if (!isFileNotFoundError(e)) throw e; signal.throwIfAborted(); setEditing({ path, original: null }); setText('{\n  "$schema": "https://opencode.ai/config.json"\n}\n'); }
     })} />
-    {data?.entries.map((entry, index) => <Card key={index}><Label style={{ fontFamily: mono, fontSize: 12 }}>{entry.path || 'Runtime configuration'}</Label><Label muted>{entry.type === 'directory' ? 'Configuration directory' : 'Configuration document'}</Label>
+    {data?.entries.map((entry, index) => <Card key={index}><Label style={{ fontFamily: mono, fontSize: 13 }}>{entry.path || 'Runtime configuration'}</Label><Label muted>{entry.type === 'directory' ? 'Configuration directory' : 'Configuration document'}</Label>
       {entry.type === 'document' && <><Disclosure title="Read effective values"><JsonView value={entry.info} /></Disclosure>{entry.path && <Button title="Edit source file" compact busy={busy} onPress={() => void run(async signal => { if (!entry.path) return; const source = new TextDecoder().decode(await client.file.read({ location: { directory }, path: entry.path }, { signal })); signal.throwIfAborted(); setEditing({ path: entry.path, original: source }); setText(source); })} />}</>}
     </Card>)}
     <Disclosure title="Default shell"><Label muted>This sets the shell for commands on your OpenCode server.</Label><Button title="Use system default" busy={busy} onPress={() => void run(async signal => { await client.experimental.config.update({ shell: null }, { signal }); await refresh(signal); signal.throwIfAborted(); setNotice('I set the shell to the system default.'); })} />{data?.shells.map(shell => <Button key={shell.path} title={`${shell.name} · ${shell.path}`} disabled={!shell.acceptable} busy={busy} onPress={() => void run(async signal => { await client.experimental.config.update({ shell: shell.path }, { signal }); await refresh(signal); signal.throwIfAborted(); setNotice(`I selected ${shell.name}.`); })} />)}</Disclosure>
     <Sheet visible={!!editing} title="Edit configuration" onClose={() => { if (busy) return; if (text === editing?.original) setEditing(undefined); else void confirmAction('Discard changes?', 'Your unsaved changes will be lost.').then(ok => { if (ok) setEditing(undefined); }); }}>
-      <Label style={{ fontFamily: mono, fontSize: 12 }}>{editing?.path}</Label><ErrorNotice error={errorAction} /><Field label="JSON or JSONC" multiline editable={!busy} value={text} onChangeText={setText} style={{ minHeight: 360, fontFamily: mono, fontSize: 12, lineHeight: 20 }} />
+      <Label style={{ fontFamily: mono, fontSize: 13 }}>{editing?.path}</Label><ErrorNotice error={errorAction} /><Field label="JSON or JSONC" multiline editable={!busy} value={text} onChangeText={setText} style={{ minHeight: 360, fontFamily: mono, fontSize: 13, lineHeight: 21 }} />
       <Button title="Save and reload" busy={busy} variant="primary" disabled={text === editing?.original} onPress={() => void run(async signal => { if (!editing) return; await saveConfigFile(client, directory, editing.path, editing.original, text, signal); setEditing({ ...editing, original: text }); await client.location.reload({ signal }); await refresh(signal); signal.throwIfAborted(); setEditing(undefined); setNotice('I saved and reloaded the configuration.'); })} />
     </Sheet>
   </Page>;
@@ -521,7 +521,7 @@ function Skills({ client, directory }: { client: Client; directory: string }) {
   return <Page error={error} loading={loading} refresh={refresh}>
     <Row style={{ flexWrap: 'nowrap', alignItems: 'flex-end' }}><Field label="Find a skill or command" value={query} onChangeText={setQuery} containerStyle={{ flex: 1 }} />{!!query && <Button title="Clear" accessibilityLabel="Clear skill and command search" compact variant="ghost" onPress={() => setQuery('')} />}</Row>
     <Label muted>Use slash commands and skills from the chat composer.</Label>
-    <Label style={styles.sectionLabel}>SKILLS · {skills.length}</Label>{skills.map(item => <Disclosure key={item.id} title={item.name}><Label muted>{item.description}</Label><Label style={{ fontFamily: mono, fontSize: 12 }}>{item.path}</Label><Text selectable style={{ color: colors.text, lineHeight: 21 }}>{item.content}</Text></Disclosure>)}
+    <Label style={styles.sectionLabel}>SKILLS · {skills.length}</Label>{skills.map(item => <Disclosure key={item.id} title={item.name}><Label muted>{item.description}</Label><Label style={{ fontFamily: mono, fontSize: 13 }}>{item.path}</Label><Text selectable style={{ color: colors.text, lineHeight: 22, fontSize: 15 }}>{item.content}</Text></Disclosure>)}
     <Label style={styles.sectionLabel}>COMMANDS · {commands.length}</Label>{commands.map(item => <Card key={item.name}><Label style={styles.name}>/{item.name}</Label><Label muted>{item.description}</Label></Card>)}
     {data && !loading && !!(data.skills.length || data.commands.length) && !skills.length && !commands.length && <Empty title="No matching skills or commands" detail="Try a skill name, description, or command name." />}
     {data && !data.skills.length && !data.commands.length && <Empty title="No custom skills or commands" />}
@@ -567,21 +567,21 @@ function Permissions({ client, directory }: { client: Client; directory: string 
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   betaAppearanceCard: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.panel },
-  betaSettingTitle: { fontFamily: sans, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  betaSettingTitle: { fontFamily: sans, fontSize: 14, lineHeight: 21, fontWeight: '500' },
   betaSettingChooser: { minHeight: 28, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  betaBackLabel: { fontSize: 13, lineHeight: 18 }, betaChooserTarget: { minHeight: 48, justifyContent: 'center' }, betaDescription: { fontSize: 13, lineHeight: 20 },
+  betaBackLabel: { fontSize: 14, lineHeight: 19 }, betaChooserTarget: { minHeight: 48, justifyContent: 'center' }, betaDescription: { fontSize: 14, lineHeight: 21 },
   betaCategoryRow: { minHeight: 48, paddingVertical: 6, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 12 },
   screen: { flex: 1, flexDirection: 'row', minHeight: 0, backgroundColor: colors.bg }, nativeNavigation: { flex: 1, minHeight: 0 },
   narrowScreen: { flexDirection: 'column' }, content: { flex: 1, flexDirection: 'row', minHeight: 0 }, narrowContent: { flexDirection: 'column' },
   sidebar: { width: 220, flexGrow: 0, borderRightWidth: 1, borderRightColor: colors.border },
   index: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 24, gap: 24 },
-  indexHeader: { gap: 5 }, group: { gap: 10 }, groupTitle: { fontSize: 12, fontWeight: '500', letterSpacing: 0.4, paddingHorizontal: 8 },
+  indexHeader: { gap: 5 }, group: { gap: 10 }, groupTitle: { fontSize: 13, fontWeight: '500', letterSpacing: 0.4, paddingHorizontal: 8 },
   groupPanel: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border, borderRadius: 10, overflow: 'hidden' },
   sectionRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
   sectionDivider: { position: 'absolute', top: 0, left: 16, right: 16, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }, currentSection: { backgroundColor: colors.selected },
-  sectionName: { fontFamily: sans, fontSize: 16, lineHeight: 22, fontWeight: '500' }, sectionDescription: { fontSize: 12, lineHeight: 18 },
+  sectionName: { fontFamily: sans, fontSize: 17, lineHeight: 23, fontWeight: '500' }, sectionDescription: { fontSize: 13, lineHeight: 19 },
   detail: { flex: 1, minWidth: 0 }, detailHeader: { minHeight: 64, paddingHorizontal: 12, paddingVertical: 6, flexWrap: 'nowrap', borderBottomWidth: 1, borderBottomColor: colors.border },
-  detailTitle: { fontFamily: sans, fontSize: 24, lineHeight: 30, fontWeight: '500', flex: 1, flexShrink: 1 },
+  detailTitle: { fontFamily: sans, fontSize: 25, lineHeight: 31, fontWeight: '500', flex: 1, flexShrink: 1 },
   page: { padding: 16, paddingHorizontal: pageInset, paddingBottom: 32, gap: 16 },
-  name: { fontFamily: sans, fontSize: 16, fontWeight: '600' }, sectionLabel: { fontFamily: sans, color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 8 },
+  name: { fontFamily: sans, fontSize: 17, fontWeight: '600' }, sectionLabel: { fontFamily: sans, color: colors.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 8 },
 });

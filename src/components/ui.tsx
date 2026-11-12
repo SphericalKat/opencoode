@@ -49,7 +49,7 @@ export function Row({ children, style }: { children: React.ReactNode; style?: Vi
 }
 export function Empty({ title, detail }: { title: string; detail?: string }) {
   const styles = useThemedStyles(createStyles);
-  return <View style={styles.empty}><Label style={{ fontSize: 16, fontWeight: '500', textAlign: 'center' }}>{title}</Label>{detail && <Label muted style={{ textAlign: 'center', lineHeight: 22 }}>{detail}</Label>}</View>;
+  return <View style={styles.empty}><Label style={{ fontSize: 17, fontWeight: '500', textAlign: 'center' }}>{title}</Label>{detail && <Label muted style={{ textAlign: 'center', lineHeight: 23 }}>{detail}</Label>}</View>;
 }
 export function ErrorNotice({ error, onRetry }: { error: string | null | undefined; onRetry?: () => void }) {
   const { colors } = useTheme();
@@ -127,7 +127,7 @@ export async function confirmAction(title: string, message: string, options: { c
 }
 export function JsonView({ value }: { value: unknown }) {
   const { colors } = useTheme();
-  return <Text selectable style={{ fontFamily: mono, fontSize: 12, lineHeight: 19, color: colors.text }}>{JSON.stringify(value, null, 2)}</Text>;
+  return <Text selectable style={{ fontFamily: mono, fontSize: 13, lineHeight: 20, color: colors.text }}>{JSON.stringify(value, null, 2)}</Text>;
 }
 export function Disclosure({ title, children, disclosureKey }: { title: string; children: React.ReactNode; disclosureKey?: string }) {
   const { colors } = useTheme();
@@ -141,19 +141,19 @@ export function Disclosure({ title, children, disclosureKey }: { title: string; 
 function createStyles(colors: ThemeColors) {
   const inset = Platform.OS !== 'android' || Number(Platform.Version) >= 29;
   return StyleSheet.create({
-  text: { color: colors.text, fontFamily: sans, fontSize: 14, lineHeight: 21 }, heading: { color: colors.text, fontFamily: sans, fontSize: 20, fontWeight: '500', letterSpacing: -0.32, flexShrink: 1 },
+  text: { color: colors.text, fontFamily: sans, fontSize: 15, lineHeight: 22 }, heading: { color: colors.text, fontFamily: sans, fontSize: 21, fontWeight: '500', letterSpacing: -0.32, flexShrink: 1 },
   buttonTarget: { minHeight: touchTarget, minWidth: touchTarget, justifyContent: 'center', alignItems: 'stretch' },
   button: { borderRadius: 6, minHeight: 36, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: colors.raised, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, borderTopColor: colors.controlTopEdge, boxShadow: [{ offsetX: 0, offsetY: 1, blurRadius: 1, color: '#00000035' }] },
   compact: { minHeight: 32, paddingVertical: 5, paddingHorizontal: 10 }, primary: { backgroundColor: colors.primary }, ghost: { backgroundColor: 'transparent', borderColor: 'transparent', borderTopColor: 'transparent', boxShadow: [] }, danger: { backgroundColor: colors.raised },
   selectedButton: { backgroundColor: colors.selected, borderColor: colors.faint, borderTopColor: colors.faint },
   pressed: { borderTopColor: colors.border, boxShadow: inset ? [{ offsetX: 0, offsetY: 1, blurRadius: 1, color: '#00000030', inset: true }] : [] }, ghostPressed: { backgroundColor: colors.raised },
-  buttonText: { color: colors.text, fontFamily: sans, fontWeight: '500', fontSize: 13, lineHeight: 20, letterSpacing: -0.04, fontVariant: ['tabular-nums'] }, input: { color: colors.text, fontFamily: sans, backgroundColor: colors.input, borderWidth: 1, borderColor: colors.border, borderBottomColor: colors.controlTopEdge, borderRadius: 8, padding: 12, paddingHorizontal: 15, fontSize: 16, minHeight: touchTarget, boxShadow: inset ? [{ offsetX: 0, offsetY: 1, blurRadius: 2, color: '#00000020', inset: true }] : [] }, fieldLabel: { fontSize: 13, fontWeight: '500', letterSpacing: 0 },
+  buttonText: { color: colors.text, fontFamily: sans, fontWeight: '500', fontSize: 14, lineHeight: 21, letterSpacing: -0.04, fontVariant: ['tabular-nums'] }, input: { color: colors.text, fontFamily: sans, backgroundColor: colors.input, borderWidth: 1, borderColor: colors.border, borderBottomColor: colors.controlTopEdge, borderRadius: 8, padding: 12, paddingHorizontal: 15, fontSize: 17, minHeight: touchTarget, boxShadow: inset ? [{ offsetX: 0, offsetY: 1, blurRadius: 2, color: '#00000020', inset: true }] : [] }, fieldLabel: { fontSize: 14, fontWeight: '500', letterSpacing: 0 },
   card: { backgroundColor: colors.panel, borderRadius: 8, padding: 14, paddingHorizontal: 15, gap: 10, borderWidth: 1, borderColor: colors.border }, row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }, empty: { padding: 28, gap: 8, alignItems: 'center', justifyContent: 'center', flex: 1 },
   error: { padding: 12, borderRadius: 8, backgroundColor: colors.dangerBackground, flexDirection: 'row', alignItems: 'center', gap: 8 },
   sheet: { flex: 1, backgroundColor: colors.panel }, sheetLayout: { flex: 1, minHeight: 0 }, sheetInner: { flex: 1, minHeight: 0, width: '100%', maxWidth: 680, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border },
-  betaSheetHeader: { paddingHorizontal: 14, paddingVertical: 8 }, betaSheetTitle: { fontSize: 17, lineHeight: 23, fontWeight: '600', flexShrink: 1 }, betaSheetContent: { paddingHorizontal: 14, gap: 12 },
-  recoveryNotice: { color: colors.muted, fontSize: 12, lineHeight: 18, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: colors.raised },
+  betaSheetHeader: { paddingHorizontal: 14, paddingVertical: 8 }, betaSheetTitle: { fontSize: 18, lineHeight: 24, fontWeight: '600', flexShrink: 1 }, betaSheetContent: { paddingHorizontal: 14, gap: 12 },
+  recoveryNotice: { color: colors.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: colors.raised },
   sheetScroll: { flex: 1, minHeight: 0 }, sheetContent: { padding: 18, gap: 16, paddingBottom: 24 }, sheetBody: { flex: 1, minHeight: 0 },
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' }, sheetScrim: { ...StyleSheet.absoluteFill, backgroundColor: '#00000070' },
   hiddenHeading: { position: 'absolute', width: 1, height: 1, overflow: 'hidden' },

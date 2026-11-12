@@ -62,7 +62,7 @@ export function McpResources({ client, location, onAttachContext }: Props) {
   };
 
   return <View style={{ gap: 14 }}>
-    <Row style={{ justifyContent: 'space-between' }}><Label style={{ fontSize: 17, fontWeight: '600' }}>MCP resources</Label><Button title="Refresh resources" compact variant="ghost" busy={loading} onPress={() => void refresh()} /></Row>
+    <Row style={{ justifyContent: 'space-between' }}><Label style={{ fontSize: 18, fontWeight: '600' }}>MCP resources</Label><Button title="Refresh resources" compact variant="ghost" busy={loading} onPress={() => void refresh()} /></Row>
     <Label muted>OpenCode supplies catalog metadata here. Add a reference to your draft. The agent can resolve it if its server tools support resource reads.</Label>
     <Field label="Find a resource" placeholder="Name, server, or URI" value={query} onChangeText={setQuery} />
     <ErrorNotice error={error} onRetry={() => void refresh()} />
@@ -79,8 +79,8 @@ function ResourceCard({ resource, onAttach }: { resource: McpResource; onAttach:
   const { colors } = useTheme();
   return <Card>
     <Label style={{ fontWeight: '600' }}>{resource.name}</Label><Label muted>{resource.server}{resource.mimeType ? ` · ${resource.mimeType}` : ''}</Label>
-    <Text selectable style={{ color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 18 }}>{resource.uri}</Text>
-    {resource.description && <Text selectable style={{ color: colors.muted, fontFamily: sans, lineHeight: 21 }}>{resource.description}</Text>}
+    <Text selectable style={{ color: colors.text, fontFamily: mono, fontSize: 13, lineHeight: 19 }}>{resource.uri}</Text>
+    {resource.description && <Text selectable style={{ color: colors.muted, fontFamily: sans, lineHeight: 22, fontSize: 15 }}>{resource.description}</Text>}
     <Button title="Add resource reference" compact onPress={onAttach} />
   </Card>;
 }
@@ -91,7 +91,7 @@ function TemplateCard({ resource, onAttach }: { resource: McpResourceTemplate; o
   const unresolved = /[{}]/.test(uri);
   return <Card>
     <Label style={{ fontWeight: '600' }}>{resource.name}</Label><Label muted>{resource.server} · Resource template</Label>
-    <Text selectable style={{ color: colors.text, fontFamily: mono, fontSize: 12, lineHeight: 18 }}>{resource.uriTemplate}</Text>
+    <Text selectable style={{ color: colors.text, fontFamily: mono, fontSize: 13, lineHeight: 19 }}>{resource.uriTemplate}</Text>
     {resource.description && <Label muted>{resource.description}</Label>}
     <Field label={`Resource URI for ${resource.name}`} value={uri} onChangeText={setUri} placeholder="Enter a complete URI from this template" />
     <Label muted>Replace each template parameter with the value that you need.</Label>
