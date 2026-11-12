@@ -10,26 +10,31 @@ import React, {
 
 import { confirmAction } from "../components/ui";
 
-type Guard = {
+interface Guard {
   update: (id: string, label: string | null) => void;
   confirm: (id?: string) => Promise<boolean>;
   subscribe: (listener: () => void) => () => void;
   has: (id: string) => boolean;
-};
+}
 const Context = createContext<Guard>({
-  update: () => {},
   confirm: async () => true,
-  subscribe: () => () => {},
   has: () => false,
+  subscribe: () => () => {},
+  update: () => {},
 });
 
 export function UnsavedProvider({ children }: { children: React.ReactNode }) {
   const changes = useRef(new Map<string, string>());
   const listeners = useRef(new Set<() => void>());
   const update = useCallback((id: string, label: string | null) => {
-    if ((changes.current.get(id) ?? null) === label) return;
-    if (label) changes.current.set(id, label);
-    else changes.current.delete(id);
+    if ((changes.current.get(id) ?? null) === label) {
+      return;
+    }
+    if (label) {
+      changes.current.set(id, label);
+    } else {
+      changes.current.delete(id);
+    }
     listeners.current.forEach((listener) => listener());
   }, []);
   const subscribe = useCallback((listener: () => void) => {
@@ -52,7 +57,7 @@ export function UnsavedProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
   const value = useMemo(
-    () => ({ update, confirm, subscribe, has }),
+    () => ({ confirm, has, subscribe, update }),
     [update, confirm, subscribe, has]
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;

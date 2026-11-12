@@ -16,49 +16,49 @@ import {
 import { createStreamBatch } from "../src/lib/streamBatch";
 
 const base = {
-  id: "event",
   created: 1,
   durable: { aggregateID: "s1", seq: 1, version: 1 as const },
+  id: "event",
 };
-const owned = { sessionID: "s1", assistantMessageID: "a1" };
+const owned = { assistantMessageID: "a1", sessionID: "s1" };
 
 test("chat displays text and reasoning deltas with independent fragment ordinals", () => {
   const events: OpenCodeEvent[] = [
     {
       ...base,
-      type: "session.step.started",
       data: {
         ...owned,
         agent: "build",
         model: { id: "m", providerID: "p" },
         started: 1,
       },
+      type: "session.step.started",
     },
     {
       ...base,
-      type: "session.reasoning.started",
       data: { ...owned, ordinal: 0 },
+      type: "session.reasoning.started",
     },
     {
       ...base,
+      data: { ...owned, delta: "Think", ordinal: 0 },
       type: "session.reasoning.delta",
-      data: { ...owned, ordinal: 0, delta: "Think" },
     },
-    { ...base, type: "session.text.started", data: { ...owned, ordinal: 0 } },
+    { ...base, data: { ...owned, ordinal: 0 }, type: "session.text.started" },
     {
       ...base,
+      data: { ...owned, delta: "Hello ", ordinal: 0 },
       type: "session.text.delta",
-      data: { ...owned, ordinal: 0, delta: "Hello " },
     },
     {
       ...base,
+      data: { ...owned, delta: "world", ordinal: 0 },
       type: "session.text.delta",
-      data: { ...owned, ordinal: 0, delta: "world" },
     },
     {
       ...base,
-      type: "session.text.ended",
       data: { ...owned, ordinal: 0, text: "Hello world!" },
+      type: "session.text.ended",
     },
   ];
   const messages = events.reduce(
@@ -67,16 +67,16 @@ test("chat displays text and reasoning deltas with independent fragment ordinals
   );
   const message = messages[0] as SessionMessageAssistant;
   assert.deepEqual(message.content, [
-    { type: "reasoning", text: "Think" },
-    { type: "text", text: "Hello world!" },
+    { text: "Think", type: "reasoning" },
+    { text: "Hello world!", type: "text" },
   ]);
   assert.equal(
     projectLiveEvent(
       messages,
       {
         ...base,
+        data: { ...owned, delta: "leak", ordinal: 0, sessionID: "other" },
         type: "session.text.delta",
-        data: { ...owned, sessionID: "other", ordinal: 0, delta: "leak" },
       },
       "s1"
     ),
@@ -88,49 +88,49 @@ test("chat updates the right concurrent tool and preserves the terminal result",
   const events: OpenCodeEvent[] = [
     {
       ...base,
-      type: "session.step.started",
       data: {
         ...owned,
         agent: "build",
         model: { id: "m", providerID: "p" },
         started: 1,
       },
+      type: "session.step.started",
     },
     {
       ...base,
-      type: "session.tool.input.started",
       data: { ...owned, id: "one", name: "read" },
-    },
-    {
-      ...base,
       type: "session.tool.input.started",
+    },
+    {
+      ...base,
       data: { ...owned, id: "two", name: "shell" },
+      type: "session.tool.input.started",
     },
     {
       ...base,
+      data: { ...owned, delta: '{"path":', id: "one" },
       type: "session.tool.input.delta",
-      data: { ...owned, id: "one", delta: '{"path":' },
     },
     {
       ...base,
+      data: { ...owned, delta: '"a"}', id: "one" },
       type: "session.tool.input.delta",
-      data: { ...owned, id: "one", delta: '"a"}' },
     },
     {
       ...base,
+      data: { ...owned, executed: true, id: "one", input: { path: "a" } },
       type: "session.tool.called",
-      data: { ...owned, id: "one", input: { path: "a" }, executed: true },
     },
     {
       ...base,
-      durable: { ...base.durable, version: 2 },
-      type: "session.tool.success",
       data: {
         ...owned,
-        id: "one",
-        executed: true,
         content: [{ type: "text", text: "Contents" }],
+        executed: true,
+        id: "one",
       },
+      durable: { ...base.durable, version: 2 },
+      type: "session.tool.success",
     },
   ];
   const message = events.reduce(
@@ -139,33 +139,35 @@ test("chat updates the right concurrent tool and preserves the terminal result",
   )[0] as SessionMessageAssistant;
   const [first, second] = message.content;
   assert.equal(first.type, "tool");
-  if (first.type === "tool")
+  if (first.type === "tool") {
     assert.deepEqual(first.state, {
       status: "completed",
       input: { path: "a" },
       content: [{ type: "text", text: "Contents" }],
       metadata: undefined,
     });
+  }
   assert.equal(second.type, "tool");
-  if (second.type === "tool")
+  if (second.type === "tool") {
     assert.deepEqual(second.state, { status: "streaming", input: "" });
+  }
 });
 
 test("composer routes registered commands and shell input while preserving absolute paths as prompts", () => {
   assert.deepEqual(parseComposer("/review file.ts\nCheck errors", ["review"]), {
-    type: "command",
     name: "review",
     text: "file.ts\nCheck errors",
+    type: "command",
   });
   assert.deepEqual(parseComposer("/Users/me/project", ["review"]), {
-    type: "prompt",
     text: "/Users/me/project",
+    type: "prompt",
   });
   assert.deepEqual(parseComposer("! pwd", []), {
-    type: "shell",
     command: "pwd",
+    type: "shell",
   });
-  assert.deepEqual(parseComposer("!", []), { type: "prompt", text: "!" });
+  assert.deepEqual(parseComposer("!", []), { text: "!", type: "prompt" });
   assert.equal(serverFileUri("/a/file #1.ts"), "file:///a/file%20%231.ts");
   assert.throws(() => serverFileUri("../phone/file"), /absolute/);
 });
@@ -173,15 +175,15 @@ test("composer routes registered commands and shell input while preserving absol
 test("message pages deduplicate overlap and retain the latest content in chronological order", () => {
   const early: SessionMessageInfo = {
     id: "one",
-    type: "user",
     text: "Before",
     time: { created: 1 },
+    type: "user",
   };
   const late: SessionMessageInfo = {
     id: "two",
-    type: "user",
     text: "Later",
     time: { created: 2 },
+    type: "user",
   };
   const updated = { ...early, text: "After" };
   assert.deepEqual(mergeMessages([late, early], [updated]), [updated, late]);
@@ -199,48 +201,49 @@ test("batched token updates flush before the authoritative text end and cannot a
     { delayMs: 50 }
   );
   const dispatch = (event: OpenCodeEvent) => {
-    if (event.type.endsWith(".delta")) batch.push(event);
-    else {
+    if (event.type.endsWith(".delta")) {
+      batch.push(event);
+    } else {
       batch.flush();
       messages = projectLiveEvent(messages, event, "s1");
     }
   };
   dispatch({
     ...base,
-    type: "session.step.started",
     data: {
       ...owned,
       agent: "build",
       model: { id: "m", providerID: "p" },
       started: 1,
     },
+    type: "session.step.started",
   });
   dispatch({
     ...base,
-    type: "session.text.started",
     data: { ...owned, ordinal: 0 },
+    type: "session.text.started",
   });
   dispatch({
     ...base,
+    data: { ...owned, delta: "Hello ", ordinal: 0 },
     type: "session.text.delta",
-    data: { ...owned, ordinal: 0, delta: "Hello " },
   });
   dispatch({
     ...base,
+    data: { ...owned, delta: "world", ordinal: 0 },
     type: "session.text.delta",
-    data: { ...owned, ordinal: 0, delta: "world" },
   });
   dispatch({
     ...base,
-    type: "session.text.ended",
     data: { ...owned, ordinal: 0, text: "Hello world!" },
+    type: "session.text.ended",
   });
   assert.deepEqual((messages[0] as SessionMessageAssistant).content, [
-    { type: "text", text: "Hello world!" },
+    { text: "Hello world!", type: "text" },
   ]);
   await new Promise((resolve) => setTimeout(resolve, 80));
   assert.deepEqual((messages[0] as SessionMessageAssistant).content, [
-    { type: "text", text: "Hello world!" },
+    { text: "Hello world!", type: "text" },
   ]);
   batch.clear();
 });

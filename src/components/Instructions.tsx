@@ -2,7 +2,8 @@ import type { InstructionEntryInfo } from "@opencode/client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 
-import { type Client, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import {
   Button,
   Busy,
@@ -31,8 +32,12 @@ export function Instructions({
   const sequence = useRef(0);
   const mounted = useRef(true);
   const scope = useRef({ client, sessionID });
-  if (scope.current.client !== client || scope.current.sessionID !== sessionID)
+  if (
+    scope.current.client !== client ||
+    scope.current.sessionID !== sessionID
+  ) {
     scope.current = { client, sessionID };
+  }
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -49,12 +54,16 @@ export function Instructions({
       const result = await client.experimental.session.instructions.entry.list({
         sessionID,
       });
-      if (mounted.current && request === sequence.current) setEntries(result);
-    } catch (cause) {
+      if (mounted.current && request === sequence.current) {
+        setEntries(result);
+      }
+    } catch (error_) {
       if (mounted.current && request === sequence.current)
-        setError(errorMessage(cause));
+        setError(errorMessage(error_));
     } finally {
-      if (mounted.current && request === sequence.current) setLoading(false);
+      if (mounted.current && request === sequence.current) {
+        setLoading(false);
+      }
     }
   }, [client, sessionID]);
   useEffect(() => {
@@ -69,22 +78,28 @@ export function Instructions({
   }, [refresh]);
 
   const run = async (operation: () => Promise<void>) => {
-    if (busy) return;
+    if (busy) {
+      return;
+    }
     const owner = scope.current;
     setBusy(true);
     setError(undefined);
     try {
       await operation();
-      if (owner !== scope.current || !mounted.current) return;
+      if (owner !== scope.current || !mounted.current) {
+        return;
+      }
       setKey("");
       setValue("");
       setJson(false);
       await refresh();
-    } catch (cause) {
+    } catch (error_) {
       if (owner === scope.current && mounted.current)
-        setError(errorMessage(cause));
+        setError(errorMessage(error_));
     } finally {
-      if (mounted.current) setBusy(false);
+      if (mounted.current) {
+        setBusy(false);
+      }
     }
   };
 
@@ -153,10 +168,11 @@ export function Instructions({
                     )) &&
                     owner === scope.current &&
                     mounted.current
-                  )
+                  ) {
                     await client.experimental.session.instructions.entry.remove(
                       { sessionID, key: entry.key }
                     );
+                  }
                 });
               }}
             />
@@ -193,11 +209,13 @@ export function Instructions({
           disabled={!key.trim() || (!json && !value.trim())}
           onPress={() => {
             void run(async () => {
-              if (!key.trim()) throw new Error("Enter an instruction name");
+              if (!key.trim()) {
+                throw new Error("Enter an instruction name");
+              }
               const parsed = json ? JSON.parse(value) : value;
               await client.experimental.session.instructions.entry.put({
-                sessionID,
                 key: key.trim(),
+                sessionID,
                 value: parsed,
               });
             });

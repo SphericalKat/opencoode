@@ -2,7 +2,8 @@ import type { ShellListOutput } from "@opencode/client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, ScrollView, Text, View } from "react-native";
 
-import { type Client, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import { useTheme } from "../lib/theme";
 import {
   Button,
@@ -17,14 +18,19 @@ import {
 } from "./ui";
 
 type Command = ShellListOutput["data"][number];
-type Output = { start: number; output: string; cursor: number; size: number };
-type Props = {
+interface Output {
+  start: number;
+  output: string;
+  cursor: number;
+  size: number;
+}
+interface Props {
   client: Client;
   sessionID: string;
   directory: string;
   initialShellID?: string;
   initialDirectory?: string;
-};
+}
 const pageBytes = 32 * 1024;
 
 export function BackgroundCommands(props: Props) {
@@ -92,29 +98,37 @@ function Commands({
 
   const refresh = useCallback(
     async (quiet = false) => {
-      if (quiet && listRequest.current && !listRequest.current.signal.aborted)
+      if (quiet && listRequest.current && !listRequest.current.signal.aborted) {
         return;
+      }
       listRequest.current?.abort();
       const controller = new AbortController();
       listRequest.current = controller;
-      if (!quiet) setLoading(true);
+      if (!quiet) {
+        setLoading(true);
+      }
       setError(undefined);
       try {
         const result = await client.shell.list(
           { location: { directory } },
           { signal: controller.signal }
         );
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setCommands(
             result.data.filter(
               (command) => command.metadata.sessionID === sessionID
             )
           );
-      } catch (cause) {
-        if (!controller.signal.aborted) setError(errorMessage(cause));
+        }
+      } catch (error_) {
+        if (!controller.signal.aborted) setError(errorMessage(error_));
       } finally {
-        if (listRequest.current === controller) listRequest.current = undefined;
-        if (!controller.signal.aborted) setLoading(false);
+        if (listRequest.current === controller) {
+          listRequest.current = undefined;
+        }
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     },
     [client, directory, sessionID]
@@ -126,13 +140,16 @@ function Commands({
         quiet &&
         outputRequest.current &&
         !outputRequest.current.signal.aborted
-      )
+      ) {
         return;
+      }
       pageStart.current = start;
       outputRequest.current?.abort();
       const controller = new AbortController();
       outputRequest.current = controller;
-      if (!quiet) setOutputBusy(true);
+      if (!quiet) {
+        setOutputBusy(true);
+      }
       setOutputError(undefined);
       try {
         const commandDirectory =
@@ -141,35 +158,42 @@ function Commands({
           { id, location: { directory: commandDirectory } },
           { signal: controller.signal }
         );
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
         if (
           command.data.metadata.sessionID !== sessionID &&
           id !== initialShellID
-        )
+        ) {
           throw new Error("This command is not associated with this session");
+        }
         setSelected(command.data);
         const result = await client.shell.output(
           {
-            id,
-            location: { directory: commandDirectory },
             cursor: start,
+            id,
             limit: pageBytes,
+            location: { directory: commandDirectory },
           },
           { signal: controller.signal }
         );
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setPage({
             start,
             output: result.data.output,
             cursor: result.data.cursor,
             size: result.data.size,
           });
-      } catch (cause) {
-        if (!controller.signal.aborted) setOutputError(errorMessage(cause));
+        }
+      } catch (error_) {
+        if (!controller.signal.aborted) setOutputError(errorMessage(error_));
       } finally {
-        if (outputRequest.current === controller)
+        if (outputRequest.current === controller) {
           outputRequest.current = undefined;
-        if (!controller.signal.aborted) setOutputBusy(false);
+        }
+        if (!controller.signal.aborted) {
+          setOutputBusy(false);
+        }
       }
     },
     [client, directory, sessionID, initialShellID, initialDirectory]
@@ -186,8 +210,9 @@ function Commands({
       return;
     }
     void refresh();
-    if (resumed && selectedRef.current)
+    if (resumed && selectedRef.current) {
       void loadOutput(selectedRef.current, pageStart.current);
+    }
     const timer = setInterval(() => {
       void refresh(true);
     }, 3000);
@@ -201,7 +226,9 @@ function Commands({
     setPage(undefined);
     setOutputError(undefined);
     pageStart.current = 0;
-    if (selectedID && previousForeground.current) void loadOutput(selectedID);
+    if (selectedID && previousForeground.current) {
+      void loadOutput(selectedID);
+    }
     return () => outputRequest.current?.abort();
   }, [selectedID, loadOutput]);
   useEffect(() => {
@@ -210,8 +237,9 @@ function Commands({
       !selectedID ||
       selected?.status !== "running" ||
       (page && page.cursor < page.size)
-    )
+    ) {
       return;
+    }
     const timer = setInterval(() => {
       void loadOutput(selectedID, page?.start ?? 0, true);
     }, 3000);
@@ -233,8 +261,9 @@ function Commands({
       selected.id !== selectedID ||
       selected.metadata.sessionID !== sessionID ||
       stopping
-    )
+    ) {
       return;
+    }
     const id = selectedID;
     const owner = generation.current;
     const running = selected?.status === "running";
@@ -245,14 +274,16 @@ function Commands({
           ? "The server will stop this command and remove its captured output."
           : "The server will delete the captured output for this command."
       ))
-    )
+    ) {
       return;
+    }
     if (
       !mounted.current ||
       owner !== generation.current ||
       selectedRef.current !== id
-    )
+    ) {
       return;
+    }
     setStopping(true);
     setOutputError(undefined);
     try {
@@ -262,17 +293,21 @@ function Commands({
         id,
         location: { directory: commandDirectory },
       });
-      if (!mounted.current || owner !== generation.current) return;
+      if (!mounted.current || owner !== generation.current) {
+        return;
+      }
       outputRequest.current?.abort();
       setSelectedID(undefined);
       setSelected(undefined);
       setPage(undefined);
       await refresh();
-    } catch (cause) {
+    } catch (error_) {
       if (mounted.current && owner === generation.current)
-        setOutputError(errorMessage(cause));
+        setOutputError(errorMessage(error_));
     } finally {
-      if (mounted.current && owner === generation.current) setStopping(false);
+      if (mounted.current && owner === generation.current) {
+        setStopping(false);
+      }
     }
   }
 
@@ -292,7 +327,9 @@ function Commands({
           busy={loading}
           onPress={() => {
             void refresh();
-            if (selectedID) void loadOutput(selectedID, page?.start ?? 0);
+            if (selectedID) {
+              void loadOutput(selectedID, page?.start ?? 0);
+            }
           }}
         />
       </Row>
@@ -351,7 +388,7 @@ function Commands({
               </Label>
               <Label muted>
                 {selected.status}
-                {selected.exit !== undefined ? ` · Exit ${selected.exit}` : ""}
+                {selected.exit === undefined ? "" : ` · Exit ${selected.exit}`}
                 {selected.signal ? ` · ${selected.signal}` : ""}
               </Label>
             </>

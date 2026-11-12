@@ -22,7 +22,7 @@ test("the editor preserves UTF-8, byte-order marks, and line endings", async () 
       },
     },
     original,
-    text + "More\r\n"
+    `${text}More\r\n`
   );
   assert.deepEqual(stored, encode("\uFEFFHello 世界\r\nMore\r\n"));
   assert.deepEqual(written, stored);

@@ -9,22 +9,22 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 
-type SheetCoordinator = {
+interface SheetCoordinator {
   suspended: boolean;
   recoveryPending: boolean;
   presentSheet: (id: string) => void;
   dismissSheet: (id: string) => boolean;
   suspendSheets: () => Promise<void>;
   resumeSheets: () => void;
-};
+}
 
 const Context = createContext<SheetCoordinator>({
-  suspended: false,
-  recoveryPending: false,
-  presentSheet: () => {},
   dismissSheet: () => false,
-  suspendSheets: async () => {},
+  presentSheet: () => {},
+  recoveryPending: false,
   resumeSheets: () => {},
+  suspendSheets: async () => {},
+  suspended: false,
 });
 
 export function SheetCoordinatorProvider({
@@ -75,12 +75,12 @@ export function SheetCoordinatorProvider({
   }, []);
   const value = useMemo(
     () => ({
-      suspended,
-      recoveryPending,
-      presentSheet,
       dismissSheet,
-      suspendSheets,
+      presentSheet,
+      recoveryPending,
       resumeSheets,
+      suspendSheets,
+      suspended,
     }),
     [
       suspended,
@@ -103,9 +103,7 @@ export function useNativePresentation() {
   const id = useId();
   const sequence = useRef(0);
   return useCallback(
-    async function withNativePresentation<T>(
-      operation: () => Promise<T>
-    ): Promise<T> {
+    async <T,>(operation: () => Promise<T>): Promise<T> => {
       if (Platform.OS === "web") return operation();
       const presentation = `${id}:native:${++sequence.current}`;
       presentSheet(presentation);

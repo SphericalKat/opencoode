@@ -20,11 +20,17 @@ import type {
 } from "../../packages/pi-mobile/protocol";
 import type { ChatBackend, ChatBackendSnapshot, ChatCore } from "./chatBackend";
 import type { Connection } from "./client";
-import { createPiClient, type PiClient } from "./piClient";
+import { createPiClient } from "./piClient";
+import type { PiClient } from "./piClient";
 
 const imageLimit = 3_000_000;
 const bodyLimit = 5_000_000;
-const imageTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const imageTypes = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
 type MessageCache = WeakMap<
   PiMessage,
   { model: string; dependencies: unknown[]; message: SessionMessageInfo }
@@ -375,28 +381,34 @@ async function imageAttachment(file: {
           : extension === "gif"
             ? "image/gif"
             : "");
-  if (!imageTypes.includes(mimeType))
+  if (!imageTypes.has(mimeType)) {
     throw new Error("Attach a PNG, JPEG, WebP, or GIF image");
+  }
   let data = dataURI?.[2];
   if (data === undefined) {
-    if (/^https?:\/\//i.test(file.uri))
+    if (/^https?:\/\//i.test(file.uri)) {
       throw new Error("Attach an image from this device");
+    }
     const source = new File(file.uri);
-    if (!source.exists)
+    if (!source.exists) {
       throw new Error(
         `${file.name || "An attached image"} is no longer on this device. Remove it and attach it again.`
       );
-    if (source.size > imageLimit)
+    }
+    if (source.size > imageLimit) {
       throw new Error(
         `${file.name || "An image"} exceeds the 3 MB image limit`
       );
+    }
     data = await source.base64();
   }
-  if (!data || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data))
+  if (!data || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
     throw new Error("The image data is invalid. Attach the image again.");
-  if (Math.ceil((data.length * 3) / 4) > imageLimit)
+  }
+  if (Math.ceil((data.length * 3) / 4) > imageLimit) {
     throw new Error(`${file.name || "An image"} exceeds the 3 MB image limit`);
-  return { mimeType, data };
+  }
+  return { data, mimeType };
 }
 
 export function makePiChatBackend(
@@ -414,14 +426,19 @@ export function makePiChatBackend(
     signal?: AbortSignal,
     fresh = false
   ): Promise<PiSnapshot> {
-    if (signal?.aborted)
+    if (signal?.aborted) {
       throw (
         signal.reason ??
         new DOMException("The request was aborted", "AbortError")
       );
-    if (!fresh && snapshot && Date.now() - received < 250) return snapshot;
+    }
+    if (!fresh && snapshot && Date.now() - received < 250) {
+      return snapshot;
+    }
     const pending = requests.get(signal);
-    if (pending) return pending;
+    if (pending) {
+      return pending;
+    }
     const startVersion = version;
     const request = pi.snapshot(signal).then((value) => {
       if (
@@ -440,7 +457,9 @@ export function makePiChatBackend(
     try {
       return await request;
     } finally {
-      if (requests.get(signal) === request) requests.delete(signal);
+      if (requests.get(signal) === request) {
+        requests.delete(signal);
+      }
     }
   }
 
@@ -449,10 +468,11 @@ export function makePiChatBackend(
     signal?: AbortSignal
   ): Promise<PiSnapshot> {
     const value = await load(signal);
-    if (value.session.id !== sessionID)
+    if (value.session.id !== sessionID) {
       throw new Error(
         "The active Pi session changed. Open the current session again."
       );
+    }
     return value;
   }
 
@@ -463,24 +483,70 @@ export function makePiChatBackend(
   ): Promise<void> {
     await current(sessionID, signal);
     const bound = { ...value, expectedSessionID: sessionID };
-    if (new TextEncoder().encode(JSON.stringify(bound)).byteLength > bodyLimit)
+    if (
+      new TextEncoder().encode(JSON.stringify(bound)).byteLength > bodyLimit
+    ) {
       throw new Error(
         "The message exceeds the 5 MB limit. Remove an image or shorten the text."
       );
+    }
     await pi.command(bound, signal);
     received = 0;
   }
 
   const core: ChatCore = {
+    message: {
+      list: async ({ sessionID, type }, options) => {
+        const value = normalized(await current(sessionID, options?.signal));
+        return {
+          data: type
+            ? value.messages.filter((message) => message.type === type)
+            : value.messages,
+          cursor: {},
+        };
+      },
+    },
+    model: {
+      list: async (_input, options) => {
+        const [models, value] = await Promise.all([
+          pi.models(options?.signal),
+          load(options?.signal),
+        ]);
+        return {
+          location: { directory: value.session.cwd },
+          data: models.map(normalizeModel),
+        };
+      },
+    },
     session: {
-      get: async ({ sessionID }, options) =>
-        normalized(await current(sessionID, options?.signal)).session,
       active: async (options) => {
         const value = await load(options?.signal);
         return value.session.idle
           ? {}
           : { [value.session.id]: { type: "running" } };
       },
+      compact: async ({ sessionID }, options) =>
+        command(sessionID, { type: "compact" }, options?.signal),
+      fork: async ({ sessionID, before }, options) => {
+        const value = await current(sessionID, options?.signal);
+        if (
+          !before ||
+          !value.messages.some(
+            (message) => message.id === before && message.role === "user"
+          )
+        )
+          throw new Error("Select a user message to fork the Pi session");
+        await command(
+          sessionID,
+          { type: "fork", entryID: before },
+          options?.signal
+        );
+        return normalized(await load(options?.signal, true)).session;
+      },
+      get: async ({ sessionID }, options) =>
+        normalized(await current(sessionID, options?.signal)).session,
+      interrupt: async ({ sessionID }, options) =>
+        command(sessionID, { type: "abort" }, options?.signal),
       prompt: async (input, options) => {
         const before = await current(input.sessionID, options?.signal);
         if (before.waiting)
@@ -503,8 +569,6 @@ export function makePiChatBackend(
         };
         await command(input.sessionID, value, options?.signal);
       },
-      interrupt: async ({ sessionID }, options) =>
-        command(sessionID, { type: "abort" }, options?.signal),
       switchModel: async ({ sessionID, model }, options) => {
         const before = await current(sessionID, options?.signal);
         if (!before.session.idle || before.waiting)
@@ -540,87 +604,46 @@ export function makePiChatBackend(
             options?.signal
           );
       },
-      compact: async ({ sessionID }, options) =>
-        command(sessionID, { type: "compact" }, options?.signal),
-      fork: async ({ sessionID, before }, options) => {
-        const value = await current(sessionID, options?.signal);
-        if (
-          !before ||
-          !value.messages.some(
-            (message) => message.id === before && message.role === "user"
-          )
-        )
-          throw new Error("Select a user message to fork the Pi session");
-        await command(
-          sessionID,
-          { type: "fork", entryID: before },
-          options?.signal
-        );
-        return normalized(await load(options?.signal, true)).session;
-      },
-    },
-    message: {
-      list: async ({ sessionID, type }, options) => {
-        const value = normalized(await current(sessionID, options?.signal));
-        return {
-          data: type
-            ? value.messages.filter((message) => message.type === type)
-            : value.messages,
-          cursor: {},
-        };
-      },
-    },
-    model: {
-      list: async (_input, options) => {
-        const [models, value] = await Promise.all([
-          pi.models(options?.signal),
-          load(options?.signal),
-        ]);
-        return {
-          location: { directory: value.session.cwd },
-          data: models.map(normalizeModel),
-        };
-      },
     },
   };
 
   return {
-    kind: "pi",
-    core,
-    capabilities: {
-      attachments: true,
-      delivery: true,
-      defaultVariant: false,
-      rename: true,
-      forkSession: false,
-      forkMessage: true,
-      compact: true,
-      archive: false,
-      remove: false,
-      move: false,
-      files: false,
-      agents: false,
-      commands: false,
-      skills: false,
-      shell: false,
-      inbox: false,
-      forms: false,
-      permissions: false,
-      diff: false,
-      context: false,
-      export: false,
-      instructions: false,
-      schedules: false,
-      background: false,
-      children: false,
-      sideQuestion: false,
-      resources: false,
-      statistics: false,
-    },
     get activityNotice() {
       return snapshot ? activityNotice(snapshot) : undefined;
     },
     canForkMessage: (message) => message.type === "user",
+    capabilities: {
+      agents: false,
+      archive: false,
+      attachments: true,
+      background: false,
+      children: false,
+      commands: false,
+      compact: true,
+      context: false,
+      defaultVariant: false,
+      delivery: true,
+      diff: false,
+      export: false,
+      files: false,
+      forkMessage: true,
+      forkSession: false,
+      forms: false,
+      inbox: false,
+      instructions: false,
+      move: false,
+      permissions: false,
+      remove: false,
+      rename: true,
+      resources: false,
+      schedules: false,
+      shell: false,
+      sideQuestion: false,
+      skills: false,
+      statistics: false,
+    },
+    core,
+    kind: "pi",
     async *subscribe({ signal }) {
       const controller = new AbortController();
       const abort = () => controller.abort(signal?.reason);

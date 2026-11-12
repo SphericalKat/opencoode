@@ -18,10 +18,12 @@ import {
   Text,
   TextInput,
   View,
-  type StyleProp,
-  type TextInputProps,
-  type ViewStyle,
-  type TextProps,
+} from "react-native";
+import type {
+  StyleProp,
+  TextInputProps,
+  ViewStyle,
+  TextProps,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -32,12 +34,8 @@ import {
   MessageDisclosureContext,
 } from "../lib/messageActions";
 import { useSheetCoordinator } from "../lib/sheets";
-import {
-  darkColors,
-  type ThemeColors,
-  useTheme,
-  useThemedStyles,
-} from "../lib/theme";
+import { darkColors, useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import {
   MotionDisclosureBody,
   MotionDisclosureChevron,
@@ -102,8 +100,8 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={{
-        disabled: !!disabled || !!busy,
         busy: !!busy,
+        disabled: !!disabled || !!busy,
         selected,
       }}
       aria-pressed={selected}
@@ -223,7 +221,7 @@ export function Empty({ title, detail }: { title: string; detail?: string }) {
         {title}
       </Label>
       {detail && (
-        <Label muted style={{ textAlign: "center", lineHeight: 23 }}>
+        <Label muted style={{ lineHeight: 23, textAlign: "center" }}>
           {detail}
         </Label>
       )}
@@ -239,7 +237,9 @@ export function ErrorNotice({
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  if (!error) return null;
+  if (!error) {
+    return null;
+  }
   return (
     <View accessibilityRole="alert" style={styles.error}>
       <Label style={{ color: colors.danger, flex: 1 }}>{error}</Label>
@@ -294,17 +294,23 @@ export function Sheet({
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
   const notifyDismissed = useCallback(() => {
-    if (requested.current || !pendingDismiss.current) return;
+    if (requested.current || !pendingDismiss.current) {
+      return;
+    }
     pendingDismiss.current = false;
     const deferActions = dismissSheet(id);
     if (!logicalVisible.current) {
-      if (deferActions && !allowDuringRecovery)
+      if (deferActions && !allowDuringRecovery) {
         pendingAppDismiss.current = true;
-      else dismissRef.current?.();
+      } else {
+        dismissRef.current?.();
+      }
     }
   }, [dismissSheet, id, allowDuringRecovery]);
   useLayoutEffect(() => {
-    if (effectiveVisible && !allowDuringRecovery) presentSheet(id);
+    if (effectiveVisible && !allowDuringRecovery) {
+      presentSheet(id);
+    }
   }, [effectiveVisible, allowDuringRecovery, presentSheet, id]);
   useEffect(
     () => () => {
@@ -329,9 +335,13 @@ export function Sheet({
       pendingDismiss.current = false;
       return;
     }
-    if (!wasVisible) return;
+    if (!wasVisible) {
+      return;
+    }
     pendingDismiss.current = true;
-    if (Platform.OS !== "android") return;
+    if (Platform.OS !== "android") {
+      return;
+    }
     const frame = requestAnimationFrame(notifyDismissed);
     return () => cancelAnimationFrame(frame);
   }, [effectiveVisible, notifyDismissed]);
@@ -443,17 +453,19 @@ export async function confirmAction(
   message: string,
   options: { confirmLabel?: string; destructive?: boolean } = {}
 ): Promise<boolean> {
-  if (Platform.OS === "web") return window.confirm(`${title}\n\n${message}`);
+  if (Platform.OS === "web") {
+    return window.confirm(`${title}\n\n${message}`);
+  }
   return new Promise((resolve) =>
     Alert.alert(
       title,
       message,
       [
-        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+        { onPress: () => resolve(false), style: "cancel", text: "Cancel" },
         {
-          text: options.confirmLabel || "Continue",
-          style: options.destructive === false ? "default" : "destructive",
           onPress: () => resolve(true),
+          style: options.destructive === false ? "default" : "destructive",
+          text: options.confirmLabel || "Continue",
         },
       ],
       { cancelable: true, onDismiss: () => resolve(false) }
@@ -466,10 +478,10 @@ export function JsonView({ value }: { value: unknown }) {
     <Text
       selectable
       style={{
+        color: colors.text,
         fontFamily: mono,
         fontSize: 13,
         lineHeight: 20,
-        color: colors.text,
       }}
     >
       {JSON.stringify(value, null, 2)}
@@ -517,7 +529,7 @@ export function Disclosure({
           pressed && styles.ghostPressed,
         ]}
       >
-        <Label style={{ fontWeight: "500", flex: 1 }}>{title}</Label>
+        <Label style={{ flex: 1, fontWeight: "500" }}>{title}</Label>
         <MotionDisclosureChevron open={open}>
           <ShellIcon name="chevron" color={colors.muted} size={16} />
         </MotionDisclosureChevron>
@@ -531,54 +543,138 @@ export function Disclosure({
 function createStyles(colors: ThemeColors) {
   const inset = Platform.OS !== "android" || Number(Platform.Version) >= 29;
   return StyleSheet.create({
-    text: {
-      color: colors.text,
-      fontFamily: sans,
-      fontSize: 15,
-      lineHeight: 22,
-    },
-    heading: {
-      color: colors.text,
-      fontFamily: sans,
-      fontSize: 21,
-      fontWeight: "500",
-      letterSpacing: -0.32,
+    betaSheetContent: { gap: 12, paddingHorizontal: 14 },
+    betaSheetHeader: { paddingHorizontal: 14, paddingVertical: 8 },
+    betaSheetTitle: {
       flexShrink: 1,
-    },
-    buttonTarget: {
-      minHeight: touchTarget,
-      minWidth: touchTarget,
-      justifyContent: "center",
-      alignItems: "stretch",
+      fontSize: 18,
+      fontWeight: "600",
+      lineHeight: 24,
     },
     button: {
-      borderRadius: 6,
-      minHeight: 36,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      backgroundColor: colors.raised,
       alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 1,
+      backgroundColor: colors.raised,
       borderColor: colors.border,
+      borderRadius: 6,
       borderTopColor: colors.controlTopEdge,
+      borderWidth: 1,
       boxShadow: [
         { offsetX: 0, offsetY: 1, blurRadius: 1, color: "#00000035" },
       ],
+      justifyContent: "center",
+      minHeight: 36,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
     },
-    compact: { minHeight: 32, paddingVertical: 5, paddingHorizontal: 10 },
-    primary: { backgroundColor: colors.primary },
+    buttonTarget: {
+      alignItems: "stretch",
+      justifyContent: "center",
+      minHeight: touchTarget,
+      minWidth: touchTarget,
+    },
+    buttonText: {
+      color: colors.text,
+      fontFamily: sans,
+      fontSize: 14,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "500",
+      letterSpacing: -0.04,
+      lineHeight: 21,
+    },
+    card: {
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      gap: 10,
+      padding: 14,
+      paddingHorizontal: 15,
+    },
+    compact: { minHeight: 32, paddingHorizontal: 10, paddingVertical: 5 },
+    danger: { backgroundColor: colors.raised },
+    disclosure: { gap: 0, padding: 0 },
+    disclosureBody: { gap: 10, padding: 14, paddingTop: 0 },
+    disclosureHeader: {
+      alignItems: "center",
+      borderRadius: 8,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: touchTarget,
+      padding: 14,
+    },
+    empty: {
+      alignItems: "center",
+      flex: 1,
+      gap: 8,
+      justifyContent: "center",
+      padding: 28,
+    },
+    error: {
+      alignItems: "center",
+      backgroundColor: colors.dangerBackground,
+      borderRadius: 8,
+      flexDirection: "row",
+      gap: 8,
+      padding: 12,
+    },
+    fieldLabel: { fontSize: 14, fontWeight: "500", letterSpacing: 0 },
+    fitInner: { flex: 0, flexShrink: 1 },
+    fitScroll: { flex: 0, flexShrink: 1 },
+    fitSheet: {
+      alignSelf: "center",
+      backgroundColor: colors.panel,
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      flexShrink: 1,
+      maxHeight: "85%",
+      maxWidth: 680,
+      overflow: "hidden",
+      width: "100%",
+    },
     ghost: {
       backgroundColor: "transparent",
       borderColor: "transparent",
       borderTopColor: "transparent",
       boxShadow: [],
     },
-    danger: { backgroundColor: colors.raised },
-    selectedButton: {
-      backgroundColor: colors.selected,
-      borderColor: colors.faint,
-      borderTopColor: colors.faint,
+    ghostPressed: { backgroundColor: colors.raised },
+    heading: {
+      color: colors.text,
+      flexShrink: 1,
+      fontFamily: sans,
+      fontSize: 21,
+      fontWeight: "500",
+      letterSpacing: -0.32,
+    },
+    hiddenHeading: {
+      height: 1,
+      overflow: "hidden",
+      position: "absolute",
+      width: 1,
+    },
+    input: {
+      backgroundColor: colors.input,
+      borderBottomColor: colors.controlTopEdge,
+      borderColor: colors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      boxShadow: inset
+        ? [
+            {
+              offsetX: 0,
+              offsetY: 1,
+              blurRadius: 2,
+              color: "#00000020",
+              inset: true,
+            },
+          ]
+        : [],
+      color: colors.text,
+      fontFamily: sans,
+      fontSize: 17,
+      minHeight: touchTarget,
+      padding: 12,
+      paddingHorizontal: 15,
     },
     pressed: {
       borderTopColor: colors.border,
@@ -594,140 +690,56 @@ function createStyles(colors: ThemeColors) {
           ]
         : [],
     },
-    ghostPressed: { backgroundColor: colors.raised },
-    buttonText: {
-      color: colors.text,
-      fontFamily: sans,
-      fontWeight: "500",
-      fontSize: 14,
-      lineHeight: 21,
-      letterSpacing: -0.04,
-      fontVariant: ["tabular-nums"],
-    },
-    input: {
-      color: colors.text,
-      fontFamily: sans,
-      backgroundColor: colors.input,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderBottomColor: colors.controlTopEdge,
-      borderRadius: 8,
-      padding: 12,
-      paddingHorizontal: 15,
-      fontSize: 17,
-      minHeight: touchTarget,
-      boxShadow: inset
-        ? [
-            {
-              offsetX: 0,
-              offsetY: 1,
-              blurRadius: 2,
-              color: "#00000020",
-              inset: true,
-            },
-          ]
-        : [],
-    },
-    fieldLabel: { fontSize: 14, fontWeight: "500", letterSpacing: 0 },
-    card: {
-      backgroundColor: colors.panel,
-      borderRadius: 8,
-      padding: 14,
-      paddingHorizontal: 15,
-      gap: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    row: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      flexWrap: "wrap",
-    },
-    empty: {
-      padding: 28,
-      gap: 8,
-      alignItems: "center",
-      justifyContent: "center",
-      flex: 1,
-    },
-    error: {
-      padding: 12,
-      borderRadius: 8,
-      backgroundColor: colors.dangerBackground,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
-    sheet: { flex: 1, backgroundColor: colors.panel },
-    sheetLayout: { flex: 1, minHeight: 0 },
-    sheetInner: {
-      flex: 1,
-      minHeight: 0,
-      width: "100%",
-      maxWidth: 680,
-      alignSelf: "center",
-    },
-    sheetHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      flexShrink: 0,
-      gap: 12,
-      paddingHorizontal: 18,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderColor: colors.border,
-    },
-    betaSheetHeader: { paddingHorizontal: 14, paddingVertical: 8 },
-    betaSheetTitle: {
-      fontSize: 18,
-      lineHeight: 24,
-      fontWeight: "600",
-      flexShrink: 1,
-    },
-    betaSheetContent: { paddingHorizontal: 14, gap: 12 },
+    primary: { backgroundColor: colors.primary },
     recoveryNotice: {
+      backgroundColor: colors.raised,
       color: colors.muted,
       fontSize: 13,
       lineHeight: 19,
       paddingHorizontal: 18,
       paddingVertical: 10,
-      backgroundColor: colors.raised,
     },
-    sheetScroll: { flex: 1, minHeight: 0 },
-    sheetContent: { padding: 18, gap: 16, paddingBottom: 24 },
+    row: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    selectedButton: {
+      backgroundColor: colors.selected,
+      borderColor: colors.faint,
+      borderTopColor: colors.faint,
+    },
+    sheet: { backgroundColor: colors.panel, flex: 1 },
     sheetBody: { flex: 1, minHeight: 0 },
+    sheetContent: { gap: 16, padding: 18, paddingBottom: 24 },
+    sheetHeader: {
+      alignItems: "center",
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      flexShrink: 0,
+      gap: 12,
+      justifyContent: "space-between",
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+    },
+    sheetInner: {
+      alignSelf: "center",
+      flex: 1,
+      maxWidth: 680,
+      minHeight: 0,
+      width: "100%",
+    },
+    sheetLayout: { flex: 1, minHeight: 0 },
     sheetOverlay: { flex: 1, justifyContent: "flex-end" },
     sheetScrim: { ...StyleSheet.absoluteFill, backgroundColor: "#00000070" },
-    hiddenHeading: {
-      position: "absolute",
-      width: 1,
-      height: 1,
-      overflow: "hidden",
+    sheetScroll: { flex: 1, minHeight: 0 },
+    text: {
+      color: colors.text,
+      fontFamily: sans,
+      fontSize: 15,
+      lineHeight: 22,
     },
-    fitSheet: {
-      flexShrink: 1,
-      maxHeight: "85%",
-      width: "100%",
-      maxWidth: 680,
-      alignSelf: "center",
-      backgroundColor: colors.panel,
-      borderTopLeftRadius: 16,
-      borderTopRightRadius: 16,
-      overflow: "hidden",
-    },
-    fitInner: { flex: 0, flexShrink: 1 },
-    fitScroll: { flex: 0, flexShrink: 1 },
-    disclosure: { padding: 0, gap: 0 },
-    disclosureHeader: {
-      minHeight: touchTarget,
-      padding: 14,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      borderRadius: 8,
-    },
-    disclosureBody: { padding: 14, paddingTop: 0, gap: 10 },
   });
 }

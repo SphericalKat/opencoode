@@ -10,14 +10,14 @@ test("forms omit inactive stale answers and resolve later conditions from active
     { key: "count", type: "integer" },
     {
       key: "extra",
-      type: "string",
       required: true,
+      type: "string",
       when: [{ key: "count", op: "eq", value: 2 }],
     },
     {
       key: "nested",
-      type: "string",
       required: true,
+      type: "string",
       when: [{ key: "extra", op: "neq", value: "skip" }],
     },
   ];
@@ -39,19 +39,19 @@ test("multiselect conditions require an answer and check membership", () => {
   const fields: FormField[] = [
     {
       key: "choices",
-      type: "multiselect",
       options: [{ value: "a", label: "A" }],
+      type: "multiselect",
     },
     {
       key: "detail",
-      type: "string",
       required: true,
+      type: "string",
       when: [{ key: "choices", op: "eq", value: "a" }],
     },
     {
       key: "other",
-      type: "string",
       required: true,
+      type: "string",
       when: [{ key: "choices", op: "neq", value: "a" }],
     },
   ];
@@ -63,40 +63,40 @@ test("multiselect conditions require an answer and check membership", () => {
 
 test("defaults include hidden values without replacing explicit false or zero", () => {
   const fields: FormField[] = [
-    { key: "region", type: "string", hidden: true, default: "us" },
-    { key: "enabled", type: "boolean", default: true, required: true },
-    { key: "count", type: "number", default: 5, required: true },
+    { default: "us", hidden: true, key: "region", type: "string" },
+    { default: true, key: "enabled", required: true, type: "boolean" },
+    { default: 5, key: "count", required: true, type: "number" },
   ];
   assert.deepEqual(initialFormValues(fields), {
-    region: "us",
-    enabled: true,
     count: 5,
+    enabled: true,
+    region: "us",
   });
-  assert.deepEqual(prepareFormAnswer(fields, { enabled: false, count: 0 }), {
-    answer: { region: "us", enabled: false, count: 0 },
+  assert.deepEqual(prepareFormAnswer(fields, { count: 0, enabled: false }), {
+    answer: { count: 0, enabled: false, region: "us" },
     errors: {},
   });
 });
 
 test("forms reject invalid numeric and restricted choice answers", () => {
   const fields: FormField[] = [
-    { key: "count", type: "integer", minimum: 1, maximum: 3 },
+    { key: "count", maximum: 3, minimum: 1, type: "integer" },
     {
       key: "choice",
-      type: "string",
       options: [{ value: "allowed", label: "Allowed" }],
+      type: "string",
     },
     {
-      key: "multiple",
-      type: "multiselect",
-      maxItems: 1,
       custom: true,
+      key: "multiple",
+      maxItems: 1,
       options: [],
+      type: "multiselect",
     },
   ];
   const result = prepareFormAnswer(fields, {
-    count: "1.5",
     choice: "invalid",
+    count: "1.5",
     multiple: ["a", "b"],
   });
   assert.deepEqual(Object.keys(result.errors), ["count", "choice", "multiple"]);
@@ -105,13 +105,13 @@ test("forms reject invalid numeric and restricted choice answers", () => {
 
 test("formats and size constraints block invalid form submissions", () => {
   const fields: FormField[] = [
-    { key: "date", type: "string", format: "date" },
+    { format: "date", key: "date", type: "string" },
     {
       key: "name",
-      type: "string",
-      minLength: 3,
       maxLength: 4,
+      minLength: 3,
       pattern: "^[a-z]+$",
+      type: "string",
     },
     { key: "url", type: "external", url: "https://example.com" },
   ];
@@ -130,7 +130,7 @@ test("formats and size constraints block invalid form submissions", () => {
 
 test("external steps require explicit acknowledgment and cleared defaults stay cleared", () => {
   const fields: FormField[] = [
-    { key: "choice", type: "string", default: "default" },
+    { default: "default", key: "choice", type: "string" },
     { key: "auth", type: "external", url: "https://example.com" },
   ];
   assert.deepEqual(prepareFormAnswer(fields, { choice: undefined }), {
@@ -138,7 +138,7 @@ test("external steps require explicit acknowledgment and cleared defaults stay c
     errors: { auth: "Confirm that you completed this step" },
   });
   assert.deepEqual(
-    prepareFormAnswer(fields, { choice: undefined, auth: true }),
+    prepareFormAnswer(fields, { auth: true, choice: undefined }),
     { answer: { auth: true }, errors: {} }
   );
 });

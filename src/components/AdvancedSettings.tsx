@@ -13,7 +13,8 @@ import * as Sharing from "expo-sharing";
 import React, { useEffect, useRef, useState } from "react";
 import { Image, Linking, Platform, ScrollView, Text, View } from "react-native";
 
-import { type Client, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import { externalURL } from "../lib/settings";
 import { useNativePresentation } from "../lib/sheets";
 import { useTheme } from "../lib/theme";
@@ -84,22 +85,27 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
       const result = await client.experimental.usage.limits({
         location: { directory },
       });
-      if (active.current) setInfo(result.data);
-    } catch (e) {
+      if (active.current) {
+        setInfo(result.data);
+      }
+    } catch (error_) {
       if (active.current)
         setError(
-          e instanceof ClientError && e.reason === "UnsupportedContentType"
+          error_ instanceof ClientError &&
+            error_.reason === "UnsupportedContentType"
             ? "Usage limits require OpenCode 2.2.1 or later. Update your server to use this view."
-            : errorMessage(e)
+            : errorMessage(error_)
         );
     } finally {
-      if (active.current) setLoading(false);
+      if (active.current) {
+        setLoading(false);
+      }
     }
   }
   return (
-    <ScrollView contentContainerStyle={{ padding: 18, gap: 14 }}>
+    <ScrollView contentContainerStyle={{ gap: 14, padding: 18 }}>
       <Row>
-        <Label style={{ fontSize: 19, fontWeight: "600", flex: 1 }}>
+        <Label style={{ flex: 1, fontSize: 19, fontWeight: "600" }}>
           Server usage
         </Label>
         <Button
@@ -117,8 +123,8 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
           <Button
             title="Open usage dashboard"
             onPress={() => {
-              void openLink(info.workspace.usageURL).catch((e) =>
-                setError(errorMessage(e))
+              void openLink(info.workspace.usageURL).catch((error_) =>
+                setError(errorMessage(error_))
               );
             }}
           />
@@ -143,9 +149,9 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
               {budget.models.map((model) => (
                 <Label key={`${model.providerID}/${model.modelID}`} muted>
                   {model.name}
-                  {model.spent !== undefined
-                    ? ` · $${model.spent.toFixed(2)}`
-                    : ""}
+                  {model.spent === undefined
+                    ? ""
+                    : ` · $${model.spent.toFixed(2)}`}
                 </Label>
               ))}
             </Card>
@@ -177,19 +183,19 @@ function Meter({ label, meter }: { label: string; meter: UsageLimitsMeter }) {
       </Row>
       <View
         accessibilityRole="progressbar"
-        accessibilityValue={{ min: 0, max: 100, now: percent }}
+        accessibilityValue={{ max: 100, min: 0, now: percent }}
         style={{
-          height: 5,
-          borderRadius: 3,
           backgroundColor: colors.raised,
+          borderRadius: 3,
+          height: 5,
           overflow: "hidden",
         }}
       >
         <View
           style={{
-            width: `${percent}%`,
-            height: 5,
             backgroundColor: meter.limited ? colors.danger : colors.success,
+            height: 5,
+            width: `${percent}%`,
           }}
         />
       </View>
@@ -219,10 +225,12 @@ function WebSearch({
     void client.websearch
       .providers({ location: { directory } })
       .then((result) => {
-        if (active.current) setProviders(result.data);
+        if (active.current) {
+          setProviders(result.data);
+        }
       })
-      .catch((e) => {
-        if (active.current) setError(errorMessage(e));
+      .catch((error_) => {
+        if (active.current) setError(errorMessage(error_));
       });
     return () => {
       active.current = false;
@@ -238,21 +246,25 @@ function WebSearch({
     setResults(undefined);
     try {
       const result = await client.websearch.query(
-        { location: { directory }, query: query.trim(), providerID: provider },
+        { location: { directory }, providerID: provider, query: query.trim() },
         { signal: abort.signal }
       );
-      if (active.current && !abort.signal.aborted)
+      if (active.current && !abort.signal.aborted) {
         setResults(result.data.results);
-    } catch (e) {
-      if (active.current && !abort.signal.aborted) setError(errorMessage(e));
+      }
+    } catch (error_) {
+      if (active.current && !abort.signal.aborted)
+        setError(errorMessage(error_));
     } finally {
-      if (active.current && !abort.signal.aborted) setBusy(false);
+      if (active.current && !abort.signal.aborted) {
+        setBusy(false);
+      }
     }
   }
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: 18, gap: 14 }}
+      contentContainerStyle={{ gap: 14, padding: 18 }}
     >
       <Label style={{ fontSize: 19, fontWeight: "600" }}>Search the web</Label>
       <Label muted>Use the web search providers on your OpenCode server.</Label>
@@ -262,14 +274,16 @@ function WebSearch({
         onChangeText={setQuery}
         returnKeyType="search"
         onSubmitEditing={() => {
-          if (query.trim() && !busy) void search();
+          if (query.trim() && !busy) {
+            void search();
+          }
         }}
       />
       <Row>
         <Button
           title="Default provider"
           compact
-          variant={!provider ? "primary" : "secondary"}
+          variant={provider ? "secondary" : "primary"}
           onPress={() => setProvider(undefined)}
         />
         {providers.map((item) => (
@@ -300,10 +314,10 @@ function WebSearch({
             <Text
               selectable
               style={{
-                fontFamily: sans,
                 color: colors.text,
-                lineHeight: 23,
+                fontFamily: sans,
                 fontSize: 15,
+                lineHeight: 23,
               }}
             >
               {result.content}
@@ -313,7 +327,9 @@ function WebSearch({
             title="Open source"
             compact
             onPress={() => {
-              void openLink(result.url).catch((e) => setError(errorMessage(e)));
+              void openLink(result.url).catch((error_) =>
+                setError(errorMessage(error_))
+              );
             }}
           />
         </Card>
@@ -355,11 +371,12 @@ function Generate({
     void client.model
       .list({ location: { directory }, types: ["chat", "image"] })
       .then((result) => {
-        if (active.current)
+        if (active.current) {
           setModels(result.data.filter((item) => item.enabled));
+        }
       })
-      .catch((e) => {
-        if (active.current) setError(errorMessage(e));
+      .catch((error_) => {
+        if (active.current) setError(errorMessage(error_));
       });
     return () => {
       active.current = false;
@@ -396,29 +413,37 @@ function Generate({
         if (
           !/^\d+:\d+$/.test(aspect) ||
           aspect.split(":").some((part) => Number(part) <= 0)
-        )
+        ) {
           throw new Error("Enter an aspect ratio such as 1:1 or 16:9");
+        }
         const result = await client.experimental.generate.image(
-          { model: ref, prompt, aspect: aspect as `${number}:${number}`, n: 1 },
+          { aspect: aspect as `${number}:${number}`, model: ref, n: 1, prompt },
           { signal: abort.signal }
         );
-        if (active.current && !abort.signal.aborted) setImages(result);
+        if (active.current && !abort.signal.aborted) {
+          setImages(result);
+        }
       } else {
         const result = await client.experimental.generate.text(
           { model: ref, prompt },
           { signal: abort.signal }
         );
-        if (active.current && !abort.signal.aborted) setText(result.text);
+        if (active.current && !abort.signal.aborted) {
+          setText(result.text);
+        }
       }
-    } catch (e) {
+    } catch (error_) {
       if (active.current && !abort.signal.aborted)
         setError(
-          e instanceof ClientError && e.reason === "UnsupportedContentType"
+          error_ instanceof ClientError &&
+            error_.reason === "UnsupportedContentType"
             ? "Standalone generation requires OpenCode 2.2.1 or later. Update your server to use this feature."
-            : errorMessage(e)
+            : errorMessage(error_)
         );
     } finally {
-      if (active.current && !abort.signal.aborted) setBusy(false);
+      if (active.current && !abort.signal.aborted) {
+        setBusy(false);
+      }
     }
   }
   async function shareImage(image: GenerateImageResult["images"][number]) {
@@ -438,23 +463,26 @@ function Generate({
         link.download = filename;
         link.click();
       } else {
-        if (!(await Sharing.isAvailableAsync()))
+        if (!(await Sharing.isAvailableAsync())) {
           throw new Error("File sharing is unavailable on this device");
+        }
         const file = new File(Paths.cache, filename);
         try {
           await file.write(image.data, { encoding: "base64" });
           await withNativePresentation(() =>
             Sharing.shareAsync(file.uri, {
-              mimeType: image.mime,
               dialogTitle: "Save or share image",
+              mimeType: image.mime,
             })
           );
         } finally {
-          if (file.exists) await file.delete();
+          if (file.exists) {
+            await file.delete();
+          }
         }
       }
-    } catch (e) {
-      setError(errorMessage(e));
+    } catch (error_) {
+      setError(errorMessage(error_));
     } finally {
       setSharing(false);
     }
@@ -462,7 +490,7 @@ function Generate({
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: 18, gap: 14 }}
+      contentContainerStyle={{ gap: 14, padding: 18 }}
     >
       <Label style={{ fontSize: 19, fontWeight: "600" }}>Generate</Label>
       <Label muted>
@@ -508,7 +536,7 @@ function Generate({
           <Button
             title="Server default"
             compact
-            variant={!model ? "primary" : "secondary"}
+            variant={model ? "secondary" : "primary"}
             onPress={() => setModel(undefined)}
           />
         )}
@@ -568,10 +596,10 @@ function Generate({
           <Text
             selectable
             style={{
-              fontFamily: sans,
               color: colors.text,
-              lineHeight: 24,
+              fontFamily: sans,
               fontSize: 15,
+              lineHeight: 24,
             }}
           >
             {text}
@@ -580,8 +608,8 @@ function Generate({
             title="Copy text"
             compact
             onPress={() => {
-              void Clipboard.setStringAsync(text).catch((e) =>
-                setError(errorMessage(e))
+              void Clipboard.setStringAsync(text).catch((error_) =>
+                setError(errorMessage(error_))
               );
             }}
           />
@@ -593,7 +621,7 @@ function Generate({
             accessibilityLabel={prompt}
             source={{ uri: `data:${image.mime};base64,${image.data}` }}
             resizeMode="contain"
-            style={{ width: "100%", aspectRatio: 1, borderRadius: 6 }}
+            style={{ aspectRatio: 1, borderRadius: 6, width: "100%" }}
           />
           <Button
             title={Platform.OS === "web" ? "Save image" : "Save or share image"}

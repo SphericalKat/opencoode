@@ -2,7 +2,8 @@ import * as Clipboard from "expo-clipboard";
 import React, { useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 
-import { errorMessage, type Client } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import { Markdown } from "./Markdown";
 import { Button, Card, ErrorNotice, Field, Label, Row } from "./ui";
 
@@ -46,7 +47,9 @@ export function SideQuestion({
     setBusy(false);
     setCopied(false);
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active" && request.current) cancel();
+      if (state !== "active" && request.current) {
+        cancel();
+      }
     });
     return () => {
       mounted.current = false;
@@ -66,7 +69,9 @@ export function SideQuestion({
 
   const ask = async () => {
     const prompt = question.trim();
-    if (!prompt || request.current) return;
+    if (!prompt || request.current) {
+      return;
+    }
     const controller = new AbortController();
     const current = ++epoch.current;
     request.current = controller;
@@ -75,23 +80,24 @@ export function SideQuestion({
     setCopied(false);
     try {
       const result = await client.session.generate(
-        { sessionID, prompt },
+        { prompt, sessionID },
         { signal: controller.signal }
       );
       if (
         !mounted.current ||
         current !== epoch.current ||
         controller.signal.aborted
-      )
+      ) {
         return;
+      }
       setAnswer({ question: prompt, text: result.text });
-    } catch (cause) {
+    } catch (error_) {
       if (
         mounted.current &&
         current === epoch.current &&
         !controller.signal.aborted
       )
-        setError(errorMessage(cause));
+        setError(errorMessage(error_));
     } finally {
       if (mounted.current && current === epoch.current) {
         request.current = null;
@@ -101,14 +107,18 @@ export function SideQuestion({
   };
 
   const copy = async () => {
-    if (!answer) return;
-    const current = epoch.current;
+    if (!answer) {
+      return;
+    }
+    const { current } = epoch;
     try {
       await Clipboard.setStringAsync(answer.text);
-      if (mounted.current && current === epoch.current) setCopied(true);
-    } catch (cause) {
+      if (mounted.current && current === epoch.current) {
+        setCopied(true);
+      }
+    } catch (error_) {
       if (mounted.current && current === epoch.current)
-        setError(errorMessage(cause));
+        setError(errorMessage(error_));
     }
   };
 

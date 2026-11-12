@@ -49,22 +49,22 @@ test("terminal ignores malformed control data and accepts a valid resume positio
 });
 
 test("terminal bridge rejects invalid geometry and preserves real keyboard input", () => {
-  assert.deepEqual(terminalEvent({ type: "input", data: "\u0003" }), {
-    type: "input",
-    data: "\u0003",
+  assert.deepEqual(terminalEvent({ data: "\u0003", type: "input" }), {
     binary: false,
+    data: "\u0003",
+    type: "input",
   });
-  assert.deepEqual(terminalEvent({ type: "resize", cols: 40, rows: 16 }), {
-    type: "resize",
+  assert.deepEqual(terminalEvent({ cols: 40, rows: 16, type: "resize" }), {
     cols: 40,
     rows: 16,
+    type: "resize",
   });
-  assert.equal(terminalEvent({ type: "resize", cols: 0, rows: 16 }), undefined);
+  assert.equal(terminalEvent({ cols: 0, rows: 16, type: "resize" }), undefined);
   assert.equal(
-    terminalEvent({ type: "resize", cols: 40.5, rows: 16 }),
+    terminalEvent({ cols: 40.5, rows: 16, type: "resize" }),
     undefined
   );
-  assert.equal(terminalEvent({ type: "input", data: {} }), undefined);
+  assert.equal(terminalEvent({ data: {}, type: "input" }), undefined);
 });
 
 test("persistent terminal input preserves UTF-8 bytes and the requested viewport", () => {
@@ -76,7 +76,14 @@ test("persistent terminal input preserves UTF-8 bytes and the requested viewport
   assert.equal(header.getUint16(3), 15);
   assert.deepEqual(new Uint8Array(frame).subarray(5), bytes);
   assert.deepEqual(
-    Array.from(new Uint8Array(persistentInputFrame({ cols: 300, rows: 20 }))),
+    [
+      ...new Uint8Array(
+        persistentInputFrame({
+          cols: 300,
+          rows: 20,
+        })
+      ),
+    ],
     [0, 1, 44, 0, 20]
   );
   assert.throws(() => persistentInputFrame({ cols: 0, rows: 15 }), /size/);
@@ -88,7 +95,7 @@ test("persistent terminal opens as an observer without credentials or automatic 
       "https://host.example/base",
       "pty/1",
       "short-lived-ticket",
-      { cursor: 57, attachmentID: "mobile-1", role: "observer" }
+      { attachmentID: "mobile-1", cursor: 57, role: "observer" }
     )
   );
   assert.equal(

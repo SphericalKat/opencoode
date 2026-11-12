@@ -15,23 +15,25 @@ import {
   BetaTabsSheet,
   BetaTabStrip,
   SessionSurface,
-  type OpenSessionTab,
 } from "../components/BetaNavigation";
+import type { OpenSessionTab } from "../components/BetaNavigation";
 import { Busy, ErrorNotice } from "../components/ui";
 import { useBetaLayout } from "../lib/betaLayout";
-import { type Connection, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Connection } from "../lib/client";
 import { makePiChatBackend } from "../lib/piChatBackend";
 import { createPiClient } from "../lib/piClient";
 import { useUnsavedGuard } from "../lib/unsaved";
 import { ChatScreen } from "./ChatScreen";
-import { SettingsScreen, type Section } from "./SettingsScreen";
+import { SettingsScreen } from "./SettingsScreen";
+import type { Section } from "./SettingsScreen";
 
-type Props = {
+interface Props {
   connection: Connection;
   onManageServers: () => void;
   onConnectionLost: (error: unknown) => void;
   foreground: boolean;
-};
+}
 const settingsSections: Section[] = ["Appearance", "Models"];
 
 export function PiWorkspace(props: Props) {
@@ -89,7 +91,9 @@ function PiWorkspaceSession({
   }, []);
 
   const recordSession = useCallback((next: SessionInfo) => {
-    if (!alive.current) return;
+    if (!alive.current) {
+      return;
+    }
     setSession((current) =>
       current?.id === next.id &&
       current.title === next.title &&
@@ -98,14 +102,18 @@ function PiWorkspaceSession({
         : next
     );
     const tab = {
+      directory: next.location.directory,
       id: next.id,
       title: next.title || "New session",
-      directory: next.location.directory,
     };
     setTabs((current) => {
       const previous = current.find((item) => item.id === next.id);
-      if (previous?.title === tab.title && previous.directory === tab.directory)
+      if (
+        previous?.title === tab.title &&
+        previous.directory === tab.directory
+      ) {
         return current;
+      }
       return previous
         ? current.map((item) => (item.id === tab.id ? tab : item))
         : [...current, tab];
@@ -119,29 +127,35 @@ function PiWorkspaceSession({
         { sessionID: info.session.id },
         { signal }
       );
-      if (!signal?.aborted) recordSession(next);
+      if (!signal?.aborted) {
+        recordSession(next);
+      }
     },
     [backend, client, recordSession]
   );
 
   useEffect(() => {
-    if (!foreground || session) return;
+    if (!foreground || session) {
+      return;
+    }
     const controller = new AbortController();
-    void refreshSession(controller.signal).catch((cause) => {
+    void refreshSession(controller.signal).catch((error_) => {
       if (controller.signal.aborted) return;
-      setError(errorMessage(cause));
-      lostConnection.current(cause);
+      setError(errorMessage(error_));
+      lostConnection.current(error_);
     });
     return () => controller.abort();
   }, [foreground, session, refreshSession]);
 
   useEffect(() => {
-    if (!foreground || !navigationOpen) return;
+    if (!foreground || !navigationOpen) {
+      return;
+    }
     const controller = new AbortController();
     void client
       .sessions(controller.signal)
       .then((value) => {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setRecent(
             value.map((item) => ({
               id: item.id,
@@ -149,19 +163,24 @@ function PiWorkspaceSession({
               directory: item.cwd,
             }))
           );
+        }
       })
-      .catch((cause) => {
-        if (!controller.signal.aborted) setError(errorMessage(cause));
+      .catch((error_) => {
+        if (!controller.signal.aborted) setError(errorMessage(error_));
       });
     return () => controller.abort();
   }, [client, foreground, navigationOpen]);
 
   useEffect(() => {
-    if (!settingsOpen) return;
+    if (!settingsOpen) {
+      return;
+    }
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
-        if (settingsCanGoBack.current) return false;
+        if (settingsCanGoBack.current) {
+          return false;
+        }
         setSettingsOpen(false);
         return true;
       }
@@ -172,38 +191,56 @@ function PiWorkspaceSession({
   const changeSession = async (
     command: Extract<PiCommand, { type: "new" | "switch" }>
   ) => {
-    if (operation.current || !foreground) return;
-    if (!(await confirmNavigation()) || !alive.current) return;
+    if (operation.current || !foreground) {
+      return;
+    }
+    if (!(await confirmNavigation()) || !alive.current) {
+      return;
+    }
     operation.current = true;
     setBusy(true);
     setError(null);
     try {
-      const current = sessionRef.current;
-      if (!current) return;
+      const { current } = sessionRef;
+      if (!current) {
+        return;
+      }
       await client.command({ ...command, expectedSessionID: current.id });
-      if (alive.current) await refreshSession();
-    } catch (cause) {
-      if (alive.current) setError(errorMessage(cause));
+      if (alive.current) {
+        await refreshSession();
+      }
+    } catch (error_) {
+      if (alive.current) setError(errorMessage(error_));
     } finally {
       operation.current = false;
-      if (alive.current) setBusy(false);
+      if (alive.current) {
+        setBusy(false);
+      }
     }
   };
 
   const openSession = (id: string) => {
-    if (!id || id === sessionRef.current?.id) return;
-    void changeSession({ type: "switch", sessionID: id });
+    if (!id || id === sessionRef.current?.id) {
+      return;
+    }
+    void changeSession({ sessionID: id, type: "switch" });
   };
   const openChatSession = (id: string) => {
-    if (!id || !foreground) return;
+    if (!id || !foreground) {
+      return;
+    }
     void (async () => {
       const info = await client.info();
-      if (!alive.current) return;
+      if (!alive.current) {
+        return;
+      }
       if (info.session.id === id) {
         recordSession(await backend.core.session.get({ sessionID: id }));
-      } else await changeSession({ type: "switch", sessionID: id });
-    })().catch((cause) => {
-      if (alive.current) setError(errorMessage(cause));
+      } else {
+        await changeSession({ type: "switch", sessionID: id });
+      }
+    })().catch((error_) => {
+      if (alive.current) setError(errorMessage(error_));
     });
   };
   const afterNavigation = (action: () => void) => {
@@ -213,16 +250,19 @@ function PiWorkspaceSession({
   const onNavigationDismissed = () => {
     const action = pendingNavigation.current;
     pendingNavigation.current = null;
-    if (alive.current) action?.();
+    if (alive.current) {
+      action?.();
+    }
   };
   const showDetails = () => {
-    const current = sessionRef.current;
-    if (current)
+    const { current } = sessionRef;
+    if (current) {
       setPanelRequest({
         id: ++requestID.current,
         sessionID: current.id,
         panel: "actions",
       });
+    }
   };
   const afterMenu = (action: () => void) => {
     pendingNavigation.current = action;
@@ -233,9 +273,9 @@ function PiWorkspaceSession({
   }, []);
   const currentTab = session
     ? {
+        directory: session.location.directory,
         id: session.id,
         title: session.title || "New session",
-        directory: session.location.directory,
       }
     : undefined;
 
@@ -250,13 +290,13 @@ function PiWorkspaceSession({
         />
       )}
       {error && (
-        <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
+        <View style={{ paddingBottom: 8, paddingHorizontal: 12 }}>
           <ErrorNotice
             error={error}
             onRetry={() => {
               setError(null);
-              void refreshSession().catch((cause) =>
-                setError(errorMessage(cause))
+              void refreshSession().catch((error_) =>
+                setError(errorMessage(error_))
               );
             }}
           />
@@ -293,8 +333,8 @@ function PiWorkspaceSession({
                 onSelectionChange={setSelected}
                 onSessionInfo={recordSession}
                 onSessionChanged={() => {
-                  void refreshSession().catch((cause) => {
-                    if (alive.current) setError(errorMessage(cause));
+                  void refreshSession().catch((error_) => {
+                    if (alive.current) setError(errorMessage(error_));
                   });
                 }}
                 onOpenSession={openChatSession}

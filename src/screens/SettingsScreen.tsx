@@ -14,12 +14,10 @@ import {
   DefaultTheme,
   usePreventRemove,
   useNavigationContainerRef,
-  type NavigationAction,
 } from "@react-navigation/native";
-import {
-  createNativeStackNavigator,
-  type NativeStackScreenProps,
-} from "@react-navigation/native-stack";
+import type { NavigationAction } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, {
   createContext,
   useCallback,
@@ -40,8 +38,8 @@ import {
   Text,
   useWindowDimensions,
   View,
-  type ViewStyle,
 } from "react-native";
+import type { ViewStyle } from "react-native";
 import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import { AdvancedSettings } from "../components/AdvancedSettings";
@@ -68,24 +66,18 @@ import {
   Sheet,
 } from "../components/ui";
 import { useBetaLayout } from "../lib/betaLayout";
-import { type Client, errorMessage } from "../lib/client";
-import {
-  initialFormValues,
-  prepareFormAnswer,
-  type FormValues,
-} from "../lib/forms";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
+import { initialFormValues, prepareFormAnswer } from "../lib/forms";
+import type { FormValues } from "../lib/forms";
 import { pageInset } from "../lib/layout";
 import {
   externalURL,
   saveConfigFile,
   withSettingsRequest,
 } from "../lib/settings";
-import {
-  paletteOptions,
-  useTheme,
-  useThemedStyles,
-  type ThemeColors,
-} from "../lib/theme";
+import { paletteOptions, useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import {
   useHasUnsavedChanges,
   useUnsavedChanges,
@@ -105,20 +97,20 @@ export type Section =
 type ModelCatalog = Pick<Client["model"], "list">;
 const sectionDescriptions: Record<Section, string> = {
   Accounts: "Provider connections and credentials",
-  Models: "Available models and capabilities",
-  MCP: "Tool servers and pending requests",
-  Config: "Server configuration and shell",
-  Skills: "Skills in this workspace",
-  Plugins: "Server plugins and updates",
-  Permissions: "Saved approvals for this project",
   Advanced: "Usage, web search, and generation",
   Appearance: "System, light, or dark theme",
+  Config: "Server configuration and shell",
+  MCP: "Tool servers and pending requests",
+  Models: "Available models and capabilities",
+  Permissions: "Saved approvals for this project",
+  Plugins: "Server plugins and updates",
+  Skills: "Skills in this workspace",
 };
 const sectionGroups: { title: string; items: Section[] }[] = [
-  { title: "General", items: ["Appearance", "Config"] },
-  { title: "Connections", items: ["Accounts", "Models", "MCP"] },
-  { title: "Agent", items: ["Skills", "Plugins", "Permissions"] },
-  { title: "Advanced", items: ["Advanced"] },
+  { items: ["Appearance", "Config"], title: "General" },
+  { items: ["Accounts", "Models", "MCP"], title: "Connections" },
+  { items: ["Skills", "Plugins", "Permissions"], title: "Agent" },
+  { items: ["Advanced"], title: "Advanced" },
 ];
 const allSections = sectionGroups.flatMap((group) => group.items);
 
@@ -126,13 +118,16 @@ type HeaderRefresh = { refresh?: () => void; loading?: boolean } | null;
 const HeaderRefreshContext = createContext<React.Dispatch<
   React.SetStateAction<HeaderRefresh>
 > | null>(null);
-type SettingsStackParams = { Index: undefined; Section: { section: Section } };
+type SettingsStackParams = {
+  Index: undefined;
+  Section: { section: Section };
+};
 const SettingsStack = createNativeStackNavigator<SettingsStackParams>();
-const zeroInsets = { top: 0, bottom: 0, left: 0, right: 0 };
+const zeroInsets = { bottom: 0, left: 0, right: 0, top: 0 };
 // The native toolbar supplies its inset before the shared back control applies its own margins.
 const nativeBackInsets = Platform.select<ViewStyle>({
-  android: { marginStart: -7, marginEnd: 33 },
-  ios: { minWidth: 44, height: 44, justifyContent: "center" },
+  android: { marginEnd: 33, marginStart: -7 },
+  ios: { height: 44, justifyContent: "center", minWidth: 44 },
 });
 
 export function SettingsScreen({
@@ -203,17 +198,27 @@ export function SettingsScreen({
   }, []);
   const changeSection = useCallback(
     async (next: Section | null) => {
-      if (next !== null && !availableSections.includes(next)) return false;
-      if (next === section) return true;
-      if (section !== null && !(await confirmNavigation())) return false;
-      if (!mounted.current) return false;
+      if (next !== null && !availableSections.includes(next)) {
+        return false;
+      }
+      if (next === section) {
+        return true;
+      }
+      if (section !== null && !(await confirmNavigation())) {
+        return false;
+      }
+      if (!mounted.current) {
+        return false;
+      }
       setSection(next);
       return true;
     },
     [section, availableSections, confirmNavigation]
   );
   useEffect(() => {
-    if (nativeStackEnabled) return;
+    if (nativeStackEnabled) {
+      return;
+    }
     onBackStateChange?.(visible && !wide && section !== null);
     return () => onBackStateChange?.(false);
   }, [
@@ -225,7 +230,9 @@ export function SettingsScreen({
     section,
   ]);
   useEffect(() => {
-    if (nativeStackEnabled || !visible || wide || section === null) return;
+    if (nativeStackEnabled || !visible || wide || section === null) {
+      return;
+    }
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
@@ -236,7 +243,9 @@ export function SettingsScreen({
     return () => subscription.remove();
   }, [betaLayout, nativeStackEnabled, visible, wide, section, changeSection]);
   const updateNativeBackState = useCallback(() => {
-    if (!nativeStackEnabled) return;
+    if (!nativeStackEnabled) {
+      return;
+    }
     const canGoBack = navigationRef.current?.canGoBack() ?? false;
     onBackStateChange?.(visible && !wide && canGoBack);
   }, [nativeStackEnabled, navigationRef, onBackStateChange, visible, wide]);
@@ -245,11 +254,15 @@ export function SettingsScreen({
     return () => onBackStateChange?.(false);
   }, [updateNativeBackState, onBackStateChange]);
   useEffect(() => {
-    if (!nativeStackEnabled || !visible) return;
+    if (!nativeStackEnabled || !visible) {
+      return;
+    }
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
-        if (!navigationRef.current?.canGoBack()) return false;
+        if (!navigationRef.current?.canGoBack()) {
+          return false;
+        }
         navigationRef.current.goBack();
         return true;
       }
@@ -285,16 +298,16 @@ export function SettingsScreen({
   const navigationTheme = useMemo(
     () => ({
       ...DefaultTheme,
-      dark: scheme === "dark",
       colors: {
         ...DefaultTheme.colors,
-        primary: colors.accent,
         background: colors.bg,
-        card: colors.panel,
-        text: colors.text,
         border: colors.border,
+        card: colors.panel,
         notification: colors.danger,
+        primary: colors.accent,
+        text: colors.text,
       },
+      dark: scheme === "dark",
     }),
     [colors, scheme]
   );
@@ -307,6 +320,9 @@ export function SettingsScreen({
     >
       <SettingsStack.Navigator
         screenOptions={{
+          animation: reducedMotion ? "fade" : "default",
+          contentStyle: { backgroundColor: colors.bg },
+          headerShadowVisible: false,
           headerStyle: { backgroundColor: colors.bg },
           headerTintColor: colors.text,
           headerTitleStyle: {
@@ -315,15 +331,11 @@ export function SettingsScreen({
             fontSize: 18,
             fontWeight: "600",
           },
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: colors.bg },
-          animation: reducedMotion ? "fade" : "default",
         }}
       >
         <SettingsStack.Screen
           name="Index"
           options={{
-            title: "Settings",
             headerLeft: onBack
               ? () => (
                   <SettingsBackButton
@@ -351,6 +363,7 @@ export function SettingsScreen({
                     </Pressable>
                   )
                 : undefined,
+            title: "Settings",
           }}
         >
           {renderIndex}
@@ -358,8 +371,8 @@ export function SettingsScreen({
         <SettingsStack.Screen
           name="Section"
           options={({ route, navigation: screenNavigation }) => ({
-            title: route.params.section,
             headerBackButtonDisplayMode: "minimal",
+            title: route.params.section,
             ...(Platform.OS === "android"
               ? {
                   headerBackVisible: false,
@@ -391,7 +404,11 @@ export function SettingsScreen({
 
   return (
     <View style={[styles.screen, !wide && styles.narrowScreen]}>
-      {!nativeStackEnabled ? (
+      {nativeStackEnabled ? (
+        <SafeAreaInsetsContext.Provider value={zeroInsets}>
+          <View style={styles.nativeNavigation}>{navigation}</View>
+        </SafeAreaInsetsContext.Provider>
+      ) : (
         <>
           {!wide && (
             <ScreenHeader
@@ -430,10 +447,6 @@ export function SettingsScreen({
             </View>
           </HeaderRefreshContext.Provider>
         </>
-      ) : (
-        <SafeAreaInsetsContext.Provider value={zeroInsets}>
-          <View style={styles.nativeNavigation}>{navigation}</View>
-        </SafeAreaInsetsContext.Provider>
       )}
     </View>
   );
@@ -497,7 +510,9 @@ function SettingsIndex({
       {sectionGroups.map((group) => {
         const items = group.items.filter((item) => sections.includes(item));
         const manageServers = group.title === "Connections" && onManageServers;
-        if (!items.length && !manageServers) return null;
+        if (!items.length && !manageServers) {
+          return null;
+        }
         return (
           <View key={group.title} style={styles.group}>
             {!(items.length === 1 && items[0] === group.title) && (
@@ -576,19 +591,23 @@ function SettingsSection({
   directory: string;
   section: Section;
 }) {
-  if (section === "Appearance")
+  if (section === "Appearance") {
     return (
       <View key={`${directory}:${section}`} style={{ flex: 1 }}>
         <AppearanceSettings />
       </View>
     );
-  if (section === "Models")
+  }
+  if (section === "Models") {
     return modelCatalog ? (
       <View key={`${directory}:${section}`} style={{ flex: 1 }}>
         <Models catalog={modelCatalog} client={client} directory={directory} />
       </View>
     ) : null;
-  if (!client) return null;
+  }
+  if (!client) {
+    return null;
+  }
   return (
     <View key={`${directory}:${section}`} style={{ flex: 1 }}>
       {section === "Accounts" && (
@@ -641,16 +660,22 @@ function NativeSettingsSection({
   usePreventRemove(
     section === "Config" && hasUnsavedConfiguration && !pendingAction,
     ({ data }) => {
-      if (prompting.current) return;
+      if (prompting.current) {
+        return;
+      }
       prompting.current = true;
       void confirmNavigation().then((leave) => {
         prompting.current = false;
-        if (leave) setPendingAction(data.action);
+        if (leave) {
+          setPendingAction(data.action);
+        }
       });
     }
   );
   useEffect(() => {
-    if (pendingAction) navigation.dispatch(pendingAction);
+    if (pendingAction) {
+      navigation.dispatch(pendingAction);
+    }
   }, [navigation, pendingAction]);
   useEffect(() => {
     navigation.setOptions({
@@ -660,17 +685,17 @@ function NativeSettingsSection({
               accessibilityRole="button"
               accessibilityLabel="Refresh"
               accessibilityState={{
-                disabled: headerRefresh.loading,
                 busy: headerRefresh.loading,
+                disabled: headerRefresh.loading,
               }}
               disabled={headerRefresh.loading}
               onPress={() => headerRefresh.refresh?.()}
               style={{
-                width: 44,
-                height: 44,
-                marginEnd: Platform.OS === "android" ? -16 : 0,
                 alignItems: "center",
+                height: 44,
                 justifyContent: "center",
+                marginEnd: Platform.OS === "android" ? -16 : 0,
+                width: 44,
               }}
             >
               {headerRefresh.loading ? (
@@ -700,14 +725,14 @@ function useResource<T>(
   directory: string,
   load: (signal: AbortSignal) => Promise<T>
 ) {
-  const scope = useMemo(() => ({ source, directory }), [source, directory]);
+  const scope = useMemo(() => ({ directory, source }), [source, directory]);
   const [data, setData] = useState<T>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [resourceScope, setResourceScope] = useState(scope);
   const active = useRef(true);
-  const latest = useRef({ scope, load });
-  latest.current = { scope, load };
+  const latest = useRef({ load, scope });
+  latest.current = { load, scope };
   const sequence = useRef(0);
   const refresh = useCallback(async (signal?: AbortSignal) => {
     const { scope: owner, load: read } = latest.current;
@@ -721,11 +746,15 @@ function useResource<T>(
     setError(null);
     try {
       const result = await withSettingsRequest(read, signal);
-      if (isCurrent()) setData(result);
-    } catch (e) {
-      if (isCurrent()) setError(errorMessage(e));
+      if (isCurrent()) {
+        setData(result);
+      }
+    } catch (error_) {
+      if (isCurrent()) setError(errorMessage(error_));
     } finally {
-      if (isCurrent()) setLoading(false);
+      if (isCurrent()) {
+        setLoading(false);
+      }
     }
   }, []);
   useEffect(() => {
@@ -763,7 +792,7 @@ function Page({
   const styles = useThemedStyles(createStyles);
   const setHeaderRefresh = useContext(HeaderRefreshContext);
   useEffect(() => {
-    setHeaderRefresh?.({ refresh, loading });
+    setHeaderRefresh?.({ loading, refresh });
     return () => setHeaderRefresh?.(null);
   }, [setHeaderRefresh, refresh, loading]);
   return (
@@ -833,7 +862,9 @@ export function AppearanceSettings() {
         fitContent
         contentStyle={{ gap: 0 }}
         onClose={() => {
-          if (!busy) setChoosingPalette(false);
+          if (!busy) {
+            setChoosingPalette(false);
+          }
         }}
       >
         <ErrorNotice error={error} />
@@ -843,8 +874,8 @@ export function AppearanceSettings() {
             accessibilityRole="button"
             accessibilityLabel={option.name}
             accessibilityState={{
-              selected: palette === option.id,
               disabled: busy,
+              selected: palette === option.id,
             }}
             disabled={busy}
             style={({ pressed }) => [
@@ -856,7 +887,7 @@ export function AppearanceSettings() {
               setError(null);
               void setPalette(option.id)
                 .then(() => setChoosingPalette(false))
-                .catch((e) => setError(errorMessage(e)))
+                .catch((error_) => setError(errorMessage(error_)))
                 .finally(() => setBusy(false));
             }}
           >
@@ -877,7 +908,7 @@ export function AppearanceSettings() {
       : appearance === "light"
         ? "Light"
         : "Dark";
-  if (betaLayout)
+  if (betaLayout) {
     return (
       <Page error={error}>
         <View style={styles.betaAppearanceCard}>
@@ -962,6 +993,7 @@ export function AppearanceSettings() {
         </Sheet>
       </Page>
     );
+  }
   return (
     <Page error={error}>
       <Label muted>Use your device theme or choose a fixed color scheme.</Label>
@@ -978,7 +1010,7 @@ export function AppearanceSettings() {
             setBusy(true);
             setError(null);
             void setAppearance(value)
-              .catch((e) => setError(errorMessage(e)))
+              .catch((error_) => setError(errorMessage(error_)))
               .finally(() => setBusy(false));
           }}
         />
@@ -1006,7 +1038,7 @@ function Accounts({
         client.integration.list({ location: { directory } }, { signal }),
         client.credential.list({ signal }),
       ]);
-      return { integrations: integrations.data, credentials };
+      return { credentials, integrations: integrations.data };
     }
   );
   const [query, setQuery] = useState("");
@@ -1025,8 +1057,8 @@ function Accounts({
         await action(signal);
         await refresh(signal);
       });
-    } catch (e) {
-      setActionError(errorMessage(e));
+    } catch (error_) {
+      setActionError(errorMessage(error_));
     } finally {
       setBusy(false);
     }
@@ -1038,7 +1070,7 @@ function Accounts({
     ) ?? [];
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Row style={{ flexWrap: "nowrap", alignItems: "flex-end" }}>
+      <Row style={{ alignItems: "flex-end", flexWrap: "nowrap" }}>
         <Field
           label="Find a provider or integration"
           placeholder="Search accounts"
@@ -1143,7 +1175,9 @@ function Accounts({
         visible={!!credential}
         title="Manage account"
         onClose={() => {
-          if (!busy) setCredential(undefined);
+          if (!busy) {
+            setCredential(undefined);
+          }
         }}
       >
         <ErrorNotice error={actionError} />
@@ -1159,7 +1193,9 @@ function Accounts({
           busy={busy}
           onPress={() =>
             void run(async (signal) => {
-              if (!credential) return;
+              if (!credential) {
+                return;
+              }
               await client.credential.update(
                 { credentialID: credential.id, label: label.trim() },
                 { signal }
@@ -1176,7 +1212,9 @@ function Accounts({
             busy={busy}
             onPress={() =>
               void run(async (signal) => {
-                if (!credential) return;
+                if (!credential) {
+                  return;
+                }
                 await client.credential.activate(
                   { credentialID: credential.id },
                   { signal }
@@ -1192,18 +1230,21 @@ function Accounts({
           variant="danger"
           busy={busy}
           onPress={() => {
-            if (!credential) return;
+            if (!credential) {
+              return;
+            }
             const credentialID = credential.id;
             void confirmAction(
               "Remove account?",
               "This removes the saved credential from your OpenCode server."
             ).then((confirmed) => {
-              if (confirmed)
+              if (confirmed) {
                 void run(async (signal) => {
                   await client.credential.remove({ credentialID }, { signal });
                   signal.throwIfAborted();
                   setCredential(undefined);
                 });
+              }
             });
           }}
         />
@@ -1259,30 +1300,40 @@ function ConnectIntegration({
     []
   );
   const check = useCallback(async () => {
-    if (!attempt || statusRequest.current) return;
+    if (!attempt || statusRequest.current) {
+      return;
+    }
     statusRequest.current = true;
     try {
       const input = {
-        integrationID: integration.id,
         attemptID: attempt.data.attemptID,
+        integrationID: integration.id,
         location: { directory },
       };
       const result =
         attempt.kind === "oauth"
           ? await client.integration.oauth.status(input)
           : await client.integration.command.status(input);
-      if (!active.current) return;
+      if (!active.current) {
+        return;
+      }
       setStatus(result.data.status);
-      if (result.data.status === "failed") setError(result.data.message);
-      if (result.data.status === "complete") onClose();
-    } catch (e) {
-      if (active.current) setError(errorMessage(e));
+      if (result.data.status === "failed") {
+        setError(result.data.message);
+      }
+      if (result.data.status === "complete") {
+        onClose();
+      }
+    } catch (error_) {
+      if (active.current) setError(errorMessage(error_));
     } finally {
       statusRequest.current = false;
     }
   }, [attempt, client, directory, integration.id, onClose]);
   useEffect(() => {
-    if (!attempt || ["complete", "expired", "failed"].includes(status)) return;
+    if (!attempt || ["complete", "expired", "failed"].includes(status)) {
+      return;
+    }
     void check();
     const timer = setInterval(() => void check(), 3000);
     return () => clearInterval(timer);
@@ -1290,8 +1341,8 @@ function ConnectIntegration({
   const open = async (url: string) => {
     try {
       await Linking.openURL(externalURL(url));
-    } catch (e) {
-      setError(errorMessage(e));
+    } catch (error_) {
+      setError(errorMessage(error_));
     }
   };
   const run = async (action: () => Promise<void>) => {
@@ -1299,29 +1350,37 @@ function ConnectIntegration({
     setError(null);
     try {
       await action();
-    } catch (e) {
-      if (active.current) setError(errorMessage(e));
+    } catch (error_) {
+      if (active.current) setError(errorMessage(error_));
     } finally {
-      if (active.current) setBusy(false);
+      if (active.current) {
+        setBusy(false);
+      }
     }
   };
   const start = async () => {
-    if (!method || method.type === "env") return;
+    if (!method || method.type === "env") {
+      return;
+    }
     const prepared = prepareFormAnswer(
       "form" in method ? (method.form ?? []) : [],
       values
     );
     setFieldErrors(prepared.errors);
-    if (Object.keys(prepared.errors).length) return;
+    if (Object.keys(prepared.errors).length) {
+      return;
+    }
     const input = {
-      integrationID: integration.id,
-      location: { directory },
-      label: label.trim() || undefined,
       answer: prepared.answer,
+      integrationID: integration.id,
+      label: label.trim() || undefined,
+      location: { directory },
     };
     await run(async () => {
       if (method.type === "key") {
-        if (!key.trim()) throw new Error("Enter an API key");
+        if (!key.trim()) {
+          throw new Error("Enter an API key");
+        }
         await client.integration.connect.key({ ...input, key: key.trim() });
         setKey("");
         onClose();
@@ -1336,7 +1395,7 @@ function ConnectIntegration({
           ...input,
           methodID: method.id,
         });
-        setAttempt({ kind: "oauth", data: result.data });
+        setAttempt({ data: result.data, kind: "oauth" });
         setStatus("pending");
         await open(result.data.url);
       } else {
@@ -1344,7 +1403,7 @@ function ConnectIntegration({
           ...input,
           methodID: method.id,
         });
-        setAttempt({ kind: "command", data: result.data });
+        setAttempt({ data: result.data, kind: "command" });
         setStatus("pending");
       }
     });
@@ -1457,10 +1516,10 @@ function ConnectIntegration({
                     onPress={() =>
                       void run(async () => {
                         await client.integration.oauth.complete({
-                          integrationID: integration.id,
                           attemptID: attempt.data.attemptID,
-                          location: { directory },
                           code: code.trim(),
+                          integrationID: integration.id,
+                          location: { directory },
                         });
                         await check();
                       })
@@ -1484,13 +1543,15 @@ function ConnectIntegration({
             onPress={() =>
               void run(async () => {
                 const input = {
-                  integrationID: integration.id,
                   attemptID: attempt.data.attemptID,
+                  integrationID: integration.id,
                   location: { directory },
                 };
-                if (attempt.kind === "oauth")
+                if (attempt.kind === "oauth") {
                   await client.integration.oauth.cancel(input);
-                else await client.integration.command.cancel(input);
+                } else {
+                  await client.integration.command.cancel(input);
+                }
                 setAttempt(undefined);
                 setStatus("");
               })
@@ -1543,15 +1604,15 @@ function Models({
     (client
       ? selected
       : {
-          id: selected.id,
-          providerID: selected.providerID,
-          name: selected.name,
           contextWindow: selected.limit.context,
+          id: selected.id,
+          name: selected.name,
+          providerID: selected.providerID,
           thinkingLevels: selected.variants.map((item) => item.id),
         });
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Row style={{ flexWrap: "nowrap", alignItems: "flex-end" }}>
+      <Row style={{ alignItems: "flex-end", flexWrap: "nowrap" }}>
         <Field
           label="Find a model"
           placeholder="Name or provider"
@@ -1702,8 +1763,8 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
         await action(signal);
         await refresh(signal);
       });
-    } catch (e) {
-      setErrorAction(errorMessage(e));
+    } catch (error_) {
+      setErrorAction(errorMessage(error_));
     } finally {
       setBusy(false);
     }
@@ -1754,10 +1815,12 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
               compact
               onPress={() =>
                 void run(async (signal) => {
-                  const input = { server: item.name, location: { directory } };
-                  if (item.status.status === "connected")
+                  const input = { location: { directory }, server: item.name };
+                  if (item.status.status === "connected") {
                     await client.experimental.mcp.disconnect(input, { signal });
-                  else await client.experimental.mcp.connect(input, { signal });
+                  } else {
+                    await client.experimental.mcp.connect(input, { signal });
+                  }
                 })
               }
             />
@@ -1781,13 +1844,14 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
                 "Remove MCP server?",
                 `This removes ${item.name} from the project configuration.`
               ).then((confirmed) => {
-                if (confirmed)
+                if (confirmed) {
                   void run(async (signal) => {
                     await client.experimental.mcp.remove(
                       { server: item.name, location: { directory } },
                       { signal }
                     );
                   });
+                }
               });
             }}
           />
@@ -1810,7 +1874,9 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
         visible={adding}
         title="Add MCP server"
         onClose={() => {
-          if (!busy) setAdding(false);
+          if (!busy) {
+            setAdding(false);
+          }
         }}
       >
         <ErrorNotice error={errorAction} />
@@ -1852,7 +1918,7 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
               value={command}
               editable={!busy}
               onChangeText={setCommand}
-              placeholder={'["npx", "-y", "your-mcp-server"]'}
+              placeholder='["npx", "-y", "your-mcp-server"]'
             />
             <Label muted>The command runs on the OpenCode server.</Label>
           </>
@@ -1865,7 +1931,7 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
           onPress={() =>
             void run(async (signal) => {
               const server = name.trim();
-              if (kind === "remote")
+              if (kind === "remote") {
                 await client.experimental.mcp.add(
                   {
                     server,
@@ -1874,19 +1940,20 @@ function Mcp({ client, directory }: { client: Client; directory: string }) {
                   },
                   { signal }
                 );
-              else {
+              } else {
                 const args: unknown = JSON.parse(command);
                 if (
                   !Array.isArray(args) ||
                   !args.length ||
                   !args.every((arg) => typeof arg === "string" && arg.length)
-                )
+                ) {
                   throw new Error("Enter a JSON array of command arguments");
+                }
                 await client.experimental.mcp.add(
                   {
-                    server,
+                    config: { command: args, type: "local" },
                     location: { directory },
-                    config: { type: "local", command: args },
+                    server,
                   },
                   { signal }
                 );
@@ -1943,8 +2010,8 @@ function Configuration({
     setNotice(null);
     try {
       await withSettingsRequest(action);
-    } catch (e) {
-      setErrorAction(errorMessage(e));
+    } catch (error_) {
+      setErrorAction(errorMessage(error_));
     } finally {
       setBusy(false);
     }
@@ -1983,12 +2050,12 @@ function Configuration({
                 )
               );
               signal.throwIfAborted();
-              setEditing({ path, original: source });
+              setEditing({ original: source, path });
               setText(source);
-            } catch (e) {
-              if (!isFileNotFoundError(e)) throw e;
+            } catch (error_) {
+              if (!isFileNotFoundError(error_)) throw error_;
               signal.throwIfAborted();
-              setEditing({ path, original: null });
+              setEditing({ original: null, path });
               setText('{\n  "$schema": "https://opencode.ai/config.json"\n}\n');
             }
           })
@@ -2016,7 +2083,9 @@ function Configuration({
                   busy={busy}
                   onPress={() =>
                     void run(async (signal) => {
-                      if (!entry.path) return;
+                      if (!entry.path) {
+                        return;
+                      }
                       const source = new TextDecoder().decode(
                         await client.file.read(
                           { location: { directory }, path: entry.path },
@@ -2024,7 +2093,7 @@ function Configuration({
                         )
                       );
                       signal.throwIfAborted();
-                      setEditing({ path: entry.path, original: source });
+                      setEditing({ original: source, path: entry.path });
                       setText(source);
                     })
                   }
@@ -2077,15 +2146,19 @@ function Configuration({
         visible={!!editing}
         title="Edit configuration"
         onClose={() => {
-          if (busy) return;
-          if (text === editing?.original) setEditing(undefined);
-          else
+          if (busy) {
+            return;
+          }
+          if (text === editing?.original) {
+            setEditing(undefined);
+          } else {
             void confirmAction(
               "Discard changes?",
               "Your unsaved changes will be lost."
             ).then((ok) => {
               if (ok) setEditing(undefined);
             });
+          }
         }}
       >
         <Label style={{ fontFamily: mono, fontSize: 13 }}>
@@ -2099,10 +2172,10 @@ function Configuration({
           value={text}
           onChangeText={setText}
           style={{
-            minHeight: 360,
             fontFamily: mono,
             fontSize: 13,
             lineHeight: 21,
+            minHeight: 360,
           }}
         />
         <Button
@@ -2112,7 +2185,9 @@ function Configuration({
           disabled={text === editing?.original}
           onPress={() =>
             void run(async (signal) => {
-              if (!editing) return;
+              if (!editing) {
+                return;
+              }
               await saveConfigFile(
                 client,
                 directory,
@@ -2146,7 +2221,7 @@ function Skills({ client, directory }: { client: Client; directory: string }) {
         client.skill.list({ location: { directory } }, { signal }),
         client.command.list({ location: { directory } }, { signal }),
       ]);
-      return { skills: skills.data, commands: commands.data };
+      return { commands: commands.data, skills: skills.data };
     }
   );
   const [query, setQuery] = useState("");
@@ -2160,7 +2235,7 @@ function Skills({ client, directory }: { client: Client; directory: string }) {
     [];
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Row style={{ flexWrap: "nowrap", alignItems: "flex-end" }}>
+      <Row style={{ alignItems: "flex-end", flexWrap: "nowrap" }}>
         <Field
           label="Find a skill or command"
           value={query}
@@ -2185,7 +2260,7 @@ function Skills({ client, directory }: { client: Client; directory: string }) {
           <Label style={{ fontFamily: mono, fontSize: 13 }}>{item.path}</Label>
           <Text
             selectable
-            style={{ color: colors.text, lineHeight: 22, fontSize: 15 }}
+            style={{ color: colors.text, fontSize: 15, lineHeight: 22 }}
           >
             {item.content}
           </Text>
@@ -2233,8 +2308,8 @@ function Plugins({ client, directory }: { client: Client; directory: string }) {
     try {
       await action();
       await refresh();
-    } catch (e) {
-      setErrorAction(errorMessage(e));
+    } catch (error_) {
+      setErrorAction(errorMessage(error_));
     } finally {
       setBusy(false);
     }
@@ -2294,11 +2369,12 @@ function Plugins({ client, directory }: { client: Client; directory: string }) {
                         "Update plugin?",
                         "This installs the latest package version on your server."
                       ))
-                    )
+                    ) {
                       await client.plugin.update({
                         location: { directory },
                         targets: [item.source.target],
                       });
+                    }
                   })
                 }
               />
@@ -2358,8 +2434,8 @@ function Permissions({
         await task(signal);
         await refresh(signal);
       });
-    } catch (e) {
-      setErrorAction(errorMessage(e));
+    } catch (error_) {
+      setErrorAction(errorMessage(error_));
     } finally {
       setBusy(false);
     }
@@ -2397,13 +2473,14 @@ function Permissions({
                   "Revoke saved approval?",
                   "OpenCode will ask again when this action requires permission."
                 ).then((confirmed) => {
-                  if (confirmed)
+                  if (confirmed) {
                     void run(async (signal) => {
                       await client.permission.saved.remove(
                         { id: item.id },
                         { signal }
                       );
                     });
+                  }
                 });
               }}
             />
@@ -2420,7 +2497,9 @@ function Permissions({
         visible={!!selected}
         title="Edit saved approval"
         onClose={() => {
-          if (!busy) setSelected(undefined);
+          if (!busy) {
+            setSelected(undefined);
+          }
         }}
       >
         <ErrorNotice error={errorAction} />
@@ -2443,11 +2522,13 @@ function Permissions({
           disabled={!action.trim() || !resource.trim()}
           onPress={() =>
             void run(async (signal) => {
-              if (!selected) return;
+              if (!selected) {
+                return;
+              }
               await client.permission.saved.update(
                 {
-                  id: selected.id,
                   action: action.trim(),
+                  id: selected.id,
                   resource: resource.trim(),
                 },
                 { signal }
@@ -2465,134 +2546,134 @@ function Permissions({
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     betaAppearanceCard: {
-      flexDirection: "row",
       alignItems: "center",
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      flexDirection: "row",
       gap: 12,
       paddingHorizontal: 12,
       paddingVertical: 8,
-      borderWidth: 1,
+    },
+    betaBackLabel: { fontSize: 14, lineHeight: 19 },
+    betaCategoryRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 48,
+      paddingHorizontal: 4,
+      paddingVertical: 6,
+    },
+    betaChooserTarget: { justifyContent: "center", minHeight: 48 },
+    betaDescription: { fontSize: 14, lineHeight: 21 },
+    betaSettingChooser: {
+      alignItems: "center",
       borderColor: colors.border,
-      borderRadius: 8,
-      backgroundColor: colors.panel,
+      borderRadius: 6,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 28,
+      paddingHorizontal: 8,
     },
     betaSettingTitle: {
       fontFamily: sans,
       fontSize: 14,
-      lineHeight: 21,
       fontWeight: "500",
+      lineHeight: 21,
     },
-    betaSettingChooser: {
-      minHeight: 28,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
-    betaBackLabel: { fontSize: 14, lineHeight: 19 },
-    betaChooserTarget: { minHeight: 48, justifyContent: "center" },
-    betaDescription: { fontSize: 14, lineHeight: 21 },
-    betaCategoryRow: {
-      minHeight: 48,
-      paddingVertical: 6,
-      paddingHorizontal: 4,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-    },
-    screen: {
-      flex: 1,
-      flexDirection: "row",
-      minHeight: 0,
-      backgroundColor: colors.bg,
-    },
-    nativeNavigation: { flex: 1, minHeight: 0 },
-    narrowScreen: { flexDirection: "column" },
     content: { flex: 1, flexDirection: "row", minHeight: 0 },
-    narrowContent: { flexDirection: "column" },
-    sidebar: {
-      width: 220,
-      flexGrow: 0,
-      borderRightWidth: 1,
-      borderRightColor: colors.border,
+    currentSection: { backgroundColor: colors.selected },
+    detail: { flex: 1, minWidth: 0 },
+    detailHeader: {
+      borderBottomColor: colors.border,
+      borderBottomWidth: 1,
+      flexWrap: "nowrap",
+      minHeight: 64,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
     },
-    index: {
-      padding: 16,
-      paddingHorizontal: pageInset,
-      paddingBottom: 24,
-      gap: 24,
+    detailTitle: {
+      flex: 1,
+      flexShrink: 1,
+      fontFamily: sans,
+      fontSize: 25,
+      fontWeight: "500",
+      lineHeight: 31,
     },
-    indexHeader: { gap: 5 },
     group: { gap: 10 },
+    groupPanel: {
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
     groupTitle: {
       fontSize: 13,
       fontWeight: "500",
       letterSpacing: 0.4,
       paddingHorizontal: 8,
     },
-    groupPanel: {
-      backgroundColor: colors.panel,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 10,
-      overflow: "hidden",
+    index: {
+      gap: 24,
+      padding: 16,
+      paddingBottom: 24,
+      paddingHorizontal: pageInset,
     },
-    sectionRow: {
-      minHeight: 68,
+    indexHeader: { gap: 5 },
+    name: { fontFamily: sans, fontSize: 17, fontWeight: "600" },
+    narrowContent: { flexDirection: "column" },
+    narrowScreen: { flexDirection: "column" },
+    nativeNavigation: { flex: 1, minHeight: 0 },
+    page: {
+      gap: 16,
+      padding: 16,
+      paddingBottom: 32,
+      paddingHorizontal: pageInset,
+    },
+    screen: {
+      backgroundColor: colors.bg,
+      flex: 1,
       flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-    },
-    sectionDivider: {
-      position: "absolute",
-      top: 0,
-      left: 16,
-      right: 16,
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: colors.border,
-    },
-    currentSection: { backgroundColor: colors.selected },
-    sectionName: {
-      fontFamily: sans,
-      fontSize: 17,
-      lineHeight: 23,
-      fontWeight: "500",
+      minHeight: 0,
     },
     sectionDescription: { fontSize: 13, lineHeight: 19 },
-    detail: { flex: 1, minWidth: 0 },
-    detailHeader: {
-      minHeight: 64,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      flexWrap: "nowrap",
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
+    sectionDivider: {
+      backgroundColor: colors.border,
+      height: StyleSheet.hairlineWidth,
+      left: 16,
+      position: "absolute",
+      right: 16,
+      top: 0,
     },
-    detailTitle: {
-      fontFamily: sans,
-      fontSize: 25,
-      lineHeight: 31,
-      fontWeight: "500",
-      flex: 1,
-      flexShrink: 1,
-    },
-    page: {
-      padding: 16,
-      paddingHorizontal: pageInset,
-      paddingBottom: 32,
-      gap: 16,
-    },
-    name: { fontFamily: sans, fontSize: 17, fontWeight: "600" },
     sectionLabel: {
-      fontFamily: sans,
       color: colors.muted,
+      fontFamily: sans,
       fontSize: 12,
       fontWeight: "700",
       letterSpacing: 1.2,
       marginTop: 8,
+    },
+    sectionName: {
+      fontFamily: sans,
+      fontSize: 17,
+      fontWeight: "500",
+      lineHeight: 23,
+    },
+    sectionRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 68,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    sidebar: {
+      borderRightColor: colors.border,
+      borderRightWidth: 1,
+      flexGrow: 0,
+      width: 220,
     },
   });

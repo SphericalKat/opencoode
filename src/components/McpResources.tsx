@@ -6,7 +6,8 @@ import type {
 import React, { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 
-import { type Client, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import { useTheme } from "../lib/theme";
 import {
   Button,
@@ -21,11 +22,11 @@ import {
   sans,
 } from "./ui";
 
-type Props = {
+interface Props {
   client: Client;
   location: { directory: string };
   onAttachContext: (text: string) => void;
-};
+}
 
 export function McpResources({ client, location, onAttachContext }: Props) {
   const [catalog, setCatalog] = useState<McpResourceCatalog>();
@@ -55,23 +56,27 @@ export function McpResources({ client, location, onAttachContext }: Props) {
         { location: { directory } },
         { signal: controller.signal }
       );
-      if (!controller.signal.aborted) setCatalog(result.data);
-    } catch (cause) {
-      if (!controller.signal.aborted) setError(errorMessage(cause));
+      if (!controller.signal.aborted) {
+        setCatalog(result.data);
+      }
+    } catch (error_) {
+      if (!controller.signal.aborted) setError(errorMessage(error_));
     } finally {
-      if (!controller.signal.aborted) setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }
 
   const search = query.trim().toLowerCase();
   const matches = [
     ...(catalog?.resources ?? []).map((resource) => ({
-      type: "resource" as const,
       resource,
+      type: "resource" as const,
     })),
     ...(catalog?.templates ?? []).map((resource) => ({
-      type: "template" as const,
       resource,
+      type: "template" as const,
     })),
   ].filter((item) =>
     `${item.resource.server} ${item.resource.name} ${"uri" in item.resource ? item.resource.uri : item.resource.uriTemplate} ${item.resource.description ?? ""}`
@@ -81,9 +86,9 @@ export function McpResources({ client, location, onAttachContext }: Props) {
 
   const attach = (resource: McpResource | McpResourceTemplate, uri: string) => {
     const metadata = {
+      name: resource.name,
       server: resource.server,
       uri,
-      name: resource.name,
       ...(resource.description ? { description: resource.description } : {}),
       ...(resource.mimeType ? { mimeType: resource.mimeType } : {}),
     };
@@ -190,8 +195,8 @@ function ResourceCard({
           style={{
             color: colors.muted,
             fontFamily: sans,
-            lineHeight: 22,
             fontSize: 15,
+            lineHeight: 22,
           }}
         >
           {resource.description}

@@ -20,7 +20,7 @@ export function ShellIcon({
   color: string;
   size?: number;
 }) {
-  if (name === "back" && Platform.OS === "ios")
+  if (name === "back" && Platform.OS === "ios") {
     return (
       <Svg
         width={size / 2}
@@ -38,6 +38,7 @@ export function ShellIcon({
         />
       </Svg>
     );
+  }
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
       {name === "menu" && (

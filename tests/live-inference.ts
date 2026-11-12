@@ -14,7 +14,8 @@ import type {
 } from "@opencode/client";
 
 import { projectLiveEvent } from "../src/lib/chat";
-import { createClient, type Connection } from "../src/lib/client";
+import { createClient } from "../src/lib/client";
+import type { Connection } from "../src/lib/client";
 
 const runInference = process.argv.includes("--run");
 const expected = "OpenCode mobile connection verified";
@@ -68,7 +69,9 @@ async function until(
 ) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    if (await check()) return;
+    if (await check()) {
+      return;
+    }
     await delay(50);
   }
   throw new Error(`Timed out: ${label}`);
@@ -89,9 +92,12 @@ function text(message: SessionMessageAssistant) {
 try {
   await until(
     () => {
-      if (launchError) throw launchError;
-      if (server.exitCode !== null || server.signalCode !== null)
+      if (launchError) {
+        throw launchError;
+      }
+      if (server.exitCode !== null || server.signalCode !== null) {
         throw new Error("OpenCode exited during startup");
+      }
       return Boolean(url && token);
     },
     "server startup",
@@ -100,8 +106,8 @@ try {
   const connection: Connection = {
     id: "inference-check",
     name: "Inference check",
-    url: url!,
     token,
+    url: url!,
   };
   client = createClient(connection, (input, init) =>
     fetch(input, {
@@ -145,9 +151,18 @@ try {
   );
   console.log(
     JSON.stringify({
-      serverVersion: info.version,
-      enabledChatModels: models.length,
+      cheapestConnected: connectedModels.slice(0, 12).map((model) => ({
+        providerID: model.providerID,
+        id: model.id,
+        perMillionTokens: rates(model),
+      })),
       connectedProviders: [...connectedProviders],
+      defaultModel: defaultModel.data && {
+        providerID: defaultModel.data.providerID,
+        id: defaultModel.data.id,
+        perMillionTokens: rates(defaultModel.data),
+      },
+      enabledChatModels: models.length,
       integrationConnections: integrations.data
         .filter((integration) => integration.connections.length)
         .map((integration) => ({
@@ -156,29 +171,14 @@ try {
             (connection) => connection.status?.status ?? "connected"
           ),
         })),
-      defaultModel: defaultModel.data && {
-        providerID: defaultModel.data.providerID,
-        id: defaultModel.data.id,
-        perMillionTokens: rates(defaultModel.data),
-      },
-      cheapestConnected: connectedModels
-        .slice(0, 12)
-        .map((model) => ({
-          providerID: model.providerID,
-          id: model.id,
-          perMillionTokens: rates(model),
-        })),
+      serverVersion: info.version,
     })
   );
   if (!models.length) {
     console.log(
       "SKIP: the existing global configuration exposes no enabled non-deprecated chat model"
     );
-  } else if (!runInference) {
-    console.log(
-      "CATALOG ONLY: add --run to authorize one tiny prompt with an existing model connection"
-    );
-  } else {
+  } else if (runInference) {
     const requested = process.env.OPENCODE_INFERENCE_MODEL;
     const model = requested
       ? models.find((model) => `${model.providerID}/${model.id}` === requested)
@@ -301,6 +301,10 @@ try {
         reducerMatchesDurableMessage: true,
       })
     );
+  } else {
+    console.log(
+      "CATALOG ONLY: add --run to authorize one tiny prompt with an existing model connection"
+    );
   }
 } finally {
   stream.abort();
@@ -316,15 +320,15 @@ try {
     await until(
       () => server.exitCode !== null || server.signalCode !== null,
       "server shutdown",
-      5_000
+      5000
     ).catch(async () => {
       server.kill("SIGKILL");
       await until(
         () => server.exitCode !== null || server.signalCode !== null,
         "forced server shutdown",
-        5_000
+        5000
       );
     });
   }
-  await rm(directory, { recursive: true, force: true });
+  await rm(directory, { force: true, recursive: true });
 }

@@ -8,8 +8,9 @@ export function mergeMessages(
   ...pages: SessionMessageInfo[][]
 ): SessionMessageInfo[] {
   const messages = new Map<string, SessionMessageInfo>();
-  for (const page of pages)
+  for (const page of pages) {
     for (const message of page) messages.set(message.id, message);
+  }
   return [...messages.values()].sort(
     (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id)
   );
@@ -25,18 +26,23 @@ export function parseComposer(
   commandNames: string[]
 ): ComposerSubmission {
   const trimmed = text.trim();
-  if (trimmed.startsWith("!") && trimmed.slice(1).trim())
+  if (trimmed.startsWith("!") && trimmed.slice(1).trim()) {
     return { type: "shell", command: trimmed.slice(1).trim() };
+  }
   const command = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
-  if (command && commandNames.includes(command[1]))
+  if (command && commandNames.includes(command[1])) {
     return { type: "command", name: command[1], text: command[2] ?? "" };
-  return { type: "prompt", text: trimmed };
+  }
+  return { text: trimmed, type: "prompt" };
 }
 
 export function serverFileUri(path: string): string {
-  if (path.startsWith("file://")) return path;
-  if (!path.startsWith("/"))
+  if (path.startsWith("file://")) {
+    return path;
+  }
+  if (!path.startsWith("/")) {
     throw new Error("The server file path must be absolute");
+  }
   return `file://${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
@@ -69,7 +75,9 @@ export function projectLiveEvents(
   events: OpenCodeEvent[],
   sessionID: string
 ): SessionMessageInfo[] {
-  if (!events.length) return messages;
+  if (!events.length) {
+    return messages;
+  }
   const indices = new Map(
     messages.map((message, index) => [message.id, index])
   );
@@ -77,13 +85,17 @@ export function projectLiveEvents(
   let next = messages;
   let inserted = false;
   const store = (assistant: SessionMessageAssistant) => {
-    if (next === messages) next = [...messages];
+    if (next === messages) {
+      next = [...messages];
+    }
     const index = indices.get(assistant.id);
     if (index === undefined) {
       indices.set(assistant.id, next.length);
       next.push(assistant);
       inserted = true;
-    } else next[index] = assistant;
+    } else {
+      next[index] = assistant;
+    }
     changed.add(assistant.id);
     return assistant;
   };
@@ -92,23 +104,26 @@ export function projectLiveEvents(
       !("sessionID" in event.data) ||
       event.data.sessionID !== sessionID ||
       !("assistantMessageID" in event.data)
-    )
+    ) {
       continue;
+    }
     const messageID = event.data.assistantMessageID;
     if (event.type === "session.step.started") {
       store({
-        id: messageID,
-        type: "assistant",
         agent: event.data.agent,
-        model: event.data.model,
         content: [],
+        id: messageID,
+        model: event.data.model,
         time: { created: event.data.started },
+        type: "assistant",
       });
       continue;
     }
     const index = indices.get(messageID);
     const current = index === undefined ? undefined : next[index];
-    if (!current || current.type !== "assistant") continue;
+    if (!current || current.type !== "assistant") {
+      continue;
+    }
     const mutable = () =>
       changed.has(messageID)
         ? current
@@ -117,7 +132,9 @@ export function projectLiveEvents(
             content: [...current.content],
             time: { ...current.time },
           });
-    if (current.retry && isAssistantProgress(event)) delete mutable().retry;
+    if (current.retry && isAssistantProgress(event)) {
+      delete mutable().retry;
+    }
     const fragment = (kind: "text" | "reasoning", ordinal: number) => {
       let count = 0;
       return current.content.findIndex(
@@ -129,12 +146,13 @@ export function projectLiveEvents(
       case "session.reasoning.started": {
         const kind =
           event.type === "session.text.started" ? "text" : "reasoning";
-        if (fragment(kind, event.data.ordinal) < 0)
+        if (fragment(kind, event.data.ordinal) < 0) {
           mutable().content.push(
             kind === "reasoning"
               ? { type: kind, text: "", time: { created: event.created } }
               : { type: kind, text: "" }
           );
+        }
         break;
       }
       case "session.text.delta":
@@ -149,13 +167,13 @@ export function projectLiveEvents(
         if (index < 0) {
           assistant.content.push(
             kind === "reasoning"
-              ? { type: kind, text: "", time: { created: event.created } }
-              : { type: kind, text: "" }
+              ? { text: "", time: { created: event.created }, type: kind }
+              : { text: "", type: kind }
           );
           index = assistant.content.length - 1;
         }
         const part = assistant.content[index];
-        if (part.type === "text" || part.type === "reasoning")
+        if (part.type === "text" || part.type === "reasoning") {
           assistant.content[index] = {
             ...part,
             text:
@@ -172,6 +190,7 @@ export function projectLiveEvents(
                 }
               : {}),
           };
+        }
         break;
       }
       case "session.tool.input.started": {
@@ -179,7 +198,7 @@ export function projectLiveEvents(
           !current.content.some(
             (part) => part.type === "tool" && part.id === event.data.id
           )
-        )
+        ) {
           mutable().content.push({
             type: "tool",
             id: event.data.id,
@@ -187,6 +206,7 @@ export function projectLiveEvents(
             state: { status: "streaming", input: "" },
             time: { created: event.created },
           });
+        }
         break;
       }
       case "session.tool.input.delta":
@@ -199,74 +219,82 @@ export function projectLiveEvents(
           (part) => part.type === "tool" && part.id === event.data.id
         );
         const part = current.content[index];
-        if (!part || part.type !== "tool") break;
+        if (!part || part.type !== "tool") {
+          break;
+        }
         if (
           (event.type === "session.tool.input.delta" ||
             event.type === "session.tool.input.ended") &&
           part.state.status !== "streaming"
-        )
+        ) {
           break;
+        }
         if (
           event.type === "session.tool.progress" &&
           part.state.status !== "running"
-        )
+        ) {
           break;
+        }
         const tool = { ...part, time: { ...part.time } };
         if (
           event.type === "session.tool.input.delta" &&
           tool.state.status === "streaming"
-        )
+        ) {
           tool.state = {
             status: "streaming",
             input: tool.state.input + event.data.delta,
           };
+        }
         if (
           event.type === "session.tool.input.ended" &&
           tool.state.status === "streaming"
-        )
+        ) {
           tool.state = { status: "streaming", input: event.data.text };
+        }
         if (event.type === "session.tool.called") {
           tool.executed = event.data.executed;
           tool.state = {
-            status: "running",
             input: event.data.input,
             metadata: {},
+            status: "running",
           };
           tool.time.ran = event.created;
         }
         if (
           event.type === "session.tool.progress" &&
           tool.state.status === "running"
-        )
+        ) {
           tool.state = {
             ...tool.state,
             metadata: { ...tool.state.metadata, ...event.data },
           };
+        }
         if (event.type === "session.tool.success") {
           tool.state = {
-            status: "completed",
-            input: typeof tool.state.input === "string" ? {} : tool.state.input,
             content: event.data.content,
+            input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
+            status: "completed",
           };
           tool.time.completed = event.created;
         }
         if (event.type === "session.tool.failed") {
           tool.state = {
-            status: "error",
-            input: typeof tool.state.input === "string" ? {} : tool.state.input,
-            error: event.data.error,
             content: event.data.content,
+            error: event.data.error,
+            input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
+            status: "error",
           };
           tool.time.completed = event.created;
         }
         mutable().content[index] = tool;
         break;
       }
-      case "session.step.streamed":
+      case "session.step.streamed": {
         mutable().time.streamed = event.created;
         break;
+      }
       case "session.step.ended": {
         const assistant = mutable();
         assistant.time.completed = event.created;
@@ -282,18 +310,20 @@ export function projectLiveEvents(
         assistant.error = event.data.error;
         break;
       }
-      case "session.retry.scheduled":
+      case "session.retry.scheduled": {
         mutable().retry = {
           attempt: event.data.attempt,
           at: event.data.at,
           error: event.data.error,
         };
         break;
+      }
     }
   }
-  if (inserted)
+  if (inserted) {
     next.sort(
       (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id)
     );
+  }
   return next;
 }

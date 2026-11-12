@@ -49,8 +49,9 @@ function session(value: unknown): value is PiSession {
     typeof value.idle !== "boolean" ||
     typeof value.thinkingLevel !== "string" ||
     (value.model !== undefined && !model(value.model))
-  )
+  ) {
     return false;
+  }
   return (
     value.context === undefined ||
     (object(value.context) &&
@@ -61,24 +62,31 @@ function session(value: unknown): value is PiSession {
 }
 
 function content(value: unknown): value is PiContent {
-  if (!object(value)) return false;
+  if (!object(value)) {
+    return false;
+  }
   switch (value.type) {
-    case "text":
+    case "text": {
       return typeof value.text === "string";
-    case "thinking":
+    }
+    case "thinking": {
       return typeof value.thinking === "string";
-    case "toolCall":
+    }
+    case "toolCall": {
       return (
         typeof value.id === "string" &&
         typeof value.name === "string" &&
         object(value.arguments)
       );
-    case "image":
+    }
+    case "image": {
       return (
         typeof value.mimeType === "string" && typeof value.data === "string"
       );
-    default:
+    }
+    default: {
       return false;
+    }
   }
 }
 
@@ -122,20 +130,28 @@ function waiting(value: unknown): boolean {
 }
 
 function event(value: unknown): value is PiEvent {
-  if (!object(value)) return false;
+  if (!object(value)) {
+    return false;
+  }
   switch (value.type) {
-    case "message":
+    case "message": {
       return message(value.message);
-    case "tool":
+    }
+    case "tool": {
       return tool(value.tool);
-    case "session":
+    }
+    case "session": {
       return session(value.session);
-    case "waiting":
+    }
+    case "waiting": {
       return waiting(value.waiting);
-    case "reset":
+    }
+    case "reset": {
       return true;
-    default:
+    }
+    default: {
       return false;
+    }
   }
 }
 
@@ -222,8 +238,11 @@ export function createPiClient(
   ): Promise<T> {
     const controller = new AbortController();
     const abort = () => controller.abort(signal?.reason);
-    if (signal?.aborted) abort();
-    else signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) {
+      abort();
+    } else {
+      signal?.addEventListener("abort", abort, { once: true });
+    }
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -231,19 +250,20 @@ export function createPiClient(
     }, timeout);
     try {
       const response = await fetchOverride(`${baseURL}${path}`, {
-        method: command ? "POST" : "GET",
+        body: command ? JSON.stringify(command) : undefined,
         headers: command
           ? { ...headers, "Content-Type": "application/json" }
           : headers,
-        body: command ? JSON.stringify(command) : undefined,
+        method: command ? "POST" : "GET",
         signal: controller.signal,
       });
       if (!response.ok) {
-        if (response.status === 401)
+        if (response.status === 401) {
           throw new PiConnectionError(
             "Pi rejected this password. Enter the server password again.",
             401
           );
+        }
         let detail = "";
         if (
           response.headers.get("content-type")?.includes("application/json")
@@ -257,15 +277,19 @@ export function createPiClient(
             ) {
               detail = body.error;
               for (const secret of [connection.token, headers.Authorization]) {
-                if (secret) detail = detail.split(secret).join("[redacted]");
+                if (secret) {
+                  detail = detail.split(secret).join("[redacted]");
+                }
               }
               detail = detail
-                .replace(/[\u0000-\u001f\u007f]/g, " ")
+                .replaceAll(/[\u0000-\u001F\u007F]/g, " ")
                 .trim()
                 .slice(0, 300);
             }
           } catch (error) {
-            if (controller.signal.aborted) throw error;
+            if (controller.signal.aborted) {
+              throw error;
+            }
           }
         }
         throw new PiConnectionError(
@@ -278,27 +302,34 @@ export function createPiClient(
       try {
         value = await response.json();
       } catch (error) {
-        if (controller.signal.aborted) throw error;
+        if (controller.signal.aborted) {
+          throw error;
+        }
         throw new PiConnectionError(
           "Pi returned an invalid JSON response. Check the server address and version."
         );
       }
-      if (!valid(value))
+      if (!valid(value)) {
         throw new PiConnectionError(
           "Pi returned an unsupported response. This app requires Pi mobile protocol 1."
         );
+      }
       return value;
     } catch (error) {
-      if (signal?.aborted)
+      if (signal?.aborted) {
         throw (
           signal.reason ??
           new DOMException("The request was aborted", "AbortError")
         );
-      if (timedOut)
+      }
+      if (timedOut) {
         throw new PiConnectionError(
           "Pi did not respond before the request timed out. Check your network and try again."
         );
-      if (error instanceof PiConnectionError) throw error;
+      }
+      if (error instanceof PiConnectionError) {
+        throw error;
+      }
       throw new PiConnectionError(
         "Pi is unreachable. Check the server address and your network."
       );
@@ -309,31 +340,6 @@ export function createPiClient(
   }
 
   return {
-    info: (signal?: AbortSignal) => request("/pi/info", serverInfo, signal),
-    snapshot: (signal?: AbortSignal) =>
-      request("/pi/snapshot", snapshot, signal),
-    async models(signal?: AbortSignal): Promise<PiModel[]> {
-      const result = await request(
-        "/pi/models",
-        (value): value is { models: PiModel[] } =>
-          object(value) &&
-          Array.isArray(value.models) &&
-          value.models.every(model),
-        signal
-      );
-      return result.models;
-    },
-    async sessions(signal?: AbortSignal): Promise<PiSessionSummary[]> {
-      const result = await request(
-        "/pi/sessions",
-        (value): value is { sessions: PiSessionSummary[] } =>
-          object(value) &&
-          Array.isArray(value.sessions) &&
-          value.sessions.every(sessionSummary),
-        signal
-      );
-      return result.sessions;
-    },
     async command(command: PiCommand, signal?: AbortSignal): Promise<void> {
       await request(
         "/pi/command",
@@ -376,6 +382,31 @@ export function createPiClient(
         after = result.cursor;
       }
     },
+    info: (signal?: AbortSignal) => request("/pi/info", serverInfo, signal),
+    async models(signal?: AbortSignal): Promise<PiModel[]> {
+      const result = await request(
+        "/pi/models",
+        (value): value is { models: PiModel[] } =>
+          object(value) &&
+          Array.isArray(value.models) &&
+          value.models.every(model),
+        signal
+      );
+      return result.models;
+    },
+    async sessions(signal?: AbortSignal): Promise<PiSessionSummary[]> {
+      const result = await request(
+        "/pi/sessions",
+        (value): value is { sessions: PiSessionSummary[] } =>
+          object(value) &&
+          Array.isArray(value.sessions) &&
+          value.sessions.every(sessionSummary),
+        signal
+      );
+      return result.sessions;
+    },
+    snapshot: (signal?: AbortSignal) =>
+      request("/pi/snapshot", snapshot, signal),
   };
 }
 

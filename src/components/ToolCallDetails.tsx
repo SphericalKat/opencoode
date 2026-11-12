@@ -15,49 +15,56 @@ import {
 } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
 
-import { type Client, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import { MessageActionsContext } from "../lib/messageActions";
-import { type ThemeColors, useTheme, useThemedStyles } from "../lib/theme";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import { ArtifactContent, isImageArtifact } from "./ArtifactContent";
 import { Disclosure, ErrorNotice, Label, mono, touchTarget } from "./ui";
 
 type Arguments = Record<string, JsonValue>;
-type Section = { label?: string; text: string; diff?: boolean };
+interface Section {
+  label?: string;
+  text: string;
+  diff?: boolean;
+}
 const textPageSize = 24_000;
 
 function nameOf(name: string): string {
   return name
     .replace(/^.*[.:]/, "")
-    .replace(/[_-]/g, "")
+    .replaceAll(/[_-]/g, "")
     .toLowerCase();
 }
 
 const toolNames: Record<string, string> = {
-  shell: "Shell",
+  applypatch: "Patch",
   bash: "Shell",
-  read: "Read",
-  readfile: "Read",
   edit: "Edit",
   editfile: "Edit",
-  write: "Write",
-  writefile: "Write",
-  patch: "Patch",
-  applypatch: "Patch",
+  execute: "Execute",
+  fetch: "Web fetch",
   glob: "Glob",
   grep: "Grep",
-  webfetch: "Web fetch",
-  fetch: "Web fetch",
-  websearch: "Web search",
-  ls: "List",
   list: "List",
-  execute: "Execute",
+  ls: "List",
+  patch: "Patch",
+  read: "Read",
+  readfile: "Read",
+  shell: "Shell",
   subagent: "Agent",
   task: "Task",
+  webfetch: "Web fetch",
+  websearch: "Web search",
+  write: "Write",
+  writefile: "Write",
 };
 
 export function toolDisplayName(name: string): string {
   return (
-    toolNames[nameOf(name)] ?? name.replace(/^.*[.:]/, "").replace(/[_-]/g, " ")
+    toolNames[nameOf(name)] ??
+    name.replace(/^.*[.:]/, "").replaceAll(/[_-]/g, " ")
   );
 }
 
@@ -67,7 +74,9 @@ function text(
 ): string | undefined {
   for (const key of keys) {
     const value = input?.[key];
-    if (typeof value === "string" && value.length) return value;
+    if (typeof value === "string" && value.length) {
+      return value;
+    }
   }
 }
 
@@ -77,14 +86,18 @@ function optionalString(
 ): string | undefined {
   for (const key of keys) {
     const value = input[key];
-    if (typeof value === "string") return value;
+    if (typeof value === "string") {
+      return value;
+    }
   }
 }
 
 export function toolDetail(
   tool: SessionMessageAssistantTool
 ): string | undefined {
-  if (tool.state.status === "streaming") return;
+  if (tool.state.status === "streaming") {
+    return;
+  }
   return text(
     tool.state.input,
     "description",
@@ -106,19 +119,23 @@ function inputSections(
   const path = text(input, "filePath", "file_path", "path");
   const file = path ? [{ label: "File", text: path }] : [];
   switch (toolNames[nameOf(name)]) {
-    case "Shell":
+    case "Shell": {
       return text(input, "command", "cmd")
         ? [{ text: text(input, "command", "cmd")! }]
         : [];
+    }
     case "Read":
-    case "List":
+    case "List": {
       return file;
+    }
     case "Edit":
     case "Patch": {
       const diff =
         text(metadata, "diff", "patch") ??
         text(input, "diff", "patch", "patchText");
-      if (diff) return [...file, { label: "Diff", text: diff, diff: true }];
+      if (diff) {
+        return [...file, { label: "Diff", text: diff, diff: true }];
+      }
       const before = optionalString(
         input,
         "oldText",
@@ -135,15 +152,15 @@ function inputSections(
       );
       return [
         ...file,
-        ...(before !== undefined ? [{ label: "Before", text: before }] : []),
-        ...(after !== undefined ? [{ label: "After", text: after }] : []),
+        ...(before === undefined ? [] : [{ label: "Before", text: before }]),
+        ...(after === undefined ? [] : [{ label: "After", text: after }]),
       ];
     }
     case "Write": {
       const content = optionalString(input, "content", "text");
       return [
         ...file,
-        ...(content !== undefined ? [{ label: "Content", text: content }] : []),
+        ...(content === undefined ? [] : [{ label: "Content", text: content }]),
       ];
     }
     case "Glob":
@@ -175,8 +192,9 @@ function inputSections(
       const prompt = text(input, "prompt", "task", "description");
       return prompt ? [{ label: "Task", text: prompt }] : [];
     }
-    default:
+    default: {
       return [];
+    }
   }
 }
 
@@ -201,7 +219,7 @@ function CopyAction({ value, label }: { value: string; label: string }) {
               setCopied(true);
               setError(undefined);
             })
-            .catch((reason) => setError(errorMessage(reason)));
+            .catch((error_) => setError(errorMessage(error_)));
         }}
         onLongPress={(event) => event.stopPropagation()}
         style={({ pressed }) => [
@@ -336,147 +354,151 @@ function CodeSection({
   );
 }
 
-export const ToolCallDetails = memo(function ToolCallDetails({
-  tool,
-  client,
-  directory,
-  selectable,
-}: {
-  tool: SessionMessageAssistantTool;
-  client?: Client;
-  directory: string;
-  selectable: boolean;
-}) {
-  const styles = useThemedStyles(createStyles);
-  const state = tool.state;
-  const input = state.status === "streaming" ? undefined : state.input;
-  const metadata = "metadata" in state ? state.metadata : undefined;
-  const sections = useMemo(
-    () => (input ? inputSections(tool.name, input, metadata) : []),
-    [tool.name, input, metadata]
-  );
-  const argumentsText = useMemo(
-    () =>
-      state.status === "streaming"
-        ? state.input
-        : JSON.stringify(state.input, null, 2),
-    [state.input, state.status]
-  );
-  const content: ToolContent[] =
-    "content" in state ? (state.content ?? []) : [];
-  const outputs = content
-    .filter((item) => item.type === "text")
-    .map((item) => item.text);
-  if (state.status === "running" && typeof state.metadata.output === "string")
-    outputs.push(state.metadata.output);
-  const output = outputs.join("\n\n");
-  const files = content
-    .filter((item) => item.type === "file")
-    .filter((item) => !isImageArtifact(item));
-  const fallback = !!input && !sections.length;
-  return (
-    <View style={styles.body}>
-      <View style={styles.panel}>
-        {sections.map((section, index) => (
-          <CodeSection
-            key={`${tool.id}:${index}`}
-            section={section}
-            divided={index > 0}
-            selectable={selectable}
-          />
-        ))}
-        {fallback && (
-          <CodeSection
-            section={{ label: "Arguments", text: argumentsText }}
-            selectable={selectable}
-          />
-        )}
-        {state.status === "streaming" && (
-          <Label muted style={styles.pending}>
-            Receiving tool arguments
-          </Label>
-        )}
-        {!!output && (
-          <CodeSection
-            section={{ label: "Output", text: output }}
-            output
-            divided={sections.length > 0 || fallback}
-            selectable={selectable}
-          />
-        )}
-        {!output && !content.length && state.status === "completed" && (
-          <Label muted style={[styles.pending, styles.divider]}>
-            No output
-          </Label>
-        )}
-      </View>
-      {files.map((file, index) => (
-        <ArtifactContent
-          key={`${file.uri}:${index}`}
-          content={file}
-          client={client}
-          directory={directory}
-        />
-      ))}
-      {state.status === "error" && <ErrorNotice error={state.error.message} />}
-      {!fallback && (
-        <Disclosure disclosureKey={`${tool.id}:arguments`} title="Arguments">
-          <View style={styles.panel}>
+export const ToolCallDetails = memo(
+  ({
+    tool,
+    client,
+    directory,
+    selectable,
+  }: {
+    tool: SessionMessageAssistantTool;
+    client?: Client;
+    directory: string;
+    selectable: boolean;
+  }) => {
+    const styles = useThemedStyles(createStyles);
+    const state = tool.state;
+    const input = state.status === "streaming" ? undefined : state.input;
+    const metadata = "metadata" in state ? state.metadata : undefined;
+    const sections = useMemo(
+      () => (input ? inputSections(tool.name, input, metadata) : []),
+      [tool.name, input, metadata]
+    );
+    const argumentsText = useMemo(
+      () =>
+        state.status === "streaming"
+          ? state.input
+          : JSON.stringify(state.input, null, 2),
+      [state.input, state.status]
+    );
+    const content: ToolContent[] =
+      "content" in state ? (state.content ?? []) : [];
+    const outputs = content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text);
+    if (state.status === "running" && typeof state.metadata.output === "string")
+      outputs.push(state.metadata.output);
+    const output = outputs.join("\n\n");
+    const files = content
+      .filter((item) => item.type === "file")
+      .filter((item) => !isImageArtifact(item));
+    const fallback = !!input && !sections.length;
+    return (
+      <View style={styles.body}>
+        <View style={styles.panel}>
+          {sections.map((section, index) => (
+            <CodeSection
+              key={`${tool.id}:${index}`}
+              section={section}
+              divided={index > 0}
+              selectable={selectable}
+            />
+          ))}
+          {fallback && (
             <CodeSection
               section={{ label: "Arguments", text: argumentsText }}
               selectable={selectable}
             />
-          </View>
-        </Disclosure>
-      )}
-    </View>
-  );
-});
+          )}
+          {state.status === "streaming" && (
+            <Label muted style={styles.pending}>
+              Receiving tool arguments
+            </Label>
+          )}
+          {!!output && (
+            <CodeSection
+              section={{ label: "Output", text: output }}
+              output
+              divided={sections.length > 0 || fallback}
+              selectable={selectable}
+            />
+          )}
+          {!output && !content.length && state.status === "completed" && (
+            <Label muted style={[styles.pending, styles.divider]}>
+              No output
+            </Label>
+          )}
+        </View>
+        {files.map((file, index) => (
+          <ArtifactContent
+            key={`${file.uri}:${index}`}
+            content={file}
+            client={client}
+            directory={directory}
+          />
+        ))}
+        {state.status === "error" && (
+          <ErrorNotice error={state.error.message} />
+        )}
+        {!fallback && (
+          <Disclosure disclosureKey={`${tool.id}:arguments`} title="Arguments">
+            <View style={styles.panel}>
+              <CodeSection
+                section={{ label: "Arguments", text: argumentsText }}
+                selectable={selectable}
+              />
+            </View>
+          </Disclosure>
+        )}
+      </View>
+    );
+  }
+);
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    added: { backgroundColor: colors.successBackground, color: colors.success },
     body: { gap: 10, minWidth: 0 },
-    panel: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 8,
-      overflow: "hidden",
-      backgroundColor: colors.panel,
-    },
-    divider: { borderTopWidth: 1, borderTopColor: colors.border },
-    output: { backgroundColor: colors.bg },
-    sectionHeader: {
-      minHeight: touchTarget,
-      paddingLeft: 12,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    sectionLabel: { fontSize: 12, lineHeight: 17 },
-    codeRow: { flexDirection: "row", alignItems: "flex-start" },
-    viewport: { maxHeight: 200, flex: 1 },
-    codeContent: { padding: 12, paddingTop: 8, gap: 8 },
     code: {
+      color: colors.text,
       fontFamily: mono,
       fontSize: 13,
       lineHeight: 20,
-      color: colors.text,
     },
+    codeContent: { gap: 8, padding: 12, paddingTop: 8 },
+    codeRow: { alignItems: "flex-start", flexDirection: "row" },
     copyAction: { flexShrink: 0, maxWidth: 160 },
-    copyTarget: {
-      width: touchTarget,
-      minHeight: touchTarget,
-      justifyContent: "center",
-      alignItems: "center",
-    },
     copyError: {
+      color: colors.danger,
       fontSize: 12,
       lineHeight: 17,
-      color: colors.danger,
       padding: 8,
     },
-    more: { minHeight: touchTarget, justifyContent: "center" },
+    copyTarget: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: touchTarget,
+      width: touchTarget,
+    },
+    divider: { borderTopColor: colors.border, borderTopWidth: 1 },
+    more: { justifyContent: "center", minHeight: touchTarget },
+    output: { backgroundColor: colors.bg },
+    panel: {
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
     pending: { fontSize: 13, lineHeight: 19, padding: 12 },
-    added: { color: colors.success, backgroundColor: colors.successBackground },
-    removed: { color: colors.danger, backgroundColor: colors.dangerBackground },
+    removed: { backgroundColor: colors.dangerBackground, color: colors.danger },
+    sectionHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: touchTarget,
+      paddingLeft: 12,
+    },
+    sectionLabel: { fontSize: 12, lineHeight: 17 },
+    viewport: { flex: 1, maxHeight: 200 },
   });

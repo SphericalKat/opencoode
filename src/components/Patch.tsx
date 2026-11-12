@@ -19,7 +19,9 @@ export function Patch({ patch }: { patch: string }) {
         }}
       >
         {patch.split(/(?<=\n)/).map((line, index) => {
-          if (line.startsWith("@@")) inHunk = true;
+          if (line.startsWith("@@")) {
+            inHunk = true;
+          }
           const color =
             inHunk && line.startsWith("+")
               ? colors.success

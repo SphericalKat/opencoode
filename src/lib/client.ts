@@ -1,21 +1,17 @@
-import {
-  ClientError,
-  isUnauthorizedError,
-  OpenCode,
-  type ServerInfo,
-} from "@opencode/client";
+import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client";
+import type { ServerInfo } from "@opencode/client";
 
 import type { PiServerInfo } from "../../packages/pi-mobile/protocol";
 import { createPiClient, PiConnectionError } from "./piClient";
 
-export type Connection = {
+export interface Connection {
   id: string;
   name: string;
   url: string;
   token?: string;
   username?: string;
   backend?: "opencode" | "pi";
-};
+}
 
 export type Client = ReturnType<typeof OpenCode.make>;
 export type ConnectedServer =
@@ -45,27 +41,32 @@ export function normalizeConnection(
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Use an HTTP or HTTPS server URL");
   }
-  if (url.username || url.password)
+  if (url.username || url.password) {
     throw new Error("Enter the server password in the password field");
-  if (url.search || url.hash)
+  }
+  if (url.search || url.hash) {
     throw new Error("Remove the query and fragment from the server URL");
+  }
   const username = input.username?.trim() || "opencode";
-  if (username.includes(":"))
+  if (username.includes(":")) {
     throw new Error("The username cannot contain a colon");
+  }
   return {
+    backend: input.backend,
     id: input.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     name: input.name.trim() || url.hostname,
-    url: url.toString().replace(/\/+$/, ""),
     token: input.token || undefined,
+    url: url.toString().replace(/\/+$/, ""),
     username,
-    backend: input.backend,
   };
 }
 
 export function authorizationHeader(
   connection: Connection
 ): string | undefined {
-  if (!connection.token) return undefined;
+  if (!connection.token) {
+    return undefined;
+  }
   const bytes = new TextEncoder().encode(
     `${connection.username || "opencode"}:${connection.token}`
   );
@@ -87,7 +88,9 @@ export function createClient(
 function pairingAddress(connection: Connection) {
   const url = new URL(connection.url);
   const match = /^(.*)\/auth\/connect\/([^/]+)\/?$/.exec(url.pathname);
-  if (!match) return;
+  if (!match) {
+    return;
+  }
   let code: string;
   try {
     code = decodeURIComponent(match[2]);
@@ -96,10 +99,11 @@ function pairingAddress(connection: Connection) {
       "This pairing link is invalid. Create a new link on your computer."
     );
   }
-  if (!/^[A-Za-z0-9_-]+$/.test(code))
+  if (!/^[A-Za-z0-9_-]+$/.test(code)) {
     throw new Error(
       "This pairing link is invalid. Create a new link on your computer."
     );
+  }
   return { code, url: `${url.origin}${match[1]}`.replace(/\/+$/, "") };
 }
 
@@ -116,8 +120,9 @@ function pairingFailure(error: unknown): unknown {
     typeof error !== "object" ||
     !("errors" in error) ||
     !Array.isArray(error.errors)
-  )
+  ) {
     return error;
+  }
   return (
     error.errors.find(isConnectionUnauthorized) ??
     error.errors[0] ??
@@ -131,8 +136,8 @@ async function checkConnection(
   signal: AbortSignal
 ): Promise<ConnectedServer> {
   const discovery = await fetchOverride(`${next.url}/opencoode/info`, {
-    signal,
     headers: { Accept: "application/json" },
+    signal,
   });
   if (
     discovery.ok &&
@@ -145,21 +150,24 @@ async function checkConnection(
       "backend" in identity &&
       identity.backend === "pi"
     ) {
-      if (!("protocol" in identity) || identity.protocol !== 1)
+      if (!("protocol" in identity) || identity.protocol !== 1) {
         throw new Error(
           "Update the app and the Pi mobile extension to use the same protocol version."
         );
+      }
       const info = await createPiClient(next, fetchOverride).info(signal);
       return { backend: "pi", connection: { ...next, backend: "pi" }, info };
     }
   }
   const info = await createClient(next, fetchOverride).server.info({ signal });
-  if (!info || typeof info !== "object" || typeof info.version !== "string")
+  if (!info || typeof info !== "object" || typeof info.version !== "string") {
     throw new Error(invalidServerMessage);
-  if (!/^2\./.test(info.version))
+  }
+  if (!info.version.startsWith("2.")) {
     throw new Error(
       `This app requires OpenCode 2. The server reports ${info.version}`
     );
+  }
   if (
     typeof info.pid !== "number" ||
     !Number.isFinite(info.pid) ||
@@ -167,8 +175,9 @@ async function checkConnection(
     !info.urls.every((url) => typeof url === "string") ||
     !info.paths ||
     typeof info.paths.tmp !== "string"
-  )
+  ) {
     throw new Error(invalidServerMessage);
+  }
   return {
     backend: "opencode",
     connection: { ...next, backend: "opencode" },
@@ -219,7 +228,9 @@ async function connectWithSignal(
 ) {
   const next = normalizeConnection(connection);
   const pairing = pairingAddress(next);
-  if (!pairing) return checkConnection(next, fetchOverride, signal);
+  if (!pairing) {
+    return checkConnection(next, fetchOverride, signal);
+  }
   const candidates = [next, ...alternatives.map(normalizeConnection)].map(
     pairingAddress
   );
@@ -237,15 +248,18 @@ async function connectWithSignal(
       candidates.flatMap((candidate) => (candidate ? [candidate.url] : []))
     ),
   ];
-  if (redeemedPairing && redeemedPairing.expiresAt <= Date.now())
+  if (redeemedPairing && redeemedPairing.expiresAt <= Date.now()) {
     clearPairingRetry();
+  }
   let cached =
     redeemedPairing?.code === pairing.code ? redeemedPairing : undefined;
   const cachedUrls = cached?.urls;
   const knownAliases = cachedUrls
     ? urls.filter((url) => cachedUrls.includes(url))
     : [];
-  if (cached && !knownAliases.length) cached = undefined;
+  if (cached && !knownAliases.length) {
+    cached = undefined;
+  }
   if (!cached) {
     try {
       cached = await Promise.any(
@@ -254,13 +268,14 @@ async function connectWithSignal(
             `${url}/auth/connect/${encodeURIComponent(pairing.code)}`,
             { headers: { Accept: "application/json" }, signal }
           );
-          if (!response.ok)
+          if (!response.ok) {
             throw new PiConnectionError(
               response.status === 401
                 ? "This pairing link expired or was already used. Create a new pairing link on your computer."
                 : `The server returned HTTP ${response.status} during pairing.`,
               response.status
             );
+          }
           const paired: unknown = await response.json();
           if (
             !paired ||
@@ -268,13 +283,14 @@ async function connectWithSignal(
             !("token" in paired) ||
             typeof paired.token !== "string" ||
             !paired.token
-          )
+          ) {
             throw new Error(invalidServerMessage);
+          }
           const session = {
             code: pairing.code,
+            expiresAt: Date.now() + 5 * 60_000,
             token: paired.token,
             urls,
-            expiresAt: Date.now() + 5 * 60_000,
           };
           redeemedPairing = session;
           return session;
@@ -285,10 +301,10 @@ async function connectWithSignal(
     }
   }
   const allowed = knownAliases.length ? knownAliases : urls;
-  const token = cached.token;
+  const { token } = cached;
   const checks = allowed.map((url) =>
     checkConnection(
-      { ...next, url, token, username: "opencode" },
+      { ...next, token, url, username: "opencode" },
       fetchOverride,
       signal
     )
@@ -300,11 +316,14 @@ async function connectWithSignal(
     const failure = pairingFailure(error);
     if (isConnectionUnauthorized(failure))
       throw new Error(
-        "The server rejected the paired connection. Create a new pairing link on your computer."
+        "The server rejected the paired connection. Create a new pairing link on your computer.",
+        { cause: error }
       );
     throw failure;
   }
-  if (paired.connection.url === allowed[0]) return paired;
+  if (paired.connection.url === allowed[0]) {
+    return paired;
+  }
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -319,7 +338,9 @@ async function connectWithSignal(
 }
 
 export function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    return error.message;
+  }
   if (
     error &&
     typeof error === "object" &&
@@ -342,7 +363,7 @@ export function connectionErrorMessage(
     return "The server rejected this password. The current server password or a new pairing link is required.";
   }
   if (error instanceof ClientError) {
-    const cause = error.cause;
+    const { cause } = error;
     if (
       cause &&
       typeof cause === "object" &&

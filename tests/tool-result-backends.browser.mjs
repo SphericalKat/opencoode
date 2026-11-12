@@ -5,21 +5,13 @@ export async function verifyBackendImages(page) {
     const result = await page.evaluate(async (failed) => {
       const connection = { id: "pi", name: "Pi", url: "http://pi.invalid" };
       const content = [
-        { type: "text", text: "Captured" },
-        { type: "image", mimeType: "image/png", data: "Zmlyc3Q=" },
-        { type: "image", mimeType: "image/jpeg", data: "c2Vjb25k" },
+        { text: "Captured", type: "text" },
+        { data: "Zmlyc3Q=", mimeType: "image/png", type: "image" },
+        { data: "c2Vjb25k", mimeType: "image/jpeg", type: "image" },
       ];
       const initial = {
         cursor: 0,
         instanceID: "server",
-        session: {
-          id: "session",
-          cwd: "/project",
-          name: "Images",
-          idle: false,
-          thinkingLevel: "",
-        },
-        tools: [],
         messages: [
           {
             id: "assistant",
@@ -35,33 +27,41 @@ export async function verifyBackendImages(page) {
             ],
           },
         ],
+        session: {
+          cwd: "/project",
+          id: "session",
+          idle: false,
+          name: "Images",
+          thinkingLevel: "",
+        },
+        tools: [],
       };
       const completed = {
-        id: "capture",
-        name: "screenshot",
-        input: {},
-        status: failed ? "error" : "completed",
-        output: "Captured",
         content,
+        id: "capture",
+        input: {},
+        name: "screenshot",
+        output: "Captured",
+        status: failed ? "error" : "completed",
       };
       const message = {
-        id: "result",
-        timestamp: 2,
-        role: "toolResult",
-        toolCallId: "capture",
         content,
+        id: "result",
         isError: failed,
+        role: "toolResult",
+        timestamp: 2,
+        toolCallId: "capture",
       };
       const events = [
         {
           cursor: 1,
-          instanceID: "server",
           events: [{ type: "tool", tool: completed }],
+          instanceID: "server",
         },
         {
           cursor: 2,
-          instanceID: "server",
           events: [{ type: "message", message }],
+          instanceID: "server",
         },
       ];
       const json = (body) =>
@@ -89,12 +89,11 @@ export async function verifyBackendImages(page) {
         await reopened.core.message.list({ sessionID: "session" })
       ).data[0].content[0].state;
       return [live, persisted, history].map((state) => ({
-        status: state.status,
         content: state.content,
+        status: state.status,
       }));
     }, failed);
     const expected = {
-      status: failed ? "error" : "completed",
       content: [
         { type: "text", text: "Captured" },
         {
@@ -108,6 +107,7 @@ export async function verifyBackendImages(page) {
           uri: "data:image/jpeg;base64,c2Vjb25k",
         },
       ],
+      status: failed ? "error" : "completed",
     };
     assert.deepEqual(result, [expected, expected, expected]);
   }
@@ -118,82 +118,84 @@ export async function verifyBackendImages(page) {
   for (const failed of [false, true]) {
     const result = await page.evaluate(async (failed) => {
       const content = [
-        { type: "text", text: "Captured" },
+        { text: "Captured", type: "text" },
         {
-          type: "file",
-          name: "First.png",
           mime: "image/png",
+          name: "First.png",
+          type: "file",
           uri: "file:///project/First.png",
         },
         {
-          type: "file",
-          name: "Second.jpg",
           mime: "image/jpeg",
+          name: "Second.jpg",
+          type: "file",
           uri: "https://example.com/Second.jpg",
         },
         {
-          type: "file",
-          name: "report.txt",
           mime: "text/plain",
+          name: "report.txt",
+          type: "file",
           uri: "data:text/plain,report",
         },
       ];
-      const owner = { sessionID: "session", assistantMessageID: "assistant" };
+      const owner = { assistantMessageID: "assistant", sessionID: "session" };
       const base = {
-        id: "event",
         created: 1,
         durable: { aggregateID: "session", seq: 1, version: 1 },
+        id: "event",
       };
       const events = [
         {
           ...base,
-          type: "session.step.started",
           data: {
             ...owner,
             agent: "build",
             model: { id: "model", providerID: "provider" },
             started: 1,
           },
+          type: "session.step.started",
         },
         {
           ...base,
-          type: "session.tool.input.started",
           data: { ...owner, id: "capture", name: "screenshot" },
+          type: "session.tool.input.started",
         },
         {
           ...base,
-          type: failed ? "session.tool.failed" : "session.tool.success",
           data: {
             ...owner,
-            id: "capture",
-            executed: true,
             content,
+            executed: true,
+            id: "capture",
             ...(failed
               ? { error: { type: "tool-error", message: "Capture failed" } }
               : {}),
           },
+          type: failed ? "session.tool.failed" : "session.tool.success",
         },
       ];
       let history;
       const client = globalThis.createClient(
         { id: "opencode", name: "OpenCode", url: "http://opencode.invalid" },
         async (input) => {
-          if (String(input.url || input).includes("/event"))
+          if (String(input.url || input).includes("/event")) {
             return new Response(
               events
                 .map((event) => `data: ${JSON.stringify(event)}\n\n`)
                 .join(""),
               { headers: { "Content-Type": "text/event-stream" } }
             );
-          return new Response(JSON.stringify({ data: history, cursor: {} }), {
+          }
+          return new Response(JSON.stringify({ cursor: {}, data: history }), {
             headers: { "Content-Type": "application/json" },
           });
         }
       );
       const backend = globalThis.makeOpenCodeChatBackend(client);
       let messages = [];
-      for await (const event of backend.core.event.subscribe({}))
+      for await (const event of backend.core.event.subscribe({})) {
         messages = globalThis.projectLiveEvent(messages, event, "session");
+      }
       history = messages;
       const live = messages[0].content[0].state;
       const reopened = (
@@ -204,23 +206,23 @@ export async function verifyBackendImages(page) {
       return [live.content, reopened.content];
     }, failed);
     const expected = [
-      { type: "text", text: "Captured" },
+      { text: "Captured", type: "text" },
       {
-        type: "file",
-        name: "First.png",
         mime: "image/png",
+        name: "First.png",
+        type: "file",
         uri: "file:///project/First.png",
       },
       {
-        type: "file",
-        name: "Second.jpg",
         mime: "image/jpeg",
+        name: "Second.jpg",
+        type: "file",
         uri: "https://example.com/Second.jpg",
       },
       {
-        type: "file",
-        name: "report.txt",
         mime: "text/plain",
+        name: "report.txt",
+        type: "file",
         uri: "data:text/plain,report",
       },
     ];

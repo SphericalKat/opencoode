@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { createClient, type Connection } from "../src/lib/client";
+import { createClient } from "../src/lib/client";
+import type { Connection } from "../src/lib/client";
 import {
   persistentInputFrame,
   persistentPtySocketUrl,
 } from "../src/lib/terminal";
 
 const fixture = JSON.parse(
-  await readFile("/tmp/opencoode-live-connection.json", "utf8")
+  await readFile("/tmp/opencoode-live-connection.json", "utf-8")
 ) as { connection: Connection; directory: string };
 const client = createClient(fixture.connection, (input, init) =>
   fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(20_000) })
@@ -33,19 +34,21 @@ async function until(
 ) {
   const deadline = Date.now() + 10_000;
   while (!(await check())) {
-    if (Date.now() >= deadline) throw new Error(`Timed out: ${description}`);
+    if (Date.now() >= deadline) {
+      throw new Error(`Timed out: ${description}`);
+    }
     await delay(25);
   }
 }
 
 try {
   const terminal = await api.create({
-    sessionID: session.id,
     args: [],
-    env: { TERM: "xterm-256color" },
-    title: "Persistent Unicode check",
     cwd: fixture.directory,
+    env: { TERM: "xterm-256color" },
+    sessionID: session.id,
     size: { cols: 80, rows: 24 },
+    title: "Persistent Unicode check",
   });
   terminalID = terminal.id;
   assert.equal(terminal.sessionID, session.id);
@@ -77,7 +80,7 @@ try {
         fixture.connection.url,
         terminal.id,
         token.ticket,
-        { cursor, attachmentID, role: "observer" }
+        { attachmentID, cursor, role: "observer" }
       )
     );
     socket.binaryType = "arraybuffer";
@@ -104,22 +107,27 @@ try {
             assert.equal(message.role, "observer");
             attached = true;
           }
-          if (message.type === "controller_changed")
+          if (message.type === "controller_changed") {
             controller = message.attachmentID === attachmentID;
+          }
           if (message.type === "replay_complete") {
-            if (message.endOffset !== undefined) offset = message.endOffset;
+            if (message.endOffset !== undefined) {
+              offset = message.endOffset;
+            }
             restored = true;
           }
         }
-      } catch (failure) {
+      } catch (error) {
         socketError =
-          failure instanceof Error
-            ? failure
+          error instanceof Error
+            ? error
             : new Error("Invalid persistent terminal response");
       }
     };
     await until(() => {
-      if (socketError) throw socketError;
+      if (socketError) {
+        throw socketError;
+      }
       return attached && restored && socket?.readyState === WebSocket.OPEN;
     }, "persistent terminal attachment and replay");
   }
@@ -160,12 +168,12 @@ try {
   socket!.send(persistentInputFrame({ cols: 80, rows: 24 }));
   await until(() => controller, "terminal control after reconnection");
   const resized = await api.update({
-    ptyID: terminal.id,
     attachmentID,
+    ptyID: terminal.id,
     size: { cols: 96, rows: 30 },
   });
   assert.deepEqual(resized.size, { cols: 96, rows: 30 });
-  const readable = await api.read({ sessionID: session.id, lines: 20 });
+  const readable = await api.read({ lines: 20, sessionID: session.id });
   assert.equal(readable?.ptyID, terminal.id);
   console.log(
     "PASS: persistent terminal create/list, observer mode, explicit control, input, Unicode byte offsets, snapshot, reconnect, resize, and screen read"
@@ -173,7 +181,9 @@ try {
 } finally {
   socket?.close();
   try {
-    if (terminalID) await api.remove({ ptyID: terminalID });
+    if (terminalID) {
+      await api.remove({ ptyID: terminalID });
+    }
   } finally {
     await client.session.remove({ sessionID: session.id });
   }

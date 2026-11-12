@@ -16,7 +16,8 @@ import type {
   SessionStatus,
   SkillInfo,
 } from "@opencode/client";
-import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { FlashList } from "@shopify/flash-list";
+import type { FlashListRef } from "@shopify/flash-list";
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
@@ -45,10 +46,12 @@ import {
   Text,
   View,
   useWindowDimensions,
-  type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  type TextInputProps,
+} from "react-native";
+import type {
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  TextInputProps,
 } from "react-native";
 import {
   KeyboardAvoidingView,
@@ -64,8 +67,8 @@ import {
   AssistantActivityPart as AssistantPart,
   AssistantTurn,
   groupTranscriptMessages,
-  type TranscriptItem,
 } from "../components/AssistantTurn";
+import type { TranscriptItem } from "../components/AssistantTurn";
 import { BackgroundCommands } from "../components/BackgroundCommands";
 import { ChildSessions } from "../components/ChildSessions";
 import { Instructions } from "../components/Instructions";
@@ -99,7 +102,8 @@ import {
   Sheet,
 } from "../components/ui";
 import { UserMessageBubble } from "../components/UserMessageBubble";
-import { sessionActivity, type AgentActivity } from "../lib/activity";
+import { sessionActivity } from "../lib/activity";
+import type { AgentActivity } from "../lib/activity";
 import { useBetaLayout } from "../lib/betaLayout";
 import {
   isAssistantProgress,
@@ -109,11 +113,8 @@ import {
   serverFileUri,
 } from "../lib/chat";
 import type { ChatBackend, ChatBackendSnapshot } from "../lib/chatBackend";
-import {
-  errorMessage,
-  isConnectionUnauthorized,
-  type Client,
-} from "../lib/client";
+import { errorMessage, isConnectionUnauthorized } from "../lib/client";
+import type { Client } from "../lib/client";
 import { loadDraft, saveDraft } from "../lib/drafts";
 import { pageInset } from "../lib/layout";
 import {
@@ -126,10 +127,11 @@ import {
 } from "../lib/modelPreferences";
 import { useNativePresentation } from "../lib/sheets";
 import { createStreamBatch } from "../lib/streamBatch";
-import { type ThemeColors, useTheme, useThemedStyles } from "../lib/theme";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import { useUnsavedChanges } from "../lib/unsaved";
 
-type Props = {
+interface Props {
   backend: ChatBackend;
   onConnectionLost?: (error: unknown) => void;
   sessionID: string;
@@ -151,7 +153,7 @@ type Props = {
     sessionID: string;
     panel: "stats" | "actions";
   };
-};
+}
 type Attachment = NonNullable<SessionPromptInput["files"]>[number];
 type Panel =
   | "actions"
@@ -207,8 +209,8 @@ function ChatSession({
   sessionPanelRequest,
 }: Props) {
   const client = backend.core;
-  const opencodeClient = backend.opencodeClient;
-  const capabilities = backend.capabilities;
+  const { opencodeClient } = backend;
+  const { capabilities } = backend;
   const { colors } = useTheme();
   const { fontScale } = useWindowDimensions();
   const minimumComposerHeight = Math.max(
@@ -269,8 +271,9 @@ function ChatSession({
   connectionLost.current = onConnectionLost;
   const reportConnectionFailure = useCallback((reason: unknown) => {
     connectionFailures.current++;
-    if (isConnectionUnauthorized(reason) || connectionFailures.current >= 2)
+    if (isConnectionUnauthorized(reason) || connectionFailures.current >= 2) {
       connectionLost.current?.(reason);
+    }
   }, []);
   const [panel, setPanel] = useState<Panel>(null);
   const [selectedMessageID, setSelectedMessageID] = useState<string | null>(
@@ -301,7 +304,7 @@ function ChatSession({
   const list = useRef<FlashListRef<TranscriptItem>>(null);
   const previousTranscript = useRef<TranscriptItem[]>([]);
   const nearEnd = useRef(true);
-  const scrollMetrics = useRef({ content: 0, viewport: 0, offset: 0 });
+  const scrollMetrics = useRef({ content: 0, offset: 0, viewport: 0 });
   const followingLatestRef = useRef(true);
   const userScrolling = useRef(false);
   const wheelDirection = useRef(0);
@@ -334,14 +337,15 @@ function ChatSession({
   const devicePickerActive = useRef(false);
   onSessionChangedRef.current = onSessionChanged;
   const draftRef = useRef({
-    text: draft,
-    files: attachments,
-    skillIDs: selectedSkills.map((skill) => skill.id),
     agentIDs: selectedAgentIDs,
     delivery,
+    files: attachments,
+    skillIDs: selectedSkills.map((skill) => skill.id),
+    text: draft,
   });
   draftRef.current = {
-    text: draft,
+    agentIDs: selectedAgentIDs,
+    delivery,
     files: attachments,
     skillIDs: [
       ...new Set([
@@ -349,8 +353,7 @@ function ChatSession({
         ...selectedSkills.map((skill) => skill.id),
       ]),
     ],
-    agentIDs: selectedAgentIDs,
-    delivery,
+    text: draft,
   };
   useUnsavedChanges(
     `chat:${draftKey}`,
@@ -370,9 +373,13 @@ function ChatSession({
     };
   }, []);
   const showError = useCallback((reason: unknown) => {
-    if (!alive.current) return;
+    if (!alive.current) {
+      return;
+    }
     setError(errorMessage(reason));
-    if (isConnectionUnauthorized(reason)) connectionLost.current?.(reason);
+    if (isConnectionUnauthorized(reason)) {
+      connectionLost.current?.(reason);
+    }
   }, []);
   const updateComposerHeight = useCallback<
     NonNullable<TextInputProps["onContentSizeChange"]>
@@ -387,11 +394,15 @@ function ChatSession({
     [minimumComposerHeight, maximumComposerHeight]
   );
   useEffect(() => {
-    if (Platform.OS === "web") return;
+    if (Platform.OS === "web") {
+      return;
+    }
     let current = true;
     void AccessibilityInfo.isScreenReaderEnabled()
       .then((enabled) => {
-        if (current) setScreenReader(enabled);
+        if (current) {
+          setScreenReader(enabled);
+        }
       })
       .catch(() => {});
     const subscription = AccessibilityInfo.addEventListener(
@@ -404,7 +415,9 @@ function ChatSession({
     };
   }, []);
   useEffect(() => {
-    if (Platform.OS !== "android" || !visible || !selectedMessageID) return;
+    if (Platform.OS !== "android" || !visible || !selectedMessageID) {
+      return;
+    }
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
@@ -415,10 +428,13 @@ function ChatSession({
     return () => subscription.remove();
   }, [visible, selectedMessageID]);
   useEffect(() => {
-    if (Platform.OS !== "web" || !visible || !selectedMessageID || panel)
+    if (Platform.OS !== "web" || !visible || !selectedMessageID || panel) {
       return;
+    }
     const closeSelection = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.key !== "Escape" || event.defaultPrevented) {
+        return;
+      }
       event.preventDefault();
       setSelectedMessageID(null);
     };
@@ -441,7 +457,9 @@ function ChatSession({
     return () => onSelectionChange?.(false);
   }, [visible, selectedMessageID, onSelectionChange]);
   useEffect(() => {
-    if (session) onSessionInfo?.(session);
+    if (session) {
+      onSessionInfo?.(session);
+    }
   }, [session, onSessionInfo]);
   useEffect(() => {
     if (
@@ -449,11 +467,13 @@ function ChatSession({
       !sessionPanelRequest ||
       sessionPanelRequest.sessionID !== sessionID ||
       handledPanelRequest.current === sessionPanelRequest.id
-    )
+    ) {
       return;
+    }
     handledPanelRequest.current = sessionPanelRequest.id;
-    if (sessionPanelRequest.panel !== "stats" || capabilities.statistics)
+    if (sessionPanelRequest.panel !== "stats" || capabilities.statistics) {
       setPanel(sessionPanelRequest.panel);
+    }
   }, [visible, sessionID, sessionPanelRequest, capabilities.statistics]);
   const setFollowing = useCallback((follow: boolean) => {
     followingLatestRef.current = follow;
@@ -468,15 +488,21 @@ function ChatSession({
     () => ({
       isOpen: (key: string) => expandedParts.current.has(key),
       setOpen: (key: string, open: boolean) => {
-        if (open) expandedParts.current.add(key);
-        else expandedParts.current.delete(key);
+        if (open) {
+          expandedParts.current.add(key);
+        } else {
+          expandedParts.current.delete(key);
+        }
       },
       toggle: (key: string) => {
         followKeyboard.current = false;
         setFollowing(false);
         const open = !expandedParts.current.has(key);
-        if (open) expandedParts.current.add(key);
-        else expandedParts.current.delete(key);
+        if (open) {
+          expandedParts.current.add(key);
+        } else {
+          expandedParts.current.delete(key);
+        }
         return open;
       },
     }),
@@ -488,7 +514,9 @@ function ChatSession({
       setFollowing(false);
       Keyboard.dismiss();
       setSelectedMessageID(id);
-      if (screenReaderEnabled.current) setPanel("message");
+      if (screenReaderEnabled.current) {
+        setPanel("message");
+      }
     },
     [setFollowing]
   );
@@ -498,8 +526,9 @@ function ChatSession({
       userScrolling.current ||
       !transcriptVisible.current ||
       followFrame.current !== undefined
-    )
+    ) {
       return;
+    }
     followFrame.current = requestAnimationFrame(() => {
       followFrame.current = undefined;
       if (
@@ -507,15 +536,17 @@ function ChatSession({
         !followingLatestRef.current ||
         userScrolling.current ||
         !transcriptVisible.current
-      )
+      ) {
         return;
+      }
       list.current?.scrollToEnd({ animated: false });
     });
   }, []);
   useEffect(
     () => () => {
-      if (followFrame.current !== undefined)
+      if (followFrame.current !== undefined) {
         cancelAnimationFrame(followFrame.current);
+      }
     },
     []
   );
@@ -524,7 +555,9 @@ function ChatSession({
       cancelAnimationFrame(followFrame.current);
       followFrame.current = undefined;
     }
-    if (visible) followContent();
+    if (visible) {
+      followContent();
+    }
   }, [visible, followContent]);
   const jumpToLatest = useCallback(() => {
     userScrolling.current = false;
@@ -540,7 +573,9 @@ function ChatSession({
     const nextNearEnd = content - offset - viewport <= 48;
     if (nextNearEnd !== nearEnd.current) {
       nearEnd.current = nextNearEnd;
-      if (!followingLatestRef.current) setAwayFromLatest(!nextNearEnd);
+      if (!followingLatestRef.current) {
+        setAwayFromLatest(!nextNearEnd);
+      }
     }
   }, []);
   const contentSizeChanged = useCallback(
@@ -565,8 +600,8 @@ function ChatSession({
         event.nativeEvent;
       scrollMetrics.current = {
         content: contentSize.height,
-        viewport: layoutMeasurement.height,
         offset: contentOffset.y,
+        viewport: layoutMeasurement.height,
       };
       measureEndDistance();
       if (
@@ -574,8 +609,9 @@ function ChatSession({
         userScrolling.current &&
         nearEnd.current &&
         wheelDirection.current >= 0
-      )
+      ) {
         setFollowing(true);
+      }
     },
     [setFollowing, measureEndDistance]
   );
@@ -593,13 +629,18 @@ function ChatSession({
     [updateScrollPosition, setFollowing]
   );
   const attachWebScroll = useCallback(() => {
-    if (Platform.OS !== "web") return;
+    if (Platform.OS !== "web") {
+      return;
+    }
     const node = list.current?.getScrollableNode();
-    if (!(node instanceof HTMLElement)) return;
+    if (!(node instanceof HTMLElement)) {
+      return;
+    }
     webScrollCleanup.current();
     const wheel = (event: WheelEvent) => {
-      if (!event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY))
+      if (!event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
         return;
+      }
       if (event.deltaY > 0 && nearEnd.current) {
         userScrolling.current = false;
         setFollowing(true);
@@ -608,7 +649,9 @@ function ChatSession({
       userScrolling.current = true;
       wheelDirection.current = event.deltaY;
       followKeyboard.current = false;
-      if (event.deltaY < 0) setFollowing(false);
+      if (event.deltaY < 0) {
+        setFollowing(false);
+      }
     };
     const touch = () => {
       wheelDirection.current = 0;
@@ -626,7 +669,9 @@ function ChatSession({
         : null;
     const context = (event: MouseEvent) => {
       const row = selectedRow(event.target);
-      if (!row) return;
+      if (!row) {
+        return;
+      }
       event.preventDefault();
       selectMessage(
         decodeURIComponent(row.id.slice("chat-message-".length).split(":")[0])
@@ -642,8 +687,9 @@ function ChatSession({
             event.target === row &&
             (event.key === "Enter" || event.key === " ")
           ))
-      )
+      ) {
         return;
+      }
       event.preventDefault();
       selectMessage(
         decodeURIComponent(row.id.slice("chat-message-".length).split(":")[0])
@@ -667,8 +713,9 @@ function ChatSession({
     };
   }, [beginUserScroll, setFollowing, selectMessage]);
   const listLoaded = useCallback(() => {
-    if (followingLatestRef.current && !userScrolling.current)
+    if (followingLatestRef.current && !userScrolling.current) {
       list.current?.scrollToEnd({ animated: false });
+    }
     attachWebScroll();
   }, [attachWebScroll]);
   useEffect(() => {
@@ -689,8 +736,9 @@ function ChatSession({
             live?.time.completed &&
             message.time.completed &&
             message.time.completed >= live.time.completed
-          )
+          ) {
             liveMessages.current.delete(message.id);
+          }
         }
         return mergeMessages(reset ? [] : current, snapshot, [
           ...liveMessages.current.values(),
@@ -701,7 +749,9 @@ function ChatSession({
   );
 
   useEffect(() => {
-    if (!foreground || !visible || panel) return;
+    if (!foreground || !visible || panel) {
+      return;
+    }
     let frame: ReturnType<typeof requestAnimationFrame> | undefined;
     const willShow = KeyboardEvents.addListener("keyboardWillShow", () => {
       followKeyboard.current = followingLatestRef.current;
@@ -709,20 +759,25 @@ function ChatSession({
     const didShow = KeyboardEvents.addListener("keyboardDidShow", () => {
       const follow = followKeyboard.current;
       followKeyboard.current = false;
-      if (!follow) return;
+      if (!follow) {
+        return;
+      }
       frame = requestAnimationFrame(() => {
         if (
           alive.current &&
           followingLatestRef.current &&
           !userScrolling.current &&
           transcriptVisible.current
-        )
+        ) {
           jumpToLatest();
+        }
       });
     });
     const willHide = KeyboardEvents.addListener("keyboardWillHide", () => {
       followKeyboard.current = false;
-      if (frame !== undefined) cancelAnimationFrame(frame);
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
+      }
     });
     const didHide = KeyboardEvents.addListener(
       "keyboardDidHide",
@@ -734,7 +789,9 @@ function ChatSession({
       willHide.remove();
       didHide.remove();
       followKeyboard.current = false;
-      if (frame !== undefined) cancelAnimationFrame(frame);
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
+      }
     };
   }, [foreground, visible, panel, jumpToLatest, followContent]);
 
@@ -742,7 +799,9 @@ function ChatSession({
     let cancelled = false;
     void loadDraft(draftKey)
       .then((value) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         if (value) {
           setDraft(value.text);
           setAttachments(value.files);
@@ -753,21 +812,24 @@ function ChatSession({
         didLoadDraft.current = true;
         setDraftLoaded(true);
       })
-      .catch((reason) => {
+      .catch((error_) => {
         if (!cancelled) {
-          showError(reason);
+          showError(error_);
           didLoadDraft.current = true;
           setDraftLoaded(true);
         }
       });
     return () => {
       cancelled = true;
-      if (didLoadDraft.current)
+      if (didLoadDraft.current) {
         void saveDraft(draftKey, draftRef.current).catch(showError);
+      }
     };
   }, [draftKey, showError]);
   useEffect(() => {
-    if (!draftLoaded) return;
+    if (!draftLoaded) {
+      return;
+    }
     const timer = setTimeout(() => {
       void saveDraft(draftKey, draftRef.current).catch(showError);
     }, 500);
@@ -784,11 +846,15 @@ function ChatSession({
     showError,
   ]);
   useEffect(() => {
-    if (!skills.length || !restoredSkillIDs.length) return;
+    if (!skills.length || !restoredSkillIDs.length) {
+      return;
+    }
     const resolved = skills.filter((skill) =>
       restoredSkillIDs.includes(skill.id)
     );
-    if (!resolved.length) return;
+    if (!resolved.length) {
+      return;
+    }
     setSelectedSkills((current) => [
       ...current,
       ...resolved.filter(
@@ -805,29 +871,34 @@ function ChatSession({
       !session ||
       !opencodeClient ||
       !capabilities.files
-    )
+    ) {
       return;
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setFileSearchBusy(true);
       void opencodeClient.file
         .find(
           {
+            limit: 40,
             location: { directory: session.location.directory },
             query: fileQuery,
             type: "file",
-            limit: 40,
           },
           { signal: controller.signal }
         )
         .then((value) => {
-          if (!controller.signal.aborted) setFileResults(value.data);
+          if (!controller.signal.aborted) {
+            setFileResults(value.data);
+          }
         })
-        .catch((reason) => {
-          if (!controller.signal.aborted) showError(reason);
+        .catch((error_) => {
+          if (!controller.signal.aborted) showError(error_);
         })
         .finally(() => {
-          if (!controller.signal.aborted) setFileSearchBusy(false);
+          if (!controller.signal.aborted) {
+            setFileSearchBusy(false);
+          }
         });
     }, 250);
     return () => {
@@ -859,7 +930,7 @@ function ChatSession({
         const sessionRequest = client.session.get({ sessionID }, opts);
         const results = await Promise.allSettled([
           sessionRequest,
-          client.message.list({ sessionID, limit: 80, order: "desc" }, opts),
+          client.message.list({ limit: 80, order: "desc", sessionID }, opts),
           opencodeClient && capabilities.inbox
             ? opencodeClient.session.inbox.list({ sessionID }, opts)
             : undefined,
@@ -883,8 +954,9 @@ function ChatSession({
           !alive.current ||
           signal?.aborted ||
           version !== requestVersion.current
-        )
+        ) {
           return;
+        }
         const [
           sessionResult,
           messageResult,
@@ -910,9 +982,10 @@ function ChatSession({
             appliedHistoryEpoch.current = historyVersion;
           }
         }
-        if (inboxResult.status === "fulfilled" && inboxResult.value)
+        if (inboxResult.status === "fulfilled" && inboxResult.value) {
           setInbox(inboxResult.value);
-        if (opencodeClient && capabilities.forms)
+        }
+        if (opencodeClient && capabilities.forms) {
           setForms((current) => [
             ...(formsResult.status === "fulfilled" && formsResult.value
               ? formsResult.value
@@ -924,23 +997,33 @@ function ChatSession({
                 )
               : current.filter((form) => form.sessionID === "global")),
           ]);
-        if (permissionsResult.status === "fulfilled" && permissionsResult.value)
+        }
+        if (
+          permissionsResult.status === "fulfilled" &&
+          permissionsResult.value
+        ) {
           setPermissions(permissionsResult.value);
+        }
         if (
           activeResult.status === "fulfilled" &&
           activityVersion === activityRevision.current
         ) {
           const running = !!activeResult.value[sessionID];
           setActive(running);
-          if (!running) setSessionStatus({ type: "idle" });
+          if (!running) {
+            setSessionStatus({ type: "idle" });
+          }
         }
         const failed = results.find((result) => result.status === "rejected");
         setFetchError(
           failed?.status === "rejected" ? errorMessage(failed.reason) : null
         );
-        if (sessionResult.status === "rejected")
+        if (sessionResult.status === "rejected") {
           reportConnectionFailure(sessionResult.reason);
-        if (!failed) setSyncErrors({});
+        }
+        if (!failed) {
+          setSyncErrors({});
+        }
         setLoading(false);
       };
       refreshing.current = work();
@@ -970,14 +1053,17 @@ function ChatSession({
   useEffect(() => {
     const listener = AppState.addEventListener("change", (state) => {
       setForeground(state === "active");
-      if (state !== "active" && didLoadDraft.current)
+      if (state !== "active" && didLoadDraft.current) {
         void saveDraft(draftKey, draftRef.current).catch(showError);
+      }
     });
     return () => listener.remove();
   }, [draftKey, showError]);
 
   useEffect(() => {
-    if (!foreground || !visible) return;
+    if (!foreground || !visible) {
+      return;
+    }
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -988,16 +1074,20 @@ function ChatSession({
     const applyEvents = (events: OpenCodeEvent[]) => {
       setMessages((current) => {
         const next = projectLiveEvents(current, events, sessionID);
-        if (next === current) return current;
+        if (next === current) {
+          return current;
+        }
         const touched = new Set<string>();
         for (const event of events) {
           const data = event.data as Record<string, unknown>;
-          if (typeof data.assistantMessageID === "string")
+          if (typeof data.assistantMessageID === "string") {
             touched.add(data.assistantMessageID);
+          }
         }
-        for (const message of next)
+        for (const message of next) {
           if (message.type === "assistant" && touched.has(message.id))
             liveMessages.current.set(message.id, message);
+        }
         return next;
       });
     };
@@ -1006,8 +1096,10 @@ function ChatSession({
     });
     const snapshots = createStreamBatch<ChatBackendSnapshot>(
       (batch) => {
-        const snapshot = batch[batch.length - 1];
-        if (!snapshot || controller.signal.aborted || !alive.current) return;
+        const snapshot = batch.at(-1);
+        if (!snapshot || controller.signal.aborted || !alive.current) {
+          return;
+        }
         setStreamStatus("Live");
         liveMessages.current.clear();
         sessionDirectory.current = snapshot.session.location.directory;
@@ -1031,15 +1123,21 @@ function ChatSession({
     };
     flushStream.current = flushPending;
     const scheduleRefresh = () => {
-      if (timer) return;
+      if (timer) {
+        return;
+      }
       timer = setTimeout(() => {
         timer = undefined;
         void refresh(controller.signal);
       }, 300);
     };
     const refreshScope = async (scope: SyncScope) => {
-      if (refreshing.current) await refreshing.current;
-      if (controller.signal.aborted) return;
+      if (refreshing.current) {
+        await refreshing.current;
+      }
+      if (controller.signal.aborted) {
+        return;
+      }
       const version = (scopeVersions.get(scope) || 0) + 1;
       scopeVersions.set(scope, version);
       const snapshotVersion = requestVersion.current;
@@ -1051,26 +1149,36 @@ function ChatSession({
       try {
         if (scope === "metadata") {
           const info = await client.session.get({ sessionID }, options);
-          if (!current()) return;
+          if (!current()) {
+            return;
+          }
           sessionDirectory.current = info.location.directory;
           setSession(info);
         } else if (scope === "history") {
           const page = await client.message.list(
-            { sessionID, limit: 80, order: "desc" },
+            { limit: 80, order: "desc", sessionID },
             options
           );
-          if (!current()) return;
+          if (!current()) {
+            return;
+          }
           applyMessageSnapshot(page.data);
         } else if (scope === "inbox") {
-          if (!opencodeClient || !capabilities.inbox) return;
+          if (!opencodeClient || !capabilities.inbox) {
+            return;
+          }
           const pending = await opencodeClient.session.inbox.list(
             { sessionID },
             options
           );
-          if (!current()) return;
+          if (!current()) {
+            return;
+          }
           setInbox(pending);
         } else {
-          if (!opencodeClient) return;
+          if (!opencodeClient) {
+            return;
+          }
           const directory = sessionDirectory.current;
           if (!directory) {
             scheduleRefresh();
@@ -1087,10 +1195,13 @@ function ChatSession({
               ? opencodeClient.form.list({ location: { directory } }, options)
               : undefined,
           ] as const);
-          if (!current()) return;
-          if (permissions.status === "fulfilled" && permissions.value)
+          if (!current()) {
+            return;
+          }
+          if (permissions.status === "fulfilled" && permissions.value) {
             setPermissions(permissions.value);
-          if (capabilities.forms)
+          }
+          if (capabilities.forms) {
             setForms((previous) => [
               ...(own.status === "fulfilled" && own.value
                 ? own.value
@@ -1101,28 +1212,34 @@ function ChatSession({
                   )
                 : previous.filter((form) => form.sessionID === "global")),
             ]);
+          }
           const failure = [own, permissions, global].find(
             (result) => result.status === "rejected"
           );
-          if (failure?.status === "rejected") throw failure.reason;
+          if (failure?.status === "rejected") {
+            throw failure.reason;
+          }
         }
-        if (current())
+        if (current()) {
           setSyncErrors((previous) => {
             if (!previous[scope]) return previous;
             const next = { ...previous };
             delete next[scope];
             return next;
           });
-      } catch (reason) {
+        }
+      } catch (error_) {
         if (current())
           setSyncErrors((previous) => ({
             ...previous,
-            [scope]: errorMessage(reason),
+            [scope]: errorMessage(error_),
           }));
       }
     };
     const scheduleScope = (scope: SyncScope) => {
-      if (scopeTimers.has(scope)) return;
+      if (scopeTimers.has(scope)) {
+        return;
+      }
       scopeTimers.set(
         scope,
         setTimeout(() => {
@@ -1140,21 +1257,27 @@ function ChatSession({
             for await (const snapshot of backend.subscribe({
               signal: controller.signal,
             })) {
-              if (controller.signal.aborted) break;
+              if (controller.signal.aborted) {
+                break;
+              }
               attempts = 0;
               connectionFailures.current = 0;
               snapshots.push(snapshot);
             }
-            if (!controller.signal.aborted)
+            if (!controller.signal.aborted) {
               throw new Error("The live connection closed");
+            }
             break;
           }
-          if (!client.event)
+          if (!client.event) {
             throw new Error("This connection does not provide live updates");
+          }
           for await (const event of client.event.subscribe({
             signal: controller.signal,
           })) {
-            if (controller.signal.aborted) break;
+            if (controller.signal.aborted) {
+              break;
+            }
             setStreamStatus("Live");
             connectionFailures.current = 0;
             attempts = 0;
@@ -1175,30 +1298,35 @@ function ChatSession({
               /^(model|provider|agent|command|skill|credential|config)\./.test(
                 event.type
               )
-            )
+            ) {
               setCatalogRevision((value) => value + 1);
+            }
             if (data.sessionID === sessionID) {
               if (event.type === "session.status") {
                 activityRevision.current++;
                 setSessionStatus(event.data.status);
                 setActive(event.data.status.type !== "idle");
-                if (event.data.status.type === "idle") scheduleRefresh();
+                if (event.data.status.type === "idle") {
+                  scheduleRefresh();
+                }
                 continue;
               }
               if (event.type === "session.retry.scheduled") {
                 activityRevision.current++;
                 setSessionStatus({
-                  type: "retry",
                   attempt: event.data.attempt,
-                  next: event.data.at,
                   message: event.data.error.message,
+                  next: event.data.at,
+                  type: "retry",
                 });
               } else if (isAssistantProgress(event)) {
                 setSessionStatus((current) =>
                   current?.type === "retry" ? { type: "busy" } : current
                 );
               }
-              if (event.type === "session.compaction.delta") continue;
+              if (event.type === "session.compaction.delta") {
+                continue;
+              }
               if (
                 event.type.endsWith(".delta") ||
                 event.type === "session.tool.progress"
@@ -1212,12 +1340,13 @@ function ChatSession({
                 continue;
               }
               switch (event.type) {
-                case "session.execution.started":
+                case "session.execution.started": {
                   activityRevision.current++;
                   setActive(true);
                   setSessionStatus({ type: "busy" });
                   break;
-                case "session.usage.updated":
+                }
+                case "session.usage.updated": {
                   setSession((previous) =>
                     previous
                       ? {
@@ -1228,15 +1357,17 @@ function ChatSession({
                       : previous
                   );
                   break;
+                }
                 case "session.execution.succeeded":
                 case "session.execution.failed":
-                case "session.execution.interrupted":
+                case "session.execution.interrupted": {
                   activityRevision.current++;
                   setActive(false);
                   setSessionStatus({ type: "idle" });
                   scheduleRefresh();
                   break;
-                case "session.revert.committed":
+                }
+                case "session.revert.committed": {
                   historyEpoch.current++;
                   setMessages((current) => {
                     liveMessages.current.clear();
@@ -1244,46 +1375,54 @@ function ChatSession({
                   });
                   scheduleRefresh();
                   break;
+                }
                 case "session.moved":
                 case "session.revert.staged":
                 case "session.revert.cleared":
-                case "session.deleted":
+                case "session.deleted": {
                   scheduleRefresh();
                   break;
-                case "session.idle":
+                }
+                case "session.idle": {
                   activityRevision.current++;
                   setActive(false);
                   setSessionStatus({ type: "idle" });
                   scheduleRefresh();
                   break;
+                }
                 case "permission.asked":
                 case "permission.replied":
                 case "form.replied":
-                case "form.cancelled":
+                case "form.cancelled": {
                   scheduleScope("requests");
                   break;
-                case "session.inbox.delivered":
+                }
+                case "session.inbox.delivered": {
                   scheduleScope("inbox");
                   scheduleScope("history");
                   break;
+                }
                 case "session.inbox.enqueued":
                 case "session.inbox.cancelled":
-                case "session.inbox.delivery.changed":
+                case "session.inbox.delivery.changed": {
                   scheduleScope("inbox");
                   break;
+                }
                 case "session.agent.selected":
-                case "session.model.selected":
+                case "session.model.selected": {
                   scheduleScope("metadata");
                   scheduleScope("history");
                   break;
+                }
                 case "session.renamed":
                 case "session.metadata.updated":
                 case "session.permissions":
                 case "session.viewed":
                 case "session.archived":
-                case "session.unarchived":
+                case "session.unarchived": {
                   scheduleScope("metadata");
                   break;
+                }
                 case "session.synthetic":
                 case "session.skill.activated":
                 case "session.instructions.updated":
@@ -1291,11 +1430,14 @@ function ChatSession({
                 case "session.shell.ended":
                 case "session.compaction.started":
                 case "session.compaction.ended":
-                case "session.compaction.failed":
+                case "session.compaction.failed": {
                   scheduleScope("history");
                   break;
+                }
               }
-            } else if (event.type === "location.shutdown") scheduleRefresh();
+            } else if (event.type === "location.shutdown") {
+              scheduleRefresh();
+            }
             const formSession =
               event.type === "form.created"
                 ? event.data.form.sessionID
@@ -1308,25 +1450,29 @@ function ChatSession({
               (formSession === "global" &&
                 (!event.location?.directory ||
                   event.location.directory === sessionDirectory.current))
-            )
+            ) {
               scheduleScope("requests");
+            }
           }
-          if (!controller.signal.aborted)
+          if (!controller.signal.aborted) {
             throw new Error("The live connection closed");
-        } catch (reason) {
+          }
+        } catch (error_) {
           flushPending();
           if (controller.signal.aborted) break;
           setStreamStatus("Reconnecting");
-          reportConnectionFailure(reason);
-          if (attempts > 1) setFetchError(errorMessage(reason));
+          reportConnectionFailure(error_);
+          if (attempts > 1) setFetchError(errorMessage(error_));
           await new Promise<void>((resolve) => {
             retryResolve = resolve;
             retryTimer = setTimeout(
               resolve,
-              Math.min(1000 * 2 ** attempts++, 15000)
+              Math.min(1000 * 2 ** attempts++, 15_000)
             );
           });
-          if (!controller.signal.aborted) await refresh(controller.signal);
+          if (!controller.signal.aborted) {
+            await refresh(controller.signal);
+          }
         }
       }
     })().catch(showError);
@@ -1334,10 +1480,14 @@ function ChatSession({
       controller.abort();
       stream.clear();
       snapshots.clear();
-      if (flushStream.current === flushPending) flushStream.current = () => {};
+      if (flushStream.current === flushPending) {
+        flushStream.current = () => {};
+      }
       clearTimeout(timer);
       clearTimeout(retryTimer);
-      for (const pending of scopeTimers.values()) clearTimeout(pending);
+      for (const pending of scopeTimers.values()) {
+        clearTimeout(pending);
+      }
       retryResolve?.();
     };
   }, [
@@ -1355,7 +1505,9 @@ function ChatSession({
   ]);
 
   useEffect(() => {
-    if (!session || !foreground || !visible) return;
+    if (!session || !foreground || !visible) {
+      return;
+    }
     const controller = new AbortController();
     const location = { directory: session.location.directory };
     void Promise.allSettled([
@@ -1363,41 +1515,52 @@ function ChatSession({
         ? opencodeClient.provider
             .list({ location }, { signal: controller.signal })
             .then((value) => {
-              if (!controller.signal.aborted) setProviders(value.data);
+              if (!controller.signal.aborted) {
+                setProviders(value.data);
+              }
             })
         : Promise.resolve(),
       client.model
         .list({ location, types: ["chat"] }, { signal: controller.signal })
         .then((value) => {
-          if (!controller.signal.aborted) setModels(value.data);
+          if (!controller.signal.aborted) {
+            setModels(value.data);
+          }
         }),
       opencodeClient && capabilities.agents
         ? opencodeClient.agent
             .list({ location }, { signal: controller.signal })
             .then((value) => {
-              if (!controller.signal.aborted) setAgents(value.data);
+              if (!controller.signal.aborted) {
+                setAgents(value.data);
+              }
             })
         : Promise.resolve(),
       opencodeClient && capabilities.commands
         ? opencodeClient.command
             .list({ location }, { signal: controller.signal })
             .then((value) => {
-              if (!controller.signal.aborted) setCommands(value.data);
+              if (!controller.signal.aborted) {
+                setCommands(value.data);
+              }
             })
         : Promise.resolve(),
       opencodeClient && capabilities.skills
         ? opencodeClient.skill
             .list({ location }, { signal: controller.signal })
             .then((value) => {
-              if (!controller.signal.aborted) setSkills(value.data);
+              if (!controller.signal.aborted) {
+                setSkills(value.data);
+              }
             })
         : Promise.resolve(),
     ]).then((results) => {
       const failed = results.find((result) => result.status === "rejected");
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
         setCatalogError(
           failed?.status === "rejected" ? errorMessage(failed.reason) : null
         );
+      }
     });
     return () => controller.abort();
   }, [
@@ -1415,19 +1578,22 @@ function ChatSession({
   ]);
 
   useEffect(() => {
-    if (!opencodeClient || !foreground || !visible || !session?.time.idle)
+    if (!opencodeClient || !foreground || !visible || !session?.time.idle) {
       return;
+    }
     const controller = new AbortController();
     void opencodeClient.session
       .view(
-        { sessionID, idle: session.time.idle },
+        { idle: session.time.idle, sessionID },
         { signal: controller.signal }
       )
       .then(() => {
-        if (!controller.signal.aborted) onSessionChangedRef.current();
+        if (!controller.signal.aborted) {
+          onSessionChangedRef.current();
+        }
       })
-      .catch((reason) => {
-        if (!controller.signal.aborted) showError(reason);
+      .catch((error_) => {
+        if (!controller.signal.aborted) showError(error_);
       });
     return () => controller.abort();
   }, [
@@ -1440,7 +1606,9 @@ function ChatSession({
   ]);
 
   useEffect(() => {
-    if (session?.location.directory) onSessionChangedRef.current();
+    if (session?.location.directory) {
+      onSessionChangedRef.current();
+    }
   }, [session?.location.directory]);
 
   useEffect(() => {
@@ -1452,29 +1620,30 @@ function ChatSession({
       !draftLoaded ||
       (consumedAttachment.current?.path === attachmentPath &&
         consumedAttachment.current.context === attachmentContext)
-    )
+    ) {
       return;
+    }
     try {
-      if (attachmentContext !== undefined) {
-        if (attachmentContext)
-          setDraft((current) =>
-            current ? `${current}\n\n${attachmentContext}` : attachmentContext
-          );
-      } else {
+      if (attachmentContext === undefined) {
         const uri = serverFileUri(attachmentPath);
         setAttachments((current) =>
           current.some((file) => file.uri === uri)
             ? current
             : [...current, { uri, name: attachmentPath.split("/").pop() }]
         );
+      } else {
+        if (attachmentContext)
+          setDraft((current) =>
+            current ? `${current}\n\n${attachmentContext}` : attachmentContext
+          );
       }
       consumedAttachment.current = {
-        path: attachmentPath,
         context: attachmentContext,
+        path: attachmentPath,
       };
       onAttachmentConsumed?.();
-    } catch (reason) {
-      showError(reason);
+    } catch (error_) {
+      showError(error_);
     }
   }, [
     attachmentPath,
@@ -1486,37 +1655,46 @@ function ChatSession({
 
   const run = useCallback(
     async (action: () => Promise<unknown>, closePanel = false) => {
-      if (submitting.current) return;
+      if (submitting.current) {
+        return;
+      }
       submitting.current = true;
       setPending(true);
       setError(null);
       try {
         await action();
         if (alive.current) {
-          if (closePanel) setPanel(null);
+          if (closePanel) {
+            setPanel(null);
+          }
           void refresh().catch(showError);
           onSessionChanged();
         }
-      } catch (reason) {
-        showError(reason);
+      } catch (error_) {
+        showError(error_);
       } finally {
         submitting.current = false;
-        if (alive.current) setPending(false);
+        if (alive.current) {
+          setPending(false);
+        }
       }
     },
     [refresh, onSessionChanged, showError]
   );
 
   const send = async () => {
-    if (!draftLoaded) return;
+    if (!draftLoaded) {
+      return;
+    }
     if (
       !draft.trim() &&
       !attachments.length &&
       !selectedSkills.length &&
       !restoredSkillIDs.length &&
       !selectedAgentIDs.length
-    )
+    ) {
       return;
+    }
     const btw = /^\/btw(?:\s+([\s\S]*))?$/.exec(draft.trim());
     if (btw && capabilities.sideQuestion && opencodeClient) {
       if (
@@ -1543,7 +1721,9 @@ function ChatSession({
       ...new Set([...sentSkills.map((skill) => skill.id), ...restoredSkillIDs]),
     ];
     const sentAgentIDs = selectedAgentIDs;
-    if (submitting.current) return;
+    if (submitting.current) {
+      return;
+    }
     setSending(true);
     try {
       await run(async () => {
@@ -1553,42 +1733,46 @@ function ChatSession({
                 sentText,
                 commands.map((command) => command.name)
               )
-            : { type: "prompt" as const, text: sentText.trim() };
+            : { text: sentText.trim(), type: "prompt" as const };
         if (submission.type === "shell") {
           if (
             sentAttachments.length ||
             sentSkillIDs.length ||
             sentAgentIDs.length
-          )
+          ) {
             throw new Error(
               "Shell commands cannot include attachments, agents, or skills"
             );
-          if (!opencodeClient || !capabilities.shell)
+          }
+          if (!opencodeClient || !capabilities.shell) {
             throw new Error(
               "Shell commands are unavailable for this connection"
             );
+          }
           await opencodeClient.session.shell({
-            sessionID,
             command: submission.command,
+            sessionID,
           });
         } else {
           const common = {
-            sessionID,
-            files: sentAttachments,
-            skills: sentSkillIDs.map((id) => ({ id })),
             agents: sentAgentIDs.map((name) => ({ name })),
             delivery,
+            files: sentAttachments,
+            sessionID,
+            skills: sentSkillIDs.map((id) => ({ id })),
           };
           if (submission.type === "command") {
-            if (!opencodeClient || !capabilities.commands)
+            if (!opencodeClient || !capabilities.commands) {
               throw new Error("Commands are unavailable for this connection");
+            }
             await opencodeClient.session.command({
               ...common,
               name: submission.name,
               text: submission.text,
             });
-          } else
+          } else {
             await client.session.prompt({ ...common, text: submission.text });
+          }
         }
         if (alive.current) {
           setDraft((current) => (current === sentText ? "" : current));
@@ -1608,27 +1792,29 @@ function ChatSession({
           const latest = draftRef.current;
           await saveDraft(draftKey, {
             ...latest,
-            text: latest.text === sentText ? "" : latest.text,
+            agentIDs: latest.agentIDs.filter(
+              (id) => !sentAgentIDs.includes(id)
+            ),
             files: latest.files.filter(
               (file) => !sentAttachments.includes(file)
             ),
             skillIDs: latest.skillIDs.filter(
               (id) => !sentSkillIDs.includes(id)
             ),
-            agentIDs: latest.agentIDs.filter(
-              (id) => !sentAgentIDs.includes(id)
-            ),
-          }).catch((reason) =>
+            text: latest.text === sentText ? "" : latest.text,
+          }).catch((error_) =>
             showError(
               new Error(
-                `Message sent. Draft save failed: ${errorMessage(reason)}`
+                `Message sent. Draft save failed: ${errorMessage(error_)}`
               )
             )
           );
         }
       });
     } finally {
-      if (alive.current) setSending(false);
+      if (alive.current) {
+        setSending(false);
+      }
     }
   };
 
@@ -1637,13 +1823,15 @@ function ChatSession({
       setStopping(true);
       try {
         await client.session.interrupt({ sessionID });
-      } catch (reason) {
+      } catch (error_) {
         if (alive.current) setStopping(false);
-        throw reason;
+        throw error_;
       }
     });
   useEffect(() => {
-    if (!active) setStopping(false);
+    if (!active) {
+      setStopping(false);
+    }
   }, [active]);
 
   const attachDevice = async () => {
@@ -1652,22 +1840,26 @@ function ChatSession({
       !draftLoaded ||
       !alive.current ||
       devicePickerActive.current
-    )
+    ) {
       return;
+    }
     devicePickerActive.current = true;
     try {
       const result = await withNativePresentation(() =>
         DocumentPicker.getDocumentAsync({
-          multiple: true,
           copyToCacheDirectory: true,
+          multiple: true,
           ...(backend.kind === "pi" ? { type: "image/*" } : {}),
         })
       );
-      if (result.canceled) return;
+      if (result.canceled) {
+        return;
+      }
       const files: Attachment[] = [];
       for (const asset of result.assets) {
-        if (asset.size && asset.size > 10 * 1024 * 1024)
+        if (asset.size && asset.size > 10 * 1024 * 1024) {
           throw new Error(`${asset.name} exceeds the 10 MB attachment limit`);
+        }
         let base64: string;
         if (Platform.OS === "web" && asset.file) {
           base64 = await new Promise<string>((resolve, reject) => {
@@ -1678,17 +1870,22 @@ function ChatSession({
               resolve(String(reader.result).split(",")[1] || "");
             reader.readAsDataURL(asset.file!);
           });
-        } else base64 = await new File(asset.uri).base64();
-        if (base64.length > 14 * 1024 * 1024)
+        } else {
+          base64 = await new File(asset.uri).base64();
+        }
+        if (base64.length > 14 * 1024 * 1024) {
           throw new Error(`${asset.name} exceeds the 10 MB attachment limit`);
+        }
         files.push({
-          uri: `data:${asset.mimeType || "application/octet-stream"};base64,${base64}`,
           name: asset.name,
+          uri: `data:${asset.mimeType || "application/octet-stream"};base64,${base64}`,
         });
       }
-      if (alive.current) setAttachments((current) => [...current, ...files]);
-    } catch (reason) {
-      showError(reason);
+      if (alive.current) {
+        setAttachments((current) => [...current, ...files]);
+      }
+    } catch (error_) {
+      showError(error_);
     } finally {
       devicePickerActive.current = false;
     }
@@ -1699,41 +1896,54 @@ function ChatSession({
       !draftLoaded ||
       queuedDevicePicker.current ||
       devicePickerActive.current
-    )
+    ) {
       return;
+    }
     queuedDevicePicker.current = true;
     Keyboard.dismiss();
     setPanel(null);
   };
   const toolsDismissed = () => {
-    if (!queuedDevicePicker.current) return;
+    if (!queuedDevicePicker.current) {
+      return;
+    }
     queuedDevicePicker.current = false;
-    if (alive.current && visible && foreground) void attachDevice();
+    if (alive.current && visible && foreground) {
+      void attachDevice();
+    }
   };
 
   const loadOlder = async () => {
-    if (!cursor || loadingOlder) return;
+    if (!cursor || loadingOlder) {
+      return;
+    }
     setLoadingOlder(true);
     const historyVersion = historyEpoch.current;
     try {
-      const page = await client.message.list({ sessionID, cursor, limit: 80 });
+      const page = await client.message.list({ cursor, limit: 80, sessionID });
       if (alive.current && historyVersion === historyEpoch.current) {
         setMessages((current) => mergeMessages(page.data, current));
         setCursor(
           page.data.length === 80 ? (page.cursor.next ?? undefined) : undefined
         );
       }
-    } catch (reason) {
-      showError(reason);
+    } catch (error_) {
+      showError(error_);
     } finally {
-      if (alive.current) setLoadingOlder(false);
+      if (alive.current) {
+        setLoadingOlder(false);
+      }
     }
   };
 
   const editInbox = (item: SessionInboxInfo) =>
     run(async () => {
-      if (!opencodeClient || !capabilities.inbox || !draftLoaded) return;
-      if (item.type !== "user" && item.type !== "synthetic") return;
+      if (!opencodeClient || !capabilities.inbox || !draftLoaded) {
+        return;
+      }
+      if (item.type !== "user" && item.type !== "synthetic") {
+        return;
+      }
       if (
         (draft ||
           attachments.length ||
@@ -1744,23 +1954,26 @@ function ChatSession({
           "Replace the message draft?",
           "This opens the pending input in the composer and replaces the current draft."
         ))
-      )
+      ) {
         return;
+      }
       await opencodeClient.session.inbox.cancel({
-        sessionID,
         inboxID: item.id,
+        sessionID,
       });
-      if (!alive.current) return;
+      if (!alive.current) {
+        return;
+      }
       setDraft(item.payload.text);
       setDelivery(item.delivery);
       if (item.type === "user") {
         setAttachments(
           (item.payload.files ?? []).map((file) => ({
+            name: file.name,
             uri:
               file.source.type === "uri"
                 ? file.source.uri
                 : `data:${file.mime};base64,${file.data}`,
-            name: file.name,
           }))
         );
         setSelectedSkills(
@@ -1789,7 +2002,9 @@ function ChatSession({
   const editMessage = async (
     message: Extract<SessionMessageInfo, { type: "user" }>
   ) => {
-    if (!draftLoaded) return;
+    if (!draftLoaded) {
+      return;
+    }
     if (
       (draft ||
         attachments.length ||
@@ -1800,17 +2015,20 @@ function ChatSession({
         "Replace the message draft?",
         "This opens the earlier message in the composer and replaces the current draft."
       ))
-    )
+    ) {
       return;
-    if (!alive.current) return;
+    }
+    if (!alive.current) {
+      return;
+    }
     setDraft(message.text);
     setAttachments(
       (message.files ?? []).map((file) => ({
+        name: file.name,
         uri:
           file.source.type === "uri"
             ? file.source.uri
             : `data:${file.mime};base64,${file.data}`,
-        name: file.name,
       }))
     );
     setSelectedSkills(
@@ -1829,32 +2047,42 @@ function ChatSession({
   };
 
   const inspect = async (target: "diff" | "context") => {
-    if (!opencodeClient || !capabilities[target]) return;
+    if (!opencodeClient || !capabilities[target]) {
+      return;
+    }
     setPanel(target);
     setPanelLoading(true);
     try {
       if (target === "diff") {
         const value = await opencodeClient.session.diff({ sessionID });
-        if (alive.current) setDiffs(value);
+        if (alive.current) {
+          setDiffs(value);
+        }
       } else {
         const value = await opencodeClient.session.context({ sessionID });
-        if (alive.current) setContext(value);
+        if (alive.current) {
+          setContext(value);
+        }
       }
-    } catch (reason) {
-      showError(reason);
+    } catch (error_) {
+      showError(error_);
     } finally {
-      if (alive.current) setPanelLoading(false);
+      if (alive.current) {
+        setPanelLoading(false);
+      }
     }
   };
 
   const exportSession = () =>
     run(async () => {
-      if (!opencodeClient || !capabilities.export) return;
+      if (!opencodeClient || !capabilities.export) {
+        return;
+      }
       const value = await opencodeClient.experimental.session.export({
         sessionID,
       });
       const content = JSON.stringify(value, null, 2);
-      const filename = `${sessionID.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+      const filename = `${sessionID.replaceAll(/[^a-zA-Z0-9_-]/g, "_")}.json`;
       if (Platform.OS === "web") {
         const url = URL.createObjectURL(
           new Blob([content], { type: "application/json" })
@@ -1867,20 +2095,21 @@ function ChatSession({
       } else {
         const file = new File(Paths.cache, filename);
         await file.write(content);
-        if (await Sharing.isAvailableAsync())
+        if (await Sharing.isAvailableAsync()) {
           await withNativePresentation(() =>
             Sharing.shareAsync(file.uri, {
               mimeType: "application/json",
               dialogTitle: session?.title || "OpenCode session",
             })
           );
-        else
+        } else {
           await withNativePresentation(() =>
             Share.share({
               title: session?.title || "OpenCode session",
               message: content,
             })
           );
+        }
       }
     });
 
@@ -1898,8 +2127,8 @@ function ChatSession({
     providers.find((provider) => provider.id === providerID)?.name ||
     (providerID ? providerLabels.get(providerID) : undefined) ||
     providerID
-      ?.replace(/[-_]/g, " ")
-      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+      ?.replaceAll(/[-_]/g, " ")
+      .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
   const actionMessage = selectedMessageID
     ? messages.find((message) => message.id === selectedMessageID)
     : undefined;
@@ -1945,7 +2174,9 @@ function ChatSession({
     selectedAgentIDs.length > 0;
   useEffect(() => {
     setStopReady(false);
-    if (!active || hasPrompt) return;
+    if (!active || hasPrompt) {
+      return;
+    }
     const timer = setTimeout(() => setStopReady(true), 400);
     return () => clearTimeout(timer);
   }, [active, hasPrompt]);
@@ -2002,12 +2233,12 @@ function ChatSession({
   ) =>
     run(async () => {
       await client.session.switchModel({
-        sessionID,
         model: {
           id: model.id,
           providerID: model.providerID,
           ...(variant === undefined ? {} : { variant }),
         },
+        sessionID,
       });
       await modelPreferences.recordRecent(model.providerID, model.id);
     }, closePanel);
@@ -2097,7 +2328,7 @@ function ChatSession({
     if (actionMessage) {
       const messageID = actionMessage.id;
       const text = messageText(actionMessage);
-      if (text)
+      if (text) {
         void Clipboard.setStringAsync(text)
           .then(() => {
             if (alive.current)
@@ -2106,10 +2337,11 @@ function ChatSession({
               );
           })
           .catch(showError);
+      }
     }
   };
 
-  if (!session)
+  if (!session) {
     return (
       <View style={styles.container}>
         {!betaLayout && (
@@ -2152,6 +2384,7 @@ function ChatSession({
         )}
       </View>
     );
+  }
   return (
     <View style={styles.frame}>
       <ChatKeyboardView enabled={visible && !panel}>
@@ -2201,8 +2434,8 @@ function ChatSession({
                     onPress={() => {
                       void run(async () => {
                         const next = await client.session.fork({
-                          sessionID,
                           before: actionMessage.id,
+                          sessionID,
                         });
                         onOpenSession(next.id);
                       });
@@ -2420,12 +2653,12 @@ function ChatSession({
                               onPress={() => {
                                 void run(() =>
                                   opencodeClient.session.inbox.update({
-                                    sessionID,
-                                    inboxID: item.id,
                                     delivery:
                                       item.delivery === "steer"
                                         ? "queue"
                                         : "steer",
+                                    inboxID: item.id,
+                                    sessionID,
                                   })
                                 );
                               }}
@@ -2449,8 +2682,8 @@ function ChatSession({
                               onPress={() => {
                                 void run(() =>
                                   opencodeClient.session.inbox.cancel({
-                                    sessionID,
                                     inboxID: item.id,
+                                    sessionID,
                                   })
                                 );
                               }}
@@ -2505,9 +2738,7 @@ function ChatSession({
             onReview={jumpToLatest}
           />
           <View style={[styles.composer, betaLayout && styles.betaComposer]}>
-            {!draftLoaded ? (
-              <Busy />
-            ) : (
+            {draftLoaded ? (
               <>
                 {(attachments.length > 0 ||
                   selectedSkills.length > 0 ||
@@ -2728,6 +2959,8 @@ function ChatSession({
                   />
                 </View>
               </>
+            ) : (
+              <Busy />
             )}
           </View>
         </View>
@@ -2877,9 +3110,9 @@ function ChatSession({
                     void run(
                       () =>
                         opencodeClient.session.move({
-                          sessionID,
-                          directory: moveDirectory,
                           delivery,
+                          directory: moveDirectory,
+                          sessionID,
                         }),
                       true
                     );
@@ -2906,7 +3139,7 @@ function ChatSession({
                 onPress={() => {
                   void run(
                     () =>
-                      client.session.compact({ sessionID, delivery: "queue" }),
+                      client.session.compact({ delivery: "queue", sessionID }),
                     true
                   );
                 }}
@@ -2945,8 +3178,8 @@ function ChatSession({
                   void run(
                     () =>
                       opencodeClient.session.update({
-                        sessionID,
                         archived: !session.time.archived,
+                        sessionID,
                       }),
                     true
                   );
@@ -3117,7 +3350,9 @@ function ChatSession({
                       }}
                       disabled={pending}
                       onPress={() => {
-                        if (!selected) void chooseModel(model);
+                        if (!selected) {
+                          void chooseModel(model);
+                        }
                       }}
                       style={({ pressed }) => [
                         styles.modelRow,
@@ -3157,25 +3392,25 @@ function ChatSession({
                   );
                 }}
                 ListEmptyComponent={
-                  <View style={{ padding: 20, gap: 12 }}>
+                  <View style={{ gap: 12, padding: 20 }}>
                     <Empty
                       title={
-                        !enabledModels.length
-                          ? "No connected models"
-                          : modelFilter !== "all" && !scopedModels.length
+                        enabledModels.length
+                          ? modelFilter !== "all" && !scopedModels.length
                             ? modelFilter === "favorites"
                               ? "No favorite models"
                               : "No recent models"
                             : "No models match"
+                          : "No connected models"
                       }
                       detail={
-                        !enabledModels.length
-                          ? "Connect a provider in Settings, then refresh this list."
-                          : modelFilter === "favorites" && !scopedModels.length
+                        enabledModels.length
+                          ? modelFilter === "favorites" && !scopedModels.length
                             ? "Tap the star beside a model to save it here."
                             : modelFilter === "recent" && !scopedModels.length
                               ? "Models appear here after you select them."
                               : "Try a model name or provider."
+                          : "Connect a provider in Settings, then refresh this list."
                       }
                     />
                     {enabledModels.length ? (
@@ -3245,8 +3480,8 @@ function ChatSession({
                       void run(
                         () =>
                           opencodeClient.session.switchAgent({
-                            sessionID,
                             agent: agent.id,
+                            sessionID,
                           }),
                         true
                       );
@@ -3338,8 +3573,14 @@ function ChatSession({
           onDismiss={() => {
             const target = queuedMessagePanel.current;
             queuedMessagePanel.current = null;
-            if (target && alive.current && panel === null && selectedMessageID)
+            if (
+              target &&
+              alive.current &&
+              panel === null &&
+              selectedMessageID
+            ) {
               setPanel(target);
+            }
           }}
         >
           <ErrorNotice error={error} />
@@ -3425,8 +3666,8 @@ function ChatSession({
                     onPress={() => {
                       void run(async () => {
                         const next = await client.session.fork({
-                          sessionID,
                           before: actionMessage.id,
+                          sessionID,
                         });
                         onOpenSession(next.id);
                       }, true);
@@ -3444,12 +3685,13 @@ function ChatSession({
                           "Undo from this message?",
                           "The server will stage a revert of later messages and file changes. You can restore the staged changes."
                         )
-                      )
+                      ) {
                         await opencodeClient.session.revert.stage({
                           sessionID,
                           messageID: actionMessage.id,
                           files: true,
                         });
+                      }
                     }, true);
                   }}
                 />
@@ -3562,7 +3804,7 @@ function ChatSession({
                 setAttachments((current) =>
                   current.some((item) => item.uri === uri)
                     ? current
-                    : [...current, { uri, name: file.path }]
+                    : [...current, { name: file.path, uri }]
                 );
                 setPanel(null);
               }}
@@ -3762,12 +4004,13 @@ function ChatKeyboardView({
     }),
     [enabled, bottom]
   );
-  if (Platform.OS === "android")
+  if (Platform.OS === "android") {
     return (
       <Animated.View style={[styles.container, keyboardPadding]}>
         {children}
       </Animated.View>
     );
+  }
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -3781,24 +4024,34 @@ function ChatKeyboardView({
 }
 
 function messageText(message: SessionMessageInfo): string {
-  if ("text" in message) return message.text;
-  if (message.type === "assistant")
+  if ("text" in message) {
+    return message.text;
+  }
+  if (message.type === "assistant") {
     return message.content
       .filter((part) => part.type === "text")
       .map((part) => part.text)
       .join("\n\n");
-  if (message.type === "shell")
+  }
+  if (message.type === "shell") {
     return `$ ${message.command}${message.output?.output ? `\n${message.output.output}` : ""}`;
-  if (message.type === "compaction")
+  }
+  if (message.type === "compaction") {
     return "summary" in message
       ? message.summary
       : "error" in message
         ? message.error.message
         : "Context compaction";
-  if (message.type === "agent-switched") return `Agent: ${message.agent}`;
-  if (message.type === "model-switched") return `Model: ${message.model.id}`;
-  if (message.type === "location-switched")
+  }
+  if (message.type === "agent-switched") {
+    return `Agent: ${message.agent}`;
+  }
+  if (message.type === "model-switched") {
+    return `Model: ${message.model.id}`;
+  }
+  if (message.type === "location-switched") {
     return `Directory: ${message.location.directory}`;
+  }
   return message.error?.message || message.outcome;
 }
 
@@ -3812,7 +4065,7 @@ function messagePreview(message: SessionMessageInfo): string {
   return messageText(message).slice(0, 240);
 }
 
-type MessageRowProps = {
+interface MessageRowProps {
   message: SessionMessageInfo;
   sourceKey?: string;
   children?: React.ReactNode;
@@ -3825,238 +4078,251 @@ type MessageRowProps = {
   screenReader?: boolean;
   client?: Client;
   directory: string;
-};
-const MessageRow = memo(function MessageRow({
-  message,
-  sourceKey,
-  children,
-  live,
-  activityKind,
-  animate,
-  onSelect,
-  selected,
-  selectionActive,
-  screenReader,
-  client,
-  directory,
-}: MessageRowProps) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const select = useCallback(
-    () => onSelect?.(message.id),
-    [onSelect, message.id]
-  );
-  const separateContent = screenReader || Platform.OS === "web";
-  if (message.type === "idle" && !message.error) return null;
-  if (!onSelect)
-    return (
-      children ?? (
-        <MessageContent
-          message={message}
-          client={client}
-          directory={directory}
-          selectable
-        />
-      )
+}
+const MessageRow = memo(
+  ({
+    message,
+    sourceKey,
+    children,
+    live,
+    activityKind,
+    animate,
+    onSelect,
+    selected,
+    selectionActive,
+    screenReader,
+    client,
+    directory,
+  }: MessageRowProps) => {
+    const { colors } = useTheme();
+    const styles = useThemedStyles(createStyles);
+    const select = useCallback(
+      () => onSelect?.(message.id),
+      [onSelect, message.id]
     );
-  return (
-    <Pressable
-      nativeID={`chat-message-${encodeURIComponent(message.id)}${sourceKey ? `:${encodeURIComponent(sourceKey)}` : ""}`}
-      accessible={!separateContent}
-      accessibilityRole={separateContent ? undefined : "button"}
-      accessibilityLabel={separateContent ? undefined : messagePreview(message)}
-      accessibilityHint={
-        separateContent
-          ? undefined
-          : "Long press to select this message. Message actions appear in the header."
-      }
-      accessibilityState={
-        separateContent ? undefined : { selected: !!selected }
-      }
-      accessibilityActions={
-        separateContent
-          ? undefined
-          : [
-              { name: "activate", label: "Select message" },
-              { name: "longpress", label: "Select message" },
-            ]
-      }
-      onAccessibilityAction={
-        separateContent ? undefined : () => onSelect(message.id)
-      }
-      focusable={!screenReader}
-      onLongPress={() => onSelect(message.id)}
-      onPress={selectionActive ? () => onSelect(message.id) : undefined}
-      style={styles.selectableMessage}
-    >
-      {selected && (
-        <View
-          pointerEvents="none"
-          aria-hidden
-          style={[styles.selectionMarker, { backgroundColor: colors.muted }]}
-        />
-      )}
-      <MessageActionsContext.Provider value={select}>
-        {children ?? (
+    const separateContent = screenReader || Platform.OS === "web";
+    if (message.type === "idle" && !message.error) return null;
+    if (!onSelect)
+      return (
+        children ?? (
           <MessageContent
             message={message}
-            live={live}
-            activityKind={activityKind}
-            animate={animate}
             client={client}
             directory={directory}
-            selectable={false}
+            selectable
+          />
+        )
+      );
+    return (
+      <Pressable
+        nativeID={`chat-message-${encodeURIComponent(message.id)}${sourceKey ? `:${encodeURIComponent(sourceKey)}` : ""}`}
+        accessible={!separateContent}
+        accessibilityRole={separateContent ? undefined : "button"}
+        accessibilityLabel={
+          separateContent ? undefined : messagePreview(message)
+        }
+        accessibilityHint={
+          separateContent
+            ? undefined
+            : "Long press to select this message. Message actions appear in the header."
+        }
+        accessibilityState={
+          separateContent ? undefined : { selected: !!selected }
+        }
+        accessibilityActions={
+          separateContent
+            ? undefined
+            : [
+                { name: "activate", label: "Select message" },
+                { name: "longpress", label: "Select message" },
+              ]
+        }
+        onAccessibilityAction={
+          separateContent ? undefined : () => onSelect(message.id)
+        }
+        focusable={!screenReader}
+        onLongPress={() => onSelect(message.id)}
+        onPress={selectionActive ? () => onSelect(message.id) : undefined}
+        style={styles.selectableMessage}
+      >
+        {selected && (
+          <View
+            pointerEvents="none"
+            aria-hidden
+            style={[styles.selectionMarker, { backgroundColor: colors.muted }]}
           />
         )}
-      </MessageActionsContext.Provider>
-      {screenReader && (
-        <Button
-          title="Message actions"
-          compact
-          variant="ghost"
-          accessibilityLabel={`Message actions: ${messagePreview(message)}`}
-          onPress={() => onSelect(message.id)}
-        />
-      )}
-    </Pressable>
-  );
-});
+        <MessageActionsContext.Provider value={select}>
+          {children ?? (
+            <MessageContent
+              message={message}
+              live={live}
+              activityKind={activityKind}
+              animate={animate}
+              client={client}
+              directory={directory}
+              selectable={false}
+            />
+          )}
+        </MessageActionsContext.Provider>
+        {screenReader && (
+          <Button
+            title="Message actions"
+            compact
+            variant="ghost"
+            accessibilityLabel={`Message actions: ${messagePreview(message)}`}
+            onPress={() => onSelect(message.id)}
+          />
+        )}
+      </Pressable>
+    );
+  }
+);
 
-const MessageContent = memo(function MessageContent({
-  message,
-  live,
-  activityKind,
-  animate,
-  client,
-  directory,
-  selectable,
-}: {
-  message: SessionMessageInfo;
-  live?: boolean;
-  activityKind?: AgentActivity["kind"];
-  animate?: boolean;
-  client?: Client;
-  directory: string;
-  selectable: boolean;
-}) {
-  const styles = useThemedStyles(createStyles);
-  const betaLayout = useBetaLayout();
-  if (message.type === "idle")
-    return message.error ? <ErrorNotice error={message.error.message} /> : null;
-  if (message.type === "assistant")
-    return (
-      <View style={styles.assistant}>
-        {message.content.map((part, index) => (
-          <AssistantPart
-            key={`${message.id}:${part.type === "tool" ? part.id : index}`}
-            detailsKey={`${message.id}:${part.type === "tool" ? part.id : index}`}
-            part={part}
-            live={
-              !!live &&
-              (part.type === "tool" || index === message.content.length - 1)
-            }
-            activityKind={activityKind}
-            animate={animate}
-            client={client}
-            directory={directory}
+const MessageContent = memo(
+  ({
+    message,
+    live,
+    activityKind,
+    animate,
+    client,
+    directory,
+    selectable,
+  }: {
+    message: SessionMessageInfo;
+    live?: boolean;
+    activityKind?: AgentActivity["kind"];
+    animate?: boolean;
+    client?: Client;
+    directory: string;
+    selectable: boolean;
+  }) => {
+    const styles = useThemedStyles(createStyles);
+    const betaLayout = useBetaLayout();
+    if (message.type === "idle")
+      return message.error ? (
+        <ErrorNotice error={message.error.message} />
+      ) : null;
+    if (message.type === "assistant")
+      return (
+        <View style={styles.assistant}>
+          {message.content.map((part, index) => (
+            <AssistantPart
+              key={`${message.id}:${part.type === "tool" ? part.id : index}`}
+              detailsKey={`${message.id}:${part.type === "tool" ? part.id : index}`}
+              part={part}
+              live={
+                !!live &&
+                (part.type === "tool" || index === message.content.length - 1)
+              }
+              activityKind={activityKind}
+              animate={animate}
+              client={client}
+              directory={directory}
+              selectable={selectable}
+            />
+          ))}
+          {message.error && <ErrorNotice error={message.error.message} />}
+          {betaLayout &&
+            !live &&
+            message.content.some(
+              (part) => part.type === "text" && !!part.text.trim()
+            ) && (
+              <CompletedAssistantFooter key={message.id} message={message} />
+            )}
+        </View>
+      );
+    if (message.type === "user")
+      return (
+        <UserMessageBubble withAttachments={!!message.files?.length}>
+          <MessageText text={message.text} selectable={selectable} />
+          {message.files?.map((file, index) => (
+            <View key={index} style={{ gap: 8 }}>
+              <Label muted style={{ fontFamily: mono, fontSize: 13 }}>
+                ↳ {file.name || file.mime}
+              </Label>
+              {file.mime.startsWith("image/") && (
+                <Image
+                  source={{ uri: `data:${file.mime};base64,${file.data}` }}
+                  style={{ height: 180, width: "100%", borderRadius: 10 }}
+                  resizeMode="contain"
+                  accessibilityLabel={file.name || "Attached image"}
+                />
+              )}
+            </View>
+          ))}
+          {message.skills?.map((skill) => (
+            <Label key={skill.id} muted>
+              Skill: {skill.name}
+            </Label>
+          ))}
+        </UserMessageBubble>
+      );
+    if (message.type === "shell")
+      return (
+        <Disclosure
+          disclosureKey={message.id}
+          title={`$ ${message.command} · ${message.status}`}
+        >
+          <CodeBlock
+            code={message.output?.output || "No output"}
             selectable={selectable}
           />
-        ))}
-        {message.error && <ErrorNotice error={message.error.message} />}
-        {betaLayout &&
-          !live &&
-          message.content.some(
-            (part) => part.type === "text" && !!part.text.trim()
-          ) && <CompletedAssistantFooter key={message.id} message={message} />}
-      </View>
-    );
-  if (message.type === "user")
-    return (
-      <UserMessageBubble withAttachments={!!message.files?.length}>
-        <MessageText text={message.text} selectable={selectable} />
-        {message.files?.map((file, index) => (
-          <View key={index} style={{ gap: 8 }}>
-            <Label muted style={{ fontFamily: mono, fontSize: 13 }}>
-              ↳ {file.name || file.mime}
-            </Label>
-            {file.mime.startsWith("image/") && (
-              <Image
-                source={{ uri: `data:${file.mime};base64,${file.data}` }}
-                style={{ height: 180, width: "100%", borderRadius: 10 }}
-                resizeMode="contain"
-                accessibilityLabel={file.name || "Attached image"}
-              />
-            )}
-          </View>
-        ))}
-        {message.skills?.map((skill) => (
-          <Label key={skill.id} muted>
-            Skill: {skill.name}
-          </Label>
-        ))}
-      </UserMessageBubble>
-    );
-  if (message.type === "shell")
-    return (
-      <Disclosure
-        disclosureKey={message.id}
-        title={`$ ${message.command} · ${message.status}`}
-      >
-        <CodeBlock
-          code={message.output?.output || "No output"}
-          selectable={selectable}
-        />
-        {message.output?.truncated && (
-          <Label muted>Output truncated by the server</Label>
-        )}
-      </Disclosure>
-    );
-  if (message.type === "compaction")
+          {message.output?.truncated && (
+            <Label muted>Output truncated by the server</Label>
+          )}
+        </Disclosure>
+      );
+    if (message.type === "compaction")
+      return (
+        <Disclosure
+          disclosureKey={message.id}
+          title={`Context compaction · ${message.status}`}
+        >
+          {"summary" in message && (
+            <MessageText text={message.summary} selectable={selectable} />
+          )}
+          {"error" in message && <ErrorNotice error={message.error.message} />}
+        </Disclosure>
+      );
+    if (message.type === "agent-switched")
+      return (
+        <Label muted style={styles.notice}>
+          Agent → {message.agent}
+        </Label>
+      );
+    if (message.type === "model-switched")
+      return (
+        <Label muted style={styles.notice}>
+          Model → {message.model.id}
+          {message.model.variant ? ` · ${message.model.variant}` : ""}
+        </Label>
+      );
+    if (message.type === "location-switched")
+      return (
+        <Label muted style={styles.notice}>
+          Directory → {message.location.directory}
+        </Label>
+      );
+    if (message.type === "skill")
+      return (
+        <Disclosure
+          disclosureKey={message.id}
+          title={`Skill · ${message.name}`}
+        >
+          <MessageText text={message.text} selectable={selectable} />
+        </Disclosure>
+      );
     return (
       <Disclosure
         disclosureKey={message.id}
-        title={`Context compaction · ${message.status}`}
+        title={message.description || message.type}
       >
-        {"summary" in message && (
-          <MessageText text={message.summary} selectable={selectable} />
-        )}
-        {"error" in message && <ErrorNotice error={message.error.message} />}
-      </Disclosure>
-    );
-  if (message.type === "agent-switched")
-    return (
-      <Label muted style={styles.notice}>
-        Agent → {message.agent}
-      </Label>
-    );
-  if (message.type === "model-switched")
-    return (
-      <Label muted style={styles.notice}>
-        Model → {message.model.id}
-        {message.model.variant ? ` · ${message.model.variant}` : ""}
-      </Label>
-    );
-  if (message.type === "location-switched")
-    return (
-      <Label muted style={styles.notice}>
-        Directory → {message.location.directory}
-      </Label>
-    );
-  if (message.type === "skill")
-    return (
-      <Disclosure disclosureKey={message.id} title={`Skill · ${message.name}`}>
         <MessageText text={message.text} selectable={selectable} />
       </Disclosure>
     );
-  return (
-    <Disclosure
-      disclosureKey={message.id}
-      title={message.description || message.type}
-    >
-      <MessageText text={message.text} selectable={selectable} />
-    </Disclosure>
-  );
-});
+  }
+);
 
 function CompletedAssistantFooter({
   message,
@@ -4117,7 +4383,7 @@ function CodeBlock({
           onPress={() => {
             void Clipboard.setStringAsync(code)
               .then(() => setCopied(true))
-              .catch((reason) => setError(errorMessage(reason)));
+              .catch((error_) => setError(errorMessage(error_)));
           }}
         />
       </Row>
@@ -4139,12 +4405,12 @@ function PanelLink({ title, onPress }: { title: string; onPress: () => void }) {
       accessibilityLabel={title}
       onPress={onPress}
       style={({ pressed }) => ({
-        minHeight: Platform.OS === "android" ? 48 : 44,
-        flexDirection: "row",
         alignItems: "center",
+        flexDirection: "row",
         gap: 12,
-        paddingVertical: 10,
+        minHeight: Platform.OS === "android" ? 48 : 44,
         opacity: pressed ? 0.6 : 1,
+        paddingVertical: 10,
       })}
     >
       <Label style={{ flex: 1 }}>{title}</Label>
@@ -4175,18 +4441,19 @@ function ChatGlyph({
   size?: number;
   selected?: boolean;
 }) {
-  if (name === "menu")
+  if (name === "menu") {
     return <ShellIcon name="menu" size={size} color={color} />;
+  }
   const path = {
-    copy: "M8 8h12v13H8Z M16 8V3H3v13h5",
     check: "m5 12 4 4L19 6",
+    close: "M6 6l12 12M18 6 6 18",
+    copy: "M8 8h12v13H8Z M16 8V3H3v13h5",
+    down: "M6 9l6 6 6-6",
     more: "M5 12h.01M12 12h.01M19 12h.01",
     plus: "M12 5v14M5 12h14",
-    up: "M12 19V5M6 11l6-6 6 6",
-    down: "M6 9l6 6 6-6",
     star: "m12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.3l-5.6 3 1.1-6.3L3 9.6l6.2-.9Z",
     stop: "M7 7h10v10H7Z",
-    close: "M6 6l12 12M18 6 6 18",
+    up: "M12 19V5M6 11l6-6 6 6",
   }[name];
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
@@ -4227,8 +4494,8 @@ function ChatIconButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{
-        disabled: !!disabled || !!busy,
         busy: !!busy,
+        disabled: !!disabled || !!busy,
         selected,
       }}
       aria-pressed={selected}
@@ -4246,9 +4513,9 @@ function ChatIconButton({
           style={[
             styles.iconFace,
             compactFace && {
-              width: 28,
-              height: 28,
               borderRadius: raised ? 6 : 14,
+              height: 28,
+              width: 28,
             },
             raised && styles.raisedFace,
             raised && compactFace && styles.betaRaisedFace,
@@ -4280,211 +4547,49 @@ function ChatIconButton({
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    frame: { flex: 1, minHeight: 0 },
-    container: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
-    header: {
-      minHeight: 56,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    headerLeading: { marginStart: pageInset - 24, marginEnd: 24 - pageInset },
-    headerTrailing: { marginStart: 24 - pageInset, marginEnd: pageInset - 24 },
-    selectionHeader: { backgroundColor: colors.panel },
-    selectionCount: {
-      flex: 1,
-      minWidth: 0,
-      fontSize: 15,
-      paddingStart: pageInset - 4,
-    },
-    selectableMessage: { position: "relative" },
-    selectionMarker: {
-      position: "absolute",
-      start: -8,
-      top: 0,
-      bottom: 0,
-      width: 2,
-      borderRadius: 1,
-    },
-    headerTitle: {
-      flex: 1,
-      minWidth: 0,
-      gap: 1,
-      paddingHorizontal: 4,
-      paddingStart: pageInset - 8,
-    },
-    headerTitleWithNavigation: { paddingStart: pageInset - 4 },
-    sessionTitle: { fontSize: 17, fontWeight: "500", lineHeight: 22 },
-    headerSubtitle: { flexDirection: "row", alignItems: "center", gap: 6 },
-    projectLabel: { fontSize: 13, lineHeight: 17, flexShrink: 1 },
-    dot: { width: 5, height: 5, borderRadius: 3 },
-    transcriptFrame: { flex: 1, minHeight: 0, paddingBottom: 8 },
-    transcript: {
-      flex: 1,
-      minHeight: 0,
-      width: "100%",
-      maxWidth: 760,
-      alignSelf: "center",
-    },
-    messages: {
-      padding: 16,
-      paddingHorizontal: pageInset,
-      paddingBottom: 24,
-      flexGrow: 1,
-    },
     assistant: { gap: 6 },
-    eyebrow: {
-      fontFamily: mono,
-      fontSize: 11,
-      color: colors.muted,
-      letterSpacing: 1.2,
-    },
-    notice: { fontFamily: mono, fontSize: 12 },
-    composerDock: {
-      padding: 12,
-      paddingHorizontal: pageInset,
-      paddingTop: 4,
-      alignItems: "center",
-    },
-    composer: {
-      width: "100%",
-      maxWidth: 736,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-      gap: 4,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderTopColor: colors.controlTopEdge,
-      borderRadius: 18,
-      backgroundColor: colors.panel,
-    },
-    composerInput: {
-      minHeight: 44,
-      maxHeight: 120,
-      borderWidth: 0,
-      borderRadius: 0,
-      boxShadow: [],
-      backgroundColor: colors.panel,
-      paddingHorizontal: 7,
-      paddingVertical: 6,
-      fontSize: 17,
-      lineHeight: 25,
-    },
-    composerToolbar: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      flexWrap: "nowrap",
-    },
-    modelTrigger: {
-      flex: 1,
-      minWidth: 0,
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingHorizontal: 8,
-    },
-    modelTriggerText: { flexShrink: 1, fontSize: 13, color: colors.muted },
-    betaLatestOverlay: { position: "absolute", bottom: 12, right: 16 },
-    betaMessages: { padding: 16, paddingBottom: 24, flexGrow: 1 },
-    betaComposerDock: { paddingHorizontal: 12, paddingBottom: 10 },
     betaComposer: {
+      backgroundColor: colors.panel,
+      borderRadius: 12,
+      borderTopColor: colors.border,
       paddingHorizontal: 4,
       paddingVertical: 2,
-      borderRadius: 12,
-      backgroundColor: colors.panel,
-      borderTopColor: colors.border,
     },
+    betaComposerDock: { paddingBottom: 10, paddingHorizontal: 12 },
     betaComposerInput: {
       backgroundColor: colors.panel,
-      paddingHorizontal: 11,
-      paddingVertical: 10,
       fontSize: 14,
       lineHeight: 23,
+      paddingHorizontal: 11,
+      paddingVertical: 10,
     },
     betaComposerToolbar: { gap: 0 },
-    betaProviderLabel: { maxWidth: 80 },
+    betaLatestOverlay: { bottom: 12, position: "absolute", right: 16 },
+    betaMessages: { flexGrow: 1, padding: 16, paddingBottom: 24 },
     betaModelName: { flex: 1, minWidth: 0 },
-    betaModelTrigger: { minWidth: 0, gap: 3, paddingHorizontal: 4 },
-    betaVariantTrigger: {
-      minWidth: 48,
-      maxWidth: "38%",
-      minHeight: 48,
-      paddingHorizontal: 4,
-      flexDirection: "row",
-      gap: 3,
-      alignItems: "center",
-      flexShrink: 0,
-    },
-    betaTriggerText: { fontSize: 14, color: colors.muted, flexShrink: 1 },
-    iconTarget: {
-      width: Platform.OS === "android" ? 48 : 44,
-      height: Platform.OS === "android" ? 48 : 44,
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
-    },
-    iconFace: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    raisedFace: {
-      backgroundColor: colors.primary,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderTopColor: colors.controlTopEdge,
-      shadowColor: "#000000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.2,
-      shadowRadius: 1,
-      elevation: 2,
-    },
+    betaModelTrigger: { gap: 3, minWidth: 0, paddingHorizontal: 4 },
+    betaProviderLabel: { maxWidth: 80 },
     betaRaisedFace: {
       backgroundColor: colors.text,
       borderColor: colors.text,
       borderTopColor: colors.text,
     },
-    errorBanner: { paddingHorizontal: 12, paddingTop: 8, gap: 4 },
-    modelSearch: { padding: 16, paddingBottom: 10, gap: 8 },
-    modelList: { paddingHorizontal: 12, paddingBottom: 24 },
-    modelRow: {
+    betaTriggerText: { color: colors.muted, flexShrink: 1, fontSize: 14 },
+    betaVariantTrigger: {
+      alignItems: "center",
       flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      minHeight: 66,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderRadius: 8,
-    },
-    variants: { gap: 8, paddingHorizontal: 4, paddingBottom: 16 },
-    radio: {
-      width: 18,
-      height: 18,
-      borderRadius: 9,
-      borderWidth: 1,
-      borderColor: colors.muted,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    radioDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: colors.text,
+      flexShrink: 0,
+      gap: 3,
+      maxWidth: "38%",
+      minHeight: 48,
+      minWidth: 48,
+      paddingHorizontal: 4,
     },
     code: {
       backgroundColor: colors.bg,
-      borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 8,
+      borderWidth: 1,
       overflow: "hidden",
     },
     codeText: {
@@ -4495,12 +4600,174 @@ function createStyles(colors: ThemeColors) {
       padding: 12,
       paddingTop: 4,
     },
+    composer: {
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 18,
+      borderTopColor: colors.controlTopEdge,
+      borderWidth: 1,
+      gap: 4,
+      maxWidth: 736,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      width: "100%",
+    },
+    composerDock: {
+      alignItems: "center",
+      padding: 12,
+      paddingHorizontal: pageInset,
+      paddingTop: 4,
+    },
+    composerInput: {
+      backgroundColor: colors.panel,
+      borderRadius: 0,
+      borderWidth: 0,
+      boxShadow: [],
+      fontSize: 17,
+      lineHeight: 25,
+      maxHeight: 120,
+      minHeight: 44,
+      paddingHorizontal: 7,
+      paddingVertical: 6,
+    },
+    composerToolbar: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "nowrap",
+      gap: 4,
+    },
+    container: { backgroundColor: colors.bg, flex: 1, minHeight: 0 },
+    dot: { borderRadius: 3, height: 5, width: 5 },
+    errorBanner: { gap: 4, paddingHorizontal: 12, paddingTop: 8 },
+    eyebrow: {
+      color: colors.muted,
+      fontFamily: mono,
+      fontSize: 11,
+      letterSpacing: 1.2,
+    },
+    frame: { flex: 1, minHeight: 0 },
+    header: {
+      alignItems: "center",
+      borderBottomColor: colors.border,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 4,
+      minHeight: 56,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    headerLeading: { marginEnd: 24 - pageInset, marginStart: pageInset - 24 },
+    headerSubtitle: { alignItems: "center", flexDirection: "row", gap: 6 },
+    headerTitle: {
+      flex: 1,
+      gap: 1,
+      minWidth: 0,
+      paddingHorizontal: 4,
+      paddingStart: pageInset - 8,
+    },
+    headerTitleWithNavigation: { paddingStart: pageInset - 4 },
+    headerTrailing: { marginEnd: pageInset - 24, marginStart: 24 - pageInset },
+    iconFace: {
+      alignItems: "center",
+      borderRadius: 18,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    iconTarget: {
+      alignItems: "center",
+      flexShrink: 0,
+      height: Platform.OS === "android" ? 48 : 44,
+      justifyContent: "center",
+      width: Platform.OS === "android" ? 48 : 44,
+    },
+    messages: {
+      flexGrow: 1,
+      padding: 16,
+      paddingBottom: 24,
+      paddingHorizontal: pageInset,
+    },
+    modelList: { paddingBottom: 24, paddingHorizontal: 12 },
+    modelRow: {
+      alignItems: "center",
+      borderRadius: 8,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 66,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    modelSearch: { gap: 8, padding: 16, paddingBottom: 10 },
+    modelTrigger: {
+      alignItems: "center",
+      flex: 1,
+      flexDirection: "row",
+      gap: 6,
+      minHeight: Platform.OS === "android" ? 48 : 44,
+      minWidth: 0,
+      paddingHorizontal: 8,
+    },
+    modelTriggerText: { color: colors.muted, flexShrink: 1, fontSize: 13 },
+    notice: { fontFamily: mono, fontSize: 12 },
+    projectLabel: { flexShrink: 1, fontSize: 13, lineHeight: 17 },
+    radio: {
+      alignItems: "center",
+      borderColor: colors.muted,
+      borderRadius: 9,
+      borderWidth: 1,
+      height: 18,
+      justifyContent: "center",
+      width: 18,
+    },
+    radioDot: {
+      backgroundColor: colors.text,
+      borderRadius: 4,
+      height: 8,
+      width: 8,
+    },
+    raisedFace: {
+      backgroundColor: colors.primary,
+      borderColor: colors.border,
+      borderTopColor: colors.controlTopEdge,
+      borderWidth: 1,
+      elevation: 2,
+      shadowColor: "#000000",
+      shadowOffset: { height: 1, width: 0 },
+      shadowOpacity: 0.2,
+      shadowRadius: 1,
+    },
     revert: {
-      margin: 12,
-      padding: 14,
-      gap: 8,
       backgroundColor: colors.raised,
       borderRadius: 10,
+      gap: 8,
+      margin: 12,
+      padding: 14,
     },
+    selectableMessage: { position: "relative" },
+    selectionCount: {
+      flex: 1,
+      fontSize: 15,
+      minWidth: 0,
+      paddingStart: pageInset - 4,
+    },
+    selectionHeader: { backgroundColor: colors.panel },
+    selectionMarker: {
+      borderRadius: 1,
+      bottom: 0,
+      position: "absolute",
+      start: -8,
+      top: 0,
+      width: 2,
+    },
+    sessionTitle: { fontSize: 17, fontWeight: "500", lineHeight: 22 },
+    transcript: {
+      alignSelf: "center",
+      flex: 1,
+      maxWidth: 760,
+      minHeight: 0,
+      width: "100%",
+    },
+    transcriptFrame: { flex: 1, minHeight: 0, paddingBottom: 8 },
+    variants: { gap: 8, paddingBottom: 16, paddingHorizontal: 4 },
   });
 }

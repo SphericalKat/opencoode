@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
 
 import { verifyBackendImages } from "./tool-result-backends.browser.mjs";
+
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -12,9 +13,9 @@ const browser = await chromium.launch({
   headless: true,
 });
 const page = await browser.newPage({
-  viewport: { width: 360, height: 800 },
   colorScheme: "dark",
   reducedMotion: "reduce",
+  viewport: { height: 800, width: 360 },
 });
 const screenshot = await readFile(
   new URL("../docs/screenshots/chat-web.png", import.meta.url)
@@ -22,13 +23,13 @@ const screenshot = await readFile(
 await page.addInitScript((png) => {
   globalThis.fixtureImage = png;
 }, screenshot.toString("base64"));
-page.setDefaultTimeout(10000);
+page.setDefaultTimeout(10_000);
 const origin = process.env.UI_TEST_ORIGIN || "http://localhost:8094";
 await page.route(`${origin}/**`, (route) =>
   new URL(route.request().url()).pathname === "/"
     ? route.fulfill({
-        contentType: "text/html",
         body: '<html><body style="margin:0"><div id="root"></div><script src="/tests/fixtures/tool-results.bundle?platform=web&dev=true&hot=false&lazy=false"></script></body></html>',
+        contentType: "text/html",
       })
     : route.continue()
 );
@@ -43,18 +44,18 @@ console.log(
 );
 const output = process.env.UI_SCREENSHOTS || "/tmp/opencoode-40-ui";
 await mkdir(output, { recursive: true });
-await page.screenshot({ path: `${output}/single.png`, fullPage: true });
+await page.screenshot({ fullPage: true, path: `${output}/single.png` });
 const small = await page
-  .getByRole("img", { name: "Screenshot.png", exact: true })
+  .getByRole("img", { exact: true, name: "Screenshot.png" })
   .boundingBox();
 await page
   .getByRole("button", { name: "Expand image preview: Screenshot.png" })
   .click();
 await page
-  .getByRole("img", { name: "Expanded Screenshot.png", exact: true })
+  .getByRole("img", { exact: true, name: "Expanded Screenshot.png" })
   .waitFor({ timeout: 3000 });
 const large = await page
-  .getByRole("img", { name: "Expanded Screenshot.png", exact: true })
+  .getByRole("img", { exact: true, name: "Expanded Screenshot.png" })
   .boundingBox();
 assert.ok(
   large.height > small.height * 2,
@@ -67,12 +68,12 @@ await page.evaluate(() =>
       .map((animation) => animation.finished.catch(() => {}))
   )
 );
-await page.screenshot({ path: `${output}/expanded.png`, fullPage: true });
-await page.getByRole("button", { name: "Done", exact: true }).click();
+await page.screenshot({ fullPage: true, path: `${output}/expanded.png` });
+await page.getByRole("button", { exact: true, name: "Done" }).click();
 await page
-  .getByRole("button", { name: "Used 1 screenshot", exact: true })
+  .getByRole("button", { exact: true, name: "Used 1 screenshot" })
   .click();
-await page.getByRole("button", { name: "screenshot", exact: true }).click();
+await page.getByRole("button", { exact: true, name: "screenshot" }).click();
 await page
   .getByText("Screenshot captured successfully", { exact: true })
   .waitFor();
@@ -84,7 +85,7 @@ assert.equal(
   1,
   "expanded details do not duplicate image artifacts"
 );
-await page.getByRole("button", { name: "screenshot", exact: true }).click();
+await page.getByRole("button", { exact: true, name: "screenshot" }).click();
 await page
   .getByRole("button", { name: "Expand image preview: Screenshot.png" })
   .waitFor();
@@ -124,18 +125,19 @@ assert.equal(
   "two thumbnails share a row on a phone"
 );
 assert.ok(boxes[2].top > boxes[1].top, "extra thumbnails wrap");
-for (const box of boxes)
+for (const box of boxes) {
   assert.ok(
     box.left >= 0 && box.right <= 360,
     "thumbnails stay inside the viewport"
   );
-await page.screenshot({ path: `${output}/multiple.png`, fullPage: true });
-await page.setViewportSize({ width: 240, height: 800 });
+}
+await page.screenshot({ fullPage: true, path: `${output}/multiple.png` });
+await page.setViewportSize({ height: 800, width: 240 });
 assert.ok(
   await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
   "very narrow screens do not overflow"
 );
-await page.setViewportSize({ width: 360, height: 800 });
+await page.setViewportSize({ height: 800, width: 360 });
 console.log(
   "PASS multiple images retain result order in wrapping rows without narrow-screen overflow"
 );
@@ -155,28 +157,28 @@ await page.route(`${origin}/fixture-image.png`, async (route) => {
   await new Promise((resolve) => {
     finishLoading = resolve;
   });
-  await route.fulfill({ status: 404, body: "Missing" });
+  await route.fulfill({ body: "Missing", status: 404 });
 });
 await page.goto(`${origin}/?scenario=loading`);
 await page.getByText("Loading image…", { exact: true }).waitFor();
 assert.equal(
   await page
-    .getByRole("button", { name: "Download", exact: true })
+    .getByRole("button", { exact: true, name: "Download" })
     .isDisabled(),
   true,
   "the fallback waits for the in-flight image request"
 );
 await page.getByText("The screenshot is ready for review.").waitFor();
-await page.screenshot({ path: `${output}/loading.png`, fullPage: true });
+await page.screenshot({ fullPage: true, path: `${output}/loading.png` });
 finishLoading();
 await page.getByText("Image unavailable", { exact: true }).waitFor();
-await page.getByRole("button", { name: "Retry image", exact: true }).waitFor();
-await page.screenshot({ path: `${output}/unavailable.png`, fullPage: true });
+await page.getByRole("button", { exact: true, name: "Retry image" }).waitFor();
+await page.screenshot({ fullPage: true, path: `${output}/unavailable.png` });
 await page.unroute(`${origin}/fixture-image.png`);
 await page.route(`${origin}/fixture-image.png`, (route) =>
-  route.fulfill({ contentType: "image/png", body: screenshot })
+  route.fulfill({ body: screenshot, contentType: "image/png" })
 );
-await page.getByRole("button", { name: "Retry image", exact: true }).click();
+await page.getByRole("button", { exact: true, name: "Retry image" }).click();
 await page
   .getByRole("button", { name: "Expand image preview: Screenshot.png" })
   .waitFor();
@@ -189,16 +191,16 @@ const originalBytes = Buffer.from(
   "An image attachment whose format cannot be decoded."
 );
 await page.route(`${origin}/fixture-image.png`, (route) =>
-  route.fulfill({ contentType: "image/png", body: originalBytes })
+  route.fulfill({ body: originalBytes, contentType: "image/png" })
 );
 await page.goto(`${origin}/?scenario=undecodable`);
 await page
   .getByText("This image cannot be displayed.", { exact: false })
   .waitFor();
-await page.getByRole("button", { name: "Retry image", exact: true }).waitFor();
+await page.getByRole("button", { exact: true, name: "Retry image" }).waitFor();
 const downloadButton = page.getByRole("button", {
-  name: "Download",
   exact: true,
+  name: "Download",
 });
 await downloadButton.waitFor();
 const downloadedFile = page.waitForEvent("download");
@@ -212,9 +214,9 @@ assert.deepEqual(
 );
 await page.unroute(`${origin}/fixture-image.png`);
 await page.route(`${origin}/fixture-image.png`, (route) =>
-  route.fulfill({ contentType: "image/png", body: screenshot })
+  route.fulfill({ body: screenshot, contentType: "image/png" })
 );
-await page.getByRole("button", { name: "Retry image", exact: true }).click();
+await page.getByRole("button", { exact: true, name: "Retry image" }).click();
 await page
   .getByRole("button", { name: "Expand image preview: Screenshot.png" })
   .waitFor();

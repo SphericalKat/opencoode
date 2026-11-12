@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-import { createClient, type Connection } from "../src/lib/client";
+import { createClient } from "../src/lib/client";
+import type { Connection } from "../src/lib/client";
 
 const fixture = JSON.parse(
-  await readFile("/tmp/opencoode-live-connection.json", "utf8")
+  await readFile("/tmp/opencoode-live-connection.json", "utf-8")
 ) as { connection: Connection; directory: string };
 const client = createClient(fixture.connection, (input, init) =>
   fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(20_000) })
@@ -13,8 +14,8 @@ const location = await client.location.get({
   location: { directory: fixture.directory },
 });
 const created = await client.worktree.create({
-  projectID: location.project.id,
   name: `mobile-smoke-${Date.now()}`,
+  projectID: location.project.id,
 });
 const treeLocation = { directory: created.directory };
 let original: Uint8Array | undefined;
@@ -34,9 +35,9 @@ try {
   });
   await assert.rejects(
     client.worktree.remove({
-      projectID: location.project.id,
       directory: created.directory,
       force: false,
+      projectID: location.project.id,
     })
   );
   assert.equal(
@@ -49,16 +50,17 @@ try {
     "Worktree create, list, location scope, and dirty removal protection passed"
   );
 } finally {
-  if (original)
+  if (original) {
     await client.experimental.file.write({
       location: treeLocation,
       path: "README.md",
       payload: original,
     });
+  }
   await client.worktree.remove({
-    projectID: location.project.id,
     directory: created.directory,
     force: false,
+    projectID: location.project.id,
   });
 }
 const list = await client.worktree.list({ projectID: location.project.id });

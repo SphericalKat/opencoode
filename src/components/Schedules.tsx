@@ -2,8 +2,10 @@ import type { ScheduleInfo } from "@opencode/client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 
-import { type Client, errorMessage } from "../lib/client";
-import { prepareSchedule, type ScheduleDraft } from "../lib/schedules";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
+import { prepareSchedule } from "../lib/schedules";
+import type { ScheduleDraft } from "../lib/schedules";
 import {
   Button,
   Busy,
@@ -16,14 +18,14 @@ import {
 } from "./ui";
 
 const emptyDraft: ScheduleDraft = {
+  after: "",
+  mode: "in",
   name: "",
   prompt: "",
-  mode: "in",
-  trigger: "",
-  timezone: "",
-  after: "",
-  until: "",
   runs: "",
+  timezone: "",
+  trigger: "",
+  until: "",
 };
 const modes = [
   { id: "in", title: "After a delay" },
@@ -33,10 +35,16 @@ const modes = [
 ] as const;
 
 function triggerLabel(item: ScheduleInfo) {
-  const when = item.when;
-  if (when.type === "in") return `After ${when.in}`;
-  if (when.type === "at") return `At ${when.at}`;
-  if (when.type === "every") return `Every ${when.every}`;
+  const { when } = item;
+  if (when.type === "in") {
+    return `After ${when.in}`;
+  }
+  if (when.type === "at") {
+    return `At ${when.at}`;
+  }
+  if (when.type === "every") {
+    return `Every ${when.every}`;
+  }
   return `Cron: ${when.cron}`;
 }
 
@@ -56,8 +64,12 @@ export function Schedules({
   const [detail, setDetail] = useState<ScheduleInfo>();
   const request = useRef(0);
   const scope = useRef({ client, sessionID });
-  if (scope.current.client !== client || scope.current.sessionID !== sessionID)
+  if (
+    scope.current.client !== client ||
+    scope.current.sessionID !== sessionID
+  ) {
     scope.current = { client, sessionID };
+  }
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -73,12 +85,16 @@ export function Schedules({
     setError(undefined);
     try {
       const schedules = await client.experimental.schedule.list({ sessionID });
-      if (mounted.current && request.current === id) setItems(schedules);
-    } catch (cause) {
+      if (mounted.current && request.current === id) {
+        setItems(schedules);
+      }
+    } catch (error_) {
       if (mounted.current && request.current === id)
-        setError(errorMessage(cause));
+        setError(errorMessage(error_));
     } finally {
-      if (mounted.current && request.current === id) setLoading(false);
+      if (mounted.current && request.current === id) {
+        setLoading(false);
+      }
     }
   }, [client, sessionID]);
 
@@ -94,23 +110,29 @@ export function Schedules({
   }, [refresh]);
 
   const run = async (action: () => Promise<void>) => {
-    if (busy) return;
+    if (busy) {
+      return;
+    }
     const owner = scope.current;
     setBusy(true);
     setError(undefined);
     try {
       await action();
-    } catch (cause) {
+    } catch (error_) {
       if (mounted.current && owner === scope.current)
-        setError(errorMessage(cause));
+        setError(errorMessage(error_));
     } finally {
-      if (mounted.current) setBusy(false);
+      if (mounted.current) {
+        setBusy(false);
+      }
     }
   };
   const mutate = async (action: () => Promise<unknown>) => {
     const owner = scope.current;
     await action();
-    if (owner !== scope.current || !mounted.current) return;
+    if (owner !== scope.current || !mounted.current) {
+      return;
+    }
     setDetail(undefined);
     await refresh();
   };
@@ -243,7 +265,9 @@ export function Schedules({
                 const input = prepareSchedule(sessionID, draft);
                 const owner = scope.current;
                 await client.experimental.schedule.create(input);
-                if (owner !== scope.current || !mounted.current) return;
+                if (owner !== scope.current || !mounted.current) {
+                  return;
+                }
                 setAdding(false);
                 setDraft(emptyDraft);
                 await refresh();
@@ -262,9 +286,9 @@ export function Schedules({
           </Label>
           <Label muted>
             {item.status} · {item.runCount} runs
-            {item.remainingRuns !== undefined
-              ? ` · ${item.remainingRuns} remaining`
-              : ""}
+            {item.remainingRuns === undefined
+              ? ""
+              : ` · ${item.remainingRuns} remaining`}
           </Label>
           {item.nextDueAt !== undefined && (
             <Label muted>
@@ -283,8 +307,9 @@ export function Schedules({
                   const result = await client.experimental.schedule.get({
                     scheduleID: item.id,
                   });
-                  if (owner === scope.current && mounted.current)
+                  if (owner === scope.current && mounted.current) {
                     setDetail(result);
+                  }
                 });
               }}
             />
@@ -323,12 +348,13 @@ export function Schedules({
                     )) &&
                     owner === scope.current &&
                     mounted.current
-                  )
+                  ) {
                     await mutate(() =>
                       client.experimental.schedule.delete({
                         scheduleID: item.id,
                       })
                     );
+                  }
                 });
               }}
             />

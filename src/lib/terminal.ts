@@ -3,7 +3,7 @@ export type TerminalEvent =
   | { type: "input"; data: string; binary?: boolean }
   | { type: "resize"; cols: number; rows: number };
 
-export type TerminalPalette = {
+export interface TerminalPalette {
   background: string;
   foreground: string;
   cursor: string;
@@ -19,7 +19,7 @@ export type TerminalPalette = {
   brightBlue: string;
   white: string;
   brightWhite: string;
-};
+}
 
 export type TerminalCommand =
   | { type: "output"; data: string }
@@ -42,12 +42,15 @@ export function persistentPtySocketUrl(
   const url = new URL(
     `${server.replace(/\/+$/, "")}/api/experimental/persistent-pty/${encodeURIComponent(ptyID)}/connect`
   );
-  if (url.protocol !== "http:" && url.protocol !== "https:")
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Use an HTTP or HTTPS server URL");
-  if (url.username || url.password)
+  }
+  if (url.username || url.password) {
     throw new Error("Server URLs cannot contain credentials");
-  if (!Number.isSafeInteger(options.cursor) || options.cursor < 0)
+  }
+  if (!Number.isSafeInteger(options.cursor) || options.cursor < 0) {
     throw new Error("Invalid terminal output position");
+  }
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.searchParams.set("ticket", ticket);
   url.searchParams.set("cursor", String(options.cursor));
@@ -67,8 +70,8 @@ export function persistentInputFrame(
     !Number.isInteger(size.rows) ||
     size.cols < 1 ||
     size.rows < 1 ||
-    size.cols > 65535 ||
-    size.rows > 65535
+    size.cols > 65_535 ||
+    size.rows > 65_535
   ) {
     throw new Error("Invalid terminal size");
   }
@@ -77,22 +80,28 @@ export function persistentInputFrame(
   frame[0] = data ? 1 : 0;
   view.setUint16(1, size.cols);
   view.setUint16(3, size.rows);
-  if (data) frame.set(data, 5);
+  if (data) {
+    frame.set(data, 5);
+  }
   return frame.buffer;
 }
 
 export function terminalEvent(value: unknown): TerminalEvent | undefined {
-  if (!value || typeof value !== "object" || !("type" in value)) return;
-  if (value.type === "ready") return { type: "ready" };
+  if (!value || typeof value !== "object" || !("type" in value)) {
+    return;
+  }
+  if (value.type === "ready") {
+    return { type: "ready" };
+  }
   if (
     value.type === "input" &&
     "data" in value &&
     typeof value.data === "string"
   ) {
     return {
-      type: "input",
-      data: value.data,
       binary: "binary" in value && value.binary === true,
+      data: value.data,
+      type: "input",
     };
   }
   if (
@@ -107,9 +116,9 @@ export function terminalEvent(value: unknown): TerminalEvent | undefined {
     Number(value.rows) <= 1000
   ) {
     return {
-      type: "resize",
       cols: Number(value.cols),
       rows: Number(value.rows),
+      type: "resize",
     };
   }
 }
@@ -124,16 +133,19 @@ export function ptySocketUrl(
   const url = new URL(
     `${server.replace(/\/+$/, "")}/api/pty/${encodeURIComponent(ptyID)}/connect`
   );
-  if (url.protocol !== "http:" && url.protocol !== "https:")
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Use an HTTP or HTTPS server URL");
-  if (url.username || url.password)
+  }
+  if (url.username || url.password) {
     throw new Error("Server URLs cannot contain credentials");
+  }
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.searchParams.set("location[directory]", directory);
   url.searchParams.set("ticket", ticket);
   if (cursor !== undefined) {
-    if (!Number.isSafeInteger(cursor) || cursor < 0)
+    if (!Number.isSafeInteger(cursor) || cursor < 0) {
       throw new Error("Invalid terminal output position");
+    }
     url.searchParams.set("cursor", String(cursor));
   }
   return url.toString();
@@ -141,7 +153,9 @@ export function ptySocketUrl(
 
 export function ptyControlCursor(bytes: ArrayBuffer): number | undefined {
   const data = new Uint8Array(bytes);
-  if (data[0] !== 0) return;
+  if (data[0] !== 0) {
+    return;
+  }
   try {
     const value: unknown = JSON.parse(
       new TextDecoder().decode(data.subarray(1))

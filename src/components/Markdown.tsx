@@ -1,5 +1,6 @@
 import * as Clipboard from "expo-clipboard";
-import MarkdownIt, { type Token } from "markdown-it";
+import MarkdownIt from "markdown-it";
+import type { Token } from "markdown-it";
 import Prism from "prismjs";
 import React, {
   createContext,
@@ -16,8 +17,8 @@ import {
   StyleSheet,
   Text,
   View,
-  type TextStyle,
 } from "react-native";
+import type { TextStyle } from "react-native";
 import "prismjs/components/prism-clike";
 import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-typescript";
@@ -40,13 +41,14 @@ import "prismjs/components/prism-markup";
 
 import { useBetaLayout } from "../lib/betaLayout";
 import { MessageActionsContext } from "../lib/messageActions";
-import { type ThemeColors, useTheme } from "../lib/theme";
+import { useTheme } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import { Button, mono, sans } from "./ui";
 
 const parser = new MarkdownIt({
+  breaks: true,
   html: false,
   linkify: true,
-  breaks: true,
   maxNesting: 40,
 });
 const SelectionContext = createContext(true);
@@ -57,10 +59,15 @@ function useMarkdownStyles() {
   return useMemo(() => createStyles(colors, beta), [colors, beta]);
 }
 
-type Node = { token: Token; children: Node[] };
+interface Node {
+  token: Token;
+  children: Node[];
+}
 
 function sameNode(left: Node, right: Node): boolean {
-  if (left === right) return true;
+  if (left === right) {
+    return true;
+  }
   const a = left.token;
   const b = right.token;
   return (
@@ -91,26 +98,38 @@ function tree(tokens: Token[]): Node[] {
   const stack = [root];
   for (const token of tokens) {
     if (token.nesting === -1) {
-      if (stack.length > 1) stack.pop();
+      if (stack.length > 1) {
+        stack.pop();
+      }
       continue;
     }
     const node = {
-      token,
       children: token.children ? tree(token.children) : [],
+      token,
     };
-    stack[stack.length - 1].push(node);
-    if (token.nesting === 1) stack.push(node.children);
+    stack.at(-1)?.push(node);
+    if (token.nesting === 1) {
+      stack.push(node.children);
+    }
   }
   return root;
 }
 
 function safeUrl(value: string | number | null): string | undefined {
-  if (typeof value !== "string" || /[\u0000-\u0020\u007f]/.test(value)) return;
+  if (typeof value !== "string" || /[\u0000-\u0020\u007F]/.test(value)) {
+    return;
+  }
   try {
     const url = new URL(value);
-    if ((url.protocol === "https:" || url.protocol === "http:") && url.hostname)
+    if (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      url.hostname
+    ) {
       return url.href;
-    if (url.protocol === "mailto:" && url.pathname) return url.href;
+    }
+    if (url.protocol === "mailto:" && url.pathname) {
+      return url.href;
+    }
   } catch {}
 }
 
@@ -120,8 +139,12 @@ const Inline = memo(
     const selectable = useContext(SelectionContext);
     const selectMessage = useContext(MessageActionsContext);
     return nodes.map(({ token, children }, index) => {
-      if (token.type === "text") return token.content;
-      if (token.type === "softbreak" || token.type === "hardbreak") return "\n";
+      if (token.type === "text") {
+        return token.content;
+      }
+      if (token.type === "softbreak" || token.type === "hardbreak") {
+        return "\n";
+      }
       const content = children.length ? (
         <Inline nodes={children} />
       ) : (
@@ -179,13 +202,7 @@ const Inline = memo(
   (previous, next) => sameNodes(previous.nodes, next.nodes)
 );
 
-const Code = memo(function Code({
-  code,
-  language,
-}: {
-  code: string;
-  language: string;
-}) {
+const Code = memo(({ code, language }: { code: string; language: string }) => {
   const styles = useMarkdownStyles();
   const { colors } = useTheme();
   const selectable = useContext(SelectionContext);
@@ -239,35 +256,35 @@ const Code = memo(function Code({
 });
 
 const supportedLanguages: Record<string, string> = {
+  bash: "bash",
+  c: "c",
+  "c#": "csharp",
+  "c++": "cpp",
+  cpp: "cpp",
+  csharp: "csharp",
+  css: "css",
+  go: "go",
+  html: "markup",
+  java: "java",
   javascript: "javascript",
   js: "javascript",
-  typescript: "typescript",
-  ts: "typescript",
-  jsx: "jsx",
-  tsx: "tsx",
   json: "json",
-  bash: "bash",
-  sh: "bash",
-  shell: "bash",
-  python: "python",
-  py: "python",
-  java: "java",
+  jsx: "jsx",
   kotlin: "kotlin",
   kt: "kotlin",
-  c: "c",
-  cpp: "cpp",
-  "c++": "cpp",
-  csharp: "csharp",
-  "c#": "csharp",
-  go: "go",
-  rust: "rust",
+  py: "python",
+  python: "python",
   rs: "rust",
+  rust: "rust",
+  sh: "bash",
+  shell: "bash",
   sql: "sql",
+  ts: "typescript",
+  tsx: "tsx",
+  typescript: "typescript",
+  xml: "markup",
   yaml: "yaml",
   yml: "yaml",
-  css: "css",
-  html: "markup",
-  xml: "markup",
 };
 
 function highlightCode(
@@ -276,34 +293,45 @@ function highlightCode(
   colors: ThemeColors
 ): React.ReactNode[] | null {
   const grammar = Prism.languages[supportedLanguages[language.toLowerCase()]];
-  if (!grammar) return null;
+  if (!grammar) {
+    return null;
+  }
   const colorFor = (type: string) => {
-    if (type === "comment" || type === "prolog" || type === "doctype")
+    if (type === "comment" || type === "prolog" || type === "doctype") {
       return colors.syntaxComment;
-    if (type === "string" || type === "char" || type === "attr-value")
+    }
+    if (type === "string" || type === "char" || type === "attr-value") {
       return colors.syntaxString;
-    if (type === "keyword" || type === "atrule" || type === "selector")
+    }
+    if (type === "keyword" || type === "atrule" || type === "selector") {
       return colors.syntaxKeyword;
-    if (type === "number" || type === "boolean") return colors.syntaxNumber;
-    if (type === "property" || type === "function" || type === "attr-name")
+    }
+    if (type === "number" || type === "boolean") {
+      return colors.syntaxNumber;
+    }
+    if (type === "property" || type === "function" || type === "attr-name") {
       return colors.syntaxProperty;
-    if (type === "class-name" || type === "builtin" || type === "tag")
+    }
+    if (type === "class-name" || type === "builtin" || type === "tag") {
       return colors.syntaxType;
-    if (type === "constant" || type === "symbol" || type === "variable")
+    }
+    if (type === "constant" || type === "symbol" || type === "variable") {
       return colors.syntaxConstant;
-    return undefined;
+    }
+    return;
   };
   let key = 0;
   const flatten = (
     token: string | Prism.Token,
     inherited?: string
   ): React.ReactNode[] => {
-    if (typeof token === "string")
+    if (typeof token === "string") {
       return [
         <Text key={key++} style={inherited ? { color: inherited } : undefined}>
           {token}
         </Text>,
       ];
+    }
     const color = colorFor(token.type) ?? inherited;
     return (
       Array.isArray(token.content) ? token.content : [token.content]
@@ -399,7 +427,7 @@ function MarkdownTable({ node, muted }: { node: Node; muted?: boolean }) {
 }
 
 const ListItem = memo(
-  function ListItem({
+  ({
     node,
     marker,
     markerWidth,
@@ -409,7 +437,7 @@ const ListItem = memo(
     marker: string;
     markerWidth: number;
     muted?: boolean;
-  }) {
+  }) => {
     const styles = useMarkdownStyles();
     const selectable = useContext(SelectionContext);
     return (
@@ -439,7 +467,7 @@ const ListItem = memo(
 );
 
 const Block = memo(
-  function Block({ node, muted }: { node: Node; muted?: boolean }) {
+  ({ node, muted }: { node: Node; muted?: boolean }) => {
     const styles = useMarkdownStyles();
     const selectable = useContext(SelectionContext);
     const { token, children } = node;
@@ -539,109 +567,111 @@ const Block = memo(
     previous.muted === next.muted && sameNode(previous.node, next.node)
 );
 
-export const Markdown = memo(function Markdown({
-  text,
-  muted,
-  selectable = true,
-}: {
-  text: string;
-  muted?: boolean;
-  selectable?: boolean;
-}) {
-  const styles = useMarkdownStyles();
-  const nodes = useMemo(() => {
-    try {
-      return tree(parser.parse(text, {}));
-    } catch {
-      return null;
-    }
-  }, [text]);
-  return (
-    <SelectionContext.Provider value={selectable}>
-      <View style={styles.root}>
-        {nodes ? (
-          <Blocks nodes={nodes} muted={muted} />
-        ) : (
-          <Text
-            selectable={selectable}
-            style={[styles.text, muted && styles.muted]}
-          >
-            {text}
-          </Text>
-        )}
-      </View>
-    </SelectionContext.Provider>
-  );
-});
+export const Markdown = memo(
+  ({
+    text,
+    muted,
+    selectable = true,
+  }: {
+    text: string;
+    muted?: boolean;
+    selectable?: boolean;
+  }) => {
+    const styles = useMarkdownStyles();
+    const nodes = useMemo(() => {
+      try {
+        return tree(parser.parse(text, {}));
+      } catch {
+        return null;
+      }
+    }, [text]);
+    return (
+      <SelectionContext.Provider value={selectable}>
+        <View style={styles.root}>
+          {nodes ? (
+            <Blocks nodes={nodes} muted={muted} />
+          ) : (
+            <Text
+              selectable={selectable}
+              style={[styles.text, muted && styles.muted]}
+            >
+              {text}
+            </Text>
+          )}
+        </View>
+      </SelectionContext.Provider>
+    );
+  }
+);
 
 const createStyles = (colors: ThemeColors, beta: boolean) => ({
   ...StyleSheet.create({
-    root: { minWidth: 0, maxWidth: "100%", gap: 12, flexShrink: 1 },
+    root: { flexShrink: 1, gap: 12, maxWidth: "100%", minWidth: 0 },
     text: {
       color: colors.text,
+      flexShrink: 1,
       fontFamily: sans,
       fontSize: beta ? 15 : 17,
       lineHeight: beta ? 23 : 26,
-      flexShrink: 1,
       ...Platform.select({ web: { overflowWrap: "anywhere" } as TextStyle }),
     },
     muted: { color: colors.muted },
-    paragraph: { minWidth: 0, gap: beta ? 16 : 0 },
+    paragraph: { gap: beta ? 16 : 0, minWidth: 0 },
     heading: { fontWeight: "700" },
     bold: { fontWeight: "700" },
     italic: { fontStyle: "italic" },
     strike: { textDecorationLine: "line-through" },
     link: { color: colors.blue, textDecorationLine: "underline" },
     inlineCode: {
-      fontFamily: mono,
       backgroundColor: colors.raised,
+      fontFamily: mono,
       fontSize: 14,
     },
     quote: {
-      borderLeftWidth: 3,
       borderLeftColor: colors.border,
-      paddingLeft: 12,
+      borderLeftWidth: 3,
       gap: 10,
       minWidth: 0,
+      paddingLeft: 12,
     },
     list: { gap: 6, minWidth: 0 },
     listItem: {
-      flexDirection: "row",
       alignItems: "flex-start",
+      flexDirection: "row",
       gap: 8,
       minWidth: 0,
     },
     marker: {
-      textAlign: "right",
       flexShrink: 0,
       fontVariant: ["tabular-nums"],
+      textAlign: "right",
     },
     // Keep an auto flex basis so native layout measures wrapped list text at its final width.
-    listContent: { flexGrow: 1, flexShrink: 1, minWidth: 0, gap: 6 },
-    rule: { height: 1, backgroundColor: colors.border, marginVertical: 4 },
+    listContent: { flexGrow: 1, flexShrink: 1, gap: 6, minWidth: 0 },
+    rule: { backgroundColor: colors.border, height: 1, marginVertical: 4 },
     group: { gap: 8, minWidth: 0 },
     code: {
       backgroundColor: colors.bg,
-      borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 10,
-      overflow: "hidden",
+      borderWidth: 1,
       minWidth: 0,
+      overflow: "hidden",
     },
     codeHeader: {
-      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
+      flexDirection: "row",
       gap: 8,
+      justifyContent: "space-between",
       paddingHorizontal: 12,
     },
     language: {
       color: colors.muted,
+      flexShrink: 1,
       fontFamily: mono,
       fontSize: 12,
-      flexShrink: 1,
     },
-    codeContent: { paddingHorizontal: 12, paddingBottom: 12 },
+    codeContent: { paddingBottom: 12, paddingHorizontal: 12 },
     codeText: {
       color: colors.text,
       fontFamily: mono,
@@ -652,24 +682,24 @@ const createStyles = (colors: ThemeColors, beta: boolean) => ({
       color: colors.danger,
       fontFamily: sans,
       fontSize: 13,
-      paddingHorizontal: 12,
       paddingBottom: 8,
+      paddingHorizontal: 12,
     },
-    tableContainer: { width: "100%", minWidth: 0 },
-    tableScroll: { width: "100%", minWidth: 0 },
+    tableContainer: { minWidth: 0, width: "100%" },
+    tableScroll: { minWidth: 0, width: "100%" },
     table: {
-      borderTopWidth: 1,
-      borderLeftWidth: 1,
       borderColor: colors.border,
+      borderLeftWidth: 1,
+      borderTopWidth: 1,
     },
-    tableRow: { flexDirection: "row", alignItems: "stretch" },
+    tableRow: { alignItems: "stretch", flexDirection: "row" },
     cell: {
-      minWidth: 0,
-      flexShrink: 0,
-      padding: 10,
-      borderRightWidth: 1,
       borderBottomWidth: 1,
       borderColor: colors.border,
+      borderRightWidth: 1,
+      flexShrink: 0,
+      minWidth: 0,
+      padding: 10,
     },
     tableHeader: { backgroundColor: colors.raised },
     tableHint: {
@@ -680,8 +710,8 @@ const createStyles = (colors: ThemeColors, beta: boolean) => ({
       paddingTop: 4,
     },
   }),
-  headingSizes: beta ? [22, 21, 20, 19, 18, 18] : [24, 22, 20, 18, 16, 14],
   headingLineHeights: beta
     ? [27, 26, 25, 24, 23, 23]
     : [32, 31, 30, 29, 28, 27],
+  headingSizes: beta ? [22, 21, 20, 19, 18, 18] : [24, 22, 20, 18, 16, 14],
 });

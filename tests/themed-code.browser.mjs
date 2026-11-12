@@ -25,31 +25,31 @@ const page = await browser.newPage();
 const origin = process.env.UI_TEST_ORIGIN || "http://localhost:8095";
 await page.route(`${origin}/`, (route) =>
   route.fulfill({
-    contentType: "text/html",
     body: '<div id="root"></div><script src="/tests/fixtures/themed-code.bundle?platform=web&dev=true&hot=false&lazy=false"></script>',
+    contentType: "text/html",
   })
 );
 await page.addInitScript(() => {
   Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
     value: {
       writeText: async (text) => {
         window.copiedCode = text;
       },
     },
-    configurable: true,
   });
 });
 await page.goto(origin);
 await page.getByText("const answer", { exact: false }).waitFor();
 const code = page.getByText("const answer", { exact: false }).last();
-assert.equal(await code.innerText(), 'const answer = "hello";\n');
+assert.equal(await code.textContent(), 'const answer = "hello";\n');
 const colors = await code.evaluate(visibleTextColors);
 assert.ok(
   colors.length >= 2,
   "explicit JavaScript uses distinct syntax colors"
 );
 const plain = page.getByText("const plain", { exact: false }).last();
-assert.equal(await plain.innerText(), 'const plain = "hello";\n');
+assert.equal(await plain.textContent(), 'const plain = "hello";\n');
 assert.equal(
   (await plain.evaluate(visibleTextColors)).length,
   1,
@@ -63,7 +63,7 @@ assert.equal(
 await page.getByRole("button", { name: "Copy code" }).first().click();
 assert.equal(
   await page.evaluate(() => window.copiedCode),
-  'const answer = \"hello\";\n'
+  'const answer = "hello";\n'
 );
 assert.equal(
   await code.evaluate((el) => getComputedStyle(el).userSelect),
@@ -78,6 +78,6 @@ await code.evaluate((el) => {
 });
 assert.equal(
   await page.evaluate(() => getSelection().toString()),
-  'const answer = \"hello\";'
+  'const answer = "hello";'
 );
 await browser.close();

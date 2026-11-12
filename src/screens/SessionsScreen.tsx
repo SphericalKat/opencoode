@@ -30,12 +30,14 @@ import {
   Sheet,
   confirmAction,
 } from "../components/ui";
-import { type Client, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import { pageInset } from "../lib/layout";
 import { useNativePresentation } from "../lib/sheets";
-import { useTheme, useThemedStyles, type ThemeColors } from "../lib/theme";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 
-type Props = {
+interface Props {
   client: Client;
   directory: string;
   onOpenSession: (id: string) => void;
@@ -47,7 +49,7 @@ type Props = {
   projectScope?: { directory: string; revision: number };
   onChooseDirectory?: () => void;
   onNewSession?: (directory: string) => void;
-};
+}
 
 export function SessionsScreen({
   client,
@@ -98,7 +100,9 @@ export function SessionsScreen({
     null
   );
   const lastActions = useRef<"menu" | "filter" | "create">("menu");
-  if (actions) lastActions.current = actions;
+  if (actions) {
+    lastActions.current = actions;
+  }
   const displayedActions = actions ?? lastActions.current;
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
@@ -115,8 +119,9 @@ export function SessionsScreen({
     scope.current.client !== client ||
     scope.current.directory !== creationDirectory ||
     scope.current.listDirectory !== listDirectory
-  )
+  ) {
     scope.current = { client, directory: creationDirectory, listDirectory };
+  }
   const paging = useRef(false);
   const operationPending = useRef(false);
   const pendingImport = useRef<(() => void) | null>(null);
@@ -163,8 +168,11 @@ export function SessionsScreen({
           once: true,
         });
       });
-      if (signal?.aborted) cancel();
-      else signal?.addEventListener("abort", cancel, { once: true });
+      if (signal?.aborted) {
+        cancel();
+      } else {
+        signal?.addEventListener("abort", cancel, { once: true });
+      }
       const timeout = setTimeout(() => {
         timedOut = true;
         controller.abort();
@@ -178,12 +186,12 @@ export function SessionsScreen({
           Promise.allSettled([
             client.session.list(
               {
-                directory: listDirectory,
-                search: search.trim() || undefined,
                 archived,
-                limit: cursor ? 40 : loadedCount.current,
                 cursor,
+                directory: listDirectory,
+                limit: cursor ? 40 : loadedCount.current,
                 order: "desc",
+                search: search.trim() || undefined,
               },
               { signal: controller.signal }
             ),
@@ -195,21 +203,24 @@ export function SessionsScreen({
           !mounted.current ||
           request !== generation.current ||
           controller.signal.aborted
-        )
+        ) {
           return;
-        if (page.status === "rejected") throw page.reason;
+        }
+        if (page.status === "rejected") {
+          throw page.reason;
+        }
         setListUnavailable(false);
         setListError(undefined);
         setSessions((previous) => {
           const next = cursor
-            ? Array.from(
-                new Map(
+            ? [
+                ...new Map(
                   [...previous, ...page.value.data].map((item) => [
                     item.id,
                     item,
                   ])
-                ).values()
-              )
+                ).values(),
+              ]
             : page.value.data;
           loadedCount.current = Math.max(40, next.length);
           return next;
@@ -224,24 +235,28 @@ export function SessionsScreen({
             `Active status unavailable: ${errorMessage(running.reason)}`
           );
         }
-      } catch (cause) {
+      } catch (error_) {
         if (
           mounted.current &&
           request === generation.current &&
           (timedOut || !controller.signal.aborted)
         ) {
           setListUnavailable(true);
-          setListError(errorMessage(cause));
+          setListError(errorMessage(error_));
         }
       } finally {
         clearTimeout(timeout);
         signal?.removeEventListener("abort", cancel);
-        if (rejectCancelled)
+        if (rejectCancelled) {
           controller.signal.removeEventListener("abort", rejectCancelled);
-        if (refreshRequest.current === controller)
+        }
+        if (refreshRequest.current === controller) {
           refreshRequest.current = null;
+        }
         if (request === generation.current) {
-          if (mounted.current) setLoading(false);
+          if (mounted.current) {
+            setLoading(false);
+          }
           paging.current = false;
           if (
             mounted.current &&
@@ -268,8 +283,9 @@ export function SessionsScreen({
       if (
         AppState.currentState !== "background" &&
         AppState.currentState !== "inactive"
-      )
+      ) {
         void refresh();
+      }
     }, 250);
     return () => {
       clearTimeout(timer);
@@ -288,22 +304,24 @@ export function SessionsScreen({
           !signal?.aborted &&
           mounted.current &&
           scope.current.client === client
-        )
+        ) {
           setProjects(items);
-      } catch (cause) {
+        }
+      } catch (error_) {
         if (
           !signal?.aborted &&
           mounted.current &&
           scope.current.client === client
         )
-          setProjectsError(errorMessage(cause));
+          setProjectsError(errorMessage(error_));
       } finally {
         if (
           !signal?.aborted &&
           mounted.current &&
           scope.current.client === client
-        )
+        ) {
           setProjectsLoading(false);
+        }
       }
     },
     [client]
@@ -313,14 +331,18 @@ export function SessionsScreen({
     setProjectDirectory(undefined);
     setProjects([]);
     setProjectsOpen(false);
-    if (!betaHome) return;
+    if (!betaHome) {
+      return;
+    }
     const controller = new AbortController();
     void loadProjects(controller.signal);
     return () => controller.abort();
   }, [client, betaHome, loadProjects]);
 
   useEffect(() => {
-    if (betaHome && projectScope) setProjectDirectory(projectScope.directory);
+    if (betaHome && projectScope) {
+      setProjectDirectory(projectScope.directory);
+    }
   }, [betaHome, projectScope]);
 
   useEffect(() => {
@@ -349,11 +371,14 @@ export function SessionsScreen({
     let releaseRetry: (() => void) | undefined;
     let attempts = 0;
     const scheduleRefresh = () => {
-      if (refreshTimer) return;
+      if (refreshTimer) {
+        return;
+      }
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined;
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           void refreshRef.current(true, controller.signal);
+        }
       }, 300);
     };
     void (async () => {
@@ -380,7 +405,9 @@ export function SessionsScreen({
               once: true,
             });
           });
-          if (controller.signal.aborted) cancelAttempt();
+          if (controller.signal.aborted) {
+            cancelAttempt();
+          }
           const initialTimeout = setTimeout(() => {
             timedOut = true;
             attempt.abort();
@@ -391,7 +418,9 @@ export function SessionsScreen({
           try {
             while (!controller.signal.aborted) {
               const result = await Promise.race([iterator.next(), cancelled]);
-              if (result.done || controller.signal.aborted) break;
+              if (result.done || controller.signal.aborted) {
+                break;
+              }
               clearTimeout(initialTimeout);
               const event = result.value;
               setStreamError(undefined);
@@ -400,35 +429,39 @@ export function SessionsScreen({
                 event.type === "server.connected" ||
                 event.type === "location.shutdown" ||
                 sessionListEvents.has(event.type)
-              )
+              ) {
                 scheduleRefresh();
+              }
             }
           } finally {
             clearTimeout(initialTimeout);
             controller.signal.removeEventListener("abort", cancelAttempt);
             attempt.abort();
-            if (rejectCancelled)
+            if (rejectCancelled) {
               attempt.signal.removeEventListener("abort", rejectCancelled);
+            }
             void iterator.return?.().catch(() => {});
           }
-          if (!controller.signal.aborted)
+          if (!controller.signal.aborted) {
             throw new Error("The live connection closed");
-        } catch (cause) {
+          }
+        } catch (error_) {
           if (controller.signal.aborted) break;
-          setStreamError(`Live updates unavailable: ${errorMessage(cause)}`);
+          setStreamError(`Live updates unavailable: ${errorMessage(error_)}`);
           await new Promise<void>((resolve) => {
             releaseRetry = resolve;
             retryTimer = setTimeout(
               resolve,
-              Math.min(1000 * 2 ** Math.min(attempts++, 4), 15000)
+              Math.min(1000 * 2 ** Math.min(attempts++, 4), 15_000)
             );
           });
-          if (!controller.signal.aborted)
+          if (!controller.signal.aborted) {
             await refreshRef.current(true, controller.signal);
+          }
         }
       }
-    })().catch((cause) => {
-      if (!controller.signal.aborted) setStreamError(errorMessage(cause));
+    })().catch((error_) => {
+      if (!controller.signal.aborted) setStreamError(errorMessage(error_));
     });
     return () => {
       controller.abort();
@@ -444,7 +477,9 @@ export function SessionsScreen({
   };
 
   const run = async (operation: () => Promise<void>, inSheet = false) => {
-    if (operationPending.current) return;
+    if (operationPending.current) {
+      return;
+    }
     operationPending.current = true;
     const owner = scope.current;
     setBusy(true);
@@ -452,14 +487,16 @@ export function SessionsScreen({
     setSheetError(undefined);
     try {
       await operation();
-    } catch (cause) {
+    } catch (error_) {
       if (mounted.current && owner === scope.current) {
-        if (inSheet) setSheetError(errorMessage(cause));
-        else setError(errorMessage(cause));
+        if (inSheet) setSheetError(errorMessage(error_));
+        else setError(errorMessage(error_));
       }
     } finally {
       operationPending.current = false;
-      if (mounted.current) setBusy(false);
+      if (mounted.current) {
+        setBusy(false);
+      }
     }
   };
 
@@ -476,22 +513,32 @@ export function SessionsScreen({
           scope.current.client !== owner.client ||
           scope.current.directory !== owner.directory ||
           !mounted.current
-        )
+        ) {
           return;
+        }
         setActions(null);
         setTitle("");
-        if (archived) setArchived(false);
+        if (archived) {
+          setArchived(false);
+        }
         openConversation(created.id);
-        if (!archived) await refresh();
+        if (!archived) {
+          await refresh();
+        }
       } finally {
-        if (mounted.current) setCreating(false);
+        if (mounted.current) {
+          setCreating(false);
+        }
       }
     }, named);
 
   const startSession = () => {
     Keyboard.dismiss();
-    if (onNewSession) onNewSession(creationDirectory);
-    else void createSession();
+    if (onNewSession) {
+      onNewSession(creationDirectory);
+    } else {
+      void createSession();
+    }
   };
 
   const manageSession = (item: SessionInfo) => {
@@ -511,30 +558,37 @@ export function SessionsScreen({
 
   const changeSession = (operation: (item: SessionInfo) => Promise<void>) =>
     run(async () => {
-      if (!selected) return;
+      if (!selected) {
+        return;
+      }
       const owner = scope.current;
       await operation(selected);
       if (
         scope.current.client !== owner.client ||
         scope.current.directory !== owner.directory ||
         !mounted.current
-      )
+      ) {
         return;
+      }
       setSelected(undefined);
       await refresh();
     }, true);
 
   const exportSession = () =>
     run(async () => {
-      if (!selected) return;
+      if (!selected) {
+        return;
+      }
       const owner = scope.current;
       const transcript = await client.experimental.session.export({
-        sessionID: selected.id,
         sanitize: true,
+        sessionID: selected.id,
       });
-      if (scope.current !== owner || !mounted.current) return;
+      if (scope.current !== owner || !mounted.current) {
+        return;
+      }
       const text = JSON.stringify(transcript, null, 2);
-      const filename = `opencode-${selected.id.replace(/[^a-zA-Z0-9_-]/g, "")}.json`;
+      const filename = `opencode-${selected.id.replaceAll(/[^a-zA-Z0-9_-]/g, "")}.json`;
       if (Platform.OS === "web") {
         const url = URL.createObjectURL(
           new Blob([text], { type: "application/json" })
@@ -545,14 +599,15 @@ export function SessionsScreen({
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } else {
-        if (!(await Sharing.isAvailableAsync()))
+        if (!(await Sharing.isAvailableAsync())) {
           throw new Error("File sharing is unavailable on this device");
+        }
         const file = new File(Paths.cache, filename);
         await file.write(text);
         await withNativePresentation(() =>
           Sharing.shareAsync(file.uri, {
-            mimeType: "application/json",
             UTI: "public.json",
+            mimeType: "application/json",
           })
         );
       }
@@ -563,22 +618,26 @@ export function SessionsScreen({
       const owner = scope.current;
       const picked = await withNativePresentation(() =>
         DocumentPicker.getDocumentAsync({
-          type: ["application/json", "text/plain"],
           copyToCacheDirectory: true,
+          type: ["application/json", "text/plain"],
         })
       );
-      if (picked.canceled || !mounted.current || scope.current !== owner)
+      if (picked.canceled || !mounted.current || scope.current !== owner) {
         return;
+      }
       const asset = picked.assets[0];
-      if (asset.size && asset.size > 20 * 1024 * 1024)
+      if (asset.size && asset.size > 20 * 1024 * 1024) {
         throw new Error("Choose a transcript smaller than 20 MB");
+      }
       const text =
         Platform.OS === "web"
           ? await (asset.file
               ? asset.file.text()
               : fetch(asset.uri).then((response) => response.text()))
           : await new File(asset.uri).text();
-      if (!mounted.current || scope.current !== owner) return;
+      if (!mounted.current || scope.current !== owner) {
+        return;
+      }
       const transcript = JSON.parse(text);
       if (
         !transcript ||
@@ -594,34 +653,41 @@ export function SessionsScreen({
           "Import session?",
           `Import this transcript into ${creationDirectory}? The server validates its contents.`
         ))
-      )
+      ) {
         return;
+      }
       if (
         scope.current.client !== owner.client ||
         scope.current.directory !== owner.directory ||
         !mounted.current
-      )
+      ) {
         return;
+      }
       const imported = await client.experimental.session.import({
         info: transcript.info,
-        messages: transcript.messages,
         location: { directory: creationDirectory },
+        messages: transcript.messages,
       });
       if (
         scope.current.client !== owner.client ||
         scope.current.directory !== owner.directory ||
         !mounted.current
-      )
+      ) {
         return;
+      }
       await refresh();
       openConversation(imported.id);
     });
 
   const queueImport = () => {
-    if (operationPending.current || pendingImport.current) return;
+    if (operationPending.current || pendingImport.current) {
+      return;
+    }
     const owner = scope.current;
     pendingImport.current = () => {
-      if (mounted.current && scope.current === owner) void importSession();
+      if (mounted.current && scope.current === owner) {
+        void importSession();
+      }
     };
     Keyboard.dismiss();
     setActions(null);
@@ -634,7 +700,9 @@ export function SessionsScreen({
   };
 
   const loadMore = () => {
-    if (loading || paging.current || !nextCursor) return;
+    if (loading || paging.current || !nextCursor) {
+      return;
+    }
     paging.current = true;
     void refresh(nextCursor);
   };
@@ -649,10 +717,12 @@ export function SessionsScreen({
       () =>
         new Promise<void>((resolve) => {
           const choose = (value: boolean) => {
-            if (mounted.current && scope.current === owner) setArchived(value);
+            if (mounted.current && scope.current === owner) {
+              setArchived(value);
+            }
             resolve();
           };
-          if (Platform.OS === "ios")
+          if (Platform.OS === "ios") {
             ActionSheetIOS.showActionSheetWithOptions(
               {
                 title: "Session history",
@@ -665,7 +735,7 @@ export function SessionsScreen({
                 else resolve();
               }
             );
-          else
+          } else {
             Alert.alert(
               "Session history",
               undefined,
@@ -676,10 +746,11 @@ export function SessionsScreen({
               ],
               { cancelable: true, onDismiss: () => resolve() }
             );
+          }
         })
-    ).catch((cause) => {
+    ).catch((error_) => {
       if (mounted.current && scope.current === owner)
-        setError(errorMessage(cause));
+        setError(errorMessage(error_));
     });
   };
 
@@ -687,7 +758,7 @@ export function SessionsScreen({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="New session"
-      accessibilityState={{ disabled: busy, busy: creating }}
+      accessibilityState={{ busy: creating, disabled: busy }}
       disabled={busy}
       onPress={startSession}
       style={({ pressed }) => [
@@ -791,7 +862,7 @@ export function SessionsScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="New session"
-              accessibilityState={{ disabled: busy, busy: creating }}
+              accessibilityState={{ busy: creating, disabled: busy }}
               disabled={busy}
               onPress={startSession}
               style={({ pressed }) => [
@@ -1025,12 +1096,13 @@ export function SessionsScreen({
                   onLongPress={betaHome ? () => manageSession(item) : undefined}
                   accessibilityActions={
                     betaHome
-                      ? [{ name: "manage", label: "Manage session" }]
+                      ? [{ label: "Manage session", name: "manage" }]
                       : undefined
                   }
                   onAccessibilityAction={(event) => {
-                    if (event.nativeEvent.actionName === "manage")
+                    if (event.nativeEvent.actionName === "manage") {
                       manageSession(item);
+                    }
                   }}
                   style={({ pressed }) => [
                     styles.sessionMain,
@@ -1146,7 +1218,7 @@ export function SessionsScreen({
           style={styles.menuRow}
         >
           <Label>All projects</Label>
-          <Label muted>{!projectDirectory ? "✓" : ""}</Label>
+          <Label muted>{projectDirectory ? "" : "✓"}</Label>
         </Pressable>
         {projectsLoading && <Busy />}
         <ErrorNotice
@@ -1211,7 +1283,9 @@ export function SessionsScreen({
               : "Session list actions"
         }
         onClose={() => {
-          if (!creating) setActions(null);
+          if (!creating) {
+            setActions(null);
+          }
         }}
         onDismiss={finishActionsDismissal}
       >
@@ -1268,26 +1342,26 @@ export function SessionsScreen({
               <>
                 {[
                   {
-                    title: "Refresh sessions",
                     disabled: loading,
                     onPress: () => {
                       setActions(null);
                       void refresh();
                     },
+                    title: "Refresh sessions",
                   },
                   {
-                    title: "Create a named session",
                     disabled: busy,
                     onPress: () => {
                       setTitle("");
                       setSheetError(undefined);
                       setActions("create");
                     },
+                    title: "Create a named session",
                   },
                   {
-                    title: "Import session JSON",
                     disabled: busy,
                     onPress: queueImport,
+                    title: "Import session JSON",
                   },
                 ].map((action) => (
                   <Pressable
@@ -1314,7 +1388,7 @@ export function SessionsScreen({
         title="Manage session"
         onClose={() => setSelected(undefined)}
       >
-        <Label selectable style={{ fontWeight: "500", fontSize: 17 }}>
+        <Label selectable style={{ fontSize: 17, fontWeight: "500" }}>
           {selected?.title || "Untitled session"}
         </Label>
         {selected && (
@@ -1349,8 +1423,8 @@ export function SessionsScreen({
             onPress={() =>
               changeSession((item) =>
                 client.session.update({
-                  sessionID: item.id,
                   archived: !item.time.archived,
+                  sessionID: item.id,
                 })
               )
             }
@@ -1361,8 +1435,9 @@ export function SessionsScreen({
             onPress={() =>
               changeSession(async (item) => {
                 const fork = await client.session.fork({ sessionID: item.id });
-                if (scope.current.client === client && mounted.current)
+                if (scope.current.client === client && mounted.current) {
                   openConversation(fork.id);
+                }
               })
             }
           />
@@ -1382,9 +1457,9 @@ export function SessionsScreen({
           onPress={() =>
             changeSession((item) =>
               client.session.move({
-                sessionID: item.id,
-                directory: moveDirectory.trim(),
                 delivery: "queue",
+                directory: moveDirectory.trim(),
+                sessionID: item.id,
               })
             )
           }
@@ -1408,8 +1483,9 @@ export function SessionsScreen({
                   "Delete session?",
                   `Delete ${item.title || item.id} and all child sessions from the server?`
                 )
-              )
+              ) {
                 await client.session.remove({ sessionID: item.id });
+              }
             })
           }
         />
@@ -1442,211 +1518,211 @@ const sessionListEvents = new Set([
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    screen: { flex: 1, backgroundColor: colors.bg },
-    betaScreen: { backgroundColor: colors.bg },
-    betaHeader: {
-      paddingHorizontal: 12,
-      paddingTop: 8,
-      paddingBottom: 0,
-      gap: 8,
-    },
-    projectSelector: {
-      minHeight: 48,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      paddingHorizontal: 6,
-    },
-    projectSelectorLabel: { flex: 1, fontSize: 14, lineHeight: 19 },
-    projectChevron: { transform: [{ rotate: "90deg" }], marginHorizontal: 8 },
-    projectSheetContent: { gap: 0 },
-    projectOption: { flex: 1, minWidth: 0, gap: 2 },
-    betaSearch: { borderRadius: 6, paddingHorizontal: 14 },
-    betaSearchInput: { fontSize: 14, lineHeight: 19, paddingVertical: 10 },
-    betaList: { paddingHorizontal: 6, paddingBottom: 12, gap: 0 },
-    betaGroupHeader: {
-      minHeight: 48,
-      flexDirection: "row",
-      alignItems: "center",
-      paddingLeft: 12,
-    },
-    betaGroupLabel: { flex: 1, fontSize: 13, lineHeight: 19 },
-    betaNewSession: {
-      minHeight: 48,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      paddingHorizontal: 12,
-    },
-    betaNewLabel: { fontSize: 14, lineHeight: 19, color: colors.muted },
-    betaDateGroup: { paddingTop: 20, paddingBottom: 12 },
-    betaSession: { minHeight: 48, borderRadius: 6 },
-    betaSessionMain: {
-      minHeight: 48,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      paddingVertical: 7,
-      paddingLeft: 12,
-      paddingRight: 12,
-    },
-    sessionText: { gap: 3 },
-    betaSessionText: { flex: 1, minWidth: 0, gap: 0 },
-    betaSessionTitle: { fontSize: 14, lineHeight: 19 },
-    betaMetadata: { fontSize: 13, lineHeight: 17 },
-    betaMetadataRow: { flexDirection: "row", alignItems: "center" },
-    betaProjectName: { flexShrink: 1 },
-    projectBadge: {
-      minWidth: 16,
-      minHeight: 16,
-      borderRadius: 3,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.muted,
-    },
-    projectBadgeLabel: {
-      fontSize: 11,
-      lineHeight: 15,
-      color: colors.panel,
-      includeFontPadding: false,
-    },
-    header: {
-      paddingHorizontal: pageInset,
-      paddingTop: 6,
-      paddingBottom: 10,
-      gap: 8,
-    },
-    compactHeader: { paddingTop: 8 },
-    headingRow: { flexWrap: "nowrap", gap: Platform.OS === "android" ? 0 : 8 },
-    navigationButton: {
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: Platform.OS === "android" ? 48 : 44,
-      marginStart: -16,
-      marginEnd: 16,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    headingText: { flex: 1, minWidth: 0, gap: 2 },
-    title: {
-      fontSize: 18,
-      lineHeight: 23,
-      fontWeight: "600",
-      letterSpacing: -0.2,
-    },
-    compactTitle: { fontSize: 19, lineHeight: 24, letterSpacing: -0.2 },
-    drawerTitle: { fontSize: 15, lineHeight: 21, fontWeight: "500" },
-    newButton: {
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: Platform.OS === "android" ? 48 : 44,
-      alignItems: "center",
-      justifyContent: "center",
-    },
     actionButton: {
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: Platform.OS === "android" ? 48 : 44,
-      marginStart: Platform.OS === "android" ? 0 : 16,
-      marginEnd: -16,
       alignItems: "center",
       justifyContent: "center",
+      marginEnd: -16,
+      marginStart: Platform.OS === "android" ? 0 : 16,
+      minHeight: Platform.OS === "android" ? 48 : 44,
+      minWidth: Platform.OS === "android" ? 48 : 44,
     },
-    pressed: { opacity: 0.55 },
-    searchRow: { flexWrap: "nowrap", gap: 8 },
     androidSearch: {
-      flexDirection: "row",
       alignItems: "center",
-      gap: 8,
-      paddingHorizontal: 12,
       backgroundColor: colors.panel,
       borderRadius: 8,
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 12,
     },
-    searchField: { flex: 1, minWidth: 0 },
     androidSearchInput: {
+      backgroundColor: "transparent",
+      borderWidth: 0,
+      boxShadow: [],
+      fontSize: 15,
+      includeFontPadding: false,
+      lineHeight: 21,
       minHeight: 40,
       paddingHorizontal: 0,
       paddingVertical: 9,
-      borderWidth: 0,
-      backgroundColor: "transparent",
-      boxShadow: [],
-      fontSize: 15,
-      lineHeight: 21,
-      includeFontPadding: false,
       textAlignVertical: "center",
     },
-    clearSearch: {
-      width: 40,
-      minHeight: 40,
-      marginEnd: -12,
+    betaDateGroup: { paddingBottom: 12, paddingTop: 20 },
+    betaGroupHeader: {
       alignItems: "center",
-      justifyContent: "center",
+      flexDirection: "row",
+      minHeight: 48,
+      paddingLeft: 12,
     },
-    search: {
-      borderRadius: 8,
-      backgroundColor: colors.panel,
-      minHeight: 40,
-      paddingHorizontal: 15,
-      paddingVertical: 9,
-      fontSize: 15,
-      lineHeight: 21,
-      includeFontPadding: false,
-      textAlignVertical: "center",
-    },
-    filter: {
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: Platform.OS === "android" ? 48 : 44,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    filterText: { fontSize: 14, lineHeight: 21 },
-    list: {
-      paddingHorizontal: pageInset,
-      paddingBottom: 24,
-      gap: 2,
-      flexGrow: 1,
-    },
-    dateGroup: {
+    betaGroupLabel: { flex: 1, fontSize: 13, lineHeight: 19 },
+    betaHeader: {
+      gap: 8,
+      paddingBottom: 0,
       paddingHorizontal: 12,
-      paddingTop: 4,
-      paddingBottom: 6,
+      paddingTop: 8,
+    },
+    betaList: { gap: 0, paddingBottom: 12, paddingHorizontal: 6 },
+    betaMetadata: { fontSize: 13, lineHeight: 17 },
+    betaMetadataRow: { alignItems: "center", flexDirection: "row" },
+    betaNewLabel: { color: colors.muted, fontSize: 14, lineHeight: 19 },
+    betaNewSession: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 12,
+    },
+    betaProjectName: { flexShrink: 1 },
+    betaScreen: { backgroundColor: colors.bg },
+    betaSearch: { borderRadius: 6, paddingHorizontal: 14 },
+    betaSearchInput: { fontSize: 14, lineHeight: 19, paddingVertical: 10 },
+    betaSession: { borderRadius: 6, minHeight: 48 },
+    betaSessionMain: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      paddingLeft: 12,
+      paddingRight: 12,
+      paddingVertical: 7,
+    },
+    betaSessionText: { flex: 1, gap: 0, minWidth: 0 },
+    betaSessionTitle: { fontSize: 14, lineHeight: 19 },
+    clearSearch: {
+      alignItems: "center",
+      justifyContent: "center",
+      marginEnd: -12,
+      minHeight: 40,
+      width: 40,
+    },
+    compactHeader: { paddingTop: 8 },
+    compactTitle: { fontSize: 19, letterSpacing: -0.2, lineHeight: 24 },
+    dateGroup: {
       fontSize: 13,
       lineHeight: 19,
+      paddingBottom: 6,
+      paddingHorizontal: 12,
+      paddingTop: 4,
     },
-    laterDateGroup: { paddingTop: 16 },
-    session: {
-      minHeight: Platform.OS === "android" ? 56 : 64,
-      flexDirection: "row",
+    drawerTitle: { fontSize: 15, fontWeight: "500", lineHeight: 21 },
+    filter: {
       alignItems: "center",
-      borderRadius: 10,
-    },
-    sessionMain: {
-      flex: 1,
-      minWidth: 0,
-      gap: 3,
-      paddingVertical: Platform.OS === "android" ? 8 : 10,
-      paddingLeft: Platform.OS === "android" ? 12 : 16,
-    },
-    sessionPressed: { opacity: 0.65 },
-    sessionTitle: {
-      minWidth: 0,
-      fontWeight: "500",
-      fontSize: 16,
-      lineHeight: 21,
-    },
-    metadata: { fontSize: 12, lineHeight: 17 },
-    rowAction: {
+      justifyContent: "center",
       minHeight: Platform.OS === "android" ? 48 : 44,
       minWidth: Platform.OS === "android" ? 48 : 44,
+    },
+    filterText: { fontSize: 14, lineHeight: 21 },
+    header: {
+      gap: 8,
+      paddingBottom: 10,
+      paddingHorizontal: pageInset,
+      paddingTop: 6,
+    },
+    headingRow: { flexWrap: "nowrap", gap: Platform.OS === "android" ? 0 : 8 },
+    headingText: { flex: 1, gap: 2, minWidth: 0 },
+    laterDateGroup: { paddingTop: 16 },
+    list: {
+      flexGrow: 1,
+      gap: 2,
+      paddingBottom: 24,
+      paddingHorizontal: pageInset,
+    },
+    menuRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      minHeight: Platform.OS === "android" ? 48 : 44,
+    },
+    metadata: { fontSize: 12, lineHeight: 17 },
+    navigationButton: {
+      alignItems: "center",
+      justifyContent: "center",
+      marginEnd: 16,
+      marginStart: -16,
+      minHeight: Platform.OS === "android" ? 48 : 44,
+      minWidth: Platform.OS === "android" ? 48 : 44,
+    },
+    newButton: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: Platform.OS === "android" ? 48 : 44,
+      minWidth: Platform.OS === "android" ? 48 : 44,
+    },
+    pressed: { opacity: 0.55 },
+    projectBadge: {
+      alignItems: "center",
+      backgroundColor: colors.muted,
+      borderRadius: 3,
+      justifyContent: "center",
+      minHeight: 16,
+      minWidth: 16,
+    },
+    projectBadgeLabel: {
+      color: colors.panel,
+      fontSize: 11,
+      includeFontPadding: false,
+      lineHeight: 15,
+    },
+    projectChevron: { marginHorizontal: 8, transform: [{ rotate: "90deg" }] },
+    projectOption: { flex: 1, gap: 2, minWidth: 0 },
+    projectSelector: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 6,
+    },
+    projectSelectorLabel: { flex: 1, fontSize: 14, lineHeight: 19 },
+    projectSheetContent: { gap: 0 },
+    rowAction: {
       alignItems: "center",
       justifyContent: "center",
       marginRight: 4,
-    },
-    menuRow: {
       minHeight: Platform.OS === "android" ? 48 : 44,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 12,
+      minWidth: Platform.OS === "android" ? 48 : 44,
     },
+    screen: { backgroundColor: colors.bg, flex: 1 },
+    search: {
+      backgroundColor: colors.panel,
+      borderRadius: 8,
+      fontSize: 15,
+      includeFontPadding: false,
+      lineHeight: 21,
+      minHeight: 40,
+      paddingHorizontal: 15,
+      paddingVertical: 9,
+      textAlignVertical: "center",
+    },
+    searchField: { flex: 1, minWidth: 0 },
+    searchRow: { flexWrap: "nowrap", gap: 8 },
     selected: { backgroundColor: colors.selected },
+    session: {
+      alignItems: "center",
+      borderRadius: 10,
+      flexDirection: "row",
+      minHeight: Platform.OS === "android" ? 56 : 64,
+    },
+    sessionMain: {
+      flex: 1,
+      gap: 3,
+      minWidth: 0,
+      paddingLeft: Platform.OS === "android" ? 12 : 16,
+      paddingVertical: Platform.OS === "android" ? 8 : 10,
+    },
+    sessionPressed: { opacity: 0.65 },
+    sessionText: { gap: 3 },
+    sessionTitle: {
+      fontSize: 16,
+      fontWeight: "500",
+      lineHeight: 21,
+      minWidth: 0,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: "600",
+      letterSpacing: -0.2,
+      lineHeight: 23,
+    },
   });
 
 function directoryName(directory: string): string {
@@ -1656,7 +1732,9 @@ function directoryName(directory: string): string {
 function sessionDateGroup(time: number): string {
   const date = new Date(time);
   const today = new Date();
-  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === today.toDateString()) {
+    return "Today";
+  }
   today.setDate(today.getDate() - 1);
   return date.toDateString() === today.toDateString() ? "Yesterday" : "Older";
 }
@@ -1667,17 +1745,25 @@ function updatedLabel(time: number): string {
   return date.toDateString() === today.toDateString()
     ? date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
     : date.toLocaleDateString(undefined, {
-        month: "short",
         day: "numeric",
+        month: "short",
         year:
           date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
       });
 }
 
 function sessionStatus(session: SessionInfo, working: boolean): string {
-  if (working) return "Working";
-  if (session.outcome === "succeeded") return "Completed";
-  if (session.outcome === "failed") return "Needs attention";
-  if (session.outcome === "interrupted") return "Stopped";
+  if (working) {
+    return "Working";
+  }
+  if (session.outcome === "succeeded") {
+    return "Completed";
+  }
+  if (session.outcome === "failed") {
+    return "Needs attention";
+  }
+  if (session.outcome === "interrupted") {
+    return "Stopped";
+  }
   return "Ready";
 }

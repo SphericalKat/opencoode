@@ -2,7 +2,8 @@ import type { FormInfo } from "@opencode/client";
 import React, { useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 
-import { type Client, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import { SessionForms } from "./SessionForms";
 import { Button, Busy, ErrorNotice, Heading, Label, Row } from "./ui";
 
@@ -30,7 +31,9 @@ export function GlobalForms({
   }, []);
 
   useEffect(() => {
-    if (!foreground) return;
+    if (!foreground) {
+      return;
+    }
     setForms([]);
     setError(null);
     const controller = new AbortController();
@@ -48,22 +51,27 @@ export function GlobalForms({
           { location: { directory } },
           { signal: controller.signal }
         );
-        if (controller.signal.aborted || current !== request) return;
+        if (controller.signal.aborted || current !== request) {
+          return;
+        }
         setForms(result.data.filter((form) => form.sessionID === "global"));
         setError(null);
-      } catch (cause) {
+      } catch (error_) {
         if (!controller.signal.aborted && current === request)
-          setError(errorMessage(cause));
+          setError(errorMessage(error_));
       } finally {
-        if (!controller.signal.aborted && current === request)
+        if (!controller.signal.aborted && current === request) {
           setLoading(false);
+        }
       }
     };
     refreshRef.current = () => {
       void refresh();
     };
     const scheduleRefresh = () => {
-      if (refreshTimer) return;
+      if (refreshTimer) {
+        return;
+      }
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined;
         void refresh();
@@ -82,34 +90,40 @@ export function GlobalForms({
               "location.shutdown",
             ],
           })) {
-            if (controller.signal.aborted) break;
+            if (controller.signal.aborted) {
+              break;
+            }
             attempts = 0;
             if (
               event.type === "server.connected" ||
               !event.location ||
               event.location.directory === directory
-            )
+            ) {
               scheduleRefresh();
+            }
           }
-          if (!controller.signal.aborted)
+          if (!controller.signal.aborted) {
             throw new Error("The live connection closed");
-        } catch (cause) {
+          }
+        } catch (error_) {
           if (controller.signal.aborted) break;
           setError(
-            `Pending request updates unavailable: ${errorMessage(cause)}`
+            `Pending request updates unavailable: ${errorMessage(error_)}`
           );
           await new Promise<void>((resolve) => {
             releaseRetry = resolve;
             retryTimer = setTimeout(
               resolve,
-              Math.min(1000 * 2 ** Math.min(attempts++, 4), 15000)
+              Math.min(1000 * 2 ** Math.min(attempts++, 4), 15_000)
             );
           });
-          if (!controller.signal.aborted) await refresh();
+          if (!controller.signal.aborted) {
+            await refresh();
+          }
         }
       }
-    })().catch((cause) => {
-      if (!controller.signal.aborted) setError(errorMessage(cause));
+    })().catch((error_) => {
+      if (!controller.signal.aborted) setError(errorMessage(error_));
     });
     return () => {
       controller.abort();

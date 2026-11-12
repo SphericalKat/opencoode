@@ -17,10 +17,10 @@ import { ThemeProvider } from "../../src/lib/theme";
 
 // Browser fixture renders the production conversation components; no app route is added.
 Object.assign(globalThis, {
-  createPiClient,
-  makePiChatBackend,
-  makeOpenCodeChatBackend,
   createClient,
+  createPiClient,
+  makeOpenCodeChatBackend,
+  makePiChatBackend,
   projectLiveEvent,
 });
 const png =
@@ -34,8 +34,8 @@ function Demo() {
     return () => removeEventListener("fixture-mime", update);
   }, []);
   const [fontsReady] = useFonts({
-    Inter: require("../../assets/fonts/Inter.ttf"),
     IBMPlexMono: require("../../assets/fonts/IBMPlexMono-Text.ttf"),
+    Inter: require("../../assets/fonts/Inter.ttf"),
   });
   const scenario =
     new URLSearchParams(location.search).get("scenario") || "single";
@@ -44,11 +44,7 @@ function Demo() {
       ? ["First.png", "Second.png", "Third.png"]
       : ["Screenshot.png"];
   const message: SessionMessageAssistant = {
-    id: "assistant",
-    type: "assistant",
     agent: "build",
-    model: { id: "model", providerID: "provider" },
-    time: { created: 1 },
     content: [
       {
         type: "tool",
@@ -79,10 +75,14 @@ function Demo() {
       },
       { type: "text", text: "The screenshot is ready for review." },
     ],
+    id: "assistant",
+    model: { id: "model", providerID: "provider" },
+    time: { created: 1 },
+    type: "assistant",
   };
   if (scenario === "tools") {
     const first = message.content[0];
-    if (first.type === "tool")
+    if (first.type === "tool") {
       message.content.splice(1, 0, {
         ...first,
         id: "read",
@@ -101,8 +101,11 @@ function Demo() {
           ],
         },
       });
+    }
   }
-  if (!fontsReady) return null;
+  if (!fontsReady) {
+    return null;
+  }
   return (
     <SafeAreaProvider>
       <KeyboardProvider>
@@ -110,16 +113,16 @@ function Demo() {
           <SheetCoordinatorProvider>
             <View
               style={{
-                padding: 16,
                 backgroundColor: "#171717",
                 minHeight: "100%",
+                padding: 16,
               }}
             >
               <AssistantTurn
                 turn={{
-                  type: "assistant-turn",
                   id: "turn",
                   messages: [message],
+                  type: "assistant-turn",
                 }}
                 animate={false}
                 directory="/project"

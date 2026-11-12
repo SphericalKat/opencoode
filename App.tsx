@@ -2,10 +2,8 @@ import {
   ClientError,
   isLocationNotFoundError,
   isUnauthorizedError,
-  type Project,
-  type ServerInfo,
-  type SessionInfo,
 } from "@opencode/client";
+import type { Project, ServerInfo, SessionInfo } from "@opencode/client";
 import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
@@ -40,13 +38,13 @@ import {
   BetaTabsSheet,
   BetaTabStrip,
   SessionSurface,
-  type OpenSessionTab,
-  type SessionPane,
 } from "./src/components/BetaNavigation";
-import {
-  ConnectionFlow,
-  type ConnectionForm,
-} from "./src/components/ConnectionFlow";
+import type {
+  OpenSessionTab,
+  SessionPane,
+} from "./src/components/BetaNavigation";
+import { ConnectionFlow } from "./src/components/ConnectionFlow";
+import type { ConnectionForm } from "./src/components/ConnectionFlow";
 import { NavIcon } from "./src/components/Icons";
 import { MotionDrawer, MotionScreen } from "./src/components/motion";
 import { OpenCodeLogo } from "./src/components/OpenCodeLogo";
@@ -73,8 +71,8 @@ import {
   isConnectionUnauthorized,
   normalizeConnection,
   withServerDeadline,
-  type Connection,
 } from "./src/lib/client";
+import type { Connection } from "./src/lib/client";
 import { pageInset } from "./src/lib/layout";
 import {
   SheetCoordinatorProvider,
@@ -88,21 +86,15 @@ import {
   saveConnections,
   saveWorkspace,
 } from "./src/lib/storage";
-import {
-  ThemeProvider,
-  useTheme,
-  useThemedStyles,
-  type ThemeColors,
-} from "./src/lib/theme";
+import { ThemeProvider, useTheme, useThemedStyles } from "./src/lib/theme";
+import type { ThemeColors } from "./src/lib/theme";
 import { UnsavedProvider, useUnsavedGuard } from "./src/lib/unsaved";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { PiWorkspace } from "./src/screens/PiWorkspace";
 import { SessionsScreen } from "./src/screens/SessionsScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
-import {
-  WorkspaceScreen,
-  type WorkspaceSection,
-} from "./src/screens/WorkspaceScreen";
+import { WorkspaceScreen } from "./src/screens/WorkspaceScreen";
+import type { WorkspaceSection } from "./src/screens/WorkspaceScreen";
 
 type Tab = "sessions" | "workspace" | "settings";
 const destinations: { id: Tab; label: string }[] = [
@@ -114,11 +106,12 @@ export default function App() {
   const { width } = useWindowDimensions();
   const betaLayout = Platform.OS === "android" && width < 920;
   const [fontsReady, fontError] = useFonts({
-    Inter: require("./assets/fonts/Inter.ttf"),
     IBMPlexMono: require("./assets/fonts/IBMPlexMono-Text.ttf"),
+    Inter: require("./assets/fonts/Inter.ttf"),
   });
-  if (!fontsReady && !fontError)
+  if (!fontsReady && !fontError) {
     return <View style={{ flex: 1, backgroundColor: "#080808" }} />;
+  }
   return (
     <SafeAreaProvider>
       <KeyboardProvider
@@ -145,8 +138,9 @@ function ThemedStatusBar() {
   const { scheme, colors } = useTheme();
   const background = colors.frame;
   useEffect(() => {
-    if (Platform.OS !== "web")
+    if (Platform.OS !== "web") {
       void SystemUI.setBackgroundColorAsync(background);
+    }
   }, [background]);
   return <StatusBar style={scheme === "dark" ? "light" : "dark"} />;
 }
@@ -214,8 +208,8 @@ function MobileApp() {
   const [form, setForm] = useState<ConnectionForm>({
     id: "",
     name: "",
-    url: "",
     token: "",
+    url: "",
   });
   const [pairingLink, setPairingLink] = useState<string | null>(null);
   const [flowRevision, setFlowRevision] = useState(0);
@@ -263,24 +257,29 @@ function MobileApp() {
   );
   const onPiConnectionLost = useCallback(
     (cause: unknown) => {
-      if (active?.backend === "pi") recoverConnection.current(active, cause);
+      if (active?.backend === "pi") {
+        recoverConnection.current(active, cause);
+      }
     },
     [active]
   );
   const recordSessionInfo = useCallback((session: SessionInfo) => {
-    if (session.id !== selectedSessionRef.current) return;
+    if (session.id !== selectedSessionRef.current) {
+      return;
+    }
     const next = {
+      directory: session.location.directory,
       id: session.id,
       title: session.title || "New session",
-      directory: session.location.directory,
     };
     setOpenTabs((current) => {
       const previous = current.find((item) => item.id === next.id);
       if (
         previous?.title === next.title &&
         previous.directory === next.directory
-      )
+      ) {
         return current;
+      }
       return previous
         ? current.map((item) => (item.id === next.id ? next : item))
         : [...current, next];
@@ -288,12 +287,16 @@ function MobileApp() {
   }, []);
 
   useEffect(() => {
-    if (!betaLayout || !client || !sessionID) return;
+    if (!betaLayout || !client || !sessionID) {
+      return;
+    }
     const controller = new AbortController();
     void client.session
       .get({ sessionID }, { signal: controller.signal })
       .then((session) => {
-        if (!controller.signal.aborted) recordSessionInfo(session);
+        if (!controller.signal.aborted) {
+          recordSessionInfo(session);
+        }
       })
       .catch(() => {});
     return () => controller.abort();
@@ -306,7 +309,9 @@ function MobileApp() {
       alternatives?: Connection[],
       explicitName = false
     ) => {
-      if (connectingRef.current) return;
+      if (connectingRef.current) {
+        return;
+      }
       connectingRef.current = true;
       const request = ++epoch.current;
       setConnecting(true);
@@ -352,25 +357,34 @@ function MobileApp() {
                       : undefined,
                     { signal }
                   )
-                  .catch((cause) => {
+                  .catch((error_) => {
                     if (
                       signal.aborted ||
                       !workspace?.directory ||
-                      !isLocationNotFoundError(cause)
+                      !isLocationNotFoundError(error_)
                     )
-                      throw cause;
+                      throw error_;
                     restoredSessionID = undefined;
                     return nextClient!.location.get(undefined, { signal });
                   })
               );
-        if (result.backend === "pi") restoredSessionID = result.info.session.id;
-        if (request !== epoch.current) return;
+        if (result.backend === "pi") {
+          restoredSessionID = result.info.session.id;
+        }
+        if (request !== epoch.current) {
+          return;
+        }
         const preserveWorkspace =
           sameServer && location.directory === directoryRef.current;
-        if (preserveWorkspace)
+        if (preserveWorkspace) {
           restoredSessionID = selectedSessionRef.current ?? undefined;
-        if (!preserveWorkspace && !(await confirmNavigation())) return;
-        if (request !== epoch.current) return;
+        }
+        if (!preserveWorkspace && !(await confirmNavigation())) {
+          return;
+        }
+        if (request !== epoch.current) {
+          return;
+        }
         const next = [
           ...current.filter((item) => item.id !== connected.id),
           connected,
@@ -381,14 +395,17 @@ function MobileApp() {
           sessionID: restoredSessionID,
         });
         await saveActiveConnectionId(connected.id);
-        if (request !== epoch.current) return;
+        if (request !== epoch.current) {
+          return;
+        }
         clearPairingRetry();
         setConnections(next);
         setActive(connected);
         setUnavailableID(null);
         recoveringConnection.current = null;
-        if (!preserveWorkspace || connected.backend === "pi")
+        if (!preserveWorkspace || connected.backend === "pi") {
           setConnectionRevision((value) => value + 1);
+        }
         setInfo(result.backend === "opencode" ? result.info : null);
         if (!preserveWorkspace) {
           setOpenTabs([]);
@@ -406,16 +423,19 @@ function MobileApp() {
         }
         setError(null);
         setServersOpen(false);
-        setForm({ id: "", name: "", url: "", token: "" });
-      } catch (cause) {
+        setForm({ id: "", name: "", token: "", url: "" });
+      } catch (error_) {
         if (request === epoch.current) {
-          setConnectionError(connectionErrorMessage(cause, connection));
-          if (!activeRef.current || activeRef.current.id === connection.id)
+          setConnectionError(connectionErrorMessage(error_, connection));
+          if (!activeRef.current || activeRef.current.id === connection.id) {
             setUnavailableID(connection.id);
+          }
         }
       } finally {
         connectingRef.current = false;
-        if (request === epoch.current) setConnecting(false);
+        if (request === epoch.current) {
+          setConnecting(false);
+        }
       }
     },
     [connections, confirmNavigation]
@@ -429,12 +449,14 @@ function MobileApp() {
   }, []);
 
   useEffect(() => {
-    if (!active || active.backend === "pi" || !directory) return;
+    if (!active || active.backend === "pi" || !directory) {
+      return;
+    }
     const timer = setTimeout(() => {
       saveWorkspace(active.id, {
         directory,
         sessionID: sessionID ?? undefined,
-      }).catch((cause) => setError(errorMessage(cause)));
+      }).catch((error_) => setError(errorMessage(error_)));
     }, 300);
     return () => clearTimeout(timer);
   }, [active, directory, sessionID]);
@@ -443,16 +465,22 @@ function MobileApp() {
     let live = true;
     Promise.all([loadConnections(), loadActiveConnectionId()])
       .then(async ([saved, id]) => {
-        if (!live) return;
+        if (!live) {
+          return;
+        }
         setConnections(saved);
         const last = saved.find((item) => item.id === id);
-        if (last) await selectServer(last, saved);
+        if (last) {
+          await selectServer(last, saved);
+        }
       })
-      .catch((cause) => {
-        if (live) setError(errorMessage(cause));
+      .catch((error_) => {
+        if (live) setError(errorMessage(error_));
       })
       .finally(() => {
-        if (live) setBooting(false);
+        if (live) {
+          setBooting(false);
+        }
       });
     return () => {
       live = false;
@@ -462,22 +490,27 @@ function MobileApp() {
 
   useEffect(() => {
     const acceptLink = (url: string | null | undefined) => {
-      if (!url) return;
+      if (!url) {
+        return;
+      }
       try {
         const parsed = new URL(url);
         if (
           parsed.protocol !== "opencoode:" &&
           !/\/auth\/connect\/[^/]+\/?$/.test(parsed.pathname)
-        )
+        ) {
           return;
+        }
         const server =
           parsed.protocol === "opencoode:"
             ? parsed.searchParams.get("url")
             : url;
-        if (!server) return;
+        if (!server) {
+          return;
+        }
         normalizeConnection({ name: "", url: server });
         setConnectionError(null);
-        setForm({ id: "", name: "", url: server, token: "" });
+        setForm({ id: "", name: "", token: "", url: server });
         setPairingLink(server);
         setFlowRevision((value) => value + 1);
         showServerSheet.current();
@@ -496,16 +529,23 @@ function MobileApp() {
 
   useEffect(() => {
     const back = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (active?.backend === "pi") return false;
-      if (tab === "settings" && settingsCanGoBack.current) return false;
-      if (betaLayout && messageSelected && !betaHome && tab === "sessions")
+      if (active?.backend === "pi") {
         return false;
+      }
+      if (tab === "settings" && settingsCanGoBack.current) {
+        return false;
+      }
+      if (betaLayout && messageSelected && !betaHome && tab === "sessions") {
+        return false;
+      }
       if (sessionID && tab === "sessions") {
         if (betaLayout && !betaHome) {
           showBetaHome();
           return true;
         }
-        if (betaLayout) return false;
+        if (betaLayout) {
+          return false;
+        }
         const request = epoch.current;
         const navigation = ++selection.current;
         void confirmNavigation().then((leave) => {
@@ -541,7 +581,9 @@ function MobileApp() {
 
   const changeDirectory = useCallback(
     (next: string) => {
-      if (activeRef.current !== active) return;
+      if (activeRef.current !== active) {
+        return;
+      }
       const request = epoch.current;
       const navigation = ++selection.current;
       void confirmNavigation().then((leave) => {
@@ -550,8 +592,9 @@ function MobileApp() {
           activeRef.current !== active ||
           request !== epoch.current ||
           navigation !== selection.current
-        )
+        ) {
           return;
+        }
         directoryRef.current = next;
         selectedSessionRef.current = null;
         setBetaHome(true);
@@ -572,13 +615,19 @@ function MobileApp() {
   );
 
   const syncSelectedLocation = useCallback((): Promise<string | null> => {
-    if (!client || activeRef.current !== active) return Promise.resolve(null);
+    if (!client || activeRef.current !== active) {
+      return Promise.resolve(null);
+    }
     const id = selectedSessionRef.current;
-    if (!id) return Promise.resolve(directoryRef.current);
+    if (!id) {
+      return Promise.resolve(directoryRef.current);
+    }
     const request = epoch.current;
     const navigation = selection.current;
     const key = `${request}:${navigation}:${id}`;
-    if (locationSync.current?.key === key) return locationSync.current.promise;
+    if (locationSync.current?.key === key) {
+      return locationSync.current.promise;
+    }
     const current = () =>
       activeRef.current === active &&
       request === epoch.current &&
@@ -590,16 +639,20 @@ function MobileApp() {
           { sessionID: id },
           { signal: AbortSignal.timeout(15_000) }
         );
-        if (!current()) return null;
+        if (!current()) {
+          return null;
+        }
         const next = selected.location.directory;
         if (next === directoryRef.current) {
           setPendingLocation(null);
           return next;
         }
         const leave = await confirmNavigation();
-        if (!current()) return null;
+        if (!current()) {
+          return null;
+        }
         if (!leave) {
-          setPendingLocation({ sessionID: id, directory: next });
+          setPendingLocation({ directory: next, sessionID: id });
           return null;
         }
         directoryRef.current = next;
@@ -609,22 +662,25 @@ function MobileApp() {
         setAttachmentContext(undefined);
         setPendingLocation(null);
         return next;
-      } catch (cause) {
-        if (current()) setError(errorMessage(cause));
+      } catch (error_) {
+        if (current()) setError(errorMessage(error_));
         return null;
       }
     })();
     locationSync.current = { key, promise };
     void promise.finally(() => {
-      if (locationSync.current?.promise === promise)
+      if (locationSync.current?.promise === promise) {
         locationSync.current = null;
+      }
     });
     return promise;
   }, [active, client, confirmNavigation]);
 
   const openSession = useCallback(
     async (id: string, keepNavigation = false): Promise<boolean> => {
-      if (!client || activeRef.current !== active) return false;
+      if (!client || activeRef.current !== active) {
+        return false;
+      }
       const request = epoch.current;
       const navigation = ++selection.current;
       openingSessionRef.current = id;
@@ -635,11 +691,14 @@ function MobileApp() {
       try {
         if (id === selectedSessionRef.current) {
           const next = await syncSelectedLocation();
-          if (!next || !current() || selectedSessionRef.current !== id)
+          if (!next || !current() || selectedSessionRef.current !== id) {
             return false;
+          }
           setTab("sessions");
           setBetaHome(false);
-          if (!keepNavigation) setNavigationOpen(false);
+          if (!keepNavigation) {
+            setNavigationOpen(false);
+          }
           return true;
         }
         const selected = id
@@ -648,8 +707,9 @@ function MobileApp() {
               { signal: AbortSignal.timeout(15_000) }
             )
           : null;
-        if (!current() || !(await confirmNavigation()) || !current())
+        if (!current() || !(await confirmNavigation()) || !current()) {
           return false;
+        }
         if (selected) {
           directoryRef.current = selected.location.directory;
           setDirectory(selected.location.directory);
@@ -662,21 +722,29 @@ function MobileApp() {
         setAttachmentPath(undefined);
         setAttachmentContext(undefined);
         setPendingLocation(null);
-        if (selected) recordSessionInfo(selected);
-        if (!keepNavigation) setNavigationOpen(false);
+        if (selected) {
+          recordSessionInfo(selected);
+        }
+        if (!keepNavigation) {
+          setNavigationOpen(false);
+        }
         return true;
-      } catch (cause) {
-        if (current()) setError(errorMessage(cause));
+      } catch (error_) {
+        if (current()) setError(errorMessage(error_));
         return false;
       } finally {
-        if (current()) openingSessionRef.current = null;
+        if (current()) {
+          openingSessionRef.current = null;
+        }
       }
     },
     [active, client, confirmNavigation, syncSelectedLocation, recordSessionInfo]
   );
 
   async function createBetaSession(target = directoryRef.current) {
-    if (!client || creatingSessionRef.current) return;
+    if (!client || creatingSessionRef.current) {
+      return;
+    }
     const owner = activeRef.current;
     const request = epoch.current;
     const navigation = ++selection.current;
@@ -688,11 +756,15 @@ function MobileApp() {
     creatingSessionRef.current = true;
     setCreatingSession(true);
     try {
-      if (!(await confirmNavigation()) || !current()) return;
+      if (!(await confirmNavigation()) || !current()) {
+        return;
+      }
       const created = await client.session.create({
         location: { directory: target },
       });
-      if (!current()) return;
+      if (!current()) {
+        return;
+      }
       selectedSessionRef.current = created.id;
       directoryRef.current = created.location.directory;
       setSessionID(created.id);
@@ -705,8 +777,8 @@ function MobileApp() {
       setTab("sessions");
       setBetaHome(false);
       setRevision((value) => value + 1);
-    } catch (cause) {
-      if (current()) setError(errorMessage(cause));
+    } catch (error_) {
+      if (current()) setError(errorMessage(error_));
     } finally {
       creatingSessionRef.current = false;
       setCreatingSession(false);
@@ -722,19 +794,24 @@ function MobileApp() {
       const next = openTabs.find((item) => item.id !== id);
       if (next) {
         const wasHome = betaHome;
-        if (!(await openSession(next.id, true))) return;
+        if (!(await openSession(next.id, true))) {
+          return;
+        }
         setBetaHome(wasHome);
       } else {
         const owner = activeRef.current;
         const request = epoch.current;
         const navigation = ++selection.current;
-        if (!(await confirmNavigation())) return;
+        if (!(await confirmNavigation())) {
+          return;
+        }
         if (
           owner !== activeRef.current ||
           request !== epoch.current ||
           navigation !== selection.current
-        )
+        ) {
           return;
+        }
         selectedSessionRef.current = null;
         setSessionID(null);
         setPendingLocation(null);
@@ -757,7 +834,9 @@ function MobileApp() {
     const owner = activeRef.current;
     const request = epoch.current;
     pendingBetaAction.current = () => {
-      if (owner === activeRef.current && request === epoch.current) action();
+      if (owner === activeRef.current && request === epoch.current) {
+        action();
+      }
     };
     setNavigationOpen(false);
   }
@@ -779,38 +858,48 @@ function MobileApp() {
     if (next === "sessions" || next === tab) {
       setTab(next);
       setNavigationOpen(false);
-      if (next === "sessions" && selectedSessionRef.current)
+      if (next === "sessions" && selectedSessionRef.current) {
         void syncSelectedLocation();
+      }
       return;
     }
     const owner = active;
     const request = epoch.current;
     const navigation = selection.current;
-    if (selectedSessionRef.current && !(await syncSelectedLocation())) return;
+    if (selectedSessionRef.current && !(await syncSelectedLocation())) {
+      return;
+    }
     if (
       activeRef.current !== owner ||
       request !== epoch.current ||
       navigation !== selection.current
-    )
+    ) {
       return;
+    }
     setVisited((current) => ({ ...current, [next]: true }));
     setTab(next);
     setNavigationOpen(false);
   }
 
   async function openProjects() {
-    if (!client) return;
+    if (!client) {
+      return;
+    }
     showNavigationSheet("projects");
     setProjectBusy(true);
     setProjectError(null);
     const owner = activeRef.current;
     try {
       const result = await client.project.list();
-      if (activeRef.current === owner) setProjects(result);
-    } catch (cause) {
-      if (activeRef.current === owner) setProjectError(errorMessage(cause));
+      if (activeRef.current === owner) {
+        setProjects(result);
+      }
+    } catch (error_) {
+      if (activeRef.current === owner) setProjectError(errorMessage(error_));
     } finally {
-      if (activeRef.current === owner) setProjectBusy(false);
+      if (activeRef.current === owner) {
+        setProjectBusy(false);
+      }
     }
   }
 
@@ -832,7 +921,9 @@ function MobileApp() {
   ) {
     let serverRequest: number | undefined;
     if (kind === "servers") {
-      if (!automatic) automaticServerRequest.current = null;
+      if (!automatic) {
+        automaticServerRequest.current = null;
+      }
       if (!activeRef.current) {
         serverSheetRequest.current += 1;
         resumeSheets();
@@ -840,11 +931,15 @@ function MobileApp() {
       }
       const request = ++serverSheetRequest.current;
       serverRequest = request;
-      if (automatic) automaticServerRequest.current = request;
+      if (automatic) {
+        automaticServerRequest.current = request;
+      }
       const owner = activeRef.current;
       const connectionEpoch = epoch.current;
       await suspendSheets();
-      if (request !== serverSheetRequest.current) return;
+      if (request !== serverSheetRequest.current) {
+        return;
+      }
       if (owner !== activeRef.current || connectionEpoch !== epoch.current) {
         automaticServerRequest.current = null;
         resumeSheets();
@@ -853,8 +948,8 @@ function MobileApp() {
     }
     if ((navigationOpen || navigationPresented.current) && !wide) {
       pendingNavigationSheet.current = {
-        kind,
         epoch: epoch.current,
+        kind,
         serverRequest,
       };
       setNavigationOpen(false);
@@ -864,7 +959,9 @@ function MobileApp() {
     if (kind === "servers") {
       automaticServerRequest.current = null;
       setServersOpen(true);
-    } else setProjectsOpen(true);
+    } else {
+      setProjectsOpen(true);
+    }
   }
   showServerSheet.current = () => {
     void showNavigationSheet("servers");
@@ -887,13 +984,17 @@ function MobileApp() {
       (pending.kind === "servers" &&
         pending.serverRequest !== serverSheetRequest.current)
     ) {
-      if (pending?.kind === "servers") resumeSheets();
+      if (pending?.kind === "servers") {
+        resumeSheets();
+      }
       return;
     }
     if (pending.kind === "servers") {
       automaticServerRequest.current = null;
       setServersOpen(true);
-    } else setProjectsOpen(true);
+    } else {
+      setProjectsOpen(true);
+    }
   }
 
   recoverConnection.current = (connection, cause) => {
@@ -901,8 +1002,9 @@ function MobileApp() {
       activeRef.current !== connection ||
       connectingRef.current ||
       recoveringConnection.current?.connection === connection
-    )
+    ) {
       return;
+    }
     const message = isConnectionUnauthorized(cause)
       ? `${connection.name} rejected the saved password. Pair again or update its saved connection.`
       : `${connection.name} is not responding. Retry it or connect to another server.`;
@@ -910,7 +1012,7 @@ function MobileApp() {
     setUnavailableID(connection.id);
     setConnectionError(message);
     if (!serversOpen) {
-      setForm({ id: "", name: "", url: "", token: "" });
+      setForm({ id: "", name: "", token: "", url: "" });
       setPairingLink(null);
       setFlowRevision((value) => value + 1);
       void showNavigationSheet("servers", true);
@@ -918,7 +1020,9 @@ function MobileApp() {
   };
 
   useEffect(() => {
-    if (!active || !client || !foreground || connecting) return;
+    if (!active || !client || !foreground || connecting) {
+      return;
+    }
     const owner = active;
     const request = epoch.current;
     let stopped = false;
@@ -928,7 +1032,9 @@ function MobileApp() {
     const current = () =>
       !stopped && activeRef.current === owner && epoch.current === request;
     const probe = async () => {
-      if (!current()) return;
+      if (!current()) {
+        return;
+      }
       const controller = new AbortController();
       let deadline: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -946,18 +1052,21 @@ function MobileApp() {
                 )
               );
               controller.abort();
-            }, 5_000);
+            }, 5000);
           }),
         ]);
-        if (!current()) return;
+        if (!current()) {
+          return;
+        }
         if (
           !result ||
           typeof result.version !== "string" ||
-          !/^2\./.test(result.version)
-        )
+          !result.version.startsWith("2.")
+        ) {
           throw new Error(
             "This address no longer returns an OpenCode 2 server."
           );
+        }
         failures = 0;
         const recovery = recoveringConnection.current;
         if (recovery?.connection === owner) {
@@ -972,8 +1081,9 @@ function MobileApp() {
             if (
               pendingNavigationSheet.current?.kind === "servers" &&
               pendingNavigationSheet.current.serverRequest === automaticRequest
-            )
+            ) {
               pendingNavigationSheet.current = null;
+            }
             resumeSheets();
           }
           setUnavailableID((value) => (value === owner.id ? null : value));
@@ -983,25 +1093,25 @@ function MobileApp() {
         }
         timer = setTimeout(() => {
           void probe();
-        }, 5_000);
-      } catch (cause) {
+        }, 5000);
+      } catch (error_) {
         if (!current()) return;
         failures += 1;
         const unauthorized =
-          isUnauthorizedError(cause) ||
-          (cause instanceof ClientError &&
-            cause.reason === "UnexpectedStatus" &&
-            cause.cause &&
-            typeof cause.cause === "object" &&
-            "status" in cause.cause &&
-            cause.cause.status === 401);
+          isUnauthorizedError(error_) ||
+          (error_ instanceof ClientError &&
+            error_.reason === "UnexpectedStatus" &&
+            error_.cause &&
+            typeof error_.cause === "object" &&
+            "status" in error_.cause &&
+            error_.cause.status === 401);
         if (unauthorized || failures >= 2)
-          recoverConnection.current(owner, cause);
+          recoverConnection.current(owner, error_);
         timer = setTimeout(
           () => {
             void probe();
           },
-          failures === 1 && !unauthorized ? 1_000 : 5_000
+          failures === 1 && !unauthorized ? 1000 : 5000
         );
       } finally {
         clearTimeout(deadline);
@@ -1024,7 +1134,9 @@ function MobileApp() {
   ]);
 
   async function openDirectory(nextDirectory = newDirectory) {
-    if (!client) return;
+    if (!client) {
+      return;
+    }
     const target = nextDirectory.trim();
     if (
       !target.startsWith("/") &&
@@ -1043,27 +1155,35 @@ function MobileApp() {
         { location: { directory: target } },
         { signal: AbortSignal.timeout(15_000) }
       );
-      if (activeRef.current !== owner || request !== epoch.current) return;
+      if (activeRef.current !== owner || request !== epoch.current) {
+        return;
+      }
       changeDirectory(location.directory);
-    } catch (cause) {
+    } catch (error_) {
       if (activeRef.current === owner && request === epoch.current)
-        setProjectError(errorMessage(cause));
+        setProjectError(errorMessage(error_));
     } finally {
-      if (activeRef.current === owner && request === epoch.current)
+      if (activeRef.current === owner && request === epoch.current) {
         setProjectBusy(false);
+      }
     }
   }
 
   async function removeConnection(connection: Connection) {
-    if (activeRef.current?.id === connection.id && !(await confirmNavigation()))
+    if (
+      activeRef.current?.id === connection.id &&
+      !(await confirmNavigation())
+    ) {
       return;
+    }
     if (
       !(await confirmAction(
         "Remove server?",
         `Remove the saved connection to ${connection.name}?`
       ))
-    )
+    ) {
       return;
+    }
     try {
       const next = connections.filter((item) => item.id !== connection.id);
       await saveConnections(next);
@@ -1081,8 +1201,8 @@ function MobileApp() {
         setPendingLocation(null);
       }
       setConnections(next);
-    } catch (cause) {
-      setConnectionError(errorMessage(cause));
+    } catch (error_) {
+      setConnectionError(errorMessage(error_));
     }
   }
 
@@ -1090,18 +1210,23 @@ function MobileApp() {
     path: string,
     contextText?: string
   ): Promise<boolean> {
-    if (!client) return false;
+    if (!client) {
+      return false;
+    }
     const owner = activeRef.current;
     const request = epoch.current;
     const navigation = selection.current;
     try {
       if (selectedSessionRef.current) {
         const nextDirectory = await syncSelectedLocation();
-        if (!nextDirectory) return false;
-        if (nextDirectory !== directory)
+        if (!nextDirectory) {
+          return false;
+        }
+        if (nextDirectory !== directory) {
           throw new Error(
             "The session moved to another directory. Choose the file again in its current workspace."
           );
+        }
       }
       const selected =
         sessionID ||
@@ -1110,8 +1235,9 @@ function MobileApp() {
         activeRef.current !== owner ||
         epoch.current !== request ||
         selection.current !== navigation
-      )
+      ) {
         return false;
+      }
       selectedSessionRef.current = selected;
       setSessionID(selected);
       setBetaHome(false);
@@ -1120,13 +1246,13 @@ function MobileApp() {
       setRevision((value) => value + 1);
       setTab("sessions");
       return true;
-    } catch (cause) {
+    } catch (error_) {
       if (
         activeRef.current === owner &&
         epoch.current === request &&
         selection.current === navigation
       )
-        setError(errorMessage(cause));
+        setError(errorMessage(error_));
       return false;
     }
   }
@@ -1139,7 +1265,7 @@ function MobileApp() {
       activeID={active?.id}
       unavailableID={unavailableID ?? undefined}
       connecting={connecting}
-      error={connectionError ?? (!active ? error : null)}
+      error={connectionError ?? (active ? null : error)}
       pairingLink={pairingLink}
       onPairingLinkConsumed={() => setPairingLink(null)}
       onChangeForm={setForm}
@@ -1159,9 +1285,9 @@ function MobileApp() {
   const currentOpenTab =
     !betaHome && tab !== "settings" && sessionID
       ? (openTabs.find((item) => item.id === sessionID) ?? {
+          directory,
           id: sessionID,
           title: "Session",
-          directory,
         })
       : undefined;
   const showMessageSelection =
@@ -1169,13 +1295,15 @@ function MobileApp() {
   const selectedPane: SessionPane =
     tab === "workspace" ? workspaceSection : "Session";
   const requestSessionPanel = (panel: "stats" | "actions") => {
-    if (!sessionID) return;
+    if (!sessionID) {
+      return;
+    }
     afterBetaMenu(() => {
       setTab("sessions");
       setSessionPanelRequest({
         id: ++panelRequestID.current,
-        sessionID,
         panel,
+        sessionID,
       });
     });
   };
@@ -1183,13 +1311,15 @@ function MobileApp() {
     const owner = activeRef.current;
     const request = epoch.current;
     pendingBetaAction.current = () => {
-      if (owner === activeRef.current && request === epoch.current) action();
+      if (owner === activeRef.current && request === epoch.current) {
+        action();
+      }
     };
     setBetaMoreOpen(false);
   }
   const openServers = () => {
     setConnectionError(null);
-    setForm({ id: "", name: "", url: "", token: "" });
+    setForm({ id: "", name: "", token: "", url: "" });
     setPairingLink(null);
     setFlowRevision((value) => value + 1);
     // Use the latest coordinator because queued tab actions retain stale navigation state.
@@ -1296,7 +1426,7 @@ function MobileApp() {
       </>
     ) : null;
 
-  if (booting)
+  if (booting) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.boot}>
@@ -1306,6 +1436,7 @@ function MobileApp() {
         </View>
       </SafeAreaView>
     );
+  }
 
   return (
     <SafeAreaView
@@ -1358,12 +1489,12 @@ function MobileApp() {
               />
             )}
             {error && (
-              <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
+              <View style={{ paddingBottom: 8, paddingHorizontal: 12 }}>
                 <ErrorNotice error={error} />
               </View>
             )}
             {pendingLocation?.sessionID === sessionID && (
-              <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
+              <View style={{ paddingBottom: 8, paddingHorizontal: 12 }}>
                 <ErrorNotice
                   error={`This session uses ${pendingLocation.directory}. Update the workspace before you attach files or open its terminal.`}
                   onRetry={() => {
@@ -1639,105 +1770,105 @@ function MobileApp() {
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    safe: { flex: 1, backgroundColor: colors.bg },
-    boot: { flex: 1, alignItems: "center", justifyContent: "center" },
-    onboarding: {
-      flexGrow: 1,
-      padding: 24,
-      paddingVertical: 40,
-      maxWidth: 520,
-      width: "100%",
-      alignSelf: "center",
-      gap: 16,
-    },
     betaOnboarding: { justifyContent: "center", paddingVertical: 32 },
-    shell: { flex: 1, flexDirection: "row", minHeight: 0 },
-    main: { flex: 1, minWidth: 0, minHeight: 0 },
-    iconButton: {
-      width: Platform.OS === "android" ? 48 : 44,
-      height: Platform.OS === "android" ? 48 : 44,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 8,
-    },
     body: { flex: 1, flexDirection: "row", minHeight: 0 },
-    full: { flex: 1, minWidth: 0, minHeight: 0 },
-    sidebar: {
-      width: 288,
-      borderRightWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.bg,
-    },
-    navigationBrand: {
-      height: Platform.OS === "android" ? 48 : 64,
-      paddingHorizontal: pageInset,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    projectChoice: {
-      marginHorizontal: pageInset,
-      paddingHorizontal: 15,
-      paddingVertical: 10,
-      minHeight: Platform.OS === "android" ? 48 : 56,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      borderRadius: 8,
-      backgroundColor: colors.panel,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    contextText: { flex: 1, minWidth: 0, gap: 1 },
-    projectName: { fontSize: 14, fontWeight: "500" },
+    boot: { alignItems: "center", flex: 1, justifyContent: "center" },
     contextDetail: { fontSize: 11, lineHeight: 16 },
-    navigationSessions: { flex: 1, minHeight: 0, marginTop: 8 },
-    navigationFooter: {
-      borderTopWidth: 1,
+    contextText: { flex: 1, gap: 1, minWidth: 0 },
+    drawer: {
+      backgroundColor: colors.bg,
       borderColor: colors.border,
+      borderRightWidth: 1,
+      height: "100%",
+    },
+    full: { flex: 1, minHeight: 0, minWidth: 0 },
+    iconButton: {
+      alignItems: "center",
+      borderRadius: 8,
+      height: Platform.OS === "android" ? 48 : 44,
+      justifyContent: "center",
+      width: Platform.OS === "android" ? 48 : 44,
+    },
+    main: { flex: 1, minHeight: 0, minWidth: 0 },
+    navigationBrand: {
+      alignItems: "center",
+      flexDirection: "row",
+      height: Platform.OS === "android" ? 48 : 64,
+      justifyContent: "space-between",
+      paddingHorizontal: pageInset,
+    },
+    navigationFooter: {
+      borderColor: colors.border,
+      borderTopWidth: 1,
+      gap: 4,
       paddingHorizontal: pageInset,
       paddingTop: 8,
-      gap: 4,
     },
-    navigationLinks: { flexDirection: "row", gap: 4 },
     navigationLink: {
-      flex: 1,
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
       borderRadius: 8,
+      flex: 1,
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "center",
+      minHeight: Platform.OS === "android" ? 48 : 44,
     },
     navigationLinkText: {
-      fontFamily: sans,
       color: colors.muted,
+      fontFamily: sans,
       fontSize: 13,
       lineHeight: 19,
     },
-    selectedDestination: { backgroundColor: colors.panel },
-    serverChoice: {
-      minHeight: 48,
-      paddingHorizontal: 16,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      borderRadius: 8,
-    },
-    serverName: { fontSize: 13, fontWeight: "500" },
-    drawer: {
-      height: "100%",
-      backgroundColor: colors.bg,
-      borderRightWidth: 1,
-      borderColor: colors.border,
+    navigationLinks: { flexDirection: "row", gap: 4 },
+    navigationSessions: { flex: 1, marginTop: 8, minHeight: 0 },
+    onboarding: {
+      alignSelf: "center",
+      flexGrow: 1,
+      gap: 16,
+      maxWidth: 520,
+      padding: 24,
+      paddingVertical: 40,
+      width: "100%",
     },
     pressed: { backgroundColor: colors.selected },
-    welcome: {
-      flex: 1,
+    projectChoice: {
       alignItems: "center",
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginHorizontal: pageInset,
+      minHeight: Platform.OS === "android" ? 48 : 56,
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+    },
+    projectName: { fontSize: 14, fontWeight: "500" },
+    safe: { backgroundColor: colors.bg, flex: 1 },
+    selectedDestination: { backgroundColor: colors.panel },
+    serverChoice: {
+      alignItems: "center",
+      borderRadius: 8,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 48,
+      paddingHorizontal: 16,
+    },
+    serverName: { fontSize: 13, fontWeight: "500" },
+    shell: { flex: 1, flexDirection: "row", minHeight: 0 },
+    sidebar: {
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      borderRightWidth: 1,
+      width: 288,
+    },
+    welcome: {
+      alignItems: "center",
+      flex: 1,
+      gap: 20,
       justifyContent: "center",
       padding: 32,
-      gap: 20,
     },
-    welcomeDetail: { maxWidth: 320, textAlign: "center", lineHeight: 24 },
+    welcomeDetail: { lineHeight: 24, maxWidth: 320, textAlign: "center" },
   });

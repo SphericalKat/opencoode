@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -10,14 +11,14 @@ const page = await browser.newPage();
 const origin = process.env.UI_TEST_ORIGIN || "http://localhost:8095";
 await page.route(`${origin}/`, (route) =>
   route.fulfill({
-    contentType: "text/html",
     body: '<div id="root"></div><script src="/tests/fixtures/themed-diff.bundle?platform=web&dev=true&hot=false&lazy=false"></script>',
+    contentType: "text/html",
   })
 );
 await page.goto(origin);
 const old = page.getByText("-old", { exact: true });
 const added = page.getByText("+new", { exact: true });
-await old.waitFor({ timeout: 10000 });
+await old.waitFor({ timeout: 10_000 });
 assert.notEqual(
   await old.evaluate((el) => getComputedStyle(el).color),
   await added.evaluate((el) => getComputedStyle(el).color)

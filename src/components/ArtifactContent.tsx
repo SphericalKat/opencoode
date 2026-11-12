@@ -4,17 +4,19 @@ import * as Sharing from "expo-sharing";
 import React, { useEffect, useRef, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
 
-import { type Client, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import { useNativePresentation } from "../lib/sheets";
-import { type ThemeColors, useThemedStyles } from "../lib/theme";
+import { useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import { Button, ErrorNotice, Label, Row, Sheet } from "./ui";
 
-type Props = {
+interface Props {
   content: ToolFileContent;
   client?: Client;
   directory?: string;
   thumbnail?: boolean;
-};
+}
 const imageTypes = new Set([
   "image/png",
   "image/jpeg",
@@ -35,11 +37,17 @@ function source(
   | { kind: "file"; path: string }
   | { kind: "remote"; url: string }
   | undefined {
-  if (uri.startsWith("data:")) return { kind: "data" };
-  if (/[\u0000-\u0020\u007f]/.test(uri)) return;
+  if (uri.startsWith("data:")) {
+    return { kind: "data" };
+  }
+  if (/[\u0000-\u0020\u007F]/.test(uri)) {
+    return;
+  }
   try {
     const url = new URL(uri);
-    if (url.username || url.password) return;
+    if (url.username || url.password) {
+      return;
+    }
     if (
       url.protocol === "file:" &&
       (!url.hostname || url.hostname === "localhost") &&
@@ -48,29 +56,39 @@ function source(
       !url.hash
     ) {
       const path = decodeURIComponent(url.pathname);
-      if (!/[\u0000-\u001f\u007f]/.test(path)) return { kind: "file", path };
+      if (!/[\u0000-\u001F\u007F]/.test(path)) {
+        return { kind: "file", path };
+      }
     }
-    if ((url.protocol === "https:" || url.protocol === "http:") && url.hostname)
+    if (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      url.hostname
+    ) {
       return { kind: "remote", url: url.href };
+    }
   } catch {}
 }
 
 function inlineBytes(uri: string): Uint8Array {
   const comma = uri.indexOf(",");
-  if (comma < 0) throw new Error("The attachment data is invalid");
+  if (comma === -1) {
+    throw new Error("The attachment data is invalid");
+  }
   const header = uri.slice(0, comma);
   const payload = uri.slice(comma + 1);
-  if (/;base64$/i.test(header))
+  if (/;base64$/i.test(header)) {
     return Uint8Array.from(atob(payload.replace(/\s/g, "")), (char) =>
       char.charCodeAt(0)
     );
+  }
   const bytes: number[] = [];
   for (let index = 0; index < payload.length;) {
     if (payload[index] === "%") {
       const hex = payload.slice(index + 1, index + 3);
-      if (!/^[a-f\d]{2}$/i.test(hex))
+      if (!/^[a-f\d]{2}$/i.test(hex)) {
         throw new Error("The attachment data is invalid");
-      bytes.push(parseInt(hex, 16));
+      }
+      bytes.push(Number.parseInt(hex, 16));
       index += 3;
     } else {
       const character = String.fromCodePoint(payload.codePointAt(index)!);
@@ -83,8 +101,9 @@ function inlineBytes(uri: string): Uint8Array {
 
 function dataUri(bytes: Uint8Array, mime: string) {
   let binary = "";
-  for (let index = 0; index < bytes.length; index += 16384)
+  for (let index = 0; index < bytes.length; index += 16_384) {
     binary += String.fromCharCode(...bytes.subarray(index, index + 16384));
+  }
   return `data:${mime};base64,${btoa(binary)}`;
 }
 
@@ -120,41 +139,51 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
     return () => request.abort();
   }, [client]);
   useEffect(() => {
-    if (image) void perform("preview");
+    if (image) {
+      void perform("preview");
+    }
   }, [client]);
   const filename =
     (
       content.name ||
-      `attachment.${mime.split("/")[1]?.replace(/[^a-z\d]/gi, "") || "bin"}`
+      `attachment.${mime.split("/")[1]?.replaceAll(/[^a-z\d]/gi, "") || "bin"}`
     )
       .split(/[\\/]/)
       .pop()!
-      .replace(/[\u0000-\u001f\u007f<>:"|?*]/g, "_") || "attachment";
+      .replaceAll(/[\u0000-\u001F\u007F<>:"|?*]/g, "_") || "attachment";
 
   async function read(signal: AbortSignal) {
-    if (!target) throw new Error("This attachment URI is not supported");
-    if (target.kind === "data") return inlineBytes(content.uri);
+    if (!target) {
+      throw new Error("This attachment URI is not supported");
+    }
+    if (target.kind === "data") {
+      return inlineBytes(content.uri);
+    }
     if (target.kind === "file") {
-      if (!client)
+      if (!client) {
         throw new Error(
           "This server does not provide remote file downloads. Open this file in the terminal."
         );
+      }
       return client.file.read(
         { location: directory ? { directory } : undefined, path: target.path },
         { signal }
       );
     }
-    const response = await fetch(target.url, { signal, credentials: "omit" });
-    if (!response.ok)
+    const response = await fetch(target.url, { credentials: "omit", signal });
+    if (!response.ok) {
       throw new Error(
         `The attachment request failed (HTTP ${response.status})`
       );
+    }
     return new Uint8Array(await response.arrayBuffer());
   }
 
   async function perform(action: "preview" | "save") {
-    if (running.current) return;
-    const signal = controller.current.signal;
+    if (running.current) {
+      return;
+    }
+    const { signal } = controller.current;
     running.current = signal;
     setBusy(true);
     setError(undefined);
@@ -164,10 +193,13 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
         action === "save" &&
         Platform.OS !== "web" &&
         !(await Sharing.isAvailableAsync())
-      )
+      ) {
         throw new Error("File sharing is unavailable on this device");
+      }
       const bytes = await read(signal);
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        return;
+      }
       if (action === "preview") {
         setPreview(dataUri(bytes, mime));
       } else if (Platform.OS === "web") {
@@ -185,14 +217,15 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
           `artifact-${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`
         );
         await temporary.write(bytes);
-        const uri = temporary.uri;
-        if (!signal.aborted)
+        const { uri } = temporary;
+        if (!signal.aborted) {
           await presentNative(() =>
             Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: filename })
           );
+        }
       }
-    } catch (reason) {
-      if (!signal.aborted) setError(errorMessage(reason));
+    } catch (error_) {
+      if (!signal.aborted) setError(errorMessage(error_));
     } finally {
       if (temporary?.exists) {
         try {
@@ -201,12 +234,14 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
       }
       if (running.current === signal) {
         running.current = undefined;
-        if (!signal.aborted) setBusy(false);
+        if (!signal.aborted) {
+          setBusy(false);
+        }
       }
     }
   }
 
-  if (thumbnail)
+  if (thumbnail) {
     return (
       <View style={styles.thumbnail}>
         {preview ? (
@@ -285,6 +320,7 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
         </Sheet>
       </View>
     );
+  }
 
   return (
     <View style={styles.container}>
@@ -294,9 +330,7 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
       <Label muted style={styles.mime}>
         {content.mime}
       </Label>
-      {!target ? (
-        <Label muted>This attachment URI is not supported.</Label>
-      ) : (
+      {target ? (
         <>
           {preview && (
             <Pressable
@@ -341,6 +375,8 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
             />
           </Row>
         </>
+      ) : (
+        <Label muted>This attachment URI is not supported.</Label>
       )}
       <ErrorNotice error={error} />
     </View>
@@ -350,42 +386,42 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: {
-      gap: 8,
-      padding: 12,
-      borderWidth: 1,
+      backgroundColor: colors.panel,
       borderColor: colors.border,
       borderRadius: 8,
-      backgroundColor: colors.panel,
+      borderWidth: 1,
+      gap: 8,
       minWidth: 0,
+      padding: 12,
+    },
+    expanded: { height: 420 },
+    mime: { fontSize: 13 },
+    name: { fontWeight: "500" },
+    placeholder: {
+      backgroundColor: colors.panel,
+      borderRadius: 6,
+      height: 112,
+      justifyContent: "center",
+      padding: 10,
+    },
+    preview: {
+      backgroundColor: colors.bg,
+      borderRadius: 6,
+      height: 180,
+      width: "100%",
     },
     thumbnail: {
       flexBasis: 148,
       flexShrink: 1,
+      gap: 6,
       maxWidth: "100%",
       minWidth: 0,
-      gap: 6,
     },
     thumbnailImage: {
-      width: "100%",
-      height: 112,
-      borderRadius: 6,
       backgroundColor: colors.panel,
-    },
-    placeholder: {
+      borderRadius: 6,
       height: 112,
-      borderRadius: 6,
-      backgroundColor: colors.panel,
-      padding: 10,
-      justifyContent: "center",
-    },
-    viewerImage: { flex: 1, width: "100%", minHeight: 0 },
-    name: { fontWeight: "500" },
-    mime: { fontSize: 13 },
-    preview: {
       width: "100%",
-      height: 180,
-      backgroundColor: colors.bg,
-      borderRadius: 6,
     },
-    expanded: { height: 420 },
+    viewerImage: { flex: 1, minHeight: 0, width: "100%" },
   });

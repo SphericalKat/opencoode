@@ -2,7 +2,8 @@ import type { SessionInfo } from "@opencode/client";
 import React, { useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 
-import { type Client, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
 import { useTheme } from "../lib/theme";
 import {
   Button,
@@ -49,7 +50,9 @@ export function ChildSessions({
     return () => listener.remove();
   }, []);
   useEffect(() => {
-    if (!foreground) return;
+    if (!foreground) {
+      return;
+    }
     const controller = new AbortController();
     let version = 0;
     let nextCursor: string | undefined;
@@ -71,28 +74,33 @@ export function ChildSessions({
       try {
         const [sessions, active] = await Promise.all([
           client.session.list(
-            { parentID: sessionID, archived, order: "desc", limit: 40 },
+            { archived, limit: 40, order: "desc", parentID: sessionID },
             { signal: controller.signal }
           ),
           client.session.active({ signal: controller.signal }),
         ]);
-        if (controller.signal.aborted || request !== version) return;
+        if (controller.signal.aborted || request !== version) {
+          return;
+        }
         knownIDs.current = new Set(sessions.data.map((item) => item.id));
         nextCursor = sessions.cursor.next ?? undefined;
         setItems(sessions.data);
         setActiveIDs(new Set(Object.keys(active)));
         setCursor(nextCursor);
         setError(undefined);
-      } catch (cause) {
+      } catch (error_) {
         if (!controller.signal.aborted && request === version)
-          setError(errorMessage(cause));
+          setError(errorMessage(error_));
       } finally {
-        if (!controller.signal.aborted && request === version)
+        if (!controller.signal.aborted && request === version) {
           setLoading(false);
+        }
       }
     };
     const scheduleRefresh = () => {
-      if (refreshTimer) return;
+      if (refreshTimer) {
+        return;
+      }
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined;
         void refresh();
@@ -102,19 +110,25 @@ export function ChildSessions({
       void refresh();
     };
     moreRef.current = () => {
-      if (!nextCursor || paging) return;
+      if (!nextCursor || paging) {
+        return;
+      }
       paging = true;
       const request = version;
       const pageCursor = nextCursor;
       setLoadingMore(true);
       void client.session
         .list(
-          { parentID: sessionID, archived, cursor: pageCursor, limit: 40 },
+          { archived, cursor: pageCursor, limit: 40, parentID: sessionID },
           { signal: controller.signal }
         )
         .then((page) => {
-          if (controller.signal.aborted || request !== version) return;
-          for (const item of page.data) knownIDs.current.add(item.id);
+          if (controller.signal.aborted || request !== version) {
+            return;
+          }
+          for (const item of page.data) {
+            knownIDs.current.add(item.id);
+          }
           nextCursor = page.cursor.next ?? undefined;
           setCursor(nextCursor);
           setItems((current) => [
@@ -124,12 +138,14 @@ export function ChildSessions({
             ),
           ]);
         })
-        .catch((cause) => {
-          if (!controller.signal.aborted) setError(errorMessage(cause));
+        .catch((error_) => {
+          if (!controller.signal.aborted) setError(errorMessage(error_));
         })
         .finally(() => {
           paging = false;
-          if (!controller.signal.aborted) setLoadingMore(false);
+          if (!controller.signal.aborted) {
+            setLoadingMore(false);
+          }
         });
     };
     stopRef.current = (id) => {
@@ -139,9 +155,12 @@ export function ChildSessions({
             "Stop this child session?",
             "This interrupts its current execution."
           ))
-        )
+        ) {
           return;
-        if (controller.signal.aborted) return;
+        }
+        if (controller.signal.aborted) {
+          return;
+        }
         setStoppingID(id);
         try {
           await client.session.interrupt(
@@ -149,10 +168,12 @@ export function ChildSessions({
             { signal: controller.signal }
           );
           await refresh();
-        } catch (cause) {
-          if (!controller.signal.aborted) setError(errorMessage(cause));
+        } catch (error_) {
+          if (!controller.signal.aborted) setError(errorMessage(error_));
         } finally {
-          if (!controller.signal.aborted) setStoppingID(undefined);
+          if (!controller.signal.aborted) {
+            setStoppingID(undefined);
+          }
         }
       })();
     };
@@ -175,7 +196,9 @@ export function ChildSessions({
               "session.usage.updated",
             ],
           })) {
-            if (controller.signal.aborted) break;
+            if (controller.signal.aborted) {
+              break;
+            }
             attempts = 0;
             if (
               event.type === "server.connected" ||
@@ -188,8 +211,9 @@ export function ChildSessions({
             if (
               !("sessionID" in event.data) ||
               !knownIDs.current.has(event.data.sessionID)
-            )
+            ) {
               continue;
+            }
             const id = event.data.sessionID;
             if (
               event.type === "session.deleted" ||
@@ -199,8 +223,9 @@ export function ChildSessions({
               scheduleRefresh();
               continue;
             }
-            if (event.type === "session.execution.started")
+            if (event.type === "session.execution.started") {
               setActiveIDs((current) => new Set([...current, id]));
+            }
             if (
               event.type === "session.execution.succeeded" ||
               event.type === "session.execution.failed" ||
@@ -221,24 +246,27 @@ export function ChildSessions({
               void client.session
                 .get({ sessionID: id }, { signal: controller.signal })
                 .then((item) => {
-                  if (!controller.signal.aborted && knownIDs.current.has(id))
+                  if (!controller.signal.aborted && knownIDs.current.has(id)) {
                     setItems((current) =>
                       current.map((existing) =>
                         existing.id === id ? item : existing
                       )
                     );
+                  }
                 })
-                .catch((cause) => {
-                  if (!controller.signal.aborted) setError(errorMessage(cause));
+                .catch((error_) => {
+                  if (!controller.signal.aborted)
+                    setError(errorMessage(error_));
                 });
             }
-            if (event.type === "session.renamed")
+            if (event.type === "session.renamed") {
               setItems((current) =>
                 current.map((item) =>
                   item.id === id ? { ...item, title: event.data.title } : item
                 )
               );
-            if (event.type === "session.usage.updated")
+            }
+            if (event.type === "session.usage.updated") {
               setItems((current) =>
                 current.map((item) =>
                   item.id === id
@@ -250,24 +278,28 @@ export function ChildSessions({
                     : item
                 )
               );
+            }
           }
-          if (!controller.signal.aborted)
+          if (!controller.signal.aborted) {
             throw new Error("Child session updates disconnected");
-        } catch (cause) {
+          }
+        } catch (error_) {
           if (controller.signal.aborted) break;
-          setError(errorMessage(cause));
+          setError(errorMessage(error_));
           await new Promise<void>((resolve) => {
             releaseRetry = resolve;
             retryTimer = setTimeout(
               resolve,
-              Math.min(1000 * 2 ** Math.min(attempts++, 4), 15000)
+              Math.min(1000 * 2 ** Math.min(attempts++, 4), 15_000)
             );
           });
-          if (!controller.signal.aborted) await refresh();
+          if (!controller.signal.aborted) {
+            await refresh();
+          }
         }
       }
-    })().catch((cause) => {
-      if (!controller.signal.aborted) setError(errorMessage(cause));
+    })().catch((error_) => {
+      if (!controller.signal.aborted) setError(errorMessage(error_));
     });
     return () => {
       controller.abort();
@@ -329,7 +361,7 @@ export function ChildSessions({
         return (
           <Card key={item.id}>
             <Row style={{ justifyContent: "space-between" }}>
-              <Label numberOfLines={2} style={{ fontWeight: "500", flex: 1 }}>
+              <Label numberOfLines={2} style={{ flex: 1, fontWeight: "500" }}>
                 {item.title || "Child session"}
               </Label>
               <Label

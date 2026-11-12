@@ -1,13 +1,13 @@
 export const PI_MOBILE_PROTOCOL = 1;
 
-export type PiModel = {
+export interface PiModel {
   id: string;
   provider: string;
   name: string;
   reasoning: boolean;
   contextWindow: number;
   thinkingLevels: string[];
-};
+}
 export type PiContent =
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string }
@@ -18,7 +18,7 @@ export type PiContent =
       arguments: Record<string, unknown>;
     }
   | { type: "image"; mimeType: string; data: string };
-export type PiMessage = {
+export interface PiMessage {
   id: string;
   role: "user" | "assistant" | "toolResult" | "custom";
   content: PiContent[];
@@ -27,8 +27,8 @@ export type PiMessage = {
   toolName?: string;
   isError?: boolean;
   errorMessage?: string;
-};
-export type PiSession = {
+}
+export interface PiSession {
   id: string;
   name: string;
   cwd: string;
@@ -40,49 +40,49 @@ export type PiSession = {
     contextWindow: number;
     percent: number | null;
   };
-};
-export type PiServerInfo = {
+}
+export interface PiServerInfo {
   backend: "pi";
   protocol: 1;
   version: string;
   instanceID: string;
   session: PiSession;
-};
-export type PiToolActivity = {
+}
+export interface PiToolActivity {
   id: string;
   name: string;
   input: Record<string, unknown>;
   output?: string;
   content?: PiContent[];
   status: "running" | "completed" | "error";
-};
-export type PiSnapshot = {
+}
+export interface PiSnapshot {
   cursor: number;
   instanceID: string;
   session: PiSession;
   messages: PiMessage[];
   tools: PiToolActivity[];
   waiting?: { kind: string; title?: string };
-};
-export type PiSessionSummary = {
+}
+export interface PiSessionSummary {
   id: string;
   name: string;
   cwd: string;
   updated: number;
   active: boolean;
-};
+}
 export type PiEvent =
   | { type: "message"; message: PiMessage }
   | { type: "tool"; tool: PiToolActivity }
   | { type: "session"; session: PiSession }
   | { type: "waiting"; waiting?: { kind: string; title?: string } }
   | { type: "reset" };
-export type PiEventBatch = {
+export interface PiEventBatch {
   cursor: number;
   instanceID: string;
   events: PiEvent[];
   reset?: boolean;
-};
+}
 export type PiCommand = (
   | {
       type: "prompt";

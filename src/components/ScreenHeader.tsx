@@ -8,7 +8,8 @@ import {
 } from "react-native";
 
 import { pageInset } from "../lib/layout";
-import { useTheme, useThemedStyles, type ThemeColors } from "../lib/theme";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import { ShellIcon } from "./ShellIcon";
 import { Label } from "./ui";
 
@@ -48,7 +49,7 @@ export function ScreenHeader({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Refresh"
-          accessibilityState={{ disabled: refreshing, busy: refreshing }}
+          accessibilityState={{ busy: refreshing, disabled: refreshing }}
           disabled={refreshing}
           onPress={() => onRefresh()}
           style={({ pressed }) => [styles.menu, pressed && styles.pressed]}
@@ -76,32 +77,32 @@ export function ScreenHeader({
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    back: {
+      alignItems: "center",
+      borderRadius: 6,
+      height: Platform.OS === "android" ? 48 : 44,
+      justifyContent: "center",
+      marginEnd: 8,
+      marginStart: -16,
+      width: Platform.OS === "android" ? 48 : 44,
+    },
     header: {
+      alignItems: "center",
+      borderBottomColor: colors.border,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      gap: 16,
       minHeight: 56,
       paddingHorizontal: pageInset,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
     },
-    back: {
-      width: Platform.OS === "android" ? 48 : 44,
-      height: Platform.OS === "android" ? 48 : 44,
-      marginStart: -16,
-      marginEnd: 8,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 6,
-    },
-    title: { fontSize: 18, lineHeight: 24, fontWeight: "600", flex: 1 },
     menu: {
-      width: Platform.OS === "android" ? 48 : 44,
-      height: Platform.OS === "android" ? 48 : 44,
-      marginEnd: -16,
       alignItems: "center",
-      justifyContent: "center",
       borderRadius: 6,
+      height: Platform.OS === "android" ? 48 : 44,
+      justifyContent: "center",
+      marginEnd: -16,
+      width: Platform.OS === "android" ? 48 : 44,
     },
     pressed: { backgroundColor: colors.selected },
+    title: { flex: 1, fontSize: 18, fontWeight: "600", lineHeight: 24 },
   });

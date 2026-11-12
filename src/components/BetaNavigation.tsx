@@ -5,17 +5,21 @@ import {
   Pressable,
   StyleSheet,
   View,
-  type StyleProp,
-  type ViewStyle,
 } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
 
-import { useTheme, useThemedStyles, type ThemeColors } from "../lib/theme";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import { NavIcon } from "./Icons";
 import { ShellIcon } from "./ShellIcon";
 import { Label, Sheet } from "./ui";
 
-export type OpenSessionTab = { id: string; title: string; directory: string };
+export interface OpenSessionTab {
+  id: string;
+  title: string;
+  directory: string;
+}
 export type SessionPane =
   | "Session"
   | "Changes"
@@ -187,7 +191,9 @@ export function SheetGrip({ onClose }: { onClose: () => void }) {
         onMoveShouldSetPanResponder: (_, state) =>
           state.dy > 8 && state.dy > Math.abs(state.dx),
         onPanResponderRelease: (_, state) => {
-          if (state.dy > 40 || state.vy > 0.5) onClose();
+          if (state.dy > 40 || state.vy > 0.5) {
+            onClose();
+          }
         },
       }),
     [onClose]
@@ -437,134 +443,134 @@ export function BetaMoreSheet({
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    surface: { flex: 1, minHeight: 0, minWidth: 0 },
-    framedSurface: {
-      flexDirection: "column",
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      backgroundColor: colors.bg,
-      overflow: "hidden",
-    },
-    recentTitle: {
-      fontSize: 12,
-      lineHeight: 17,
-      paddingHorizontal: 8,
-      paddingTop: 12,
-      paddingBottom: 4,
-    },
-    strip: {
-      minHeight: 48,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      paddingHorizontal: 16,
-    },
-    stripTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
-    count: { fontSize: 14, lineHeight: 19, paddingHorizontal: 4 },
-    badge: {
-      minWidth: 16,
-      minHeight: 16,
-      borderRadius: 3,
-      backgroundColor: colors.muted,
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
-    },
-    badgeText: { fontSize: 12, lineHeight: 15, color: colors.bg },
-    sessionTabs: {
-      flexDirection: "row",
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-    },
-    sessionTab: {
-      flex: 1,
-      minHeight: 48,
-      alignItems: "center",
-      justifyContent: "center",
-      borderBottomWidth: 1,
-      borderBottomColor: "transparent",
-    },
-    selectedTab: { borderBottomColor: colors.text },
-    tabText: { fontSize: 14, lineHeight: 19 },
-    project: {
-      flexDirection: "row",
-      alignItems: "center",
-      minHeight: 40,
-      paddingHorizontal: 14,
-      gap: 8,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-    },
-    projectName: { fontSize: 14, lineHeight: 19, flex: 1 },
-    sheetContent: { padding: 12, paddingTop: 0, paddingBottom: 4, gap: 0 },
-    gripTarget: { height: 28, justifyContent: "center", alignItems: "center" },
-    grip: {
-      width: 32,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: colors.faint,
-      opacity: 0.5,
-    },
-    openTab: { flexDirection: "row", alignItems: "center", borderRadius: 6 },
     activeTab: { backgroundColor: colors.selected },
-    openTabMain: {
-      flex: 1,
-      minWidth: 0,
-      minHeight: 48,
-      flexDirection: "row",
+    badge: {
       alignItems: "center",
-      paddingLeft: 8,
-      gap: 8,
+      backgroundColor: colors.muted,
+      borderRadius: 3,
+      flexShrink: 0,
+      justifyContent: "center",
+      minHeight: 16,
+      minWidth: 16,
     },
-    openTabTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
+    badgeText: { color: colors.bg, fontSize: 12, lineHeight: 15 },
     closeTab: {
-      width: 48,
+      alignItems: "center",
       height: 48,
       justifyContent: "center",
-      alignItems: "center",
+      width: 48,
     },
-    menuRow: {
-      minHeight: 48,
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: 8,
-      gap: 8,
-    },
-    menuText: { fontSize: 14, lineHeight: 19, color: colors.muted },
-    serverRow: {
-      minHeight: 56,
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: 8,
-      gap: 8,
-    },
-    serverText: { flex: 1, minWidth: 0 },
-    serverName: { fontSize: 14, lineHeight: 19 },
-    serverDetail: { fontSize: 12, lineHeight: 17 },
+    count: { fontSize: 14, lineHeight: 19, paddingHorizontal: 4 },
     divider: {
-      height: StyleSheet.hairlineWidth,
       backgroundColor: colors.border,
+      height: StyleSheet.hairlineWidth,
     },
     footer: {
-      flexDirection: "row",
       alignItems: "center",
+      flexDirection: "row",
       justifyContent: "space-between",
     },
     footerButton: {
-      minHeight: 48,
-      flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 8,
+      flexDirection: "row",
       gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 8,
     },
+    framedSurface: {
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: "column",
+      overflow: "hidden",
+    },
+    grip: {
+      backgroundColor: colors.faint,
+      borderRadius: 2,
+      height: 4,
+      opacity: 0.5,
+      width: 32,
+    },
+    gripTarget: { alignItems: "center", height: 28, justifyContent: "center" },
+    menuRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 8,
+    },
+    menuText: { color: colors.muted, fontSize: 14, lineHeight: 19 },
     moreRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
       minHeight: 48,
       paddingHorizontal: 12,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
     },
     moreText: { fontSize: 14, lineHeight: 19 },
+    openTab: { alignItems: "center", borderRadius: 6, flexDirection: "row" },
+    openTabMain: {
+      alignItems: "center",
+      flex: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      minWidth: 0,
+      paddingLeft: 8,
+    },
+    openTabTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
     pressed: { opacity: 0.6 },
+    project: {
+      alignItems: "center",
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 40,
+      paddingHorizontal: 14,
+    },
+    projectName: { flex: 1, fontSize: 14, lineHeight: 19 },
+    recentTitle: {
+      fontSize: 12,
+      lineHeight: 17,
+      paddingBottom: 4,
+      paddingHorizontal: 8,
+      paddingTop: 12,
+    },
+    selectedTab: { borderBottomColor: colors.text },
+    serverDetail: { fontSize: 12, lineHeight: 17 },
+    serverName: { fontSize: 14, lineHeight: 19 },
+    serverRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 56,
+      paddingHorizontal: 8,
+    },
+    serverText: { flex: 1, minWidth: 0 },
+    sessionTab: {
+      alignItems: "center",
+      borderBottomColor: "transparent",
+      borderBottomWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 48,
+    },
+    sessionTabs: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      flexDirection: "row",
+    },
+    sheetContent: { gap: 0, padding: 12, paddingBottom: 4, paddingTop: 0 },
+    strip: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 16,
+    },
+    stripTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
+    surface: { flex: 1, minHeight: 0, minWidth: 0 },
+    tabText: { fontSize: 14, lineHeight: 19 },
   });

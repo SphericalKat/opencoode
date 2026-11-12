@@ -14,13 +14,11 @@ import {
 import Svg, { Path, Rect } from "react-native-svg";
 
 import { useBetaLayout } from "../lib/betaLayout";
-import {
-  type Connection,
-  errorMessage,
-  normalizeConnection,
-} from "../lib/client";
+import { errorMessage, normalizeConnection } from "../lib/client";
+import type { Connection } from "../lib/client";
 import { parsePairingPayload } from "../lib/pairing";
-import { type ThemeColors, useTheme, useThemedStyles } from "../lib/theme";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import { MotionContent } from "./motion";
 import { OpenCodeLogo } from "./OpenCodeLogo";
 import { ShellIcon } from "./ShellIcon";
@@ -38,15 +36,15 @@ import {
   touchTarget,
 } from "./ui";
 
-export type ConnectionForm = {
+export interface ConnectionForm {
   id: string;
   name: string;
   url: string;
   token: string;
   username?: string;
-};
+}
 type Step = "servers" | "home" | "pair" | "address" | "password" | "scan";
-type Props = {
+interface Props {
   form: ConnectionForm;
   connections: Connection[];
   activeID?: string;
@@ -62,9 +60,9 @@ type Props = {
     alternatives?: Connection[]
   ) => Promise<void>;
   onRemove: (connection: Connection) => Promise<void>;
-};
+}
 
-const blankForm: ConnectionForm = { id: "", name: "", url: "", token: "" };
+const blankForm: ConnectionForm = { id: "", name: "", token: "", url: "" };
 
 export function ConnectionFlow({
   form,
@@ -84,6 +82,8 @@ export function ConnectionFlow({
   const styles = useThemedStyles(createStyles);
   const beta = useBetaLayout();
   const [navigation, setNavigation] = useState(() => ({
+    direction: 0 as -1 | 0 | 1,
+    revision: 0,
     step: (form.id
       ? "password"
       : form.url
@@ -93,8 +93,6 @@ export function ConnectionFlow({
         : connections.length && !unavailableID
           ? "servers"
           : "home") as Step,
-    direction: 0 as -1 | 0 | 1,
-    revision: 0,
   }));
   const { step } = navigation;
   const [pairingText, setPairingText] = useState(form.id ? "" : form.url);
@@ -123,12 +121,15 @@ export function ConnectionFlow({
   }, []);
 
   useEffect(() => {
-    if (step === "servers" && (!connections.length || unavailableID))
+    if (step === "servers" && (!connections.length || unavailableID)) {
       setStep("home");
+    }
   }, [connections.length, unavailableID, step]);
 
   useEffect(() => {
-    if (!pairingLink) return;
+    if (!pairingLink) {
+      return;
+    }
     setPairingText(pairingLink);
     setStep("pair");
     acceptPairing(pairingLink);
@@ -136,16 +137,20 @@ export function ConnectionFlow({
   }, [pairingLink]);
 
   useEffect(() => {
-    if (!submission) return;
+    if (!submission) {
+      return;
+    }
     let live = true;
     void connectRef
       .current(submission[0], submission.slice(1))
-      .catch((cause) => {
-        if (live) setLocalError(errorMessage(cause));
+      .catch((error_) => {
+        if (live) setLocalError(errorMessage(error_));
       })
       .finally(() => {
         submitting.current = false;
-        if (live) setSubmission(null);
+        if (live) {
+          setSubmission(null);
+        }
       });
     return () => {
       live = false;
@@ -153,27 +158,33 @@ export function ConnectionFlow({
   }, [submission]);
 
   useEffect(() => {
-    if (step !== "scan") return;
+    if (step !== "scan") {
+      return;
+    }
     const back = BackHandler.addEventListener("hardwareBackPress", () => {
       setStep("home");
       return true;
     });
     const appState = AppState.addEventListener("change", (state) => {
-      if (state !== "active") setStep("home");
+      if (state !== "active") {
+        setStep("home");
+      }
     });
-    const timeout = !cameraReady
-      ? setTimeout(() => {
+    const timeout = cameraReady
+      ? null
+      : setTimeout(() => {
           acceptedScan.current = true;
           setStep("pair");
           setLocalError(
             "The camera is unavailable. Paste a pairing link instead."
           );
-        }, 7_000)
-      : null;
+        }, 7_000);
     return () => {
       back.remove();
       appState.remove();
-      if (timeout) clearTimeout(timeout);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     };
   }, [step, cameraReady]);
 
@@ -188,12 +199,14 @@ export function ConnectionFlow({
         ? current.direction === direction
           ? current
           : { ...current, direction }
-        : { step: next, direction, revision: current.revision + 1 }
+        : { direction, revision: current.revision + 1, step: next }
     );
   }
 
   function go(next: Step, direction: -1 | 1 = 1) {
-    if (busy) return;
+    if (busy) {
+      return;
+    }
     Keyboard.dismiss();
     clearError();
     setCameraBlocked(false);
@@ -206,8 +219,9 @@ export function ConnectionFlow({
       submitting.current ||
       removing.current ||
       !candidates.length
-    )
+    ) {
       return;
+    }
     submitting.current = true;
     acceptedScan.current = true;
     Keyboard.dismiss();
@@ -221,25 +235,31 @@ export function ConnectionFlow({
       const candidates = parsePairingPayload(text);
       onChangeForm(blankForm);
       submit(candidates);
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
+    } catch (error_) {
+      setLocalError(errorMessage(error_));
       return false;
     }
     return true;
   }
 
   async function pastePairing() {
-    if (busy || requesting.current || removing.current) return;
+    if (busy || requesting.current || removing.current) {
+      return;
+    }
     requesting.current = true;
     clearError();
     setReading(true);
     setStep("pair");
     try {
       const text = await Clipboard.getStringAsync();
-      if (!mounted.current) return;
+      if (!mounted.current) {
+        return;
+      }
       setPairingText(text);
       setStep("pair");
-      if (text.trim()) acceptPairing(text);
+      if (text.trim()) {
+        acceptPairing(text);
+      }
     } catch {
       if (mounted.current) {
         setStep("pair");
@@ -247,24 +267,31 @@ export function ConnectionFlow({
       }
     } finally {
       requesting.current = false;
-      if (mounted.current) setReading(false);
+      if (mounted.current) {
+        setReading(false);
+      }
     }
   }
 
   async function scan() {
-    if (busy || requesting.current || removing.current) return;
+    if (busy || requesting.current || removing.current) {
+      return;
+    }
     requesting.current = true;
     Keyboard.dismiss();
     clearError();
     setReading(true);
     setCameraBlocked(false);
     try {
-      if (Platform.OS === "web" && !(await CameraView.isAvailableAsync()))
+      if (Platform.OS === "web" && !(await CameraView.isAvailableAsync())) {
         throw new Error("unavailable");
+      }
       const nextPermission = permission?.granted
         ? permission
         : await requestPermission();
-      if (!mounted.current) return;
+      if (!mounted.current) {
+        return;
+      }
       if (!nextPermission.granted) {
         setCameraBlocked(!nextPermission.canAskAgain);
         setLocalError(
@@ -284,12 +311,16 @@ export function ConnectionFlow({
       }
     } finally {
       requesting.current = false;
-      if (mounted.current) setReading(false);
+      if (mounted.current) {
+        setReading(false);
+      }
     }
   }
 
   function nextAddress(animate = false) {
-    if (busy) return;
+    if (busy) {
+      return;
+    }
     try {
       const url = form.url.trim();
       if (url.startsWith("{") || /\/auth\/connect\/[^/]+\/?$/.test(url)) {
@@ -298,14 +329,14 @@ export function ConnectionFlow({
       }
       const normalized = normalizeConnection({
         ...form,
-        url,
         id: form.id || undefined,
+        url,
       });
       onChangeForm({ ...form, url: normalized.url });
       clearError();
       setStep("password", animate ? 1 : 0);
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
+    } catch (error_) {
+      setLocalError(errorMessage(error_));
     }
   }
 
@@ -315,24 +346,27 @@ export function ConnectionFlow({
         [normalizeConnection({ ...form, id: form.id || undefined })],
         "password"
       );
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
+    } catch (error_) {
+      setLocalError(errorMessage(error_));
     }
   }
 
   async function remove(connection: Connection) {
-    if (busy || submitting.current || requesting.current || removing.current)
+    if (busy || submitting.current || requesting.current || removing.current) {
       return;
+    }
     removing.current = connection.id;
     setRemovingID(connection.id);
     clearError();
     try {
       await onRemove(connection);
-    } catch (cause) {
-      if (mounted.current) setLocalError(errorMessage(cause));
+    } catch (error_) {
+      if (mounted.current) setLocalError(errorMessage(error_));
     } finally {
       removing.current = null;
-      if (mounted.current) setRemovingID(null);
+      if (mounted.current) {
+        setRemovingID(null);
+      }
     }
   }
 
@@ -594,12 +628,15 @@ export function ConnectionFlow({
                 );
               }}
               onBarcodeScanned={({ data }) => {
-                if (acceptedScan.current) return;
+                if (acceptedScan.current) {
+                  return;
+                }
                 acceptedScan.current = true;
-                if (!acceptPairing(data))
+                if (!acceptPairing(data)) {
                   setLocalError(
                     "This QR code is not a server pairing code. Scan a pairing code from your computer."
                   );
+                }
               }}
             />
             <View pointerEvents="none" style={styles.viewfinder}>
@@ -669,7 +706,7 @@ export function ConnectionFlow({
             editable={!busy}
             onChangeText={(url) => {
               clearError();
-              onChangeForm({ ...form, url, token: "" });
+              onChangeForm({ ...form, token: "", url });
             }}
             keyboardType="url"
             autoComplete="off"
@@ -859,92 +896,92 @@ function PairingIcon({ color }: { color: string }) {
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { gap: 16 },
+    actions: { gap: 4 },
     back: { alignSelf: "flex-start", marginLeft: -10 },
-    center: { textAlign: "center" },
-    betaContainer: { width: "100%", maxWidth: 360, alignSelf: "center" },
-    betaIntro: { alignItems: "center", gap: 8, marginBottom: 12 },
-    betaLogo: { marginBottom: 28 },
-    betaTitle: {
-      fontSize: 19,
-      lineHeight: 25,
-      fontWeight: "500",
-      textAlign: "center",
-    },
-    betaHint: { fontSize: 14, lineHeight: 21, textAlign: "center" },
-    betaInput: {
-      minHeight: 48,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
-      fontSize: 15,
-      borderRadius: 6,
-    },
     betaActions: { gap: 8 },
-    betaPassword: { justifyContent: "center", gap: 4 },
-    betaInstructions: {
-      alignItems: "center",
-      gap: 12,
-      paddingTop: 16,
-      marginTop: 4,
-    },
     betaCommand: {
-      borderWidth: 1,
+      backgroundColor: colors.input,
       borderColor: colors.border,
       borderRadius: 6,
-      backgroundColor: colors.input,
+      borderWidth: 1,
       paddingHorizontal: 16,
       paddingVertical: 6,
     },
-    intro: { gap: 12, alignItems: "center", paddingTop: 8, paddingBottom: 8 },
-    actions: { gap: 4 },
-    instruction: { fontWeight: "500", fontSize: 14 },
+    betaContainer: { alignSelf: "center", maxWidth: 360, width: "100%" },
+    betaHint: { fontSize: 14, lineHeight: 21, textAlign: "center" },
+    betaInput: {
+      borderRadius: 6,
+      fontSize: 15,
+      minHeight: 48,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    betaInstructions: {
+      alignItems: "center",
+      gap: 12,
+      marginTop: 4,
+      paddingTop: 16,
+    },
+    betaIntro: { alignItems: "center", gap: 8, marginBottom: 12 },
+    betaLogo: { marginBottom: 28 },
+    betaPassword: { gap: 4, justifyContent: "center" },
+    betaTitle: {
+      fontSize: 19,
+      fontWeight: "500",
+      lineHeight: 25,
+      textAlign: "center",
+    },
+    camera: {
+      aspectRatio: 1,
+      backgroundColor: "#000000",
+      borderRadius: 12,
+      maxHeight: 360,
+      overflow: "hidden",
+      width: "100%",
+    },
+    center: { textAlign: "center" },
     command: {
+      color: colors.text,
       fontFamily: mono,
       fontSize: 13,
-      color: colors.text,
       paddingVertical: 4,
     },
-    small: { fontSize: 13, lineHeight: 19 },
+    container: { gap: 16 },
+    frame: {
+      aspectRatio: 1,
+      borderColor: "#ffffffbb",
+      borderRadius: 12,
+      borderWidth: 1.5,
+      position: "absolute",
+      width: "70%",
+    },
+    instruction: { fontSize: 14, fontWeight: "500" },
+    intro: { alignItems: "center", gap: 12, paddingBottom: 8, paddingTop: 8 },
+    manage: { paddingBottom: 10, paddingLeft: 32 },
+    privacy: {
+      fontSize: 12,
+      lineHeight: 18,
+      paddingTop: 4,
+      textAlign: "center",
+    },
     saved: { gap: 4 },
     savedItem: { borderBottomWidth: 1, borderColor: colors.border },
     server: {
-      minHeight: touchTarget + 16,
-      paddingVertical: 12,
-      paddingHorizontal: 4,
-      flexDirection: "row",
       alignItems: "center",
-      gap: 12,
       borderRadius: 6,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: touchTarget + 16,
+      paddingHorizontal: 4,
+      paddingVertical: 12,
     },
-    serverText: { flex: 1, minWidth: 0, gap: 2 },
     serverName: { fontWeight: "500" },
-    manage: { paddingBottom: 10, paddingLeft: 32 },
-    camera: {
-      width: "100%",
-      aspectRatio: 1,
-      maxHeight: 360,
-      overflow: "hidden",
-      borderRadius: 12,
-      backgroundColor: "#000000",
-    },
+    serverText: { flex: 1, gap: 2, minWidth: 0 },
+    small: { fontSize: 13, lineHeight: 19 },
     viewfinder: {
       ...StyleSheet.absoluteFill,
       alignItems: "center",
       justifyContent: "center",
-    },
-    frame: {
-      position: "absolute",
-      width: "70%",
-      aspectRatio: 1,
-      borderWidth: 1.5,
-      borderColor: "#ffffffbb",
-      borderRadius: 12,
-    },
-    privacy: {
-      fontSize: 12,
-      lineHeight: 18,
-      textAlign: "center",
-      paddingTop: 4,
     },
   });
 }

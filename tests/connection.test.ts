@@ -29,11 +29,11 @@ test("Basic authentication preserves a Unicode password and its colons", () => {
   const header = authorizationHeader({
     id: "one",
     name: "Work",
-    url: "https://example.com",
     token: "sëcret:a:b",
+    url: "https://example.com",
   });
   assert.equal(
-    Buffer.from(header!.slice(6), "base64").toString("utf8"),
+    Buffer.from(header!.slice(6), "base64").toString("utf-8"),
     "opencode:sëcret:a:b"
   );
 });
@@ -46,9 +46,9 @@ test("pairing redeems the code as JSON and authenticates the next request under 
   }[] = [];
   const server = createServer((request, response) => {
     requests.push({
-      path: request.url,
-      authorization: request.headers.authorization,
       accept: request.headers.accept,
+      authorization: request.headers.authorization,
+      path: request.url,
     });
     response.setHeader("Content-Type", "application/json");
     if (request.url === "/proxy/auth/connect/one-use-code") {
@@ -56,10 +56,10 @@ test("pairing redeems the code as JSON and authenticates the next request under 
     } else if (request.url === "/proxy/api/info") {
       response.end(
         JSON.stringify({
-          version: "2.1.4",
+          paths: { tmp: "/tmp" },
           pid: 42,
           urls: [],
-          paths: { tmp: "/tmp" },
+          version: "2.1.4",
         })
       );
     } else {
@@ -83,14 +83,14 @@ test("pairing redeems the code as JSON and authenticates the next request under 
     assert.equal(result.info.version, "2.1.4");
     assert.deepEqual(requests, [
       {
-        path: "/proxy/auth/connect/one-use-code",
-        authorization: undefined,
         accept: "application/json",
+        authorization: undefined,
+        path: "/proxy/auth/connect/one-use-code",
       },
       {
-        path: "/proxy/api/info",
-        authorization: `Basic ${Buffer.from("opencode:paired-token").toString("base64")}`,
         accept: "*/*",
+        authorization: `Basic ${Buffer.from("opencode:paired-token").toString("base64")}`,
+        path: "/proxy/api/info",
       },
     ]);
   } finally {
@@ -136,8 +136,8 @@ test("connection recovery distinguishes rejected passwords, expired links, and i
       const connection = {
         id: "recovery",
         name: "Server",
-        url: origin + path,
         token: "incorrect-password",
+        url: origin + path,
       };
       await assert.rejects(
         () => connect(connection),

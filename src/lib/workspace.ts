@@ -4,8 +4,9 @@ export function decodeEditableFile(bytes: Uint8Array): string {
   if (bytes.byteLength > EDITABLE_FILE_LIMIT) {
     throw new Error("This file exceeds the 512 KB mobile editor limit");
   }
-  if (bytes.includes(0))
+  if (bytes.includes(0)) {
     throw new Error("This is a binary file. Attach it to a prompt instead");
+  }
   try {
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
       bytes
@@ -17,10 +18,10 @@ export function decodeEditableFile(bytes: Uint8Array): string {
   }
 }
 
-type FileAccess = {
+interface FileAccess {
   read: () => Promise<Uint8Array>;
   write: (bytes: Uint8Array) => Promise<unknown>;
-};
+}
 
 export async function saveEditableFile(
   access: FileAccess,
@@ -37,8 +38,9 @@ export async function saveEditableFile(
     );
   }
   const next = new TextEncoder().encode(text);
-  if (next.byteLength > EDITABLE_FILE_LIMIT)
+  if (next.byteLength > EDITABLE_FILE_LIMIT) {
     throw new Error("Your edits exceed the 512 KB mobile editor limit");
+  }
   await access.write(next);
   return next;
 }
@@ -65,7 +67,8 @@ export function serverFilePath(directory: string, path: string): string {
     path.startsWith("/") ||
     path.startsWith("\\\\") ||
     /^[A-Za-z]:[\\/]/.test(path)
-  )
+  ) {
     return path;
+  }
   return `${directory.replace(/[\\/]+$/, "")}/${path}`;
 }

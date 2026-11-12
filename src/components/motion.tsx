@@ -11,9 +11,8 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  type StyleProp,
-  type ViewStyle,
 } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 import Animated, {
   cancelAnimation,
   cubicBezier,
@@ -40,7 +39,9 @@ export function useMotionPreference() {
     let live = true;
     void AccessibilityInfo.isReduceMotionEnabled()
       .then((value) => {
-        if (live) setReduced(value);
+        if (live) {
+          setReduced(value);
+        }
       })
       .catch(() => {});
     const subscription = AccessibilityInfo.addEventListener(
@@ -81,8 +82,8 @@ export function PressFeedback({
             { translateY: !reduced && down ? 1 : 0 },
             { scale: !reduced && down ? 0.97 : 1 },
           ],
-          transitionProperty: reduced ? "none" : "transform",
           transitionDuration: 120,
+          transitionProperty: reduced ? "none" : "transform",
           transitionTimingFunction: easePress,
         },
       ]}
@@ -110,8 +111,8 @@ export function MotionDisclosureChevron({
         style,
         {
           transform: [{ rotate: open ? "90deg" : "0deg" }],
-          transitionProperty: reduced ? "none" : "transform",
           transitionDuration: 140,
+          transitionProperty: reduced ? "none" : "transform",
           transitionTimingFunction: easePress,
         },
       ]}
@@ -139,8 +140,9 @@ export function MotionDisclosureBody({
   requested.current = open;
   const revision = useRef(0);
   const finishClose = useCallback((request: number) => {
-    if (alive.current && request === revision.current && !requested.current)
+    if (alive.current && request === revision.current && !requested.current) {
       setPresented(false);
+    }
   }, []);
   useLayoutEffect(() => {
     if (initial.current) {
@@ -149,7 +151,9 @@ export function MotionDisclosureBody({
     }
     const request = ++revision.current;
     cancelAnimation(progress);
-    if (open) setPresented(true);
+    if (open) {
+      setPresented(true);
+    }
     progress.set(
       withTiming(
         open ? 1 : 0,
@@ -159,7 +163,9 @@ export function MotionDisclosureBody({
           reduceMotion: ReduceMotion.Never,
         },
         (finished) => {
-          if (finished && !open) scheduleOnRN(finishClose, request);
+          if (finished && !open) {
+            scheduleOnRN(finishClose, request);
+          }
         }
       )
     );
@@ -179,7 +185,9 @@ export function MotionDisclosureBody({
     }),
     Platform.OS === "web" ? [reduced] : undefined
   );
-  if (!presented) return null;
+  if (!presented) {
+    return null;
+  }
   return (
     <Animated.View
       pointerEvents={open ? "auto" : "none"}
@@ -211,7 +219,9 @@ export function MotionScreen({
     cancelAnimation(progress);
     if (!visible) {
       progress.set(0);
-    } else if (!wasVisible) {
+    } else if (wasVisible) {
+      progress.set(1);
+    } else {
       progress.set(0);
       progress.set(
         withTiming(1, {
@@ -220,8 +230,6 @@ export function MotionScreen({
           reduceMotion: ReduceMotion.Never,
         })
       );
-    } else {
-      progress.set(1);
     }
   }, [visible, reduced, progress]);
   useEffect(() => () => cancelAnimation(progress), [progress]);
@@ -320,7 +328,7 @@ export function WorkingIndicator({
   useEffect(() => {
     cancelAnimation(rotation);
     rotation.set(0);
-    if (active && !reduced)
+    if (active && !reduced) {
       rotation.set(
         withRepeat(
           withTiming(360, {
@@ -332,6 +340,7 @@ export function WorkingIndicator({
           false
         )
       );
+    }
     return () => cancelAnimation(rotation);
   }, [active, reduced, rotation]);
   const spin = useAnimatedStyle(() => ({
@@ -340,7 +349,7 @@ export function WorkingIndicator({
   return (
     <Animated.View
       aria-hidden
-      style={[styles.indicator, { width: size, height: size }, spin]}
+      style={[styles.indicator, { height: size, width: size }, spin]}
     >
       <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
         <Circle
@@ -394,12 +403,16 @@ export function MotionDrawer({
   dismissRef.current = onDismiss;
 
   const notifyDismissed = useCallback(() => {
-    if (!pendingDismiss.current || requested.current) return;
+    if (!pendingDismiss.current || requested.current) {
+      return;
+    }
     pendingDismiss.current = false;
     dismissRef.current?.();
   }, []);
   const finishClose = useCallback((request: number) => {
-    if (request !== revision.current || requested.current) return;
+    if (request !== revision.current || requested.current) {
+      return;
+    }
     showing.current = false;
     pendingDismiss.current = true;
     setPresented(false);
@@ -416,7 +429,9 @@ export function MotionDrawer({
             reduceMotion: ReduceMotion.Never,
           },
           (finished) => {
-            if (finished && !open) scheduleOnRN(finishClose, request);
+            if (finished && !open) {
+              scheduleOnRN(finishClose, request);
+            }
           }
         )
       );
@@ -428,11 +443,17 @@ export function MotionDrawer({
     if (visible) {
       pendingDismiss.current = false;
       setPresented(true);
-      if (showing.current) animate(true);
-    } else if (presented) animate(false);
+      if (showing.current) {
+        animate(true);
+      }
+    } else if (presented) {
+      animate(false);
+    }
   }, [visible, presented, animate]);
   useEffect(() => {
-    if (presented || Platform.OS === "ios" || !pendingDismiss.current) return;
+    if (presented || Platform.OS === "ios" || !pendingDismiss.current) {
+      return;
+    }
     const frame = requestAnimationFrame(notifyDismissed);
     return () => cancelAnimationFrame(frame);
   }, [presented, notifyDismissed]);
@@ -482,7 +503,7 @@ export function MotionDrawer({
           </Animated.View>
           <Animated.View
             accessibilityViewIsModal
-            style={[{ width, height: "100%" }, panelStyle, panel]}
+            style={[{ height: "100%", width }, panelStyle, panel]}
           >
             {children}
           </Animated.View>
@@ -493,8 +514,8 @@ export function MotionDrawer({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, minWidth: 0, minHeight: 0 },
-  pressContent: { alignItems: "center", justifyContent: "center" },
-  indicator: { alignItems: "center", justifyContent: "center", flexShrink: 0 },
   drawerRoot: { flex: 1, flexDirection: "row" },
+  indicator: { alignItems: "center", flexShrink: 0, justifyContent: "center" },
+  pressContent: { alignItems: "center", justifyContent: "center" },
+  screen: { flex: 1, minHeight: 0, minWidth: 0 },
 });

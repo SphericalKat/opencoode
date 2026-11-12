@@ -16,7 +16,7 @@ import type {
 export const TerminalRenderer = forwardRef<
   TerminalRendererHandle,
   TerminalRendererProps
->(function TerminalRenderer({ onEvent, onError }, ref) {
+>(({ onEvent, onError }, ref) => {
   const { colors } = useTheme();
   const frame = useRef<HTMLIFrameElement>(null);
   const onEventRef = useRef(onEvent);

@@ -4,20 +4,22 @@
   let restoreResize = false;
   let inputEnabled = true;
   const term = new Terminal({
+    cursorBlink: true,
     fontFamily: "Menlo, Consolas, monospace",
     fontSize: 13,
-    cursorBlink: true,
-    scrollback: 2000,
     screenReaderMode: true,
+    scrollback: 2000,
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
-  term.open(document.getElementById("terminal"));
+  term.open(document.querySelector("#terminal"));
   term.attachCustomKeyEventHandler(() => inputEnabled);
   term.element.addEventListener(
     "paste",
     (event) => {
-      if (inputEnabled) return;
+      if (inputEnabled) {
+        return;
+      }
       event.preventDefault();
       event.stopImmediatePropagation();
     },
@@ -26,12 +28,16 @@
 
   function send(value) {
     const message = JSON.stringify({ channel, ...value });
-    if (window.ReactNativeWebView)
+    if (window.ReactNativeWebView) {
       window.ReactNativeWebView.postMessage(message);
-    else window.parent.postMessage(message, "*");
+    } else {
+      window.parent.postMessage(message, "*");
+    }
   }
   function receive(event) {
-    if (!window.ReactNativeWebView && event.source !== window.parent) return;
+    if (!window.ReactNativeWebView && event.source !== window.parent) {
+      return;
+    }
     let message;
     try {
       message =
@@ -39,10 +45,15 @@
     } catch {
       return;
     }
-    if (!message || message.channel !== channel) return;
-    if (message.type === "output" && typeof message.data === "string")
+    if (!message || message.channel !== channel) {
+      return;
+    }
+    if (message.type === "output" && typeof message.data === "string") {
       term.write(message.data);
-    if (message.type === "focus" && inputEnabled) term.focus();
+    }
+    if (message.type === "focus" && inputEnabled) {
+      term.focus();
+    }
     if (
       message.type === "inputEnabled" &&
       typeof message.enabled === "boolean"
@@ -51,7 +62,9 @@
       term.textarea.readOnly = !inputEnabled;
       term.textarea.tabIndex = inputEnabled ? 0 : -1;
       term.textarea.setAttribute("inputmode", inputEnabled ? "text" : "none");
-      if (!inputEnabled) term.textarea.blur();
+      if (!inputEnabled) {
+        term.textarea.blur();
+      }
     }
     if (
       message.type === "theme" &&
@@ -63,7 +76,7 @@
       document.documentElement.style.backgroundColor =
         message.colors.background;
       document.body.style.backgroundColor = message.colors.background;
-      document.getElementById("terminal").style.visibility = "visible";
+      document.querySelector("#terminal").style.visibility = "visible";
     }
     if (
       message.type === "restore" &&
@@ -81,24 +94,28 @@
       restored.set([27, 99]);
       restored.set(bytes, 2);
       term.write(restored, () => {
-        if (currentTheme) term.options.theme = currentTheme;
+        if (currentTheme) {
+          term.options.theme = currentTheme;
+        }
       });
     }
   }
   window.addEventListener("message", receive);
   document.addEventListener("message", receive);
-  term.onData((data) => send({ type: "input", data }));
-  term.onBinary((data) => send({ type: "input", data, binary: true }));
+  term.onData((data) => send({ data, type: "input" }));
+  term.onBinary((data) => send({ binary: true, data, type: "input" }));
   term.onResize((size) => {
-    if (!restoreResize) send({ type: "resize", ...size });
+    if (!restoreResize) {
+      send({ type: "resize", ...size });
+    }
   });
   const observer = new ResizeObserver(() => fit.fit());
-  observer.observe(document.getElementById("terminal"));
+  observer.observe(document.querySelector("#terminal"));
   window.addEventListener("resize", () => fit.fit());
   window.visualViewport?.addEventListener("resize", () => fit.fit());
   requestAnimationFrame(() => {
     fit.fit();
     send({ type: "ready" });
-    send({ type: "resize", cols: term.cols, rows: term.rows });
+    send({ cols: term.cols, rows: term.rows, type: "resize" });
   });
 })();

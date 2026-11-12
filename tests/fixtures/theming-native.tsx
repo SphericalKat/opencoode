@@ -14,28 +14,29 @@ import { ThemeProvider, useTheme } from "../../src/lib/theme";
 import { UnsavedProvider } from "../../src/lib/unsaved";
 import { ChatScreen } from "../../src/screens/ChatScreen";
 import { AppearanceSettings } from "../../src/screens/SettingsScreen";
+
 const noop = () => {};
 const model = {
-  id: "demo-model",
-  providerID: "openai",
-  name: "Sample Model",
-  enabled: true,
-  variants: ["low", "medium", "high", "xhigh"].map((id) => ({ id })),
-  limit: { context: 200000, output: 32000 },
   capabilities: {},
   cost: { input: 0, output: 0 },
+  enabled: true,
+  id: "demo-model",
+  limit: { context: 200000, output: 32000 },
+  name: "Sample Model",
+  providerID: "openai",
+  variants: ["low", "medium", "high", "xhigh"].map((id) => ({ id })),
 };
 const session = {
-  id: "visual-42",
-  title: "Picker spacing comparison",
   agent: "build",
+  id: "visual-42",
   location: { directory: "/sample" },
   model: { id: model.id, providerID: model.providerID, variant: "medium" },
   time: { created: 1, updated: 1 },
-  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  title: "Picker spacing comparison",
+  tokens: { cache: { read: 0, write: 0 }, input: 0, output: 0, reasoning: 0 },
 };
 const backend: any = {
-  subscribe: async function* ({ signal }: { signal?: AbortSignal }) {
+  async *subscribe({ signal }: { signal?: AbortSignal }) {
     await new Promise<void>((resolve) => {
       if (signal?.aborted) resolve();
       else signal?.addEventListener("abort", () => resolve(), { once: true });
@@ -44,18 +45,18 @@ const backend: any = {
   kind: "pi",
   capabilities: { defaultVariant: true },
   core: {
-    session: {
-      get: async () => session,
-      active: async () => ({}),
-      switchModel: async () => {},
-      update: async () => {},
-      fork: async () => {},
-      prompt: async () => {},
-      interrupt: async () => {},
-      compact: async () => {},
-    },
     message: { list: async () => ({ data: [], cursor: {} }) },
     model: { list: async () => ({ data: [model] }) },
+    session: {
+      active: async () => ({}),
+      compact: async () => {},
+      fork: async () => {},
+      get: async () => session,
+      interrupt: async () => {},
+      prompt: async () => {},
+      switchModel: async () => {},
+      update: async () => {},
+    },
   },
 };
 function Content() {
@@ -64,7 +65,7 @@ function Content() {
     "chat"
   );
   return (
-    <View style={{ flex: 1, paddingTop: 56, backgroundColor: colors.bg }}>
+    <View style={{ backgroundColor: colors.bg, flex: 1, paddingTop: 56 }}>
       <View
         style={{
           flexDirection: "row",
@@ -106,10 +107,12 @@ function Content() {
 }
 function Demo() {
   const [ready] = useFonts({
-    Inter: require("../../assets/fonts/Inter.ttf"),
     IBMPlexMono: require("../../assets/fonts/IBMPlexMono-Text.ttf"),
+    Inter: require("../../assets/fonts/Inter.ttf"),
   });
-  if (!ready) return null;
+  if (!ready) {
+    return null;
+  }
   return (
     <SafeAreaProvider>
       <KeyboardProvider>

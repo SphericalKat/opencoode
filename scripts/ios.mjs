@@ -2,10 +2,13 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { encoding: "utf8", ...options });
-  if (result.error) throw result.error;
-  if (result.status !== 0)
+  const result = spawnSync(command, args, { encoding: "utf-8", ...options });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
     throw new Error(`${command} exited with ${result.status}`);
+  }
   return result.stdout;
 }
 
@@ -21,14 +24,16 @@ try {
       phones.sort((a, b) =>
         b.osVersion.localeCompare(a.osVersion, undefined, { numeric: true })
       )[0]);
-  if (!selected || selected.platform !== "iOS")
+  if (!selected || selected.platform !== "iOS") {
     throw new Error(
       "No iOS simulator is available. Install a runtime in Xcode, or set SIMULATOR_UDID to an available iOS device."
     );
-  const profile = fileURLToPath(new URL("./simslim-dev.json", import.meta.url));
+  }
+  const profile = fileURLToPath(new URL("simslim-dev.json", import.meta.url));
   console.log(`Use ${selected.name} (${selected.osVersion}) with SimSlim`);
-  if (selected.state !== "Booted")
+  if (selected.state !== "Booted") {
     run("simslim", ["boot", selected.udid], { stdio: "inherit" });
+  }
   run("simslim", ["on", selected.udid, "--no-reboot", "--profile", profile], {
     stdio: "inherit",
   });

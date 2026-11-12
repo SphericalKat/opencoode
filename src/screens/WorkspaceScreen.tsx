@@ -37,10 +37,12 @@ import {
   Row,
   Sheet,
 } from "../components/ui";
-import { type Client, type Connection, errorMessage } from "../lib/client";
+import { errorMessage } from "../lib/client";
+import type { Client, Connection } from "../lib/client";
 import { pageInset } from "../lib/layout";
 import { useNativePresentation } from "../lib/sheets";
-import { type ThemeColors, useTheme, useThemedStyles } from "../lib/theme";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import { useUnsavedChanges } from "../lib/unsaved";
 import {
   decodeEditableFile,
@@ -52,7 +54,7 @@ import {
 
 export type WorkspaceSection = "Files" | "Changes" | "Worktrees" | "Terminal";
 
-type Props = {
+interface Props {
   client: Client;
   connection: Connection;
   directory: string;
@@ -68,7 +70,7 @@ type Props = {
   onOpenNavigation?: () => void;
   section?: WorkspaceSection;
   hideChrome?: boolean;
-};
+}
 
 export function WorkspaceScreen(props: Props) {
   return (
@@ -134,9 +136,9 @@ function Workspace({
               >
                 <Label
                   style={{
-                    textAlign: "center",
-                    fontSize: 14,
                     color: activeTab === item ? colors.text : colors.muted,
+                    fontSize: 14,
+                    textAlign: "center",
                   }}
                 >
                   {item}
@@ -181,7 +183,7 @@ function Workspace({
   );
 }
 
-type OpenFile = {
+interface OpenFile {
   path: string;
   bytes: Uint8Array | null;
   original: Uint8Array | null;
@@ -191,7 +193,7 @@ type OpenFile = {
   preview?: string;
   notice?: string;
   error?: string;
-};
+}
 
 function imageMime(bytes: Uint8Array): string | undefined {
   if (
@@ -203,10 +205,12 @@ function imageMime(bytes: Uint8Array): string | undefined {
     bytes[5] === 0x0a &&
     bytes[6] === 0x1a &&
     bytes[7] === 0x0a
-  )
+  ) {
     return "image/png";
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return "image/jpeg";
+  }
   if (
     bytes[0] === 0x47 &&
     bytes[1] === 0x49 &&
@@ -214,8 +218,9 @@ function imageMime(bytes: Uint8Array): string | undefined {
     bytes[3] === 0x38 &&
     (bytes[4] === 0x37 || bytes[4] === 0x39) &&
     bytes[5] === 0x61
-  )
+  ) {
     return "image/gif";
+  }
   if (
     bytes[0] === 0x52 &&
     bytes[1] === 0x49 &&
@@ -225,33 +230,37 @@ function imageMime(bytes: Uint8Array): string | undefined {
     bytes[9] === 0x45 &&
     bytes[10] === 0x42 &&
     bytes[11] === 0x50
-  )
+  ) {
     return "image/webp";
+  }
 }
 
 function fileMime(path: string, bytes: Uint8Array): string {
   const image = imageMime(bytes);
-  if (image) return image;
+  if (image) {
+    return image;
+  }
   if (
     bytes[0] === 0x25 &&
     bytes[1] === 0x50 &&
     bytes[2] === 0x44 &&
     bytes[3] === 0x46 &&
     bytes[4] === 0x2d
-  )
+  ) {
     return "application/pdf";
+  }
   const extension = path.split(".").pop()?.toLowerCase();
   return (
     (
       {
-        json: "application/json",
-        txt: "text/plain",
-        md: "text/markdown",
         csv: "text/csv",
-        mp3: "audio/mpeg",
-        wav: "audio/wav",
-        mp4: "video/mp4",
+        json: "application/json",
+        md: "text/markdown",
         mov: "video/quicktime",
+        mp3: "audio/mpeg",
+        mp4: "video/mp4",
+        txt: "text/plain",
+        wav: "audio/wav",
         zip: "application/zip",
       } as Record<string, string>
     )[extension || ""] || "application/octet-stream"
@@ -260,15 +269,17 @@ function fileMime(path: string, bytes: Uint8Array): string {
 
 function base64(bytes: Uint8Array): string {
   const chunks: string[] = [];
-  for (let index = 0; index < bytes.length; index += 0x8000)
+  for (let index = 0; index < bytes.length; index += 0x80_00) {
     chunks.push(String.fromCharCode(...bytes.subarray(index, index + 0x8000)));
+  }
   return btoa(chunks.join(""));
 }
 
 function quotedText(text: string, language = ""): string {
   let longest = 2;
-  for (const match of text.matchAll(/`+/g))
+  for (const match of text.matchAll(/`+/g)) {
     longest = Math.max(longest, match[0].length);
+  }
   const fence = "`".repeat(longest + 1);
   return `${fence}${language}\n${text}\n${fence}`;
 }
@@ -293,7 +304,7 @@ function Files({
   const [saved, setSaved] = useState(false);
   const [fileActionsOpen, setFileActionsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [selection, setSelection] = useState({ end: 0, start: 0 });
   const [sharing, setSharing] = useState(false);
   const location = { directory };
   const searching = query.trim().length > 0;
@@ -312,14 +323,14 @@ function Files({
         try {
           const result = query.trim()
             ? await client.file.find(
-                { location: { directory }, query: query.trim(), limit: 200 },
+                { limit: 200, location: { directory }, query: query.trim() },
                 { signal: controller.signal }
               )
             : await client.file.list(
                 { location: { directory }, path },
                 { signal: controller.signal }
               );
-          if (!controller.signal.aborted)
+          if (!controller.signal.aborted) {
             setEntries(
               [...result.data].sort((a, b) =>
                 a.type === b.type
@@ -329,13 +340,16 @@ function Files({
                     : 1
               )
             );
-        } catch (failure) {
+          }
+        } catch (error_) {
           if (!controller.signal.aborted) {
             setEntries([]);
-            setError(errorMessage(failure));
+            setError(errorMessage(error_));
           }
         } finally {
-          if (!controller.signal.aborted) setLoading(false);
+          if (!controller.signal.aborted) {
+            setLoading(false);
+          }
         }
       },
       query.trim() ? 250 : 0
@@ -348,18 +362,18 @@ function Files({
 
   async function openFile(nextPath: string) {
     setFile({
-      path: nextPath,
       bytes: null,
-      original: null,
-      text: "",
       initialText: "",
+      original: null,
+      path: nextPath,
+      text: "",
     });
     setFileBusy(true);
     setSaveError(null);
     setSaved(false);
     setFileActionsOpen(false);
     setCopied(false);
-    setSelection({ start: 0, end: 0 });
+    setSelection({ end: 0, start: 0 });
     try {
       const bytes = await client.file.read({ location, path: nextPath });
       const mime = fileMime(nextPath, bytes);
@@ -371,13 +385,13 @@ function Files({
         setFile((current) =>
           current?.path === nextPath
             ? {
-                path: nextPath,
                 bytes,
-                original: null,
-                text: "",
                 initialText: "",
                 mime,
+                original: null,
+                path: nextPath,
                 preview,
+                text: "",
               }
             : current
         );
@@ -387,16 +401,16 @@ function Files({
           setFile((current) =>
             current?.path === nextPath
               ? {
-                  path: nextPath,
                   bytes,
-                  original: bytes,
-                  text,
                   initialText: text,
                   mime,
+                  original: bytes,
+                  path: nextPath,
+                  text,
                 }
               : current
           );
-        } catch (failure) {
+        } catch (error_) {
           setFile((current) =>
             current?.path === nextPath
               ? {
@@ -406,16 +420,16 @@ function Files({
                   text: "",
                   initialText: "",
                   mime,
-                  notice: errorMessage(failure),
+                  notice: errorMessage(error_),
                 }
               : current
           );
         }
       }
-    } catch (failure) {
+    } catch (error_) {
       setFile((current) =>
         current?.path === nextPath
-          ? { ...current, error: errorMessage(failure) }
+          ? { ...current, error: errorMessage(error_) }
           : current
       );
     } finally {
@@ -424,7 +438,9 @@ function Files({
   }
 
   async function closeFile() {
-    if (fileBusy || sharing) return false;
+    if (fileBusy || sharing) {
+      return false;
+    }
     if (
       file &&
       file.text !== file.initialText &&
@@ -432,14 +448,17 @@ function Files({
         "Discard your edits?",
         "Your unsaved edits will be lost."
       ))
-    )
+    ) {
       return false;
+    }
     setFile(null);
     return true;
   }
 
   async function save() {
-    if (!file?.original) return;
+    if (!file?.original) {
+      return;
+    }
     const editing = file;
     setFileBusy(true);
     setSaveError(null);
@@ -459,22 +478,26 @@ function Files({
       );
       setFile((current) =>
         current?.path === editing.path
-          ? { ...current, bytes, original: bytes, initialText: editing.text }
+          ? { ...current, bytes, initialText: editing.text, original: bytes }
           : current
       );
       setSaved(true);
       setRevision((value) => value + 1);
-    } catch (failure) {
-      setSaveError(errorMessage(failure));
+    } catch (error_) {
+      setSaveError(errorMessage(error_));
     } finally {
       setFileBusy(false);
     }
   }
 
   async function attach(contextText?: string) {
-    if (!file || !onAttachFile) return;
+    if (!file || !onAttachFile) {
+      return;
+    }
     const editing = file;
-    if (!(await closeFile())) return;
+    if (!(await closeFile())) {
+      return;
+    }
     try {
       if (
         (await onAttachFile(
@@ -487,29 +510,35 @@ function Files({
           "The attachment was not added. Check the connection and retry."
         );
       }
-    } catch (failure) {
+    } catch (error_) {
       setFile(editing);
-      setSaveError(errorMessage(failure));
+      setSaveError(errorMessage(error_));
     }
   }
 
   async function attachSelection() {
-    if (!file || selection.end <= selection.start) return;
+    if (!file || selection.end <= selection.start) {
+      return;
+    }
     const start = Math.max(0, Math.min(selection.start, file.text.length));
     const end = Math.max(start, Math.min(selection.end, file.text.length));
-    if (end <= start) return;
+    if (end <= start) {
+      return;
+    }
     const firstLine = file.text.slice(0, start).split("\n").length;
     const lastLine = file.text
       .slice(0, file.text[end - 1] === "\n" ? end - 1 : end)
       .split("\n").length;
     const path = serverFilePath(directory, file.path);
     await attach(
-      `Selected text from ${path}, lines ${firstLine}–${lastLine}${file.text !== file.initialText ? " (unsaved editor text)" : ""}:\n\n${quotedText(file.text.slice(start, end))}`
+      `Selected text from ${path}, lines ${firstLine}–${lastLine}${file.text === file.initialText ? "" : " (unsaved editor text)"}:\n\n${quotedText(file.text.slice(start, end))}`
     );
   }
 
   async function shareFile() {
-    if (!file?.bytes) return;
+    if (!file?.bytes) {
+      return;
+    }
     setSharing(true);
     setSaveError(null);
     try {
@@ -517,7 +546,7 @@ function Files({
         ? new TextEncoder().encode(file.text)
         : file.bytes;
       const name =
-        fileName(file.path).replace(/[^\p{L}\p{N}._-]/gu, "_") || "download";
+        fileName(file.path).replaceAll(/[^\p{L}\p{N}._-]/gu, "_") || "download";
       const mime = file.mime || "application/octet-stream";
       if (Platform.OS === "web") {
         const url = URL.createObjectURL(
@@ -529,8 +558,9 @@ function Files({
         anchor.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } else {
-        if (!(await Sharing.isAvailableAsync()))
+        if (!(await Sharing.isAvailableAsync())) {
           throw new Error("File sharing is unavailable on this device");
+        }
         const exported = new File(
           Paths.cache,
           `opencoode-${Date.now()}-${name}`
@@ -539,16 +569,18 @@ function Files({
           await exported.write(bytes);
           await presentNative(() =>
             Sharing.shareAsync(exported.uri, {
-              mimeType: mime,
               dialogTitle: "Save or share file",
+              mimeType: mime,
             })
           );
         } finally {
-          if (exported.exists) await exported.delete();
+          if (exported.exists) {
+            await exported.delete();
+          }
         }
       }
-    } catch (failure) {
-      setSaveError(errorMessage(failure));
+    } catch (error_) {
+      setSaveError(errorMessage(error_));
     } finally {
       setSharing(false);
     }
@@ -574,7 +606,7 @@ function Files({
             muted
             numberOfLines={1}
             ellipsizeMode="middle"
-            style={{ flex: 1, minWidth: 0, fontFamily: mono, fontSize: 13 }}
+            style={{ flex: 1, fontFamily: mono, fontSize: 13, minWidth: 0 }}
           >
             {searching ? "Search · up to 200" : path || "/"}
           </Label>
@@ -627,7 +659,9 @@ function Files({
                 if (item.type === "directory") {
                   setPath(item.path);
                   setQuery("");
-                } else void openFile(item.path);
+                } else {
+                  void openFile(item.path);
+                }
               }}
             >
               <Text style={styles.fileIcon}>
@@ -671,7 +705,7 @@ function Files({
               {file.path}
             </Label>
             <Row
-              style={{ justifyContent: "space-between", flexWrap: "nowrap" }}
+              style={{ flexWrap: "nowrap", justifyContent: "space-between" }}
             >
               {file.original && (
                 <Button
@@ -738,15 +772,16 @@ function Files({
                     compact
                     disabled={fileBusy || sharing}
                     onPress={() => {
-                      if (file.text === file.initialText)
+                      if (file.text === file.initialText) {
                         void openFile(file.path);
-                      else
+                      } else {
                         void confirmAction(
                           "Reload the file?",
                           "Your unsaved edits will be lost."
                         ).then((yes) => {
                           if (yes) void openFile(file.path);
                         });
+                      }
                     }}
                   />
                   {file.original && (
@@ -756,8 +791,8 @@ function Files({
                       onPress={() => {
                         void Clipboard.setStringAsync(file.text)
                           .then(() => setCopied(true))
-                          .catch((failure) =>
-                            setSaveError(errorMessage(failure))
+                          .catch((error_) =>
+                            setSaveError(errorMessage(error_))
                           );
                       }}
                     />
@@ -794,15 +829,15 @@ function Files({
                   accessibilityLabel={fileName(file.path)}
                   source={{ uri: file.preview }}
                   resizeMode="contain"
-                  style={{ width: "100%", height: "100%" }}
+                  style={{ height: "100%", width: "100%" }}
                   onError={() =>
                     setFile((current) =>
                       current?.path === file.path
                         ? {
                             ...current,
-                            preview: undefined,
                             notice:
                               "This device cannot display this image. Save or share the file to open it in another app.",
+                            preview: undefined,
                           }
                         : current
                     )
@@ -822,7 +857,7 @@ function Files({
                   setFile((current) => current && { ...current, text });
                   setSaved(false);
                   setCopied(false);
-                  setSelection({ start: 0, end: 0 });
+                  setSelection({ end: 0, start: 0 });
                 }}
                 editable={!fileBusy && !sharing}
                 containerStyle={{ flex: 1, minHeight: 0 }}
@@ -915,19 +950,28 @@ function Changes({
       ),
     ])
       .then(([vcs, status]) => {
-        if (controller.signal.aborted) return;
-        if (vcs.status === "fulfilled") setInfo(vcs.value.data);
-        if (status.status === "fulfilled") setFiles(status.value.data);
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (vcs.status === "fulfilled") {
+          setInfo(vcs.value.data);
+        }
+        if (status.status === "fulfilled") {
+          setFiles(status.value.data);
+        }
         const failures = [vcs, status].filter(
           (result) => result.status === "rejected"
         );
-        if (failures.length)
+        if (failures.length) {
           setError(
             failures.map((result) => errorMessage(result.reason)).join("\n")
           );
+        }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       });
     return () => controller.abort();
   }, [client, directory, revision]);
@@ -936,16 +980,16 @@ function Changes({
     setError(null);
     try {
       const result = await client.vcs.diff({
+        base: base.trim() || undefined,
         location: { directory },
         mode,
-        base: base.trim() || undefined,
         untracked: "files",
       });
       setDiff(
         file ? result.data.filter((item) => item.file === file) : result.data
       );
-    } catch (failure) {
-      setError(errorMessage(failure));
+    } catch (error_) {
+      setError(errorMessage(error_));
     } finally {
       setBusy(false);
     }
@@ -955,27 +999,30 @@ function Changes({
     setError(null);
     try {
       const result = await client.vcs.branch.list({
-        location: { directory },
         limit: 200,
+        location: { directory },
       });
       setBranches(result.data);
       setBranchesVisible(true);
-    } catch (failure) {
-      setError(errorMessage(failure));
+    } catch (error_) {
+      setError(errorMessage(error_));
     } finally {
       setBusy(false);
     }
   }
   async function closeDiff() {
-    if (addingReview) return;
+    if (addingReview) {
+      return;
+    }
     if (
       reviewComment.trim() &&
       !(await confirmAction(
         "Discard review comment?",
         "Your comment has not been added to a prompt."
       ))
-    )
+    ) {
       return;
+    }
     setReview(null);
     setReviewVisible(false);
     setReviewComment("");
@@ -989,8 +1036,9 @@ function Changes({
           "Discard review comment?",
           "Your comment has not been added to a prompt."
         ))
-      )
+      ) {
         return;
+      }
       setReviewComment("");
     }
     setReview(file);
@@ -998,7 +1046,9 @@ function Changes({
     setError(null);
   }
   async function addReview() {
-    if (!review || !onAttachFile || !reviewComment.trim()) return;
+    if (!review || !onAttachFile || !reviewComment.trim()) {
+      return;
+    }
     setAddingReview(true);
     setError(null);
     try {
@@ -1007,16 +1057,17 @@ function Changes({
         (await onAttachFile(
           serverFilePath(directory, review.file),
           context
-        )) !== false
+        )) === false
       ) {
+        setError("The review was not added. Check the connection and retry.");
+      } else {
         setReview(null);
         setReviewVisible(false);
         setReviewComment("");
         setDiff(null);
-      } else
-        setError("The review was not added. Check the connection and retry.");
-    } catch (failure) {
-      setError(errorMessage(failure));
+      }
+    } catch (error_) {
+      setError(errorMessage(error_));
     } finally {
       setAddingReview(false);
     }
@@ -1028,7 +1079,7 @@ function Changes({
           <Label
             numberOfLines={1}
             ellipsizeMode="middle"
-            style={{ flex: 1, minWidth: 0, fontFamily: mono }}
+            style={{ flex: 1, fontFamily: mono, minWidth: 0 }}
           >
             ⑂ {info?.branch.current || "No branch"}
           </Label>
@@ -1054,9 +1105,9 @@ function Changes({
               key={value}
               title={
                 {
-                  working: "Working tree",
                   branch: "Branch",
                   committed: "Committed",
+                  working: "Working tree",
                 }[value]
               }
               compact
@@ -1252,29 +1303,33 @@ function Worktrees({
           setTrees(list);
         }
       })
-      .catch((failure) => {
-        if (!controller.signal.aborted) setError(errorMessage(failure));
+      .catch((error_) => {
+        if (!controller.signal.aborted) setError(errorMessage(error_));
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       });
     return () => controller.abort();
   }, [client, directory, revision]);
   async function create() {
-    if (!location) return;
+    if (!location) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const tree = await client.worktree.create({
-        projectID: location.project.id,
-        name: name.trim() || undefined,
         branch: branch.trim() || undefined,
         from: from.trim() || undefined,
+        name: name.trim() || undefined,
+        projectID: location.project.id,
       });
       setCreateVisible(false);
       onDirectoryChange(tree.directory);
-    } catch (failure) {
-      setError(errorMessage(failure));
+    } catch (error_) {
+      setError(errorMessage(error_));
     } finally {
       setBusy(false);
     }
@@ -1287,19 +1342,20 @@ function Worktrees({
         "Remove this worktree?",
         `The server will remove ${tree.directory}. Removal stops if the worktree has uncommitted changes.`
       ))
-    )
+    ) {
       return;
+    }
     setBusy(true);
     setError(null);
     try {
       await client.worktree.remove({
-        projectID: location.project.id,
         directory: tree.directory,
         force: false,
+        projectID: location.project.id,
       });
       setRevision((value) => value + 1);
-    } catch (failure) {
-      setError(errorMessage(failure));
+    } catch (error_) {
+      setError(errorMessage(error_));
     } finally {
       setBusy(false);
     }
@@ -1395,7 +1451,9 @@ function Worktrees({
         visible={createVisible}
         title="Create worktree"
         onClose={() => {
-          if (!busy) setCreateVisible(false);
+          if (!busy) {
+            setCreateVisible(false);
+          }
         }}
       >
         <ErrorNotice error={error} />
@@ -1433,67 +1491,67 @@ function Worktrees({
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    screen: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
+    content: {
+      gap: 16,
+      padding: 16,
+      paddingBottom: 32,
+      paddingHorizontal: pageInset,
+    },
+    controls: { gap: 8, paddingBottom: 10, paddingHorizontal: pageInset },
+    editor: { flex: 1, gap: 12, minHeight: 0, padding: 16 },
+    fileIcon: { color: colors.muted, fontFamily: mono, fontSize: 23 },
+    fileRow: {
+      alignItems: "center",
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 58,
+      paddingVertical: 12,
+    },
     header: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 4,
+      justifyContent: "space-between",
+      paddingBottom: 12,
       paddingHorizontal: pageInset,
       paddingTop: 12,
-      paddingBottom: 12,
-      gap: 4,
-      flexDirection: "row",
+    },
+    list: { flexGrow: 1, paddingBottom: 24, paddingHorizontal: pageInset },
+    mediaPreview: {
       alignItems: "center",
-      justifyContent: "space-between",
+      flex: 1,
+      gap: 12,
+      justifyContent: "center",
+      minHeight: 0,
+    },
+    screen: { backgroundColor: colors.bg, flex: 1, minHeight: 0 },
+    selectedTab: { backgroundColor: colors.panel },
+    tabs: {
+      backgroundColor: colors.raised,
+      borderRadius: 14,
+      flexDirection: "row",
+      gap: 2,
+      marginBottom: 12,
+      marginHorizontal: pageInset,
+      padding: 4,
     },
     title: {
       fontSize: 25,
-      lineHeight: 31,
       fontWeight: "500",
       letterSpacing: -0.5,
-    },
-    tabs: {
-      flexDirection: "row",
-      marginHorizontal: pageInset,
-      marginBottom: 12,
-      padding: 4,
-      gap: 2,
-      backgroundColor: colors.raised,
-      borderRadius: 14,
+      lineHeight: 31,
     },
     workspaceTab: {
+      alignItems: "center",
+      borderRadius: 10,
       flex: 1,
-      minWidth: 0,
+      justifyContent: "center",
       minHeight: Platform.OS === "android" ? 48 : 44,
+      minWidth: 0,
       paddingHorizontal: 4,
       paddingVertical: 9,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 10,
-    },
-    selectedTab: { backgroundColor: colors.panel },
-    controls: { paddingHorizontal: pageInset, paddingBottom: 10, gap: 8 },
-    list: { flexGrow: 1, paddingHorizontal: pageInset, paddingBottom: 24 },
-    content: {
-      padding: 16,
-      paddingHorizontal: pageInset,
-      gap: 16,
-      paddingBottom: 32,
-    },
-    fileRow: {
-      minHeight: 58,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderColor: colors.border,
-    },
-    fileIcon: { fontFamily: mono, fontSize: 23, color: colors.muted },
-    editor: { flex: 1, minHeight: 0, padding: 16, gap: 12 },
-    mediaPreview: {
-      flex: 1,
-      minHeight: 0,
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 12,
     },
   });
 }

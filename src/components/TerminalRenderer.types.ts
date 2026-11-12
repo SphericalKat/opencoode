@@ -1,9 +1,9 @@
 import type { TerminalCommand, TerminalEvent } from "../lib/terminal";
 
-export type TerminalRendererHandle = {
+export interface TerminalRendererHandle {
   send: (command: TerminalCommand) => void;
-};
-export type TerminalRendererProps = {
+}
+export interface TerminalRendererProps {
   onEvent: (event: TerminalEvent) => void;
   onError: (message: string) => void;
-};
+}

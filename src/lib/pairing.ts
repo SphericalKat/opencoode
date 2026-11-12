@@ -1,4 +1,5 @@
-import { normalizeConnection, type Connection } from "./client";
+import { normalizeConnection } from "./client";
+import type { Connection } from "./client";
 
 const codePattern = /^[A-Za-z0-9_-]+$/;
 const invalidPairing =
@@ -25,9 +26,10 @@ export function parsePairingPayload(input: string): Connection[] {
       !Array.isArray(payload.urls) ||
       !payload.urls.length ||
       !payload.urls.every((url) => typeof url === "string")
-    )
+    ) {
       throw new Error(invalidPairing);
-    const code = payload.code;
+    }
+    const { code } = payload;
     let servers: Connection[];
     try {
       servers = payload.urls.map((url) =>
@@ -42,8 +44,8 @@ export function parsePairingPayload(input: string): Connection[] {
       ...new Map(servers.map((server) => [server.url, server])).values(),
     ].map((server) => ({
       ...server,
-      url: `${server.url}/auth/connect/${code}`,
       token: undefined,
+      url: `${server.url}/auth/connect/${code}`,
     }));
   }
   let url: URL;
@@ -55,10 +57,13 @@ export function parsePairingPayload(input: string): Connection[] {
   if (
     url.pathname === "/connect" &&
     (url.hash.length > 1 || url.searchParams.has("data"))
-  )
+  ) {
     throw new Error(legacyPairing);
+  }
   const code = /\/auth\/connect\/([^/]+)\/?$/.exec(url.pathname)?.[1];
-  if (!code || !codePattern.test(code)) throw new Error(invalidPairing);
+  if (!code || !codePattern.test(code)) {
+    throw new Error(invalidPairing);
+  }
   try {
     return [normalizeConnection({ name: "", url: value })];
   } catch {

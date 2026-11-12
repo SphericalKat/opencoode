@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { prepareSchedule, type ScheduleDraft } from "../src/lib/schedules";
+import { prepareSchedule } from "../src/lib/schedules";
+import type { ScheduleDraft } from "../src/lib/schedules";
 
 const draft: ScheduleDraft = {
+  after: "",
+  mode: "every",
   name: "",
   prompt: "Check the build",
-  mode: "every",
-  trigger: "1 hour",
-  timezone: "Asia/Kolkata",
-  after: "",
-  until: "",
   runs: "",
+  timezone: "Asia/Kolkata",
+  trigger: "1 hour",
+  until: "",
 };
 
 test("schedule form rejects empty input and invalid repeat limits before server admission", () => {
@@ -45,10 +46,10 @@ test("schedule form rejects empty input and invalid repeat limits before server 
 test("one-shot requests do not inherit repeat limits from a previous form mode", () => {
   const request = prepareSchedule("ses_a", {
     ...draft,
-    mode: "in",
-    trigger: "20 minutes",
-    runs: "invalid",
     after: "8 hours",
+    mode: "in",
+    runs: "invalid",
+    trigger: "20 minutes",
   });
   assert.equal(request.ends, undefined);
 });

@@ -2,8 +2,10 @@ import type { FileSystemEntry, Project } from "@opencode/client";
 import React, { useEffect, useRef, useState } from "react";
 import { FlatList, Keyboard, Pressable, StyleSheet, View } from "react-native";
 
-import { type Client, errorMessage } from "../lib/client";
-import { type ThemeColors, useTheme, useThemedStyles } from "../lib/theme";
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
 import { fileName } from "../lib/workspace";
 import { NavIcon } from "./Icons";
 import {
@@ -19,7 +21,7 @@ import {
   touchTarget,
 } from "./ui";
 
-type Props = {
+interface Props {
   client: Client;
   directory: string;
   value: string;
@@ -28,7 +30,7 @@ type Props = {
   error: string | null;
   onChangeValue: (value: string) => void;
   onOpenDirectory: (directory: string) => void;
-};
+}
 
 function absolutePath(value: string) {
   return (
@@ -39,7 +41,7 @@ function absolutePath(value: string) {
 }
 
 function normalizePath(value: string) {
-  const path = value.replace(/\\/g, "/");
+  const path = value.replaceAll("\\", "/");
   const network =
     path.startsWith("//") && !path.startsWith("///")
       ? path.split("/").filter(Boolean).slice(0, 2)
@@ -56,9 +58,14 @@ function normalizePath(value: string) {
       : "/";
   const parts: string[] = [];
   for (const part of path.slice(root.length).split("/")) {
-    if (!part || part === ".") continue;
-    if (part === "..") parts.pop();
-    else parts.push(part);
+    if (!part || part === ".") {
+      continue;
+    }
+    if (part === "..") {
+      parts.pop();
+    } else {
+      parts.push(part);
+    }
   }
   return (
     root +
@@ -117,7 +124,9 @@ export function ProjectDirectoryBrowser({
     void client.file
       .list({ location: { directory }, path }, { signal: controller.signal })
       .then((result) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
         setBase(result.location.directory);
         setFolders(
           result.data
@@ -125,14 +134,16 @@ export function ProjectDirectoryBrowser({
             .sort((a, b) => fileName(a.path).localeCompare(fileName(b.path)))
         );
       })
-      .catch((cause) => {
+      .catch((error_) => {
         if (!controller.signal.aborted) {
           setFolders([]);
-          setBrowseError(errorMessage(cause));
+          setBrowseError(errorMessage(error_));
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       });
     return () => controller.abort();
   }, [client, directory, path, revision]);
@@ -147,12 +158,17 @@ export function ProjectDirectoryBrowser({
     onChangeValue(normalized);
     setRecent(false);
     setManual(false);
-    if (normalized === path) setRevision((current) => current + 1);
-    else setPath(normalized);
+    if (normalized === path) {
+      setRevision((current) => current + 1);
+    } else {
+      setPath(normalized);
+    }
   }
 
   async function initializeGit() {
-    if (pending || action.current) return;
+    if (pending || action.current) {
+      return;
+    }
     const controller = new AbortController();
     action.current = controller;
     setInitializing(true);
@@ -167,7 +183,9 @@ export function ProjectDirectoryBrowser({
         { location: { directory: location.directory } },
         { signal: controller.signal }
       );
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        return;
+      }
       if (vcs.data.provider) {
         setNotice(
           `This folder already belongs to a ${vcs.data.provider} repository.`
@@ -179,18 +197,25 @@ export function ProjectDirectoryBrowser({
         `Create a Git repository in ${location.project.directory}?`,
         { confirmLabel: "Initialize Git", destructive: false }
       );
-      if (!confirmed || controller.signal.aborted) return;
+      if (!confirmed || controller.signal.aborted) {
+        return;
+      }
       await client.vcs.init(
         { location: { directory: location.directory }, provider: "git" },
         { signal: controller.signal }
       );
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
         setNotice(`Git initialized in ${location.project.directory}`);
-    } catch (cause) {
-      if (!controller.signal.aborted) setActionError(errorMessage(cause));
+      }
+    } catch (error_) {
+      if (!controller.signal.aborted) setActionError(errorMessage(error_));
     } finally {
-      if (mounted.current) setInitializing(false);
-      if (action.current === controller) action.current = null;
+      if (mounted.current) {
+        setInitializing(false);
+      }
+      if (action.current === controller) {
+        action.current = null;
+      }
     }
   }
 
@@ -262,7 +287,7 @@ export function ProjectDirectoryBrowser({
         <ErrorNotice
           error={error || browseError || actionError}
           onRetry={
-            !pending ? () => setRevision((current) => current + 1) : undefined
+            pending ? undefined : () => setRevision((current) => current + 1)
           }
         />
         {notice && (
@@ -396,27 +421,27 @@ export function ProjectDirectoryBrowser({
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, minHeight: 0 },
-    header: { padding: 16, paddingBottom: 8, gap: 10 },
-    path: { color: colors.muted, fontFamily: mono, fontSize: 13 },
-    list: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 16 },
+    detail: { fontFamily: mono, fontSize: 12 },
     folder: {
-      minHeight: touchTarget + 8,
-      flexDirection: "row",
       alignItems: "center",
-      gap: 12,
-      paddingVertical: 12,
       borderBottomWidth: 1,
       borderColor: colors.border,
-    },
-    detail: { fontSize: 12, fontFamily: mono },
-    footer: {
       flexDirection: "row",
+      gap: 12,
+      minHeight: touchTarget + 8,
+      paddingVertical: 12,
+    },
+    footer: {
       alignItems: "center",
+      borderColor: colors.border,
+      borderTopWidth: 1,
+      flexDirection: "row",
       flexShrink: 0,
       gap: 8,
       padding: 16,
-      borderTopWidth: 1,
-      borderColor: colors.border,
     },
+    header: { gap: 10, padding: 16, paddingBottom: 8 },
+    list: { flexGrow: 1, paddingBottom: 16, paddingHorizontal: 16 },
+    path: { color: colors.muted, fontFamily: mono, fontSize: 13 },
   });
 }

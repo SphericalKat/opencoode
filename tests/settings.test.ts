@@ -18,9 +18,6 @@ test("configuration preserves a newer server file instead of overwriting it", as
   await assert.rejects(
     saveConfigFile(
       {
-        file: {
-          read: async () => new TextEncoder().encode('{"model":"newer"}'),
-        },
         experimental: {
           file: {
             write: async () => {
@@ -31,6 +28,9 @@ test("configuration preserves a newer server file instead of overwriting it", as
               };
             },
           },
+        },
+        file: {
+          read: async () => new TextEncoder().encode('{"model":"newer"}'),
         },
       },
       "/project",
@@ -48,7 +48,6 @@ test("new configuration refuses to overwrite a file created after the editor ope
   await assert.rejects(
     saveConfigFile(
       {
-        file: { read: async () => new TextEncoder().encode("{}") },
         experimental: {
           file: {
             write: async () => {
@@ -60,6 +59,7 @@ test("new configuration refuses to overwrite a file created after the editor ope
             },
           },
         },
+        file: { read: async () => new TextEncoder().encode("{}") },
       },
       "/project",
       "/project/opencode.jsonc",
@@ -75,12 +75,6 @@ test("configuration validates before reading or writing and saves the exact edit
   let reads = 0;
   const written: Uint8Array[] = [];
   const client = {
-    file: {
-      read: async () => {
-        reads++;
-        return new TextEncoder().encode("{}");
-      },
-    },
     experimental: {
       file: {
         write: async (input: { payload: Uint8Array }) => {
@@ -90,6 +84,12 @@ test("configuration validates before reading or writing and saves the exact edit
             data: { path: "/project/opencode.jsonc" },
           };
         },
+      },
+    },
+    file: {
+      read: async () => {
+        reads++;
+        return new TextEncoder().encode("{}");
       },
     },
   };

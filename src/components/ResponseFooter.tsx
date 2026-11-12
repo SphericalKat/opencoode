@@ -28,9 +28,9 @@ export function ResponseFooter({
             setError(null);
             void Clipboard.setStringAsync(text)
               .then(() => setCopied(true))
-              .catch((reason) => {
+              .catch((error_) => {
                 setCopied(false);
-                setError(errorMessage(reason));
+                setError(errorMessage(error_));
               });
           }}
           style={({ pressed }) => [styles.copy, pressed && { opacity: 0.6 }]}
@@ -72,7 +72,7 @@ export function ResponseFooter({
           <Label muted accessibilityLiveRegion="polite" style={styles.detail}>
             {copied ? "Copied" : ""}
             {copied && elapsedSeconds !== undefined ? " · " : ""}
-            {elapsedSeconds !== undefined ? `${elapsedSeconds}s` : ""}
+            {elapsedSeconds === undefined ? "" : `${elapsedSeconds}s`}
           </Label>
         )}
       </View>
@@ -89,12 +89,12 @@ export function ResponseFooter({
 }
 
 const styles = StyleSheet.create({
-  footer: { flexDirection: "row", alignItems: "center", marginStart: -16 },
   copy: {
-    width: 48,
-    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 48,
+    width: 48,
   },
   detail: { fontSize: 12, lineHeight: 17 },
+  footer: { alignItems: "center", flexDirection: "row", marginStart: -16 },
 });

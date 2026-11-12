@@ -1,8 +1,8 @@
 import {
   isDynamicThemeSupported,
   useMaterial3Theme,
-  type Material3Scheme,
 } from "@pchmn/expo-material3-theme";
+import type { Material3Scheme } from "@pchmn/expo-material3-theme";
 import * as SecureStore from "expo-secure-store";
 import React, {
   createContext,
@@ -19,7 +19,7 @@ import { useBetaLayout } from "./betaLayout";
 import upstreamThemes from "./upstreamThemes.json";
 
 export type Appearance = "system" | "light" | "dark";
-export type ThemeColors = {
+export interface ThemeColors {
   frame: string;
   bg: string;
   panel: string;
@@ -49,87 +49,87 @@ export type ThemeColors = {
   syntaxProperty: string;
   syntaxType: string;
   syntaxConstant: string;
-};
+}
 
 export const darkColors: ThemeColors = {
-  frame: "#171717",
-  bg: "#171717",
-  panel: "#242424",
-  raised: "#333333",
-  border: "#ffffff12",
-  text: "#f0f0f0",
-  muted: "#aeaeae",
-  faint: "#858585",
   accent: "#a2bcff",
   accentText: "#ffffff",
-  primary: "#333333",
-  primaryText: "#f0f0f0",
-  selected: "#303030",
+  bg: "#171717",
+  blue: "#a2bcff",
+  border: "#ffffff12",
+  controlTopEdge: "#ffffff16",
   danger: "#f17471",
   dangerBackground: "#461516",
   dangerBorder: "#97252b",
-  blue: "#a2bcff",
+  faint: "#858585",
+  focus: "#7698fd",
+  frame: "#171717",
+  input: "#1b1b1b",
+  muted: "#aeaeae",
+  panel: "#242424",
+  primary: "#333333",
+  primaryText: "#f0f0f0",
+  raised: "#333333",
+  selected: "#303030",
   success: "#6bd586",
   successBackground: "#14361d",
-  focus: "#7698fd",
-  input: "#1b1b1b",
-  controlTopEdge: "#ffffff16",
   syntaxComment: "#858585",
-  syntaxString: "#6bd586",
+  syntaxConstant: "#a2bcff",
   syntaxKeyword: "#cf9cff",
   syntaxNumber: "#ffba92",
   syntaxProperty: "#93e9f6",
+  syntaxString: "#6bd586",
   syntaxType: "#ecf58c",
-  syntaxConstant: "#a2bcff",
+  text: "#f0f0f0",
 };
 
 export const lightColors: ThemeColors = {
-  frame: "#fafafa",
-  bg: "#fafafa",
-  panel: "#ffffff",
-  raised: "#f2f2f2",
-  border: "#0000001a",
-  text: "#161616",
-  muted: "#5c5c5c",
-  faint: "#808080",
   accent: "#3b5cf6",
   accentText: "#ffffff",
-  primary: "#242424",
-  primaryText: "#ffffff",
-  selected: "#eeeeee",
+  bg: "#fafafa",
+  blue: "#3b5cf6",
+  border: "#0000001a",
+  controlTopEdge: "#ffffffcc",
   danger: "#b82d35",
   dangerBackground: "#fceceb",
   dangerBorder: "#f2bbb7",
-  blue: "#3b5cf6",
+  faint: "#808080",
+  focus: "#7698fd",
+  frame: "#fafafa",
+  input: "#f2f2f2",
+  muted: "#5c5c5c",
+  panel: "#ffffff",
+  primary: "#242424",
+  primaryText: "#ffffff",
+  raised: "#f2f2f2",
+  selected: "#eeeeee",
   success: "#198b43",
   successBackground: "#e7f9ea",
-  focus: "#7698fd",
-  input: "#f2f2f2",
-  controlTopEdge: "#ffffffcc",
   syntaxComment: "#5c5c5c",
-  syntaxString: "#198b43",
+  syntaxConstant: "#3b5cf6",
   syntaxKeyword: "#8038a8",
   syntaxNumber: "#a84b16",
   syntaxProperty: "#006e83",
+  syntaxString: "#198b43",
   syntaxType: "#596600",
-  syntaxConstant: "#3b5cf6",
+  text: "#161616",
 };
 
-type Theme = {
+interface Theme {
   colors: ThemeColors;
   appearance: Appearance;
   scheme: "light" | "dark";
   setAppearance: (appearance: Appearance) => Promise<void>;
   palette: string;
   setPalette: (palette: string) => Promise<void>;
-};
+}
 
 const Context = createContext<Theme>({
-  colors: darkColors,
   appearance: "system",
+  colors: darkColors,
+  palette: "default",
   scheme: "dark",
   setAppearance: async () => {},
-  palette: "default",
   setPalette: async () => {},
 });
 const preferenceKey = "opencoode.appearance";
@@ -164,8 +164,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           value &&
           (value === "dynamic" ||
             upstreamThemes.some((theme) => theme.id === value))
-        )
+        ) {
           updatePalette(value);
+        }
       })
       .catch(() => {});
     return () => {
@@ -174,10 +175,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const setPalette = useCallback(async (next: string) => {
     const request = ++paletteRevision.current;
-    if (Platform.OS === "web")
+    if (Platform.OS === "web") {
       globalThis.sessionStorage.setItem(paletteKey, next);
-    else await SecureStore.setItemAsync(paletteKey, next);
-    if (request === paletteRevision.current) updatePalette(next);
+    } else {
+      await SecureStore.setItemAsync(paletteKey, next);
+    }
+    if (request === paletteRevision.current) {
+      updatePalette(next);
+    }
   }, []);
   useEffect(() => {
     let alive = true;
@@ -191,8 +196,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           alive &&
           revision.current === 0 &&
           (value === "system" || value === "dark" || value === "light")
-        )
+        ) {
           updateAppearance(value);
+        }
       })
       .catch(() => {});
     return () => {
@@ -202,10 +208,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const setAppearance = useCallback(async (next: Appearance) => {
     const request = ++revision.current;
-    if (Platform.OS === "web")
+    if (Platform.OS === "web") {
       globalThis.sessionStorage.setItem(preferenceKey, next);
-    else await SecureStore.setItemAsync(preferenceKey, next);
-    if (request === revision.current) updateAppearance(next);
+    } else {
+      await SecureStore.setItemAsync(preferenceKey, next);
+    }
+    if (request === revision.current) {
+      updateAppearance(next);
+    }
   }, []);
   const scheme =
     appearance === "system"
@@ -214,8 +224,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         : "dark"
       : appearance;
   useEffect(() => {
-    if (Platform.OS === "web")
+    if (Platform.OS === "web") {
       document.documentElement.style.colorScheme = scheme;
+    }
   }, [scheme]);
   const fallback = betaLayout
     ? scheme === "light"
@@ -226,13 +237,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       : darkColors;
   const colors = useMemo(() => {
     const preset = upstreamThemes.find((item) => item.id === palette);
-    if (preset) return mapPreset(preset[scheme], fallback);
-    if (palette === "dynamic" && isDynamicThemeSupported)
+    if (preset) {
+      return mapPreset(preset[scheme], fallback);
+    }
+    if (palette === "dynamic" && isDynamicThemeSupported) {
       return dynamicColors(materialTheme[scheme], fallback);
+    }
     return fallback;
   }, [palette, scheme, fallback, materialTheme]);
   const theme = useMemo(
-    () => ({ colors, appearance, scheme, setAppearance, palette, setPalette }),
+    () => ({ appearance, colors, palette, scheme, setAppearance, setPalette }),
     [colors, appearance, scheme, setAppearance, palette, setPalette]
   );
   return <Context.Provider value={theme}>{children}</Context.Provider>;
@@ -240,16 +254,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
 const betaDarkColors: ThemeColors = {
   ...darkColors,
-  frame: "#080808",
   bg: "#161616",
-  text: "#fafafa",
   border: "#ffffff1a",
+  frame: "#080808",
+  text: "#fafafa",
 };
 const betaLightColors: ThemeColors = {
   ...lightColors,
   bg: "#ffffff",
-  panel: "#fafafa",
   input: "#fafafa",
+  panel: "#fafafa",
   selected: "#f2f2f2",
 };
 
@@ -270,64 +284,64 @@ function mapPreset(
     t[key]?.startsWith("#") ? t[key] : otherwise;
   return {
     ...fallback,
-    frame: color("background-base", fallback.bg),
-    bg: color("background-base", fallback.bg),
-    panel: color("surface-base", fallback.panel),
-    raised: color("surface-raised-stronger-non-alpha", fallback.raised),
-    border: color("border-base", fallback.border),
-    text: color("text-base", fallback.text),
-    muted: color("text-weak", fallback.muted),
-    faint: color("text-weaker", fallback.faint),
     accent: color("text-interactive-base", fallback.accent),
     accentText: color("text-on-interactive-base", fallback.accentText),
-    primary: color("button-primary-base", fallback.primary),
-    primaryText: color("background-base", fallback.primaryText),
-    selected: color("surface-interactive-weak", fallback.selected),
+    bg: color("background-base", fallback.bg),
+    blue: color("text-interactive-base", fallback.blue),
+    border: color("border-base", fallback.border),
     danger: color("text-diff-delete-base", fallback.danger),
     dangerBackground: color("surface-critical-weak", fallback.dangerBackground),
     dangerBorder: color("border-critical-base", fallback.dangerBorder),
-    blue: color("text-interactive-base", fallback.blue),
+    faint: color("text-weaker", fallback.faint),
+    focus: color("border-focus", fallback.focus),
+    frame: color("background-base", fallback.bg),
+    input: color("input-base", fallback.input),
+    muted: color("text-weak", fallback.muted),
+    panel: color("surface-base", fallback.panel),
+    primary: color("button-primary-base", fallback.primary),
+    primaryText: color("background-base", fallback.primaryText),
+    raised: color("surface-raised-stronger-non-alpha", fallback.raised),
+    selected: color("surface-interactive-weak", fallback.selected),
     success: color("text-diff-add-base", fallback.success),
     successBackground: color(
       "surface-success-weak",
       fallback.successBackground
     ),
-    focus: color("border-focus", fallback.focus),
-    input: color("input-base", fallback.input),
     syntaxComment: color("syntax-comment", fallback.syntaxComment),
-    syntaxString: color("syntax-string", fallback.syntaxString),
+    syntaxConstant: color("syntax-constant", fallback.syntaxConstant),
     syntaxKeyword: color("syntax-keyword", fallback.syntaxKeyword),
     syntaxNumber: color("syntax-primitive", fallback.syntaxNumber),
     syntaxProperty: color("syntax-property", fallback.syntaxProperty),
+    syntaxString: color("syntax-string", fallback.syntaxString),
     syntaxType: color("syntax-type", fallback.syntaxType),
-    syntaxConstant: color("syntax-constant", fallback.syntaxConstant),
+    text: color("text-base", fallback.text),
   };
 }
 
 function dynamicColors(t: Material3Scheme, fallback: ThemeColors): ThemeColors {
   return {
     ...fallback,
-    frame: t.background,
-    bg: t.background,
-    panel: t.surface,
-    raised: t.surfaceContainerHigh,
-    border: t.outlineVariant,
-    text: t.onBackground,
-    muted: t.onSurfaceVariant,
-    faint: t.outline,
     accent: t.primary,
     accentText: t.onPrimary,
+    bg: t.background,
     blue: t.primary,
-    focus: t.primary,
-    primary: t.primary,
-    primaryText: t.onPrimary,
-    selected: t.secondaryContainer,
-    input: t.surfaceContainer,
+    border: t.outlineVariant,
     danger: t.error,
     dangerBackground: t.errorContainer,
     dangerBorder: t.error,
+    faint: t.outline,
+    focus: t.primary,
+    frame: t.background,
+    input: t.surfaceContainer,
+    muted: t.onSurfaceVariant,
+    panel: t.surface,
+    primary: t.primary,
+    primaryText: t.onPrimary,
+    raised: t.surfaceContainerHigh,
+    selected: t.secondaryContainer,
+    syntaxConstant: t.tertiary,
     syntaxKeyword: t.primary,
     syntaxProperty: t.secondary,
-    syntaxConstant: t.tertiary,
+    text: t.onBackground,
   };
 }

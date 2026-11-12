@@ -5,7 +5,7 @@ import type {
   SessionStatus,
 } from "@opencode/client";
 
-export type AgentActivity = {
+export interface AgentActivity {
   kind:
     | "idle"
     | "working"
@@ -22,25 +22,26 @@ export type AgentActivity = {
   messageID?: string;
   partIndex?: number;
   retry?: { attempt: number; at: number; message: string };
-};
+}
 
 export function toolActivityLabel(tool: SessionMessageAssistantTool): string {
-  const name = tool.name.replace(/^.*[.:]/, "").replace(/[_-]/g, " ");
-  if (tool.state.status === "streaming")
+  const name = tool.name.replace(/^.*[.:]/, "").replaceAll(/[_-]/g, " ");
+  if (tool.state.status === "streaming") {
     return `Preparing ${["shell", "bash"].includes(name) ? "command" : name}`;
+  }
   const labels: Record<string, [string, string]> = {
-    shell: ["Running command", "Ran command"],
     bash: ["Running command", "Ran command"],
-    read: ["Reading file", "Read file"],
     edit: ["Editing file", "Edited file"],
-    write: ["Writing file", "Wrote file"],
-    patch: ["Applying patch", "Applied patch"],
+    execute: ["Running code", "Ran code"],
     glob: ["Finding files", "Found files"],
     grep: ["Searching files", "Searched files"],
+    patch: ["Applying patch", "Applied patch"],
+    read: ["Reading file", "Read file"],
+    shell: ["Running command", "Ran command"],
+    subagent: ["Running subagent", "Subagent finished"],
     webfetch: ["Fetching page", "Fetched page"],
     websearch: ["Searching the web", "Searched the web"],
-    subagent: ["Running subagent", "Subagent finished"],
-    execute: ["Running code", "Ran code"],
+    write: ["Writing file", "Wrote file"],
   };
   return tool.state.status === "completed"
     ? labels[name]?.[1] || `${name} completed`
@@ -54,7 +55,7 @@ export function sessionActivity(
   permissionCount: number,
   formCount: number
 ): AgentActivity {
-  if (permissionCount)
+  if (permissionCount) {
     return {
       kind: "approval",
       label:
@@ -62,8 +63,13 @@ export function sessionActivity(
           ? "Approval needed"
           : `${permissionCount} approvals needed`,
     };
-  if (formCount) return { kind: "question", label: "Waiting for your answer" };
-  if (!active) return { kind: "idle", label: "" };
+  }
+  if (formCount) {
+    return { kind: "question", label: "Waiting for your answer" };
+  }
+  if (!active) {
+    return { kind: "idle", label: "" };
+  }
   const current = messages.findLast((message) =>
     ["assistant", "idle", "user", "shell", "compaction"].includes(message.type)
   );
@@ -75,21 +81,26 @@ export function sessionActivity(
       : undefined;
   const retry =
     status?.type === "retry"
-      ? { attempt: status.attempt, at: status.next, message: status.message }
+      ? { at: status.next, attempt: status.attempt, message: status.message }
       : !status && assistant?.retry
         ? {
-            attempt: assistant.retry.attempt,
             at: assistant.retry.at,
+            attempt: assistant.retry.attempt,
             message: assistant.retry.error.message,
           }
         : undefined;
-  if (retry) return { kind: "retry", label: "Retrying", retry };
-  if (current?.type === "assistant" && current.error)
+  if (retry) {
+    return { kind: "retry", label: "Retrying", retry };
+  }
+  if (current?.type === "assistant" && current.error) {
     return { kind: "error", label: "Agent encountered an error" };
-  if (current?.type === "compaction" && current.status === "running")
+  }
+  if (current?.type === "compaction" && current.status === "running") {
     return { kind: "compaction", label: "Compacting context" };
-  if (current?.type === "shell" && current.status === "running")
+  }
+  if (current?.type === "shell" && current.status === "running") {
     return { kind: "shell", label: "Running command" };
+  }
   if (assistant) {
     const partIndex = assistant.content.length - 1;
     const part = assistant.content[partIndex];
@@ -99,20 +110,23 @@ export function sessionActivity(
         part.type === "tool" &&
         (part.state.status === "streaming" || part.state.status === "running")
     );
-    if (tool?.type === "tool")
+    if (tool?.type === "tool") {
       return {
         kind: "tool",
         label: toolActivityLabel(tool),
         messageID: assistant.id,
       };
-    if (part?.type === "reasoning" && part.time?.completed === undefined)
+    }
+    if (part?.type === "reasoning" && part.time?.completed === undefined) {
       return { kind: "thinking", label: "Thinking", ...location };
+    }
     if (
       part?.type === "text" &&
       part.text.trim() &&
       assistant.time.streamed === undefined
-    )
+    ) {
       return { kind: "writing", label: "Writing", ...location };
+    }
   }
   return { kind: "working", label: "Working" };
 }

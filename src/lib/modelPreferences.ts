@@ -2,7 +2,10 @@ import { File, Paths } from "expo-file-system";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
-type Preferences = { favoriteIDs: string[]; recentIDs: string[] };
+interface Preferences {
+  favoriteIDs: string[];
+  recentIDs: string[];
+}
 type State = Preferences & {
   serverID: string;
   loading: boolean;
@@ -21,7 +24,9 @@ function storageName(serverID: string): string {
 }
 
 function isModelID(value: unknown): value is string {
-  if (typeof value !== "string") return false;
+  if (typeof value !== "string") {
+    return false;
+  }
   try {
     const pair: unknown = JSON.parse(value);
     return (
@@ -43,7 +48,9 @@ async function readPreferences(serverID: string): Promise<Preferences> {
       : file?.exists
         ? await file.text()
         : null;
-  if (!raw) return { favoriteIDs: [], recentIDs: [] };
+  if (!raw) {
+    return { favoriteIDs: [], recentIDs: [] };
+  }
   const value: unknown = JSON.parse(raw);
   if (
     !value ||
@@ -80,16 +87,20 @@ function updatePreferences(
       const next = update(current);
       if (next !== current) {
         const name = storageName(serverID);
-        if (Platform.OS === "web")
+        if (Platform.OS === "web") {
           sessionStorage.setItem(name, JSON.stringify(next));
-        else await new File(Paths.document, name).write(JSON.stringify(next));
+        } else {
+          await new File(Paths.document, name).write(JSON.stringify(next));
+        }
       }
       return next;
     });
   writes.set(serverID, write);
   void write
     .finally(() => {
-      if (writes.get(serverID) === write) writes.delete(serverID);
+      if (writes.get(serverID) === write) {
+        writes.delete(serverID);
+      }
     })
     .catch(() => {});
   return write;
@@ -101,12 +112,12 @@ function failureMessage(reason: unknown, action: string): string {
 
 export function useModelPreferences(serverID: string) {
   const [state, setState] = useState<State>({
-    serverID,
-    favoriteIDs: [],
-    recentIDs: [],
-    loading: true,
-    saving: false,
     error: null,
+    favoriteIDs: [],
+    loading: true,
+    recentIDs: [],
+    saving: false,
+    serverID,
   });
   const [revision, setRevision] = useState(0);
   const scope = useRef(serverID);
@@ -126,22 +137,22 @@ export function useModelPreferences(serverID: string) {
     const version = ++request.current;
     if (!serverID.trim()) {
       setState({
-        serverID,
-        favoriteIDs: [],
-        recentIDs: [],
-        loading: false,
-        saving: false,
         error: null,
+        favoriteIDs: [],
+        loading: false,
+        recentIDs: [],
+        saving: false,
+        serverID,
       });
       return;
     }
     setState((current) => ({
-      serverID,
-      favoriteIDs: current.serverID === serverID ? current.favoriteIDs : [],
-      recentIDs: current.serverID === serverID ? current.recentIDs : [],
-      loading: true,
-      saving: false,
       error: null,
+      favoriteIDs: current.serverID === serverID ? current.favoriteIDs : [],
+      loading: true,
+      recentIDs: current.serverID === serverID ? current.recentIDs : [],
+      saving: false,
+      serverID,
     }));
     void loadPreferences(serverID)
       .then((preferences) => {
@@ -159,7 +170,7 @@ export function useModelPreferences(serverID: string) {
           });
         }
       })
-      .catch((reason) => {
+      .catch((error) => {
         if (
           mounted.current &&
           scope.current === serverID &&
@@ -168,7 +179,7 @@ export function useModelPreferences(serverID: string) {
           setState((current) => ({
             ...current,
             loading: false,
-            error: failureMessage(reason, "load"),
+            error: failureMessage(error, "load"),
           }));
         }
       });
@@ -179,9 +190,11 @@ export function useModelPreferences(serverID: string) {
 
   const change = useCallback(
     async (update: (current: Preferences) => Preferences) => {
-      if (!serverID.trim()) return;
+      if (!serverID.trim()) {
+        return;
+      }
       const version = ++request.current;
-      setState((current) => ({ ...current, saving: true, error: null }));
+      setState((current) => ({ ...current, error: null, saving: true }));
       try {
         const preferences = await updatePreferences(serverID, update);
         if (
@@ -197,7 +210,7 @@ export function useModelPreferences(serverID: string) {
             error: null,
           });
         }
-      } catch (reason) {
+      } catch (error) {
         if (
           mounted.current &&
           scope.current === serverID &&
@@ -207,7 +220,7 @@ export function useModelPreferences(serverID: string) {
             ...current,
             loading: false,
             saving: false,
-            error: failureMessage(reason, "save"),
+            error: failureMessage(error, "save"),
           }));
         }
       }
@@ -233,7 +246,9 @@ export function useModelPreferences(serverID: string) {
     (providerID: string, modelID: string) =>
       change((current) => {
         const id = modelPreferenceID(providerID, modelID);
-        if (current.recentIDs[0] === id) return current;
+        if (current.recentIDs[0] === id) {
+          return current;
+        }
         return {
           ...current,
           recentIDs: [
@@ -246,15 +261,8 @@ export function useModelPreferences(serverID: string) {
   );
 
   const reload = useCallback(() => setRevision((value) => value + 1), []);
-  const current: Omit<State, "serverID"> = !serverID.trim()
-    ? {
-        favoriteIDs: [],
-        recentIDs: [],
-        loading: false,
-        saving: false,
-        error: null,
-      }
-    : state.serverID === serverID
+  const current: Omit<State, "serverID"> = serverID.trim()
+    ? state.serverID === serverID
       ? state
       : {
           favoriteIDs: [],
@@ -262,15 +270,22 @@ export function useModelPreferences(serverID: string) {
           loading: true,
           saving: false,
           error: null,
-        };
+        }
+    : {
+        favoriteIDs: [],
+        recentIDs: [],
+        loading: false,
+        saving: false,
+        error: null,
+      };
   return {
-    favoriteIDs: current.favoriteIDs,
-    recentIDs: current.recentIDs,
-    loading: current.loading,
-    saving: current.saving,
     error: current.error,
-    toggleFavorite,
+    favoriteIDs: current.favoriteIDs,
+    loading: current.loading,
+    recentIDs: current.recentIDs,
     recordRecent,
     reload,
+    saving: current.saving,
+    toggleFavorite,
   };
 }

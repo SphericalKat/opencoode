@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import {
   mkdtemp,
   mkdir,
@@ -14,7 +15,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import type { FormField, OpenCodeEvent } from "@opencode/client";
 
-import { connect, createClient, type Connection } from "../src/lib/client";
+import { connect, createClient } from "../src/lib/client";
+import type { Connection } from "../src/lib/client";
 import { prepareFormAnswer } from "../src/lib/forms";
 import { prepareSchedule } from "../src/lib/schedules";
 
@@ -28,7 +30,9 @@ async function until(
 ) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    if (await check()) return;
+    if (await check()) {
+      return;
+    }
     await delay(50);
   }
   throw new Error(`Timed out: ${description}`);
@@ -72,21 +76,23 @@ async function startServer(port: number) {
     "SHELL",
     "SystemRoot",
   ]) {
-    if (process.env[name]) env[name] = process.env[name];
+    if (process.env[name]) {
+      env[name] = process.env[name];
+    }
   }
   Object.assign(env, {
-    XDG_CONFIG_HOME: path.join(root, "config"),
-    XDG_DATA_HOME: path.join(root, "data"),
-    XDG_CACHE_HOME: path.join(root, "cache"),
-    XDG_STATE_HOME: path.join(root, "state"),
-    OPENCODE_TEST_HOME: path.join(root, "home"),
-    OPENCODE_CONFIG_DIR: path.join(root, "config"),
-    OPENCODE_DISABLE_MODELS_FETCH: "1",
-    OPENCODE_DISABLE_CLAUDE_CODE: "1",
-    OPENCODE_DISABLE_PROJECT_CONFIG: "1",
     OPENCODE_CONFIG_CONTENT: JSON.stringify({
       experimental: { schedules: true },
     }),
+    OPENCODE_CONFIG_DIR: path.join(root, "config"),
+    OPENCODE_DISABLE_CLAUDE_CODE: "1",
+    OPENCODE_DISABLE_MODELS_FETCH: "1",
+    OPENCODE_DISABLE_PROJECT_CONFIG: "1",
+    OPENCODE_TEST_HOME: path.join(root, "home"),
+    XDG_CACHE_HOME: path.join(root, "cache"),
+    XDG_CONFIG_HOME: path.join(root, "config"),
+    XDG_DATA_HOME: path.join(root, "data"),
+    XDG_STATE_HOME: path.join(root, "state"),
   });
   const child = spawn(
     process.env.OPENCODE_BINARY || "opencode",
@@ -128,9 +134,12 @@ async function startServer(port: number) {
   try {
     await until(
       () => {
-        if (spawnError) throw spawnError;
-        if (child.exitCode !== null || child.signalCode !== null)
+        if (spawnError) {
+          throw spawnError;
+        }
+        if (child.exitCode !== null || child.signalCode !== null) {
           throw new Error("OpenCode exited during startup");
+        }
         return Boolean(url && password);
       },
       "OpenCode server startup",
@@ -139,35 +148,37 @@ async function startServer(port: number) {
     const connection: Connection = {
       id: "live-server",
       name: "Local integration server",
-      url: url!,
       token: password!,
+      url: url!,
       username: "opencode",
     };
-    return { root, directory, child, connection, interrupt };
+    return { child, connection, directory, interrupt, root };
   } catch (error) {
     process.off("SIGINT", interrupt);
     process.off("SIGTERM", interrupt);
     await stopServer(child);
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
     throw error;
   }
 }
 
 async function stopServer(child: ChildProcess) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
   child.kill("SIGTERM");
   try {
     await until(
       () => child.exitCode !== null || child.signalCode !== null,
       "OpenCode shutdown",
-      5_000
+      5000
     );
   } catch {
     child.kill("SIGKILL");
     await until(
       () => child.exitCode !== null || child.signalCode !== null,
       "OpenCode forced shutdown",
-      5_000
+      5000
     );
   }
 }
@@ -190,10 +201,13 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
     try {
       for await (const event of client.event.subscribe({
         signal: stream.signal,
-      }))
+      })) {
         events.push(event);
+      }
     } catch (error) {
-      if (!stream.signal.aborted) streamError = error;
+      if (!stream.signal.aborted) {
+        streamError = error;
+      }
     }
   })();
   try {
@@ -227,8 +241,8 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
     const resolved = await client.location.get({ location });
     assert.equal(resolved.directory, directory);
     const session = await client.session.create({
-      title: "Integration session",
       location,
+      title: "Integration session",
     });
     sessionIDs.push(session.id);
     assert.equal(session.location.directory, directory);
@@ -244,11 +258,11 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       (await client.session.get({ sessionID: session.id })).title,
       "Renamed integration session"
     );
-    await client.session.update({ sessionID: session.id, archived: true });
+    await client.session.update({ archived: true, sessionID: session.id });
     assert.ok(
       (await client.session.get({ sessionID: session.id })).time.archived
     );
-    await client.session.update({ sessionID: session.id, archived: false });
+    await client.session.update({ archived: false, sessionID: session.id });
     assert.equal(
       (await client.session.get({ sessionID: session.id })).time.archived,
       undefined
@@ -267,8 +281,8 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
     );
 
     await client.session.shell({
-      sessionID: session.id,
       command: "printf 'opencoode-history-check'",
+      sessionID: session.id,
     });
     await until(
       async () =>
@@ -280,16 +294,16 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       "shell message history"
     );
     const history = await client.message.list({
-      sessionID: session.id,
-      order: "desc",
       limit: 1,
+      order: "desc",
+      sessionID: session.id,
     });
     assert.equal(history.data.length, 1);
     assert.ok(history.cursor.next);
     const older = await client.message.list({
-      sessionID: session.id,
       cursor: history.cursor.next,
       limit: 10,
+      sessionID: session.id,
     });
     assert.ok(!older.data.some((message) => message.id === history.data[0].id));
     const fork = await client.session.fork({ sessionID: session.id });
@@ -304,10 +318,10 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       )
     );
     const pending = await client.session.prompt({
+      delivery: "queue",
+      resume: false,
       sessionID: session.id,
       text: "Integration inbox check",
-      resume: false,
-      delivery: "queue",
     });
     assert.ok(
       (await client.session.inbox.list({ sessionID: session.id })).some(
@@ -315,8 +329,8 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       )
     );
     await client.session.inbox.cancel({
-      sessionID: session.id,
       inboxID: pending.id,
+      sessionID: session.id,
     });
     assert.ok(
       !(await client.session.inbox.list({ sessionID: session.id })).some(
@@ -338,8 +352,8 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
 
     const instructions = client.experimental.session.instructions.entry;
     await instructions.put({
-      sessionID: session.id,
       key: "integration-review",
+      sessionID: session.id,
       value: { guidance: "Verify the instruction contract" },
     });
     assert.deepEqual(
@@ -349,8 +363,8 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       { guidance: "Verify the instruction contract" }
     );
     await instructions.remove({
-      sessionID: session.id,
       key: "integration-review",
+      sessionID: session.id,
     });
     assert.ok(
       !(await instructions.list({ sessionID: session.id })).some(
@@ -358,26 +372,26 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       )
     );
     const fields = [
-      { key: "enabled", type: "boolean", required: true },
+      { key: "enabled", required: true, type: "boolean" },
       {
         key: "quantity",
-        type: "integer",
         minimum: 0,
+        type: "integer",
         when: [{ key: "enabled", op: "eq", value: true }],
       },
-      { key: "url", type: "string", format: "uri", required: true },
+      { format: "uri", key: "url", required: true, type: "string" },
       {
-        key: "hidden",
-        type: "string",
-        hidden: true,
         default: "default-value",
+        hidden: true,
+        key: "hidden",
         required: true,
+        type: "string",
       },
     ] satisfies [FormField, ...FormField[]];
     const form = await client.session.form.create({
+      fields,
       sessionID: session.id,
       title: "Integration form",
-      fields,
     });
     const answer = prepareFormAnswer(fields, {
       enabled: false,
@@ -386,24 +400,24 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
     });
     assert.deepEqual(answer.errors, {});
     await client.session.form.reply({
-      sessionID: session.id,
-      formID: form.id,
       answer: answer.answer,
+      formID: form.id,
+      sessionID: session.id,
     });
     assert.deepEqual(
       (
         await client.session.form.get({
-          sessionID: session.id,
           formID: form.id,
+          sessionID: session.id,
         })
       ).state,
       {
-        status: "answered",
         answer: {
           enabled: false,
-          url: "mailto:integration@example.invalid",
           hidden: "default-value",
+          url: "mailto:integration@example.invalid",
         },
+        status: "answered",
       }
     );
     console.log(
@@ -411,16 +425,16 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
     );
 
     await client.session.update({
-      sessionID: session.id,
       permissions: [
         { action: "integration.review", resource: "*", effect: "ask" },
       ],
+      sessionID: session.id,
     });
     const permission = await client.permission.create({
-      sessionID: session.id,
       action: "integration.review",
       resources: ["fixture-only"],
       save: ["fixture-only"],
+      sessionID: session.id,
     });
     assert.equal(permission.effect, "ask");
     assert.ok(
@@ -429,9 +443,9 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       )
     );
     await client.permission.reply({
-      sessionID: session.id,
-      requestID: permission.id,
       decision: "always",
+      requestID: permission.id,
+      sessionID: session.id,
     });
     const savedPermission = (
       await client.permission.saved.list({ projectID: session.projectID })
@@ -465,14 +479,14 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
     ) {
       const schedule = await client.experimental.schedule.create(
         prepareSchedule(session.id, {
+          after: "",
+          mode: "every",
           name: "Integration schedule",
           prompt: "Verify schedule lifecycle",
-          mode: "every",
-          trigger: "1 day",
-          timezone: "UTC",
-          after: "",
-          until: "",
           runs: "2",
+          timezone: "UTC",
+          trigger: "1 day",
+          until: "",
         })
       );
       try {
@@ -520,10 +534,11 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       console.log(
         "PASS: schedule create/list/pause/read/resume/delete and unsigned-account usage"
       );
-    } else
+    } else {
       console.log(
         "SKIP: schedules and usage limits require OpenCode 2.2.1 or later"
       );
+    }
 
     const before = await client.file.read({ location, path: "README.md" });
     assert.equal(
@@ -544,7 +559,7 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       /Verified file write/
     );
     assert.match(
-      await readFile(path.join(directory, "README.md"), "utf8"),
+      await readFile(path.join(directory, "README.md"), "utf-8"),
       /Verified file write/
     );
     const found = await client.file.find({
@@ -562,12 +577,12 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
     );
 
     const created = await client.pty.create({
-      location,
-      command: "/bin/sh",
       args: [
         "-c",
         'printf "opencoode-terminal-ready\\n"; read line; printf "opencoode-terminal-received:%s\\n" "$line"',
       ],
+      command: "/bin/sh",
+      location,
       title: "Integration terminal",
     });
     ptyIDs.push(created.data.id);
@@ -591,16 +606,20 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       socketError = true;
     });
     socket.addEventListener("message", (event: MessageEvent) => {
-      if (typeof event.data === "string") terminal += event.data;
-      else if (
+      if (typeof event.data === "string") {
+        terminal += event.data;
+      } else if (
         event.data instanceof ArrayBuffer &&
         new Uint8Array(event.data)[0] !== 0
-      )
+      ) {
         terminal += new TextDecoder().decode(event.data);
+      }
     });
     try {
       await until(() => {
-        if (socketError) throw new Error("PTY socket failed");
+        if (socketError) {
+          throw new Error("PTY socket failed");
+        }
         return (
           socket.readyState === WebSocket.OPEN &&
           terminal.includes("opencoode-terminal-ready")
@@ -609,7 +628,7 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
       await client.pty.update({
         location,
         ptyID: created.data.id,
-        size: { rows: 30, cols: 100 },
+        size: { cols: 100, rows: 30 },
       });
       socket.send("input-check\n");
       await until(
@@ -622,19 +641,23 @@ async function smoke(server: Awaited<ReturnType<typeof startServer>>) {
     console.log(
       "PASS: PTY ticket, WebSocket output, resize, and terminal input"
     );
-    if (streamError) throw streamError;
+    if (streamError) {
+      throw streamError;
+    }
     console.log(
       "SKIP: model inference and provider OAuth require configured credentials; none were copied into this server"
     );
-    return { client, sessionIDs, ptyIDs };
+    return { client, ptyIDs, sessionIDs };
   } finally {
     stream.abort();
     await eventTask;
     if (!fixtureMode) {
-      for (const ptyID of ptyIDs)
+      for (const ptyID of ptyIDs) {
         await client.pty.remove({ location, ptyID }).catch(() => {});
-      for (const sessionID of sessionIDs.toReversed())
+      }
+      for (const sessionID of sessionIDs.toReversed()) {
         await client.session.remove({ sessionID }).catch(() => {});
+      }
     }
   }
 }
@@ -666,6 +689,8 @@ try {
   process.off("SIGINT", server.interrupt);
   process.off("SIGTERM", server.interrupt);
   await stopServer(server.child);
-  await rm(server.root, { recursive: true, force: true });
-  if (fixtureMode) await rm(fixtureFile, { force: true });
+  await rm(server.root, { force: true, recursive: true });
+  if (fixtureMode) {
+    await rm(fixtureFile, { force: true });
+  }
 }

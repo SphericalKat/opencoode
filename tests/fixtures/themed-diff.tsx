@@ -3,6 +3,7 @@ import React from "react";
 
 import { Patch } from "../../src/components/Patch";
 import { ThemeProvider } from "../../src/lib/theme";
+
 function Demo() {
   return (
     <ThemeProvider>

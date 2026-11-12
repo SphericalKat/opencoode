@@ -9,12 +9,12 @@ import type {
   TerminalRendererProps,
 } from "./TerminalRenderer.types";
 
-const source = { html: terminalHtml, baseUrl: "about:blank" };
+const source = { baseUrl: "about:blank", html: terminalHtml };
 
 export const TerminalRenderer = forwardRef<
   TerminalRendererHandle,
   TerminalRendererProps
->(function TerminalRenderer({ onEvent, onError }, ref) {
+>(({ onEvent, onError }, ref) => {
   const { colors } = useTheme();
   const view = useRef<WebView<object>>(null);
   useImperativeHandle(

@@ -7,8 +7,8 @@ import {
   initialFormValues,
   isFieldActive,
   prepareFormAnswer,
-  type FormValues,
 } from "../lib/forms";
+import type { FormValues } from "../lib/forms";
 import { useTheme } from "../lib/theme";
 import {
   Button,
@@ -40,8 +40,9 @@ export function DynamicFields({
     onChange({ ...values, [key]: value });
   const open = async (url: string) => {
     try {
-      if (!/^https?:\/\//i.test(url))
+      if (!/^https?:\/\//i.test(url)) {
         throw new Error("This link requires an HTTP or HTTPS address");
+      }
       await Linking.openURL(url);
       setLinkError(null);
     } catch (error) {
@@ -57,8 +58,9 @@ export function DynamicFields({
         if (
           field.type !== "external" &&
           (field.hidden || !isFieldActive(field, current))
-        )
+        ) {
           return null;
+        }
         const label = `${field.title || field.key}${field.type !== "external" && field.required ? " *" : ""}`;
         const value = values[field.key];
         return (
@@ -273,12 +275,12 @@ function PendingForm({
             },
           }
         : undefined;
-      if (cancel)
+      if (cancel) {
         await client.session.form.cancel(
           { sessionID: form.sessionID, formID: form.id },
           options
         );
-      else
+      } else {
         await client.session.form.reply(
           {
             sessionID: form.sessionID,
@@ -287,6 +289,7 @@ function PendingForm({
           },
           options
         );
+      }
       onChanged();
     } catch (error) {
       onError(error);
@@ -346,10 +349,10 @@ function PendingPermission({
     setBusy(true);
     try {
       await client.permission.reply({
-        sessionID,
-        requestID: permission.id,
         decision,
         message: message.trim() || undefined,
+        requestID: permission.id,
+        sessionID,
       });
       onChanged();
     } catch (error) {
@@ -425,7 +428,9 @@ export function SessionForms({
   onError: (error: unknown) => void;
   locationDirectory?: string;
 }) {
-  if (!forms.length && !permissions.length) return null;
+  if (!forms.length && !permissions.length) {
+    return null;
+  }
   return (
     <View style={{ gap: 12 }}>
       {permissions

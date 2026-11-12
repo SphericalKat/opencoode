@@ -25,13 +25,13 @@ export function UserMessageBubble({
 }
 
 const styles = StyleSheet.create({
+  attachments: { width: "92%" },
   bubble: {
     alignSelf: "flex-end",
+    borderRadius: 12,
+    gap: 10,
     maxWidth: "92%",
     minWidth: 0,
     padding: 12,
-    borderRadius: 12,
-    gap: 10,
   },
-  attachments: { width: "92%" },
 });
