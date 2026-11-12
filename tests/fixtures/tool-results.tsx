@@ -31,7 +31,7 @@ function Demo() {
     id: 'assistant', type: 'assistant', agent: 'build', model: { id: 'model', providerID: 'provider' }, time: { created: 1 },
     content: [{ type: 'tool', id: 'capture', name: 'screenshot', time: { created: 1 }, state: { status: 'completed', input: {}, content: [
       { type: 'text', text: 'Screenshot captured successfully' },
-      ...files.map(name => ({ type: 'file' as const, name, mime, uri: scenario === 'unavailable' || scenario === 'loading' ? `${location.origin}/fixture-image.png` : `data:image/png;base64,${png}` })),
+      ...files.map(name => ({ type: 'file' as const, name, mime, uri: ['unavailable', 'loading', 'undecodable'].includes(scenario) ? `${location.origin}/fixture-image.png` : `data:image/png;base64,${png}` })),
       { type: 'file', name: 'report.txt', mime: 'text/plain', uri: 'data:text/plain,report' },
     ] } }, { type: 'text', text: 'The screenshot is ready for review.' }],
   };

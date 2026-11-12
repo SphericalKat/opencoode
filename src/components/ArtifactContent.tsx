@@ -130,11 +130,14 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
 
   if (thumbnail) return <View style={styles.thumbnail}>
     {preview ? <Pressable accessibilityRole="button" accessibilityLabel={`Expand image preview: ${filename}`} onPress={() => setExpanded(true)}>
-      <Image source={{ uri: preview }} accessibilityLabel={filename} resizeMode="contain" style={styles.thumbnailImage} onError={() => { setPreview(undefined); setError('This image cannot be displayed. Try loading it again.'); }} />
+      <Image source={{ uri: preview }} accessibilityLabel={filename} resizeMode="contain" style={styles.thumbnailImage} onError={() => { setPreview(undefined); setError(`This image cannot be displayed. Retry the preview or use ${Platform.OS === 'web' ? 'Download' : 'Save or share'} to open the file.`); }} />
     </Pressable> : <View style={styles.placeholder}><Label muted accessibilityRole="status">{busy ? 'Loading image…' : 'Image unavailable'}</Label></View>}
     <Label numberOfLines={2} style={styles.mime}>{filename}</Label>
     <ErrorNotice error={error} />
-    {!preview && !busy && <Button title="Retry image" compact onPress={() => { void perform('preview'); }} />}
+    {!preview && <Row>
+      {!busy && <Button title="Retry image" compact onPress={() => { void perform('preview'); }} />}
+      <Button title={Platform.OS === 'web' ? 'Download' : 'Save or share'} compact disabled={busy} onPress={() => { void perform('save'); }} />
+    </Row>}
     <Sheet visible={expanded} title={filename} onClose={() => setExpanded(false)} scroll={false}>
       {preview && <Image source={{ uri: preview }} accessibilityLabel={`Expanded ${filename}`} resizeMode="contain" style={styles.viewerImage} />}
       <Button title={Platform.OS === 'web' ? 'Download' : 'Save or share'} busy={busy} onPress={() => { void perform('save'); }} />
