@@ -37,6 +37,8 @@ Ultracite runs Oxlint and Oxfmt with the `core`, `react` and `react-native` pres
   - `[...x]` in place of `x.slice()` converts a `Uint8Array` to `number[]`.
   - `interface` in place of `type` removes the implicit index signature. React Navigation param lists and types cast from `Record<string, unknown>` must stay `type` aliases.
   - `.at(-1)` returns `T | undefined` where an index access returned `T`.
+  - `toSorted()` and the other ES2023 copy methods (`toReversed`, `toSpliced`, `with`) are missing from Hermes. They throw `undefined is not a function` on Android and work in browsers and Node. `unicorn/no-array-sort` suggests `toSorted()`. Keep `.sort()` on a copy, and list the rule in the PR.
+- After a lint change that touches runtime code, verify it on Android as described in "Verify on Android". Typecheck, unit tests and a browser load do not run Hermes.
 - Keep lint-only changes in their own commits, such as `refactor(chat): ...` or `chore(lint): ...`. Do not mix them with behavior changes.
 
 ## Android development
@@ -50,7 +52,18 @@ Use the `android-cli` skill for native builds, device interaction, and screensho
 - For a Gradle-only APK build, run `./gradlew :app:assembleDebug` from `android/`. Its output is `android/app/build/outputs/apk/debug/app-debug.apk` relative to the repository root.
 - The Android CLI also supports `android build`; inspect `android build --help` for build-reference arguments. Deploy an existing APK with `android run --device <serial> --apks <apk-path> --activity dev.opencoode.mobile.MainActivity`.
 - Select the target explicitly when multiple devices are connected. Discover serials with `adb devices`; inspect existing AVDs with `android emulator list` before starting another emulator.
-- Debug builds need Metro. For a USB-connected device or emulator, reverse its selected Metro port with `adb -s <serial> reverse tcp:<port> tcp:<port>`.
+- Debug builds need Metro. For a USB-connected device, reverse its selected Metro port with `adb -s <serial> reverse tcp:<port> tcp:<port>`.
+- On an emulator, a debug build loads its bundle from `10.0.2.2:8081`, the host computer, so `adb reverse` has no effect. To use a different Metro port, set `debug_http_host` in `shared_prefs/dev.opencoode.mobile_preferences.xml` with `adb shell run-as dev.opencoode.mobile`, then restart the app.
+- Rebuild the APK when `develop` adds a native module. An old APK with a newer bundle can fail in ways the source change did not cause.
+
+### Verify on Android
+
+This is a mobile app. Verify runtime changes on an Android emulator or device with the Android CLI. Do not use Playwright, a browser, or `expo export --platform web` as proof. React Native Web runs in a browser engine with different JavaScript APIs, and it does not exercise native modules.
+
+1. Build or reuse a debug APK that matches the branch, install it with `android run`, and point it at Metro serving the branch.
+2. Connect it to an isolated OpenCode server. `tests/live-server.ts` shows the environment variables that isolate the server's config and data. From an emulator, the server address is `http://10.0.2.2:<port>`.
+3. Open every screen the change touches. Check `logcat` for `ReactNativeJS` errors after each step, and inspect a screenshot.
+4. For a refactor, repeat the same steps with Metro serving `develop`. The native APK can stay the same. Report each difference between the two runs.
 
 ### Inspect and debug
 
