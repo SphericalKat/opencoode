@@ -1,4 +1,7 @@
-export function createStreamBatch<T>(apply: (events: T[]) => void, options: { delayMs?: number; frame?: boolean } = {}) {
+export function createStreamBatch<T>(
+  apply: (events: T[]) => void,
+  options: { delayMs?: number; frame?: boolean } = {}
+) {
   let events: T[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   let frame: number | undefined;
@@ -19,10 +22,13 @@ export function createStreamBatch<T>(apply: (events: T[]) => void, options: { de
     push(event: T) {
       events.push(event);
       if (timer !== undefined || frame !== undefined) return;
-      if (options.frame && typeof requestAnimationFrame === 'function') {
-        frame = requestAnimationFrame(() => { frame = undefined; flush(); });
+      if (options.frame && typeof requestAnimationFrame === "function") {
+        frame = requestAnimationFrame(() => {
+          frame = undefined;
+          flush();
+        });
       } else {
-        timer = setTimeout(flush, options.frame ? 16 : options.delayMs ?? 50);
+        timer = setTimeout(flush, options.frame ? 16 : (options.delayMs ?? 50));
       }
     },
     flush,

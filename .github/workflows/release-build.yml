@@ -24,7 +24,7 @@ permissions:
   contents: write
 
 env:
-  CI: '1'
+  CI: "1"
   RELEASE_TAG: ${{ inputs.tag }}
   GH_TOKEN: ${{ github.token }}
   GH_REPO: ${{ github.repository }}
@@ -164,7 +164,7 @@ jobs:
           install: false
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '26.6'
+          xcode-version: "26.6"
 
       - name: Prepare native iOS project
         run: |

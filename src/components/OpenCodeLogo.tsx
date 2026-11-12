@@ -1,6 +1,7 @@
-import React from 'react';
-import Svg, { Path } from 'react-native-svg';
-import { useTheme } from '../lib/theme';
+import React from "react";
+import Svg, { Path } from "react-native-svg";
+
+import { useTheme } from "../lib/theme";
 
 const paths = [
   "M49.2857 32.8573H16.4286V82.143H49.2857V32.8573ZM65.7143 98.5716H0V16.4287H65.7143V98.5716Z",
@@ -10,10 +11,28 @@ const paths = [
   "M394.285 32.8573H344.999V82.143H394.285V98.5716H328.57V16.4287H394.285V32.8573Z",
   "M459.997 32.8573H427.14V82.143H459.997V32.8573ZM476.425 98.5716H410.711V16.4287H476.425V98.5716Z",
   "M542.145 32.8571H509.288V82.1429H542.145V32.8571ZM558.574 98.5714H492.859V16.4286H542.145V0H558.574V98.5714Z",
-  "M591.429 32.8573V49.2859H624.286V32.8573H591.429ZM640.714 65.7144H591.429V82.143H640.714V98.5716H575V16.4287H640.714V65.7144Z"
+  "M591.429 32.8573V49.2859H624.286V32.8573H591.429ZM640.714 65.7144H591.429V82.143H640.714V98.5716H575V16.4287H640.714V65.7144Z",
 ];
 
-export function OpenCodeLogo({ width = 160, height }: { width?: number; height?: number }) {
+export function OpenCodeLogo({
+  width = 160,
+  height,
+}: {
+  width?: number;
+  height?: number;
+}) {
   const { colors } = useTheme();
-  return <Svg width={width} height={height ?? width * 115 / 641} viewBox="0 0 641 115" accessibilityRole="image" accessibilityLabel="OpenCode">{paths.map((path, index) => <Path key={index} d={path} fill={colors.text} />)}</Svg>;
+  return (
+    <Svg
+      width={width}
+      height={height ?? (width * 115) / 641}
+      viewBox="0 0 641 115"
+      accessibilityRole="image"
+      accessibilityLabel="OpenCode"
+    >
+      {paths.map((path, index) => (
+        <Path key={index} d={path} fill={colors.text} />
+      ))}
+    </Svg>
+  );
 }

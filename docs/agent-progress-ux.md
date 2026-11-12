@@ -1,7 +1,6 @@
 # Agent progress UX
 
-I compared the desktop and TUI source at upstream commit `92b2ca0dd727942e00aba3523ed141d53e78ea28` on October 30, 2026.
-I also observed live conversations through the mobile app preview at 393 × 852.
+I compared the desktop and TUI source at upstream commit `92b2ca0dd727942e00aba3523ed141d53e78ea28` on October 30, 2026. I also observed live conversations through the mobile app preview at 393 × 852.
 
 ## Comparison
 
@@ -15,10 +14,7 @@ I also observed live conversations through the mobile app preview at 393 × 852.
 | Placement | Stable activity lane and composer activity chips | Activity in the transcript footer | I kept ordinary activity inline at the latest response or in the header while the reader views older messages. I placed waits, retries, and errors above the composer. |
 | Reading | Activity does not disturb the current view | Expanding details can trigger automatic scroll | I paused automatic follow on expansion and retained disclosure state. |
 
-I kept Stop beside Send while the user typed during active execution.
-I kept the stopping state until the server confirms that execution ends.
-I used a UI-thread rotation for the progress indicator and retained reduced-motion support.
-I kept transcript growth and individual text fragments free of entrance animations.
+I kept Stop beside Send while the user typed during active execution. I kept the stopping state until the server confirms that execution ends. I used a UI-thread rotation for the progress indicator and retained reduced-motion support. I kept transcript growth and individual text fragments free of entrance animations.
 
 ## Sources
 
@@ -30,9 +26,7 @@ I kept transcript growth and individual text fragments free of entrance animatio
 
 ## Independent review
 
-I requested Claude reviews of the original implementation and the revised code with an actual phone screenshot.
-The reviews identified misleading activity states, stale retries, duplicate controls, disclosure scroll jumps, and accessibility gaps.
-I addressed these findings in the implementation.
+I requested Claude reviews of the original implementation and the revised code with an actual phone screenshot. The reviews identified misleading activity states, stale retries, duplicate controls, disclosure scroll jumps, and accessibility gaps. I addressed these findings in the implementation.
 
 ## Live observations
 
@@ -48,9 +42,7 @@ I addressed these findings in the implementation.
 
 ## Native refinement
 
-I used one iPhone 17 Pro with iOS 26.3 and the committed SimSlim profile.
-I inspected live conversations in Expo Go, including a sustained thinking phase and a 30-second command.
-I requested a separate visual review of the native screenshots.
+I used one iPhone 17 Pro with iOS 26.3 and the committed SimSlim profile. I inspected live conversations in Expo Go, including a sustained thinking phase and a 30-second command. I requested a separate visual review of the native screenshots.
 
 | Before | After | Why |
 | --- | --- | --- |
@@ -64,15 +56,10 @@ I requested a separate visual review of the native screenshots.
 | Numbered lists had uneven text columns. | I aligned list text with a numbered marker column. | I aligned the response text. |
 | A follow-up draft hid the Stop control. | I kept Stop beside Send while the user typed during active execution. | I preserved the draft when the user interrupts the agent. |
 
-I scrolled to older content during the command and the thinking phase.
-I observed the progress label in the header and retained the same reading position through completion.
-I returned to the latest response with the arrow inside the composer toolbar.
-I also inspected native long-press selection and the layout with the on-screen keyboard.
+I scrolled to older content during the command and the thinking phase. I observed the progress label in the header and retained the same reading position through completion. I returned to the latest response with the arrow inside the composer toolbar. I also inspected native long-press selection and the layout with the on-screen keyboard.
 
 ![Final native chat with the refined composer and toolbar](screenshots/native-refined-chat.png)
 
 ![Final native layout with the on-screen keyboard](screenshots/native-keyboard-refined.png)
 
-I reviewed retry failures, permission approvals, and native accessibility behavior from source.
-I did not run tests, typechecks, or native builds.
-I did not measure animation performance on a physical device.
+I reviewed retry failures, permission approvals, and native accessibility behavior from source. I did not run tests, typechecks, or native builds. I did not measure animation performance on a physical device.
