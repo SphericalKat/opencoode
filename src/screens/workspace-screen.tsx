@@ -376,7 +376,7 @@ const loadEntries = async (
         { signal }
       )
     : await client.file.list({ location: { directory }, path }, { signal });
-  return result.data.toSorted(compareEntries);
+  return [...result.data].sort(compareEntries);
 };
 
 const shareTitle = () =>

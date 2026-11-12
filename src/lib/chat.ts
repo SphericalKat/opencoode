@@ -13,7 +13,7 @@ export const mergeMessages = (
       messages.set(message.id, message);
     }
   }
-  return [...messages.values()].toSorted(
+  return [...messages.values()].sort(
     (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id)
   );
 };

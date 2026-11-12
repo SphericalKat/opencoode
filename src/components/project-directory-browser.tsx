@@ -335,9 +335,7 @@ const ProjectDirectoryBrowser = ({
         setFolders(
           result.data
             .filter((entry) => entry.type === "directory")
-            .toSorted((a, b) =>
-              fileName(a.path).localeCompare(fileName(b.path))
-            )
+            .sort((a, b) => fileName(a.path).localeCompare(fileName(b.path)))
         );
       } catch (error_) {
         if (!controller.signal.aborted) {

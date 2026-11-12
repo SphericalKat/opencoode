@@ -3059,7 +3059,7 @@ const ChatSession = ({
                 modelPreferenceID(model.providerID, model.id)
               )
             )
-            .toSorted(
+            .sort(
               (a, b) =>
                 preferredIDs.indexOf(modelPreferenceID(a.providerID, a.id)) -
                 preferredIDs.indexOf(modelPreferenceID(b.providerID, b.id))
