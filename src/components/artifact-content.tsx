@@ -26,21 +26,40 @@ const imageTypes = new Set([
   "image/bmp",
 ]);
 
-export function isImageArtifact(content: ToolFileContent) {
-  return imageTypes.has(content.mime.split(";")[0].trim().toLowerCase());
-}
+const hasControlCharacter = (value: string, highest: number) => {
+  for (const character of value) {
+    const code = character.codePointAt(0);
+    if (code !== undefined && (code <= highest || code === 0x7f)) {
+      return true;
+    }
+  }
+  return false;
+};
 
-function source(
+const unsafeFilenameCharacters = new Set(["<", ">", ":", '"', "|", "?", "*"]);
+
+const sanitizeFilename = (name: string) =>
+  Array.from(name, (character) =>
+    hasControlCharacter(character, 0x1f) ||
+    unsafeFilenameCharacters.has(character)
+      ? "_"
+      : character
+  ).join("");
+
+export const isImageArtifact = (content: ToolFileContent) =>
+  imageTypes.has(content.mime.split(";")[0].trim().toLowerCase());
+
+const source = (
   uri: string
 ):
   | { kind: "data" }
   | { kind: "file"; path: string }
   | { kind: "remote"; url: string }
-  | undefined {
+  | undefined => {
   if (uri.startsWith("data:")) {
     return { kind: "data" };
   }
-  if (/[\u0000-\u0020\u007F]/.test(uri)) {
+  if (hasControlCharacter(uri, 0x20)) {
     return;
   }
   try {
@@ -56,7 +75,7 @@ function source(
       !url.hash
     ) {
       const path = decodeURIComponent(url.pathname);
-      if (!/[\u0000-\u001F\u007F]/.test(path)) {
+      if (!hasControlCharacter(path, 0x1f)) {
         return { kind: "file", path };
       }
     }
@@ -66,57 +85,98 @@ function source(
     ) {
       return { kind: "remote", url: url.href };
     }
-  } catch {}
-}
+  } catch {
+    // Malformed URIs are unsupported.
+  }
+};
 
-function inlineBytes(uri: string): Uint8Array {
+const inlineBytes = (uri: string): Uint8Array => {
   const comma = uri.indexOf(",");
   if (comma === -1) {
     throw new Error("The attachment data is invalid");
   }
   const header = uri.slice(0, comma);
   const payload = uri.slice(comma + 1);
-  if (/;base64$/i.test(header)) {
-    return Uint8Array.from(atob(payload.replace(/\s/g, "")), (char) =>
-      char.charCodeAt(0)
+  if (/;[Bb][Aa][Ss][Ee]64$/u.test(header)) {
+    return Uint8Array.from(
+      atob(payload.replaceAll(/\s/gu, "")),
+      (char) => char.codePointAt(0) ?? 0
     );
   }
   const bytes: number[] = [];
   for (let index = 0; index < payload.length;) {
     if (payload[index] === "%") {
       const hex = payload.slice(index + 1, index + 3);
-      if (!/^[a-f\d]{2}$/i.test(hex)) {
+      if (!/^[\dA-Fa-f]{2}$/u.test(hex)) {
         throw new Error("The attachment data is invalid");
       }
       bytes.push(Number.parseInt(hex, 16));
       index += 3;
     } else {
-      const character = String.fromCodePoint(payload.codePointAt(index)!);
+      const code = payload.codePointAt(index);
+      if (code === undefined) {
+        throw new Error("The attachment data is invalid");
+      }
+      const character = String.fromCodePoint(code);
       bytes.push(...new TextEncoder().encode(character));
       index += character.length;
     }
   }
   return new Uint8Array(bytes);
-}
+};
 
-function dataUri(bytes: Uint8Array, mime: string) {
+const dataUri = (bytes: Uint8Array, mime: string) => {
   let binary = "";
   for (let index = 0; index < bytes.length; index += 16_384) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + 16_384));
+    binary += String.fromCodePoint(...bytes.subarray(index, index + 16_384));
   }
   return `data:${mime};base64,${btoa(binary)}`;
-}
+};
 
-export function ArtifactContent(props: Props) {
-  return (
-    <Artifact
-      key={`${props.directory ?? ""}:${props.content.uri}:${props.content.mime}`}
-      {...props}
-    />
-  );
-}
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      gap: 8,
+      minWidth: 0,
+      padding: 12,
+    },
+    expanded: { height: 420 },
+    mime: { fontSize: 13 },
+    name: { fontWeight: "500" },
+    placeholder: {
+      backgroundColor: colors.panel,
+      borderRadius: 6,
+      height: 112,
+      justifyContent: "center",
+      padding: 10,
+    },
+    preview: {
+      backgroundColor: colors.bg,
+      borderRadius: 6,
+      height: 180,
+      width: "100%",
+    },
+    thumbnail: {
+      flexBasis: 148,
+      flexShrink: 1,
+      gap: 6,
+      maxWidth: "100%",
+      minWidth: 0,
+    },
+    thumbnailImage: {
+      backgroundColor: colors.panel,
+      borderRadius: 6,
+      height: 112,
+      width: "100%",
+    },
+    viewerImage: { flex: 1, minHeight: 0, width: "100%" },
+  });
 
-function Artifact({ content, client, directory, thumbnail }: Props) {
+const Artifact = ({ content, client, directory, thumbnail }: Props) => {
   const styles = useThemedStyles(createStyles);
   const presentNative = useNativePresentation();
   const target = source(content.uri);
@@ -138,21 +198,14 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
     setBusy(false);
     return () => request.abort();
   }, [client]);
-  useEffect(() => {
-    if (image) {
-      void perform("preview");
-    }
-  }, [client]);
+  const segments = (
+    content.name ||
+    `attachment.${mime.split("/")[1]?.replaceAll(/[^A-Za-z\d]/gu, "") || "bin"}`
+  ).split(/[\\/]/u);
   const filename =
-    (
-      content.name ||
-      `attachment.${mime.split("/")[1]?.replaceAll(/[^a-z\d]/gi, "") || "bin"}`
-    )
-      .split(/[\\/]/)
-      .pop()!
-      .replaceAll(/[\u0000-\u001F\u007F<>:"|?*]/g, "_") || "attachment";
+    sanitizeFilename(segments.slice(-1).join("")) || "attachment";
 
-  async function read(signal: AbortSignal) {
+  const read = async (signal: AbortSignal) => {
     if (!target) {
       throw new Error("This attachment URI is not supported");
     }
@@ -177,9 +230,9 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
       );
     }
     return new Uint8Array(await response.arrayBuffer());
-  }
+  };
 
-  async function perform(action: "preview" | "save") {
+  const perform = async (action: "preview" | "save") => {
     if (running.current) {
       return;
     }
@@ -232,7 +285,9 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
       if (temporary?.exists) {
         try {
           await temporary.delete();
-        } catch {}
+        } catch {
+          // The temporary file is already gone or cannot be removed.
+        }
       }
       if (running.current === signal) {
         running.current = undefined;
@@ -241,7 +296,12 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
         }
       }
     }
-  }
+  };
+  useEffect(() => {
+    if (image) {
+      void perform("preview");
+    }
+  }, [client]);
 
   if (thumbnail) {
     return (
@@ -383,47 +443,11 @@ function Artifact({ content, client, directory, thumbnail }: Props) {
       <ErrorNotice error={error} />
     </View>
   );
-}
+};
 
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    container: {
-      backgroundColor: colors.panel,
-      borderColor: colors.border,
-      borderRadius: 8,
-      borderWidth: 1,
-      gap: 8,
-      minWidth: 0,
-      padding: 12,
-    },
-    expanded: { height: 420 },
-    mime: { fontSize: 13 },
-    name: { fontWeight: "500" },
-    placeholder: {
-      backgroundColor: colors.panel,
-      borderRadius: 6,
-      height: 112,
-      justifyContent: "center",
-      padding: 10,
-    },
-    preview: {
-      backgroundColor: colors.bg,
-      borderRadius: 6,
-      height: 180,
-      width: "100%",
-    },
-    thumbnail: {
-      flexBasis: 148,
-      flexShrink: 1,
-      gap: 6,
-      maxWidth: "100%",
-      minWidth: 0,
-    },
-    thumbnailImage: {
-      backgroundColor: colors.panel,
-      borderRadius: 6,
-      height: 112,
-      width: "100%",
-    },
-    viewerImage: { flex: 1, minHeight: 0, width: "100%" },
-  });
+export const ArtifactContent = (props: Props) => (
+  <Artifact
+    key={`${props.directory ?? ""}:${props.content.uri}:${props.content.mime}`}
+    {...props}
+  />
+);

@@ -13,7 +13,39 @@ import type { ThemeColors } from "../lib/theme";
 import { ShellIcon } from "./shell-icon";
 import { BodyText } from "./ui";
 
-export function ScreenHeader({
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    back: {
+      alignItems: "center",
+      borderRadius: 6,
+      height: Platform.OS === "android" ? 48 : 44,
+      justifyContent: "center",
+      marginEnd: 8,
+      marginStart: -16,
+      width: Platform.OS === "android" ? 48 : 44,
+    },
+    header: {
+      alignItems: "center",
+      borderBottomColor: colors.border,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      gap: 16,
+      minHeight: 56,
+      paddingHorizontal: pageInset,
+    },
+    menu: {
+      alignItems: "center",
+      borderRadius: 6,
+      height: Platform.OS === "android" ? 48 : 44,
+      justifyContent: "center",
+      marginEnd: -16,
+      width: Platform.OS === "android" ? 48 : 44,
+    },
+    pressed: { backgroundColor: colors.selected },
+    title: { flex: 1, fontSize: 18, fontWeight: "600", lineHeight: 24 },
+  });
+
+export const ScreenHeader = ({
   title,
   backLabel,
   onBack,
@@ -27,7 +59,7 @@ export function ScreenHeader({
   onOpenNavigation?: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
-}) {
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
@@ -77,36 +109,4 @@ export function ScreenHeader({
       )}
     </View>
   );
-}
-
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    back: {
-      alignItems: "center",
-      borderRadius: 6,
-      height: Platform.OS === "android" ? 48 : 44,
-      justifyContent: "center",
-      marginEnd: 8,
-      marginStart: -16,
-      width: Platform.OS === "android" ? 48 : 44,
-    },
-    header: {
-      alignItems: "center",
-      borderBottomColor: colors.border,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      flexDirection: "row",
-      gap: 16,
-      minHeight: 56,
-      paddingHorizontal: pageInset,
-    },
-    menu: {
-      alignItems: "center",
-      borderRadius: 6,
-      height: Platform.OS === "android" ? 48 : 44,
-      justifyContent: "center",
-      marginEnd: -16,
-      width: Platform.OS === "android" ? 48 : 44,
-    },
-    pressed: { backgroundColor: colors.selected },
-    title: { flex: 1, fontSize: 18, fontWeight: "600", lineHeight: 24 },
-  });
+};

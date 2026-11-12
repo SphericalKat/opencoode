@@ -27,7 +27,143 @@ export type SessionPane =
   | "Terminal"
   | "Worktrees";
 
-export function SessionSurface({
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    activeTab: { backgroundColor: colors.selected },
+    badge: {
+      alignItems: "center",
+      backgroundColor: colors.muted,
+      borderRadius: 3,
+      flexShrink: 0,
+      justifyContent: "center",
+      minHeight: 16,
+      minWidth: 16,
+    },
+    badgeText: { color: colors.bg, fontSize: 12, lineHeight: 15 },
+    closeTab: {
+      alignItems: "center",
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    count: { fontSize: 14, lineHeight: 19, paddingHorizontal: 4 },
+    divider: {
+      backgroundColor: colors.border,
+      height: StyleSheet.hairlineWidth,
+    },
+    footer: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    footerButton: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 8,
+    },
+    framedSurface: {
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: "column",
+      overflow: "hidden",
+    },
+    grip: {
+      backgroundColor: colors.faint,
+      borderRadius: 2,
+      height: 4,
+      opacity: 0.5,
+      width: 32,
+    },
+    gripTarget: { alignItems: "center", height: 28, justifyContent: "center" },
+    menuRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 8,
+    },
+    menuText: { color: colors.muted, fontSize: 14, lineHeight: 19 },
+    moreRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 48,
+      paddingHorizontal: 12,
+    },
+    moreText: { fontSize: 14, lineHeight: 19 },
+    openTab: { alignItems: "center", borderRadius: 6, flexDirection: "row" },
+    openTabMain: {
+      alignItems: "center",
+      flex: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      minWidth: 0,
+      paddingLeft: 8,
+    },
+    openTabTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
+    pressed: { opacity: 0.6 },
+    project: {
+      alignItems: "center",
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 40,
+      paddingHorizontal: 14,
+    },
+    projectName: { flex: 1, fontSize: 14, lineHeight: 19 },
+    recentTitle: {
+      fontSize: 12,
+      lineHeight: 17,
+      paddingBottom: 4,
+      paddingHorizontal: 8,
+      paddingTop: 12,
+    },
+    selectedTab: { borderBottomColor: colors.text },
+    serverDetail: { fontSize: 12, lineHeight: 17 },
+    serverName: { fontSize: 14, lineHeight: 19 },
+    serverRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 56,
+      paddingHorizontal: 8,
+    },
+    serverText: { flex: 1, minWidth: 0 },
+    sessionTab: {
+      alignItems: "center",
+      borderBottomColor: "transparent",
+      borderBottomWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 48,
+    },
+    sessionTabs: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      flexDirection: "row",
+    },
+    sheetContent: { gap: 0, padding: 12, paddingBottom: 4, paddingTop: 0 },
+    strip: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 16,
+    },
+    stripTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
+    surface: { flex: 1, minHeight: 0, minWidth: 0 },
+    tabText: { fontSize: 14, lineHeight: 19 },
+  });
+
+const EMPTY_TABS: OpenSessionTab[] = [];
+
+export const SessionSurface = ({
   framed,
   style,
   children,
@@ -35,29 +171,27 @@ export function SessionSurface({
   framed: boolean;
   style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
-}) {
+}) => {
   const styles = useThemedStyles(createStyles);
   return (
     <View style={[styles.surface, style, framed && styles.framedSurface]}>
       {children}
     </View>
   );
-}
+};
 
-function HomeIcon({ color }: { color: string }) {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden>
-      <Rect x={2} y={2} width={4} height={4} stroke={color} />
-      <Rect x={10} y={2} width={4} height={4} stroke={color} />
-      <Rect x={2} y={10} width={4} height={4} stroke={color} />
-      <Path d="M12 9v6M9 12h6" stroke={color} />
-    </Svg>
-  );
-}
+const HomeIcon = ({ color }: { color: string }) => (
+  <Svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden>
+    <Rect x={2} y={2} width={4} height={4} stroke={color} />
+    <Rect x={10} y={2} width={4} height={4} stroke={color} />
+    <Rect x={2} y={10} width={4} height={4} stroke={color} />
+    <Path d="M12 9v6M9 12h6" stroke={color} />
+  </Svg>
+);
 
-function ProjectBadge({ directory }: { directory: string }) {
+const ProjectBadge = ({ directory }: { directory: string }) => {
   const styles = useThemedStyles(createStyles);
-  const name = directory.split(/[\\/]/).filter(Boolean).pop() || "Project";
+  const name = directory.split(/[\\/]/u).findLast(Boolean) || "Project";
   return (
     <View style={styles.badge}>
       <BodyText style={styles.badgeText}>
@@ -65,9 +199,9 @@ function ProjectBadge({ directory }: { directory: string }) {
       </BodyText>
     </View>
   );
-}
+};
 
-export function BetaTabStrip({
+export const BetaTabStrip = ({
   current,
   count,
   busy,
@@ -77,7 +211,7 @@ export function BetaTabStrip({
   count: number;
   busy?: boolean;
   onOpen: () => void;
-}) {
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
@@ -104,9 +238,9 @@ export function BetaTabStrip({
       )}
     </Pressable>
   );
-}
+};
 
-export function BetaSessionNavigation({
+export const BetaSessionNavigation = ({
   pane,
   directory,
   onSelect,
@@ -120,7 +254,7 @@ export function BetaSessionNavigation({
   onMore: () => void;
   onProject?: () => void;
   changes?: boolean;
-}) {
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
@@ -178,14 +312,14 @@ export function BetaSessionNavigation({
       >
         <ProjectBadge directory={directory} />
         <BodyText muted numberOfLines={1} style={styles.projectName}>
-          {directory.split(/[\\/]/).filter(Boolean).pop() || directory}
+          {directory.split(/[\\/]/u).findLast(Boolean) || directory}
         </BodyText>
       </Pressable>
     </>
   );
-}
+};
 
-export function SheetGrip({ onClose }: { onClose: () => void }) {
+export const SheetGrip = ({ onClose }: { onClose: () => void }) => {
   const styles = useThemedStyles(createStyles);
   const pan = useMemo(
     () =>
@@ -205,12 +339,12 @@ export function SheetGrip({ onClose }: { onClose: () => void }) {
       <View style={styles.grip} />
     </View>
   );
-}
+};
 
-export function BetaTabsSheet({
+export const BetaTabsSheet = ({
   visible,
   tabs,
-  recent = [],
+  recent = EMPTY_TABS,
   selectedID,
   serverLabel,
   onServer,
@@ -237,7 +371,7 @@ export function BetaTabsSheet({
   onHome?: () => void;
   onSettings: () => void;
   onHelp: () => void;
-}) {
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
@@ -376,9 +510,9 @@ export function BetaTabsSheet({
       </View>
     </Sheet>
   );
-}
+};
 
-export function BetaMoreSheet({
+export const BetaMoreSheet = ({
   visible,
   pane = "Session",
   onClose,
@@ -394,7 +528,7 @@ export function BetaMoreSheet({
   onView?: (pane: "Files" | "Terminal" | "Worktrees") => void;
   onUsage?: () => void;
   onDetails?: () => void;
-}) {
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
@@ -441,138 +575,4 @@ export function BetaMoreSheet({
       )}
     </Sheet>
   );
-}
-
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    activeTab: { backgroundColor: colors.selected },
-    badge: {
-      alignItems: "center",
-      backgroundColor: colors.muted,
-      borderRadius: 3,
-      flexShrink: 0,
-      justifyContent: "center",
-      minHeight: 16,
-      minWidth: 16,
-    },
-    badgeText: { color: colors.bg, fontSize: 12, lineHeight: 15 },
-    closeTab: {
-      alignItems: "center",
-      height: 48,
-      justifyContent: "center",
-      width: 48,
-    },
-    count: { fontSize: 14, lineHeight: 19, paddingHorizontal: 4 },
-    divider: {
-      backgroundColor: colors.border,
-      height: StyleSheet.hairlineWidth,
-    },
-    footer: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-    },
-    footerButton: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 8,
-      minHeight: 48,
-      paddingHorizontal: 8,
-    },
-    framedSurface: {
-      backgroundColor: colors.bg,
-      borderColor: colors.border,
-      borderRadius: 12,
-      borderWidth: 1,
-      flexDirection: "column",
-      overflow: "hidden",
-    },
-    grip: {
-      backgroundColor: colors.faint,
-      borderRadius: 2,
-      height: 4,
-      opacity: 0.5,
-      width: 32,
-    },
-    gripTarget: { alignItems: "center", height: 28, justifyContent: "center" },
-    menuRow: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 8,
-      minHeight: 48,
-      paddingHorizontal: 8,
-    },
-    menuText: { color: colors.muted, fontSize: 14, lineHeight: 19 },
-    moreRow: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      minHeight: 48,
-      paddingHorizontal: 12,
-    },
-    moreText: { fontSize: 14, lineHeight: 19 },
-    openTab: { alignItems: "center", borderRadius: 6, flexDirection: "row" },
-    openTabMain: {
-      alignItems: "center",
-      flex: 1,
-      flexDirection: "row",
-      gap: 8,
-      minHeight: 48,
-      minWidth: 0,
-      paddingLeft: 8,
-    },
-    openTabTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
-    pressed: { opacity: 0.6 },
-    project: {
-      alignItems: "center",
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      flexDirection: "row",
-      gap: 8,
-      minHeight: 40,
-      paddingHorizontal: 14,
-    },
-    projectName: { flex: 1, fontSize: 14, lineHeight: 19 },
-    recentTitle: {
-      fontSize: 12,
-      lineHeight: 17,
-      paddingBottom: 4,
-      paddingHorizontal: 8,
-      paddingTop: 12,
-    },
-    selectedTab: { borderBottomColor: colors.text },
-    serverDetail: { fontSize: 12, lineHeight: 17 },
-    serverName: { fontSize: 14, lineHeight: 19 },
-    serverRow: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 8,
-      minHeight: 56,
-      paddingHorizontal: 8,
-    },
-    serverText: { flex: 1, minWidth: 0 },
-    sessionTab: {
-      alignItems: "center",
-      borderBottomColor: "transparent",
-      borderBottomWidth: 1,
-      flex: 1,
-      justifyContent: "center",
-      minHeight: 48,
-    },
-    sessionTabs: {
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      flexDirection: "row",
-    },
-    sheetContent: { gap: 0, padding: 12, paddingBottom: 4, paddingTop: 0 },
-    strip: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 8,
-      minHeight: 48,
-      paddingHorizontal: 16,
-    },
-    stripTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
-    surface: { flex: 1, minHeight: 0, minWidth: 0 },
-    tabText: { fontSize: 14, lineHeight: 19 },
-  });
+};

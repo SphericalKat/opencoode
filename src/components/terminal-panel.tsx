@@ -55,565 +55,119 @@ interface Props {
   sessionID?: string;
 }
 type Mode = "desktop" | "workspace";
+type ConnectionStatus = "connecting" | "connected" | "disconnected";
+type ControlMessage = object & Record<"type", unknown>;
 const ModalSafeAreaRoot =
   Platform.OS === "web" ? React.Fragment : SafeAreaProvider;
 
-export function TerminalPanel(props: Props) {
-  return (
-    <Terminals key={`${props.connection.id}:${props.directory}`} {...props} />
-  );
-}
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    connectionBar: {
+      flexShrink: 0,
+      flexWrap: "nowrap",
+      paddingBottom: 8,
+      paddingHorizontal: 16,
+    },
+    fullscreen: { backgroundColor: colors.bg, flex: 1, paddingTop: 8 },
+    keys: { flexGrow: 0, flexShrink: 0, height: 54 },
+    modes: { flexGrow: 0, flexShrink: 0, height: 50 },
+    nativeComposer: {
+      flexShrink: 0,
+      flexWrap: "nowrap",
+      paddingHorizontal: 8,
+      paddingTop: 8,
+    },
+    nativeInput: {
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 6,
+      borderWidth: 1,
+      color: colors.text,
+      flex: 1,
+      fontFamily: mono,
+      fontSize: 15,
+      minHeight: 44,
+      minWidth: 0,
+      padding: 10,
+    },
+    notice: { flexShrink: 0, paddingBottom: 8, paddingHorizontal: 16 },
+    panel: { flex: 1, minHeight: 0 },
+    selectedTab: {
+      backgroundColor: colors.selected,
+      borderColor: colors.focus,
+    },
+    session: { flex: 1, minHeight: 0 },
+    tab: {
+      borderColor: colors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    tabs: { flexGrow: 0, flexShrink: 0, height: 48 },
+    terminal: {
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+      borderTopWidth: 1,
+      flex: 1,
+      minHeight: 0,
+    },
+    toolbar: {
+      flexShrink: 0,
+      paddingBottom: 8,
+      paddingHorizontal: 16,
+      paddingTop: 6,
+    },
+  });
 
-function Terminals(props: Props) {
-  const styles = useThemedStyles(createStyles);
-  const confirmUnsaved = useUnsavedGuard();
-  const { suspended } = useSheetCoordinator();
-  const capabilityKnown = useRef(false);
-  const [persistent, setPersistent] = useState<boolean | null>(null);
-  const [mode, setMode] = useState<Mode>("workspace");
-  const [sessionID, setSessionID] = useState(props.sessionID);
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [sessionPicker, setSessionPicker] = useState(false);
-  const [sessionCursor, setSessionCursor] = useState<string | undefined>(
-    undefined
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [checkRevision, setCheckRevision] = useState(0);
-  const mounted = useRef(true);
+const socketListeners = new WeakMap<WebSocket, () => void>();
 
-  useEffect(() => {
-    setSessionID(props.sessionID);
-  }, [props.sessionID]);
-  useEffect(() => {
-    if (suspended) {
-      return;
+const detachSocket = (ws: WebSocket) => {
+  socketListeners.get(ws)?.();
+  socketListeners.delete(ws);
+};
+
+const connectionLabel = (
+  status: ConnectionStatus,
+  active: boolean,
+  mode: Mode,
+  controller: boolean,
+  size: { cols: number; rows: number }
+) => {
+  if (status === "connected") {
+    let role = "Connected";
+    if (mode === "desktop") {
+      role = controller ? "In control" : "View only";
     }
-    mounted.current = true;
-    const controller = new AbortController();
-    void props.client.server
-      .info({ signal: controller.signal })
-      .then((info) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-        const supported = info.capabilities?.persistentPty === true;
-        setPersistent(supported);
-        if (!supported || !capabilityKnown.current) {
-          setMode(supported ? "desktop" : "workspace");
-        }
-        capabilityKnown.current = true;
-      })
-      .catch((error_) => {
-        if (!controller.signal.aborted) {
-          setError(errorMessage(error_));
-        }
-      });
-    return () => {
-      mounted.current = false;
-      controller.abort();
-    };
-  }, [props.client, checkRevision, suspended]);
-
-  async function pickSession(cursor?: string) {
-    setSessionPicker(true);
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await props.client.session.list({
-        cursor,
-        directory: props.directory,
-        limit: 50,
-      });
-      if (!mounted.current) {
-        return;
-      }
-      setSessions((current) =>
-        cursor ? [...current, ...result.data] : result.data
-      );
-      setSessionCursor(result.cursor.next ?? undefined);
-    } catch (error_) {
-      if (mounted.current) {
-        setError(errorMessage(error_));
-      }
-    } finally {
-      if (mounted.current) {
-        setLoading(false);
-      }
-    }
+    return `${role} · ${size.cols} × ${size.rows}`;
   }
-
-  async function selectMode(next: Mode) {
-    if (next === mode || !(await confirmUnsaved())) {
-      return;
-    }
-    setMode(next);
+  if (!active) {
+    return "Paused in background";
   }
+  return status === "connecting" ? "Connect to shell…" : "Disconnected";
+};
 
-  async function selectSession(next: string) {
-    if (next !== sessionID && !(await confirmUnsaved())) {
-      return;
-    }
-    setSessionID(next);
-    setSessionPicker(false);
+const composerPlaceholder = (
+  canSend: boolean,
+  mode: Mode,
+  controller: boolean
+) => {
+  if (canSend) {
+    return "Text for the terminal";
   }
+  return mode === "desktop" && !controller
+    ? "Take control to send text"
+    : "Connect to send text";
+};
 
-  return (
-    <View style={styles.panel}>
-      {persistent && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.modes}
-          contentContainerStyle={{
-            gap: 8,
-            paddingHorizontal: 16,
-            paddingVertical: 6,
-          }}
-        >
-          <Button
-            title="Desktop terminals"
-            compact
-            variant={mode === "desktop" ? "primary" : "ghost"}
-            onPress={() => void selectMode("desktop")}
-          />
-          <Button
-            title="Workspace shells"
-            compact
-            variant={mode === "workspace" ? "primary" : "ghost"}
-            onPress={() => void selectMode("workspace")}
-          />
-          {mode === "desktop" && (
-            <Button
-              title="Choose session"
-              compact
-              onPress={() => void pickSession()}
-            />
-          )}
-        </ScrollView>
-      )}
-      {persistent === null && !error && <Busy />}
-      {error && (
-        <View style={styles.notice}>
-          <ErrorNotice
-            error={error}
-            onRetry={() => {
-              setError(null);
-              setCheckRevision((value) => value + 1);
-            }}
-          />
-        </View>
-      )}
-      {persistent !== null && (mode === "workspace" || sessionID) ? (
-        <TerminalList
-          key={`${mode}:${sessionID ?? ""}`}
-          {...props}
-          sessionID={sessionID}
-          mode={mode}
-        />
-      ) : (
-        persistent !== null && (
-          <Empty
-            title="Choose a desktop session"
-            detail="Desktop terminals belong to a session. Choose its session to see the same terminals on your phone."
-          />
-        )
-      )}
-      {persistent !== null && mode === "desktop" && !sessionID && (
-        <View style={styles.notice}>
-          <Button
-            title="Choose session"
-            variant="primary"
-            onPress={() => void pickSession()}
-          />
-        </View>
-      )}
-      <Sheet
-        visible={sessionPicker}
-        title="Terminal session"
-        onClose={() => setSessionPicker(false)}
-      >
-        <ErrorNotice error={error} />
-        {loading && sessions.length === 0 && <Busy />}
-        {sessions.map((session) => (
-          <Button
-            key={session.id}
-            title={session.title || session.id}
-            variant={sessionID === session.id ? "primary" : "secondary"}
-            onPress={() => void selectSession(session.id)}
-          />
-        ))}
-        {!loading && sessions.length === 0 && (
-          <BodyText muted>
-            Create a session from the Sessions tab first.
-          </BodyText>
-        )}
-        {sessionCursor && (
-          <Button
-            title="More sessions"
-            busy={loading}
-            onPress={() => void pickSession(sessionCursor)}
-          />
-        )}
-      </Sheet>
-    </View>
-  );
-}
-
-function TerminalList({
-  client,
-  connection,
-  directory,
-  sessionID,
-  mode,
-}: Props & { mode: Mode }) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const confirmUnsaved = useUnsavedGuard();
-  const { suspended } = useSheetCoordinator();
-  const [terminals, setTerminals] = useState<Pty[]>([]);
-  const [selectedID, setSelectedID] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [foreground, setForeground] = useState(
-    AppState.currentState !== "background" &&
-      AppState.currentState !== "inactive"
-  );
-  const request = useRef<AbortController | null>(null);
-  const mounted = useRef(true);
-
-  const refresh = useCallback(async () => {
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    setLoading(true);
-    setError(null);
-    try {
-      const data =
-        mode === "desktop" && sessionID
-          ? await client.experimental.persistentPty.list(
-              { sessionID },
-              { signal: controller.signal }
-            )
-          : (
-              await client.pty.list(
-                { location: { directory } },
-                { signal: controller.signal }
-              )
-            ).data;
-      if (controller.signal.aborted) {
-        return;
-      }
-      setTerminals(data);
-      setSelectedID((current) =>
-        data.some((item) => item.id === current)
-          ? current
-          : (data.find((item) => item.status === "running")?.id ??
-            data[0]?.id ??
-            null)
-      );
-    } catch (error_) {
-      if (!controller.signal.aborted) {
-        setError(errorMessage(error_));
-      }
-    } finally {
-      if (!controller.signal.aborted) {
-        setLoading(false);
-      }
-    }
-  }, [client, directory, sessionID, mode]);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      request.current?.abort();
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const listener = AppState.addEventListener("change", (state) =>
-      setForeground(state === "active")
-    );
-    return () => listener.remove();
-  }, []);
-
-  useEffect(() => {
-    if (!foreground || suspended) {
-      return;
-    }
-    const controller = new AbortController();
-    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let retryResolve: (() => void) | undefined;
-    const scheduleRefresh = () => {
-      if (refreshTimer) {
-        return;
-      }
-      refreshTimer = setTimeout(() => {
-        refreshTimer = undefined;
-        void refresh();
-      }, 250);
-    };
-    void (async () => {
-      await refresh();
-      let attempts = 0;
-      while (!controller.signal.aborted) {
-        try {
-          for await (const event of client.event.subscribe({
-            signal: controller.signal,
-          })) {
-            if (controller.signal.aborted) {
-              break;
-            }
-            attempts = 0;
-            if (event.type === "server.connected") {
-              scheduleRefresh();
-              continue;
-            }
-            if (
-              mode === "desktop" &&
-              (event.type === "persistent-pty.added" ||
-                event.type === "persistent-pty.removed")
-            ) {
-              if (event.data.sessionID === sessionID) {
-                scheduleRefresh();
-              }
-            }
-            if (
-              mode === "workspace" &&
-              (event.type === "pty.created" ||
-                event.type === "pty.updated" ||
-                event.type === "pty.deleted" ||
-                event.type === "pty.exited")
-            ) {
-              if (!event.location || event.location.directory === directory) {
-                scheduleRefresh();
-              }
-            }
-          }
-          if (!controller.signal.aborted) {
-            throw new Error("The terminal inventory connection closed");
-          }
-        } catch {
-          if (controller.signal.aborted) {
-            break;
-          }
-          await new Promise<void>((resolve) => {
-            retryResolve = resolve;
-            retryTimer = setTimeout(
-              resolve,
-              Math.min(1000 * 2 ** Math.min(attempts++, 4), 15_000)
-            );
-          });
-          if (!controller.signal.aborted) {
-            await refresh();
-          }
-        }
-      }
-    })().catch((error_) => {
-      if (!controller.signal.aborted) {
-        setError(errorMessage(error_));
-      }
-    });
-    return () => {
-      controller.abort();
-      request.current?.abort();
-      clearTimeout(refreshTimer);
-      clearTimeout(retryTimer);
-      retryResolve?.();
-    };
-  }, [client, directory, mode, sessionID, foreground, refresh, suspended]);
-
-  async function create() {
-    if (!(await confirmUnsaved())) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const terminal =
-        mode === "desktop" && sessionID
-          ? await client.experimental.persistentPty.create({
-              args: [],
-              cwd: directory,
-              env: {},
-              sessionID,
-              title: "Terminal",
-            })
-          : (
-              await client.pty.create({
-                cwd: directory,
-                location: { directory },
-              })
-            ).data;
-      if (!mounted.current) {
-        return;
-      }
-      request.current?.abort();
-      setLoading(false);
-      setTerminals((current) =>
-        current.some((item) => item.id === terminal.id)
-          ? current.map((item) => (item.id === terminal.id ? terminal : item))
-          : [...current, terminal]
-      );
-      setSelectedID(terminal.id);
-    } catch (error_) {
-      if (mounted.current) {
-        setError(errorMessage(error_));
-      }
-    } finally {
-      if (mounted.current) {
-        setBusy(false);
-      }
-    }
-  }
-
-  async function selectTerminal(next: string) {
-    if (next === selectedID || !(await confirmUnsaved())) {
-      return;
-    }
-    setSelectedID(next);
-  }
-
-  async function terminate() {
-    if (
-      !selectedID ||
-      !(await confirmAction(
-        "Terminate this shell?",
-        "The server will stop this shell and its child processes."
-      ))
-    ) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      if (mode === "desktop") {
-        await client.experimental.persistentPty.remove({ ptyID: selectedID });
-      } else {
-        await client.pty.remove({ location: { directory }, ptyID: selectedID });
-      }
-      if (mounted.current) {
-        await refresh();
-      }
-    } catch (error_) {
-      if (mounted.current) {
-        setError(errorMessage(error_));
-      }
-    } finally {
-      if (mounted.current) {
-        setBusy(false);
-      }
-    }
-  }
-
-  const selected = terminals.find((item) => item.id === selectedID);
-  return (
-    <View style={styles.panel}>
-      <Row style={styles.toolbar}>
-        <Button
-          title="New shell"
-          compact
-          variant="primary"
-          onPress={() => void create()}
-          busy={busy}
-        />
-        <Button
-          title="Refresh"
-          compact
-          onPress={() => void refresh()}
-          disabled={busy || loading}
-        />
-        {selected && (
-          <Button
-            title="Terminate"
-            compact
-            variant="danger"
-            onPress={() => void terminate()}
-            disabled={busy}
-          />
-        )}
-      </Row>
-      <View style={styles.notice}>
-        <ErrorNotice error={error} onRetry={() => void refresh()} />
-      </View>
-      {loading && terminals.length === 0 ? <Busy /> : null}
-      {terminals.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.tabs}
-          contentContainerStyle={{
-            gap: 8,
-            paddingBottom: 10,
-            paddingHorizontal: 16,
-          }}
-        >
-          {terminals.map((terminal) => (
-            <Pressable
-              accessibilityRole="tab"
-              accessibilityState={{ selected: selectedID === terminal.id }}
-              key={terminal.id}
-              onPress={() => void selectTerminal(terminal.id)}
-              style={[
-                styles.tab,
-                selectedID === terminal.id && styles.selectedTab,
-              ]}
-            >
-              <BodyText
-                style={{
-                  color:
-                    terminal.status === "running"
-                      ? colors.success
-                      : colors.muted,
-                }}
-              >
-                {terminal.status === "running" ? "●" : "○"}{" "}
-                {terminal.title || terminal.command}
-              </BodyText>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-      {selected ? (
-        selected.status === "running" || mode === "desktop" ? (
-          <TerminalSession
-            key={selected.id}
-            client={client}
-            connection={connection}
-            directory={directory}
-            terminal={selected}
-            mode={mode}
-            onExit={() => void refresh()}
-          />
-        ) : (
-          <Empty
-            title="Shell exited"
-            detail={`Exit code: ${selected.exitCode ?? "unknown"}. Create a new shell to continue.`}
-          />
-        )
-      ) : (
-        !loading && (
-          <Empty
-            title="A shell on your server"
-            detail="Create a terminal to run commands in this workspace. Shells continue after you leave this screen."
-          />
-        )
-      )}
-    </View>
-  );
-}
-
-function TerminalSession({
+const TerminalSession = ({
   client,
   connection,
   directory,
   terminal,
   mode,
   onExit,
-}: Props & { terminal: Pty; mode: Mode; onExit: () => void }) {
+}: Props & { terminal: Pty; mode: Mode; onExit: () => void }) => {
   const reducedMotion = useMotionPreference();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -642,9 +196,7 @@ function TerminalSession({
     AppState.currentState !== "background" &&
       AppState.currentState !== "inactive"
   );
-  const [status, setStatus] = useState<
-    "connecting" | "connected" | "disconnected"
-  >("connecting");
+  const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const [size, setSize] = useState({ cols: 80, rows: 24 });
@@ -708,9 +260,7 @@ function TerminalSession({
     const ws = socket.current;
     socket.current = null;
     if (ws) {
-      ws.onclose = null;
-      ws.onerror = null;
-      ws.onmessage = null;
+      detachSocket(ws);
       ws.close();
     }
     if (flushTimer.current) {
@@ -721,7 +271,7 @@ function TerminalSession({
     cursor.current = undefined;
     restored.current = false;
     controllerRef.current = false;
-    rendererGeneration.current++;
+    rendererGeneration.current += 1;
     setReady(false);
     setRendererBroken(false);
     setController(false);
@@ -800,9 +350,9 @@ function TerminalSession({
     let decoder = new TextDecoder();
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let connectTimer: ReturnType<typeof setTimeout> | undefined;
-    const controller = new AbortController();
+    const abortController = new AbortController();
 
-    function flush() {
+    const flush = () => {
       flushTimer.current = null;
       if (!pending.current.length) {
         return;
@@ -812,21 +362,20 @@ function TerminalSession({
         type: "output",
       });
       pending.current = [];
-    }
-    function retry() {
-      if (disposed || suspendedRef.current || retryTimer) {
-        return;
-      }
-      setStatus("disconnected");
-      retryTimer = setTimeout(
-        () => {
+    };
+    const open = async () => {
+      const retry = () => {
+        if (disposed || suspendedRef.current || retryTimer) {
+          return;
+        }
+        setStatus("disconnected");
+        const delay = Math.min(30_000, 1000 * 2 ** Math.min(retries, 5));
+        retries += 1;
+        retryTimer = setTimeout(() => {
           retryTimer = undefined;
           void open();
-        },
-        Math.min(30_000, 1000 * 2 ** Math.min(retries++, 5))
-      );
-    }
-    async function open() {
+        }, delay);
+      };
       if (disposed || suspendedRef.current) {
         return;
       }
@@ -839,7 +388,7 @@ function TerminalSession({
         if (mode === "desktop") {
           const snapshot = await client.experimental.persistentPty.snapshot(
             { ptyID: terminal.id },
-            { signal: controller.signal }
+            { signal: abortController.signal }
           );
           if (disposed || suspendedRef.current) {
             return;
@@ -862,7 +411,7 @@ function TerminalSession({
           }
           const token = await client.experimental.persistentPty.connectToken(
             { ptyID: terminal.id, "x-opencode-ticket": "1" },
-            { signal: controller.signal }
+            { signal: abortController.signal }
           );
           if (disposed || suspendedRef.current) {
             return;
@@ -880,7 +429,7 @@ function TerminalSession({
         } else {
           const current = await client.pty.get(
             { location: { directory }, ptyID: terminal.id },
-            { signal: controller.signal }
+            { signal: abortController.signal }
           );
           if (disposed || suspendedRef.current) {
             return;
@@ -895,7 +444,7 @@ function TerminalSession({
               ptyID: terminal.id,
               "x-opencode-ticket": "1",
             },
-            { signal: controller.signal }
+            { signal: abortController.signal }
           );
           if (disposed || suspendedRef.current) {
             return;
@@ -920,7 +469,119 @@ function TerminalSession({
             ws.close();
           }
         }, 15_000);
-        ws.onopen = () => {
+        const handleAttached = (message: ControlMessage) => {
+          if (!("inputProtocol" in message) || message.inputProtocol !== 1) {
+            setError(
+              "Restart the OpenCode server to update its terminal protocol"
+            );
+            exited = true;
+            ws.close();
+            return;
+          }
+          if (
+            "replay" in message &&
+            message.replay &&
+            typeof message.replay === "object" &&
+            "truncated" in message.replay &&
+            message.replay.truncated === true
+          ) {
+            setError(
+              "The terminal changed during recovery. Reconnect to restore its current screen."
+            );
+            ws.close();
+            return;
+          }
+          controllerRef.current =
+            "role" in message && message.role === "controller";
+          setController(controllerRef.current);
+        };
+        const handleReplayComplete = (message: ControlMessage) => {
+          restored.current = true;
+          clearTimeout(connectTimer);
+          setStatus("connected");
+          if ("endOffset" in message && typeof message.endOffset === "number") {
+            cursor.current = message.endOffset;
+          }
+        };
+        const handleResized = (message: ControlMessage) => {
+          if (
+            "cols" in message &&
+            "rows" in message &&
+            "checkpoint" in message &&
+            typeof message.cols === "number" &&
+            typeof message.rows === "number" &&
+            typeof message.checkpoint === "string"
+          ) {
+            flush();
+            decoder = new TextDecoder();
+            renderer.current?.send({
+              checkpoint: message.checkpoint,
+              cols: message.cols,
+              rows: message.rows,
+              type: "restore",
+            });
+          }
+        };
+        const handleExited = (message: ControlMessage) => {
+          exited = true;
+          setStatus("disconnected");
+          setError(
+            `Shell exited with code ${"exitCode" in message ? message.exitCode : "unknown"}`
+          );
+          onExitRef.current();
+        };
+        const handleDesktopBinary = (data: ArrayBuffer) => {
+          cursor.current = (cursor.current ?? 0) + data.byteLength;
+          pending.current.push(
+            decoder.decode(new Uint8Array(data), { stream: true })
+          );
+          if (!flushTimer.current) {
+            flushTimer.current = setTimeout(flush, 16);
+          }
+        };
+        const handleDesktopText = (data: string) => {
+          let message: unknown;
+          try {
+            message = JSON.parse(data);
+          } catch {
+            return;
+          }
+          if (!message || typeof message !== "object" || !("type" in message)) {
+            return;
+          }
+          if (message.type === "attached") {
+            handleAttached(message);
+          } else if (message.type === "replay_complete") {
+            handleReplayComplete(message);
+          } else if (message.type === "controller_changed") {
+            controllerRef.current =
+              "attachmentID" in message &&
+              message.attachmentID === attachmentID;
+            setController(controllerRef.current);
+          } else if (message.type === "resized") {
+            handleResized(message);
+          } else if (message.type === "exited") {
+            handleExited(message);
+          }
+        };
+        const handleWorkspaceData = (data: unknown) => {
+          if (data instanceof ArrayBuffer) {
+            const position = ptyControlCursor(data);
+            if (position !== undefined) {
+              cursor.current = position;
+            }
+            return;
+          }
+          if (typeof data !== "string") {
+            return;
+          }
+          cursor.current = (cursor.current ?? 0) + data.length;
+          pending.current.push(data);
+          if (!flushTimer.current) {
+            flushTimer.current = setTimeout(flush, 16);
+          }
+        };
+        const onOpen = () => {
           if (disposed || suspendedRef.current) {
             ws.close();
             return;
@@ -932,135 +593,30 @@ function TerminalSession({
             setStatus("connected");
           }
         };
-        ws.onmessage = (event) => {
+        const onMessage = (event: MessageEvent) => {
           if (disposed || suspendedRef.current) {
             return;
           }
-          if (mode === "desktop") {
-            if (event.data instanceof ArrayBuffer) {
-              cursor.current = (cursor.current ?? 0) + event.data.byteLength;
-              pending.current.push(
-                decoder.decode(new Uint8Array(event.data), { stream: true })
-              );
-              if (!flushTimer.current) {
-                flushTimer.current = setTimeout(flush, 16);
-              }
-              return;
-            }
-            if (typeof event.data !== "string") {
-              return;
-            }
-            let message: unknown;
-            try {
-              message = JSON.parse(event.data);
-            } catch {
-              return;
-            }
-            if (
-              !message ||
-              typeof message !== "object" ||
-              !("type" in message)
-            ) {
-              return;
-            }
-            if (message.type === "attached") {
-              if (
-                !("inputProtocol" in message) ||
-                message.inputProtocol !== 1
-              ) {
-                setError(
-                  "Restart the OpenCode server to update its terminal protocol"
-                );
-                exited = true;
-                ws.close();
-                return;
-              }
-              if (
-                "replay" in message &&
-                message.replay &&
-                typeof message.replay === "object" &&
-                "truncated" in message.replay &&
-                message.replay.truncated === true
-              ) {
-                setError(
-                  "The terminal changed during recovery. Reconnect to restore its current screen."
-                );
-                ws.close();
-                return;
-              }
-              controllerRef.current =
-                "role" in message && message.role === "controller";
-              setController(controllerRef.current);
-            }
-            if (message.type === "replay_complete") {
-              restored.current = true;
-              clearTimeout(connectTimer);
-              setStatus("connected");
-              if (
-                "endOffset" in message &&
-                typeof message.endOffset === "number"
-              ) {
-                cursor.current = message.endOffset;
-              }
-            }
-            if (message.type === "controller_changed") {
-              controllerRef.current =
-                "attachmentID" in message &&
-                message.attachmentID === attachmentID;
-              setController(controllerRef.current);
-            }
-            if (
-              message.type === "resized" &&
-              "cols" in message &&
-              "rows" in message &&
-              "checkpoint" in message &&
-              typeof message.cols === "number" &&
-              typeof message.rows === "number" &&
-              typeof message.checkpoint === "string"
-            ) {
-              flush();
-              decoder = new TextDecoder();
-              renderer.current?.send({
-                checkpoint: message.checkpoint,
-                cols: message.cols,
-                rows: message.rows,
-                type: "restore",
-              });
-            }
-            if (message.type === "exited") {
-              exited = true;
-              setStatus("disconnected");
-              setError(
-                `Shell exited with code ${"exitCode" in message ? message.exitCode : "unknown"}`
-              );
-              onExitRef.current();
-            }
+          if (mode !== "desktop") {
+            handleWorkspaceData(event.data);
             return;
           }
           if (event.data instanceof ArrayBuffer) {
-            const position = ptyControlCursor(event.data);
-            if (position !== undefined) {
-              cursor.current = position;
-            }
+            handleDesktopBinary(event.data);
             return;
           }
-          if (typeof event.data !== "string") {
-            return;
-          }
-          cursor.current = (cursor.current ?? 0) + event.data.length;
-          pending.current.push(event.data);
-          if (!flushTimer.current) {
-            flushTimer.current = setTimeout(flush, 16);
+          if (typeof event.data === "string") {
+            handleDesktopText(event.data);
           }
         };
-        ws.onerror = () => {
+        const onError = () => {
           if (!disposed) {
             setError(
               "The terminal connection failed. Check server access and allowed web origins."
             );
           }
         };
-        ws.onclose = () => {
+        const onClose = () => {
           clearTimeout(connectTimer);
           if (socket.current === ws) {
             socket.current = null;
@@ -1069,18 +625,27 @@ function TerminalSession({
             retry();
           }
         };
+        ws.addEventListener("open", onOpen);
+        ws.addEventListener("message", onMessage);
+        ws.addEventListener("error", onError);
+        ws.addEventListener("close", onClose);
+        socketListeners.set(ws, () => {
+          ws.removeEventListener("close", onClose);
+          ws.removeEventListener("error", onError);
+          ws.removeEventListener("message", onMessage);
+        });
       } catch (error_) {
         if (!disposed) {
           setError(errorMessage(error_));
           retry();
         }
       }
-    }
+    };
     void open();
     return () => {
       disposed = true;
       controllerRef.current = false;
-      controller.abort();
+      abortController.abort();
       clearTimeout(retryTimer);
       clearTimeout(connectTimer);
       if (flushTimer.current) {
@@ -1090,9 +655,7 @@ function TerminalSession({
       const ws = socket.current;
       socket.current = null;
       if (ws) {
-        ws.onclose = null;
-        ws.onerror = null;
-        ws.onmessage = null;
+        detachSocket(ws);
         ws.close();
       }
     };
@@ -1155,7 +718,7 @@ function TerminalSession({
     suspended,
   ]);
 
-  function send(data: string, binary = false, reportError = false): boolean {
+  const send = (data: string, binary = false, reportError = false): boolean => {
     const ws = socket.current;
     if (
       suspendedRef.current ||
@@ -1194,8 +757,8 @@ function TerminalSession({
       }
       return false;
     }
-  }
-  function takeControl() {
+  };
+  const takeControl = () => {
     if (
       !suspendedRef.current &&
       restored.current &&
@@ -1203,8 +766,8 @@ function TerminalSession({
     ) {
       socket.current.send(persistentInputFrame(size));
     }
-  }
-  function event(message: TerminalEvent) {
+  };
+  const event = (message: TerminalEvent) => {
     if (suspendedRef.current) {
       return;
     }
@@ -1221,8 +784,8 @@ function TerminalSession({
           : { cols: message.cols, rows: message.rows }
       );
     }
-  }
-  function reconnect() {
+  };
+  const reconnect = () => {
     if (suspendedRef.current) {
       return;
     }
@@ -1230,30 +793,30 @@ function TerminalSession({
       setReady(false);
       cursor.current = undefined;
       pending.current = [];
-      rendererGeneration.current++;
+      rendererGeneration.current += 1;
       setRendererEpoch((value) => value + 1);
       setRendererBroken(false);
     } else {
       setRevision((value) => value + 1);
     }
     setError(null);
-  }
-  function changeFullscreen(next: boolean) {
+  };
+  const changeFullscreen = (next: boolean) => {
     if (suspendedRef.current) {
       return;
     }
     resetTerminalView();
     setFullscreen(next);
-  }
-  function submitNative(appendReturn: boolean, text = nativeText) {
+  };
+  const submitNative = (appendReturn: boolean, text = nativeText) => {
     if (!text && !appendReturn) {
       return;
     }
     if (send(`${text}${appendReturn ? "\r" : ""}`, false, true)) {
       setNativeText("");
     }
-  }
-  function focusInput() {
+  };
+  const focusInput = () => {
     if (suspendedRef.current) {
       return;
     }
@@ -1262,24 +825,92 @@ function TerminalSession({
     } else {
       renderer.current?.send({ type: "focus" });
     }
-  }
+  };
   const canSend =
     !suspended &&
     ready &&
     status === "connected" &&
     (mode !== "desktop" || controller);
   const generation = rendererEpoch;
+  const renderNotice = () =>
+    recoveryPending ? (
+      <View style={styles.notice}>
+        <BodyText accessibilityRole="alert">
+          Close this panel to open the connection wizard.
+        </BodyText>
+      </View>
+    ) : (
+      error && (
+        <View style={styles.notice}>
+          <ErrorNotice error={error} />
+        </View>
+      )
+    );
+  const renderAndroidInput = () =>
+    Platform.OS === "android" &&
+    (fullscreen ? (
+      <Row style={styles.nativeComposer}>
+        <TextInput
+          ref={nativeInput}
+          accessibilityLabel="Terminal text"
+          placeholder={composerPlaceholder(canSend, mode, controller)}
+          placeholderTextColor={colors.faint}
+          style={styles.nativeInput}
+          value={nativeText}
+          onChangeText={setNativeText}
+          editable={canSend}
+          autoCorrect={false}
+          autoCapitalize="none"
+          spellCheck={false}
+          secureTextEntry={privateInput}
+          textContentType="none"
+          autoComplete="off"
+          importantForAutofill="no"
+          submitBehavior="submit"
+          returnKeyType="send"
+          onSubmitEditing={(submitEvent) =>
+            submitNative(true, submitEvent.nativeEvent.text)
+          }
+        />
+        <Button
+          title="Send line"
+          compact
+          variant="primary"
+          disabled={!canSend}
+          onPress={() => submitNative(true)}
+        />
+      </Row>
+    ) : (
+      <View style={styles.notice}>
+        <Button
+          title="Open full screen to type"
+          compact
+          onPress={() => changeFullscreen(true)}
+        />
+      </View>
+    ));
+  const renderAndroidKeys = () =>
+    Platform.OS === "android" &&
+    fullscreen && (
+      <>
+        <Button
+          title="Send text"
+          compact
+          disabled={!canSend || !nativeText}
+          onPress={() => submitNative(false)}
+        />
+        <Button
+          title={privateInput ? "Show text" : "Hide text"}
+          compact
+          onPress={() => setPrivateInput((value) => !value)}
+        />
+      </>
+    );
   const content = (
     <View style={styles.session}>
       <Row style={styles.connectionBar}>
         <BodyText muted style={{ flex: 1, fontSize: 12 }}>
-          {status === "connected"
-            ? `${mode === "desktop" ? (controller ? "In control" : "View only") : "Connected"} · ${size.cols} × ${size.rows}`
-            : active
-              ? status === "connecting"
-                ? "Connect to shell…"
-                : "Disconnected"
-              : "Paused in background"}
+          {connectionLabel(status, active, mode, controller, size)}
         </BodyText>
         {mode === "desktop" && status === "connected" && !controller && (
           <Button title="Take control" compact onPress={takeControl} />
@@ -1298,19 +929,7 @@ function TerminalSession({
           <Button title="Reconnect" compact onPress={reconnect} />
         </Row>
       )}
-      {recoveryPending ? (
-        <View style={styles.notice}>
-          <BodyText accessibilityRole="alert">
-            Close this panel to open the connection wizard.
-          </BodyText>
-        </View>
-      ) : (
-        error && (
-          <View style={styles.notice}>
-            <ErrorNotice error={error} />
-          </View>
-        )
-      )}
+      {renderNotice()}
       <View style={styles.terminal}>
         <TerminalRenderer
           key={rendererEpoch}
@@ -1330,75 +949,14 @@ function TerminalSession({
           }}
         />
       </View>
-      {Platform.OS === "android" &&
-        (fullscreen ? (
-          <Row style={styles.nativeComposer}>
-            <TextInput
-              ref={nativeInput}
-              accessibilityLabel="Terminal text"
-              placeholder={
-                canSend
-                  ? "Text for the terminal"
-                  : mode === "desktop" && !controller
-                    ? "Take control to send text"
-                    : "Connect to send text"
-              }
-              placeholderTextColor={colors.faint}
-              style={styles.nativeInput}
-              value={nativeText}
-              onChangeText={setNativeText}
-              editable={canSend}
-              autoCorrect={false}
-              autoCapitalize="none"
-              spellCheck={false}
-              secureTextEntry={privateInput}
-              textContentType="none"
-              autoComplete="off"
-              importantForAutofill="no"
-              submitBehavior="submit"
-              returnKeyType="send"
-              onSubmitEditing={(event) =>
-                submitNative(true, event.nativeEvent.text)
-              }
-            />
-            <Button
-              title="Send line"
-              compact
-              variant="primary"
-              disabled={!canSend}
-              onPress={() => submitNative(true)}
-            />
-          </Row>
-        ) : (
-          <View style={styles.notice}>
-            <Button
-              title="Open full screen to type"
-              compact
-              onPress={() => changeFullscreen(true)}
-            />
-          </View>
-        ))}
+      {renderAndroidInput()}
       <ScrollView
         horizontal
         keyboardShouldPersistTaps="always"
         style={styles.keys}
         contentContainerStyle={{ gap: 6, padding: 8 }}
       >
-        {Platform.OS === "android" && fullscreen && (
-          <>
-            <Button
-              title="Send text"
-              compact
-              disabled={!canSend || !nativeText}
-              onPress={() => submitNative(false)}
-            />
-            <Button
-              title={privateInput ? "Show text" : "Hide text"}
-              compact
-              onPress={() => setPrivateInput((value) => !value)}
-            />
-          </>
-        )}
+        {renderAndroidKeys()}
         {(
           [
             ["Enter", "\r"],
@@ -1466,64 +1024,583 @@ function TerminalSession({
       </Modal>
     </View>
   );
-}
+};
 
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    connectionBar: {
-      flexShrink: 0,
-      flexWrap: "nowrap",
-      paddingBottom: 8,
-      paddingHorizontal: 16,
-    },
-    fullscreen: { backgroundColor: colors.bg, flex: 1, paddingTop: 8 },
-    keys: { flexGrow: 0, flexShrink: 0, height: 54 },
-    modes: { flexGrow: 0, flexShrink: 0, height: 50 },
-    nativeComposer: {
-      flexShrink: 0,
-      flexWrap: "nowrap",
-      paddingHorizontal: 8,
-      paddingTop: 8,
-    },
-    nativeInput: {
-      backgroundColor: colors.panel,
-      borderColor: colors.border,
-      borderRadius: 6,
-      borderWidth: 1,
-      color: colors.text,
-      flex: 1,
-      fontFamily: mono,
-      fontSize: 15,
-      minHeight: 44,
-      minWidth: 0,
-      padding: 10,
-    },
-    notice: { flexShrink: 0, paddingBottom: 8, paddingHorizontal: 16 },
-    panel: { flex: 1, minHeight: 0 },
-    selectedTab: {
-      backgroundColor: colors.selected,
-      borderColor: colors.focus,
-    },
-    session: { flex: 1, minHeight: 0 },
-    tab: {
-      borderColor: colors.border,
-      borderRadius: 8,
-      borderWidth: 1,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
-    tabs: { flexGrow: 0, flexShrink: 0, height: 48 },
-    terminal: {
-      borderBottomWidth: 1,
-      borderColor: colors.border,
-      borderTopWidth: 1,
-      flex: 1,
-      minHeight: 0,
-    },
-    toolbar: {
-      flexShrink: 0,
-      paddingBottom: 8,
-      paddingHorizontal: 16,
-      paddingTop: 6,
-    },
-  });
+const TerminalList = ({
+  client,
+  connection,
+  directory,
+  sessionID,
+  mode,
+}: Props & { mode: Mode }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const confirmUnsaved = useUnsavedGuard();
+  const { suspended } = useSheetCoordinator();
+  const [terminals, setTerminals] = useState<Pty[]>([]);
+  const [selectedID, setSelectedID] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [foreground, setForeground] = useState(
+    AppState.currentState !== "background" &&
+      AppState.currentState !== "inactive"
+  );
+  const request = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+
+  const refresh = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setLoading(true);
+    setError(null);
+    try {
+      let data: Pty[];
+      if (mode === "desktop" && sessionID) {
+        data = await client.experimental.persistentPty.list(
+          { sessionID },
+          { signal: controller.signal }
+        );
+      } else {
+        const response = await client.pty.list(
+          { location: { directory } },
+          { signal: controller.signal }
+        );
+        ({ data } = response);
+      }
+      if (controller.signal.aborted) {
+        return;
+      }
+      setTerminals(data);
+      setSelectedID((current) =>
+        data.some((item) => item.id === current)
+          ? current
+          : (data.find((item) => item.status === "running")?.id ??
+            data[0]?.id ??
+            null)
+      );
+    } catch (error_) {
+      if (!controller.signal.aborted) {
+        setError(errorMessage(error_));
+      }
+    }
+    if (!controller.signal.aborted) {
+      setLoading(false);
+    }
+  }, [client, directory, sessionID, mode]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      request.current?.abort();
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", (state) =>
+      setForeground(state === "active")
+    );
+    return () => listener.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!foreground || suspended) {
+      return;
+    }
+    const controller = new AbortController();
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let retryResolve: (() => void) | undefined;
+    const scheduleRefresh = () => {
+      if (refreshTimer) {
+        return;
+      }
+      refreshTimer = setTimeout(() => {
+        refreshTimer = undefined;
+        void refresh();
+      }, 250);
+    };
+    const waitForRetry = (delay: number) =>
+      new Promise<void>((resolve) => {
+        retryResolve = resolve;
+        retryTimer = setTimeout(resolve, delay);
+      });
+    void (async () => {
+      await refresh();
+      let attempts = 0;
+      while (!controller.signal.aborted) {
+        try {
+          for await (const event of client.event.subscribe({
+            signal: controller.signal,
+          })) {
+            if (controller.signal.aborted) {
+              break;
+            }
+            attempts = 0;
+            if (event.type === "server.connected") {
+              scheduleRefresh();
+              continue;
+            }
+            if (
+              mode === "desktop" &&
+              (event.type === "persistent-pty.added" ||
+                event.type === "persistent-pty.removed") &&
+              event.data.sessionID === sessionID
+            ) {
+              scheduleRefresh();
+            }
+            if (
+              mode === "workspace" &&
+              (event.type === "pty.created" ||
+                event.type === "pty.updated" ||
+                event.type === "pty.deleted" ||
+                event.type === "pty.exited") &&
+              (!event.location || event.location.directory === directory)
+            ) {
+              scheduleRefresh();
+            }
+          }
+          if (!controller.signal.aborted) {
+            throw new Error("The terminal inventory connection closed");
+          }
+        } catch {
+          if (controller.signal.aborted) {
+            break;
+          }
+          const delay = Math.min(1000 * 2 ** Math.min(attempts, 4), 15_000);
+          attempts += 1;
+          await waitForRetry(delay);
+          if (!controller.signal.aborted) {
+            await refresh();
+          }
+        }
+      }
+    })().catch((error_) => {
+      if (!controller.signal.aborted) {
+        setError(errorMessage(error_));
+      }
+    });
+    return () => {
+      controller.abort();
+      request.current?.abort();
+      clearTimeout(refreshTimer);
+      clearTimeout(retryTimer);
+      retryResolve?.();
+    };
+  }, [client, directory, mode, sessionID, foreground, refresh, suspended]);
+
+  const create = async () => {
+    if (!(await confirmUnsaved())) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      let terminal: Pty;
+      if (mode === "desktop" && sessionID) {
+        terminal = await client.experimental.persistentPty.create({
+          args: [],
+          cwd: directory,
+          env: {},
+          sessionID,
+          title: "Terminal",
+        });
+      } else {
+        const response = await client.pty.create({
+          cwd: directory,
+          location: { directory },
+        });
+        terminal = response.data;
+      }
+      if (!mounted.current) {
+        return;
+      }
+      request.current?.abort();
+      setLoading(false);
+      setTerminals((current) =>
+        current.some((item) => item.id === terminal.id)
+          ? current.map((item) => (item.id === terminal.id ? terminal : item))
+          : [...current, terminal]
+      );
+      setSelectedID(terminal.id);
+    } catch (error_) {
+      if (mounted.current) {
+        setError(errorMessage(error_));
+      }
+    }
+    if (mounted.current) {
+      setBusy(false);
+    }
+  };
+
+  const selectTerminal = async (next: string) => {
+    if (next === selectedID || !(await confirmUnsaved())) {
+      return;
+    }
+    setSelectedID(next);
+  };
+
+  const terminate = async () => {
+    if (
+      !selectedID ||
+      !(await confirmAction(
+        "Terminate this shell?",
+        "The server will stop this shell and its child processes."
+      ))
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await (mode === "desktop"
+        ? client.experimental.persistentPty.remove({ ptyID: selectedID })
+        : client.pty.remove({ location: { directory }, ptyID: selectedID }));
+      if (mounted.current) {
+        await refresh();
+      }
+    } catch (error_) {
+      if (mounted.current) {
+        setError(errorMessage(error_));
+      }
+    }
+    if (mounted.current) {
+      setBusy(false);
+    }
+  };
+
+  const selected = terminals.find((item) => item.id === selectedID);
+  const renderSelected = () => {
+    if (!selected) {
+      return (
+        !loading && (
+          <Empty
+            title="A shell on your server"
+            detail="Create a terminal to run commands in this workspace. Shells continue after you leave this screen."
+          />
+        )
+      );
+    }
+    if (selected.status === "running" || mode === "desktop") {
+      return (
+        <TerminalSession
+          key={selected.id}
+          client={client}
+          connection={connection}
+          directory={directory}
+          terminal={selected}
+          mode={mode}
+          onExit={() => {
+            void refresh();
+          }}
+        />
+      );
+    }
+    return (
+      <Empty
+        title="Shell exited"
+        detail={`Exit code: ${selected.exitCode ?? "unknown"}. Create a new shell to continue.`}
+      />
+    );
+  };
+  return (
+    <View style={styles.panel}>
+      <Row style={styles.toolbar}>
+        <Button
+          title="New shell"
+          compact
+          variant="primary"
+          onPress={() => {
+            void create();
+          }}
+          busy={busy}
+        />
+        <Button
+          title="Refresh"
+          compact
+          onPress={() => {
+            void refresh();
+          }}
+          disabled={busy || loading}
+        />
+        {selected && (
+          <Button
+            title="Terminate"
+            compact
+            variant="danger"
+            onPress={() => {
+              void terminate();
+            }}
+            disabled={busy}
+          />
+        )}
+      </Row>
+      <View style={styles.notice}>
+        <ErrorNotice
+          error={error}
+          onRetry={() => {
+            void refresh();
+          }}
+        />
+      </View>
+      {loading && terminals.length === 0 ? <Busy /> : null}
+      {terminals.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabs}
+          contentContainerStyle={{
+            gap: 8,
+            paddingBottom: 10,
+            paddingHorizontal: 16,
+          }}
+        >
+          {terminals.map((terminal) => (
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityState={{ selected: selectedID === terminal.id }}
+              key={terminal.id}
+              onPress={() => {
+                void selectTerminal(terminal.id);
+              }}
+              style={[
+                styles.tab,
+                selectedID === terminal.id && styles.selectedTab,
+              ]}
+            >
+              <BodyText
+                style={{
+                  color:
+                    terminal.status === "running"
+                      ? colors.success
+                      : colors.muted,
+                }}
+              >
+                {terminal.status === "running" ? "●" : "○"}{" "}
+                {terminal.title || terminal.command}
+              </BodyText>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+      {renderSelected()}
+    </View>
+  );
+};
+
+const Terminals = (props: Props) => {
+  const styles = useThemedStyles(createStyles);
+  const confirmUnsaved = useUnsavedGuard();
+  const { suspended } = useSheetCoordinator();
+  const capabilityKnown = useRef(false);
+  const [persistent, setPersistent] = useState<boolean | null>(null);
+  const [mode, setMode] = useState<Mode>("workspace");
+  const [sessionID, setSessionID] = useState(props.sessionID);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [sessionPicker, setSessionPicker] = useState(false);
+  const [sessionCursor, setSessionCursor] = useState<string | undefined>(
+    undefined
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [checkRevision, setCheckRevision] = useState(0);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    setSessionID(props.sessionID);
+  }, [props.sessionID]);
+  useEffect(() => {
+    if (suspended) {
+      return;
+    }
+    mounted.current = true;
+    const controller = new AbortController();
+    void props.client.server
+      .info({ signal: controller.signal })
+      .then((info) => {
+        if (controller.signal.aborted) {
+          return null;
+        }
+        const supported = info.capabilities?.persistentPty === true;
+        setPersistent(supported);
+        if (!supported || !capabilityKnown.current) {
+          setMode(supported ? "desktop" : "workspace");
+        }
+        capabilityKnown.current = true;
+        return null;
+      })
+      .catch((error_) => {
+        if (!controller.signal.aborted) {
+          setError(errorMessage(error_));
+        }
+      });
+    return () => {
+      mounted.current = false;
+      controller.abort();
+    };
+  }, [props.client, checkRevision, suspended]);
+
+  const pickSession = async (cursor?: string) => {
+    setSessionPicker(true);
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await props.client.session.list({
+        cursor,
+        directory: props.directory,
+        limit: 50,
+      });
+      if (!mounted.current) {
+        return;
+      }
+      setSessions((current) =>
+        cursor ? [...current, ...result.data] : result.data
+      );
+      setSessionCursor(result.cursor.next ?? undefined);
+    } catch (error_) {
+      if (mounted.current) {
+        setError(errorMessage(error_));
+      }
+    }
+    if (mounted.current) {
+      setLoading(false);
+    }
+  };
+
+  const selectMode = async (next: Mode) => {
+    if (next === mode || !(await confirmUnsaved())) {
+      return;
+    }
+    setMode(next);
+  };
+
+  const selectSession = async (next: string) => {
+    if (next !== sessionID && !(await confirmUnsaved())) {
+      return;
+    }
+    setSessionID(next);
+    setSessionPicker(false);
+  };
+
+  const renderTerminals = () =>
+    persistent !== null && (mode === "workspace" || sessionID) ? (
+      <TerminalList
+        key={`${mode}:${sessionID ?? ""}`}
+        {...props}
+        sessionID={sessionID}
+        mode={mode}
+      />
+    ) : (
+      persistent !== null && (
+        <Empty
+          title="Choose a desktop session"
+          detail="Desktop terminals belong to a session. Choose its session to see the same terminals on your phone."
+        />
+      )
+    );
+
+  return (
+    <View style={styles.panel}>
+      {persistent && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.modes}
+          contentContainerStyle={{
+            gap: 8,
+            paddingHorizontal: 16,
+            paddingVertical: 6,
+          }}
+        >
+          <Button
+            title="Desktop terminals"
+            compact
+            variant={mode === "desktop" ? "primary" : "ghost"}
+            onPress={() => {
+              void selectMode("desktop");
+            }}
+          />
+          <Button
+            title="Workspace shells"
+            compact
+            variant={mode === "workspace" ? "primary" : "ghost"}
+            onPress={() => {
+              void selectMode("workspace");
+            }}
+          />
+          {mode === "desktop" && (
+            <Button
+              title="Choose session"
+              compact
+              onPress={() => {
+                void pickSession();
+              }}
+            />
+          )}
+        </ScrollView>
+      )}
+      {persistent === null && !error && <Busy />}
+      {error && (
+        <View style={styles.notice}>
+          <ErrorNotice
+            error={error}
+            onRetry={() => {
+              setError(null);
+              setCheckRevision((value) => value + 1);
+            }}
+          />
+        </View>
+      )}
+      {renderTerminals()}
+      {persistent !== null && mode === "desktop" && !sessionID && (
+        <View style={styles.notice}>
+          <Button
+            title="Choose session"
+            variant="primary"
+            onPress={() => {
+              void pickSession();
+            }}
+          />
+        </View>
+      )}
+      <Sheet
+        visible={sessionPicker}
+        title="Terminal session"
+        onClose={() => setSessionPicker(false)}
+      >
+        <ErrorNotice error={error} />
+        {loading && sessions.length === 0 && <Busy />}
+        {sessions.map((session) => (
+          <Button
+            key={session.id}
+            title={session.title || session.id}
+            variant={sessionID === session.id ? "primary" : "secondary"}
+            onPress={() => {
+              void selectSession(session.id);
+            }}
+          />
+        ))}
+        {!loading && sessions.length === 0 && (
+          <BodyText muted>
+            Create a session from the Sessions tab first.
+          </BodyText>
+        )}
+        {sessionCursor && (
+          <Button
+            title="More sessions"
+            busy={loading}
+            onPress={() => {
+              void pickSession(sessionCursor);
+            }}
+          />
+        )}
+      </Sheet>
+    </View>
+  );
+};
+
+export const TerminalPanel = (props: Props) => (
+  <Terminals key={`${props.connection.id}:${props.directory}`} {...props} />
+);

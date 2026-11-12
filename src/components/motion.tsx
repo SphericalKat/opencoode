@@ -32,7 +32,38 @@ const easePress = cubicBezier(0.23, 1, 0.32, 1);
 const easeDrawer = Easing.bezier(0.32, 0.72, 0, 1);
 const easeContent = Easing.bezier(0.23, 1, 0.32, 1);
 
-export function useMotionPreference() {
+const styles = StyleSheet.create({
+  drawerRoot: { flex: 1, flexDirection: "row" },
+  indicator: { alignItems: "center", flexShrink: 0, justifyContent: "center" },
+  pressContent: { alignItems: "center", justifyContent: "center" },
+  screen: { flex: 1, minHeight: 0, minWidth: 0 },
+});
+
+const disclosureDuration = (reduced: boolean, open: boolean): number => {
+  if (reduced) {
+    return 80;
+  }
+  return open ? 140 : 110;
+};
+
+const contentDuration = (
+  variant: "context" | "connection",
+  reduced: boolean
+): number => {
+  if (variant === "context") {
+    return reduced ? 80 : 120;
+  }
+  return reduced ? 100 : 180;
+};
+
+const drawerDuration = (reduced: boolean, open: boolean): number => {
+  if (reduced) {
+    return 100;
+  }
+  return open ? 220 : 180;
+};
+
+export const useMotionPreference = () => {
   const initial = useReducedMotion();
   const [reduced, setReduced] = useState(initial);
   useEffect(() => {
@@ -42,8 +73,9 @@ export function useMotionPreference() {
         if (live) {
           setReduced(value);
         }
+        return value;
       })
-      .catch(() => {});
+      .catch(() => false);
     const subscription = AccessibilityInfo.addEventListener(
       "reduceMotionChanged",
       setReduced
@@ -54,9 +86,9 @@ export function useMotionPreference() {
     };
   }, []);
   return reduced;
-}
+};
 
-export function PressFeedback({
+export const PressFeedback = ({
   pressed,
   disabled,
   children,
@@ -66,7 +98,7 @@ export function PressFeedback({
   disabled?: boolean;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-}) {
+}) => {
   const reduced = useMotionPreference();
   const down = pressed && !disabled;
   const opacity = StyleSheet.flatten(style)?.opacity ?? 1;
@@ -91,9 +123,9 @@ export function PressFeedback({
       {children}
     </Animated.View>
   );
-}
+};
 
-export function MotionDisclosureChevron({
+export const MotionDisclosureChevron = ({
   open,
   children,
   style,
@@ -101,7 +133,7 @@ export function MotionDisclosureChevron({
   open: boolean;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-}) {
+}) => {
   const reduced = useMotionPreference();
   return (
     <Animated.View
@@ -120,9 +152,9 @@ export function MotionDisclosureChevron({
       {children}
     </Animated.View>
   );
-}
+};
 
-export function MotionDisclosureBody({
+export const MotionDisclosureBody = ({
   open,
   children,
   style,
@@ -130,14 +162,16 @@ export function MotionDisclosureBody({
   open: boolean;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-}) {
+}) => {
   const reduced = useMotionPreference();
   const [presented, setPresented] = useState(open);
   const progress = useSharedValue(open ? 1 : 0);
   const initial = useRef(true);
   const alive = useRef(true);
   const requested = useRef(open);
-  requested.current = open;
+  useLayoutEffect(() => {
+    requested.current = open;
+  });
   const revision = useRef(0);
   const finishClose = useCallback((request: number) => {
     if (alive.current && request === revision.current && !requested.current) {
@@ -149,7 +183,8 @@ export function MotionDisclosureBody({
       initial.current = false;
       return;
     }
-    const request = ++revision.current;
+    revision.current += 1;
+    const request = revision.current;
     cancelAnimation(progress);
     if (open) {
       setPresented(true);
@@ -158,7 +193,7 @@ export function MotionDisclosureBody({
       withTiming(
         open ? 1 : 0,
         {
-          duration: reduced ? 80 : open ? 140 : 110,
+          duration: disclosureDuration(reduced, open),
           easing: easeContent,
           reduceMotion: ReduceMotion.Never,
         },
@@ -171,10 +206,11 @@ export function MotionDisclosureBody({
     );
   }, [open, reduced, progress, finishClose]);
   useEffect(() => {
+    const counter = revision;
     alive.current = true;
     return () => {
       alive.current = false;
-      revision.current++;
+      counter.current += 1;
       cancelAnimation(progress);
     };
   }, [progress]);
@@ -198,9 +234,9 @@ export function MotionDisclosureBody({
       {children}
     </Animated.View>
   );
-}
+};
 
-export function MotionScreen({
+export const MotionScreen = ({
   visible,
   children,
   style,
@@ -208,7 +244,7 @@ export function MotionScreen({
   visible: boolean;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-}) {
+}) => {
   const reduced = useMotionPreference();
   const progress = useSharedValue(0);
   const previousVisible = useRef(false);
@@ -254,9 +290,9 @@ export function MotionScreen({
       {children}
     </Animated.View>
   );
-}
+};
 
-export function MotionContent({
+export const MotionContent = ({
   transitionKey,
   variant,
   direction = 1,
@@ -270,7 +306,7 @@ export function MotionContent({
   enabled?: boolean;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-}) {
+}) => {
   const reduced = useMotionPreference();
   const progress = useSharedValue(1);
   const previous = useRef(transitionKey);
@@ -285,8 +321,7 @@ export function MotionContent({
     progress.set(0);
     progress.set(
       withTiming(1, {
-        duration:
-          variant === "context" ? (reduced ? 80 : 120) : reduced ? 100 : 180,
+        duration: contentDuration(variant, reduced),
         easing: easeContent,
         reduceMotion: ReduceMotion.Never,
       })
@@ -294,27 +329,33 @@ export function MotionContent({
   }, [transitionKey, variant, direction, enabled, reduced, progress]);
   useEffect(() => () => cancelAnimation(progress), [progress]);
   const entry = useAnimatedStyle(
-    () => ({
-      opacity: reduced
-        ? 0.9 + progress.get() * 0.1
-        : variant === "context"
-          ? 0.75 + progress.get() * 0.25
-          : 0.8 + progress.get() * 0.2,
-      transform: [
-        {
-          translateX:
-            variant === "connection" && !reduced
-              ? direction * 12 * (1 - progress.get())
-              : 0,
-        },
-      ],
-    }),
+    () => {
+      let opacity: number;
+      if (reduced) {
+        opacity = 0.9 + progress.get() * 0.1;
+      } else if (variant === "context") {
+        opacity = 0.75 + progress.get() * 0.25;
+      } else {
+        opacity = 0.8 + progress.get() * 0.2;
+      }
+      return {
+        opacity,
+        transform: [
+          {
+            translateX:
+              variant === "connection" && !reduced
+                ? direction * 12 * (1 - progress.get())
+                : 0,
+          },
+        ],
+      };
+    },
     Platform.OS === "web" ? [variant, direction, reduced] : undefined
   );
   return <Animated.View style={[style, entry]}>{children}</Animated.View>;
-}
+};
 
-export function WorkingIndicator({
+export const WorkingIndicator = ({
   active,
   color,
   size = 16,
@@ -322,7 +363,7 @@ export function WorkingIndicator({
   active: boolean;
   color: string;
   size?: number;
-}) {
+}) => {
   const reduced = useMotionPreference();
   const rotation = useSharedValue(0);
   useEffect(() => {
@@ -372,9 +413,9 @@ export function WorkingIndicator({
       </Svg>
     </Animated.View>
   );
-}
+};
 
-export function MotionDrawer({
+export const MotionDrawer = ({
   visible,
   width,
   onClose,
@@ -390,17 +431,19 @@ export function MotionDrawer({
   children: React.ReactNode;
   panelStyle?: StyleProp<ViewStyle>;
   scrimColor?: string;
-}) {
+}) => {
   const reduced = useMotionPreference();
   const progress = useSharedValue(0);
   const [presented, setPresented] = useState(visible);
   const showing = useRef(false);
   const requested = useRef(visible);
-  requested.current = visible;
   const revision = useRef(0);
   const pendingDismiss = useRef(false);
   const dismissRef = useRef(onDismiss);
-  dismissRef.current = onDismiss;
+  useLayoutEffect(() => {
+    requested.current = visible;
+    dismissRef.current = onDismiss;
+  });
 
   const notifyDismissed = useCallback(() => {
     if (!pendingDismiss.current || requested.current) {
@@ -419,12 +462,13 @@ export function MotionDrawer({
   }, []);
   const animate = useCallback(
     (open: boolean) => {
-      const request = ++revision.current;
+      revision.current += 1;
+      const request = revision.current;
       progress.set(
         withTiming(
           open ? 1 : 0,
           {
-            duration: reduced ? 100 : open ? 220 : 180,
+            duration: drawerDuration(reduced, open),
             easing: easeDrawer,
             reduceMotion: ReduceMotion.Never,
           },
@@ -511,11 +555,4 @@ export function MotionDrawer({
       </SafeAreaProvider>
     </Modal>
   );
-}
-
-const styles = StyleSheet.create({
-  drawerRoot: { flex: 1, flexDirection: "row" },
-  indicator: { alignItems: "center", flexShrink: 0, justifyContent: "center" },
-  pressContent: { alignItems: "center", justifyContent: "center" },
-  screen: { flex: 1, minHeight: 0, minWidth: 0 },
-});
+};

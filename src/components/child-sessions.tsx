@@ -16,7 +16,92 @@ import {
   confirmAction,
 } from "./ui";
 
-export function ChildSessions({
+const ignore = () => null;
+
+const runWithCleanup = async (
+  task: () => Promise<void>,
+  cleanup: () => void
+) => {
+  try {
+    await task();
+  } finally {
+    cleanup();
+  }
+};
+
+const followEvents = async <T,>(
+  events: AsyncIterable<T>,
+  signal: AbortSignal,
+  handle: (event: T) => void
+) => {
+  for await (const event of events) {
+    if (signal.aborted) {
+      break;
+    }
+    handle(event);
+  }
+  if (!signal.aborted) {
+    throw new Error("Child session updates disconnected");
+  }
+};
+
+const subscribedEvents = [
+  "session.created",
+  "session.deleted",
+  "session.archived",
+  "session.unarchived",
+  "session.renamed",
+  "session.execution.started",
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
+  "session.usage.updated",
+] as const;
+
+const subscribeChildSessionEvents = (client: Client, signal: AbortSignal) =>
+  client.event.subscribe({ signal, types: subscribedEvents });
+
+type ChildSessionEvent =
+  ReturnType<typeof subscribeChildSessionEvents> extends AsyncIterable<
+    infer Event
+  >
+    ? Event
+    : never;
+
+const retryDelay = (attempts: number) =>
+  Math.min(1000 * 2 ** Math.min(attempts, 4), 15_000);
+
+const childStatus = (isActive: boolean, outcome: SessionInfo["outcome"]) => {
+  if (isActive) {
+    return "Running";
+  }
+  if (outcome === "succeeded") {
+    return "Completed";
+  }
+  if (outcome === "failed") {
+    return "Failed";
+  }
+  if (outcome === "interrupted") {
+    return "Stopped";
+  }
+  return "Idle";
+};
+
+const childStatusColor = (
+  isActive: boolean,
+  outcome: SessionInfo["outcome"],
+  colors: ReturnType<typeof useTheme>["colors"]
+) => {
+  if (isActive) {
+    return colors.success;
+  }
+  if (outcome === "failed") {
+    return colors.danger;
+  }
+  return colors.muted;
+};
+
+export const ChildSessions = ({
   client,
   sessionID,
   onOpenSession,
@@ -24,7 +109,7 @@ export function ChildSessions({
   client: Client;
   sessionID: string;
   onOpenSession: (id: string) => void;
-}) {
+}) => {
   const { colors } = useTheme();
   const [items, setItems] = useState<SessionInfo[]>([]);
   const [activeIDs, setActiveIDs] = useState<Set<string>>(new Set());
@@ -39,9 +124,9 @@ export function ChildSessions({
       AppState.currentState !== "inactive"
   );
   const knownIDs = useRef(new Set<string>());
-  const refreshRef = useRef<() => void>(() => {});
-  const moreRef = useRef<() => void>(() => {});
-  const stopRef = useRef<(id: string) => void>(() => {});
+  const refreshRef = useRef<() => void>(ignore);
+  const moreRef = useRef<() => void>(ignore);
+  const stopRef = useRef<(id: string) => void>(ignore);
 
   useEffect(() => {
     const listener = AppState.addEventListener("change", (state) =>
@@ -69,34 +154,40 @@ export function ChildSessions({
     setStoppingID(undefined);
     knownIDs.current.clear();
     const refresh = async () => {
-      const request = ++version;
+      version += 1;
+      const request = version;
       setLoading(true);
-      try {
-        const [sessions, active] = await Promise.all([
-          client.session.list(
-            { archived, limit: 40, order: "desc", parentID: sessionID },
-            { signal: controller.signal }
-          ),
-          client.session.active({ signal: controller.signal }),
-        ]);
-        if (controller.signal.aborted || request !== version) {
-          return;
+      await runWithCleanup(
+        async () => {
+          try {
+            const [sessions, active] = await Promise.all([
+              client.session.list(
+                { archived, limit: 40, order: "desc", parentID: sessionID },
+                { signal: controller.signal }
+              ),
+              client.session.active({ signal: controller.signal }),
+            ]);
+            if (controller.signal.aborted || request !== version) {
+              return;
+            }
+            knownIDs.current = new Set(sessions.data.map((item) => item.id));
+            nextCursor = sessions.cursor.next ?? undefined;
+            setItems(sessions.data);
+            setActiveIDs(new Set(Object.keys(active)));
+            setCursor(nextCursor);
+            setError(undefined);
+          } catch (error_) {
+            if (!controller.signal.aborted && request === version) {
+              setError(errorMessage(error_));
+            }
+          }
+        },
+        () => {
+          if (!controller.signal.aborted && request === version) {
+            setLoading(false);
+          }
         }
-        knownIDs.current = new Set(sessions.data.map((item) => item.id));
-        nextCursor = sessions.cursor.next ?? undefined;
-        setItems(sessions.data);
-        setActiveIDs(new Set(Object.keys(active)));
-        setCursor(nextCursor);
-        setError(undefined);
-      } catch (error_) {
-        if (!controller.signal.aborted && request === version) {
-          setError(errorMessage(error_));
-        }
-      } finally {
-        if (!controller.signal.aborted && request === version) {
-          setLoading(false);
-        }
-      }
+      );
     };
     const scheduleRefresh = () => {
       if (refreshTimer) {
@@ -118,38 +209,41 @@ export function ChildSessions({
       const request = version;
       const pageCursor = nextCursor;
       setLoadingMore(true);
-      void client.session
-        .list(
-          { archived, cursor: pageCursor, limit: 40, parentID: sessionID },
-          { signal: controller.signal }
-        )
-        .then((page) => {
-          if (controller.signal.aborted || request !== version) {
-            return;
+      const pending = client.session.list(
+        { archived, cursor: pageCursor, limit: 40, parentID: sessionID },
+        { signal: controller.signal }
+      );
+      void runWithCleanup(
+        async () => {
+          try {
+            const page = await pending;
+            if (controller.signal.aborted || request !== version) {
+              return;
+            }
+            for (const item of page.data) {
+              knownIDs.current.add(item.id);
+            }
+            nextCursor = page.cursor.next ?? undefined;
+            setCursor(nextCursor);
+            setItems((current) => [
+              ...current,
+              ...page.data.filter(
+                (item) => !current.some((existing) => existing.id === item.id)
+              ),
+            ]);
+          } catch (error_) {
+            if (!controller.signal.aborted) {
+              setError(errorMessage(error_));
+            }
           }
-          for (const item of page.data) {
-            knownIDs.current.add(item.id);
-          }
-          nextCursor = page.cursor.next ?? undefined;
-          setCursor(nextCursor);
-          setItems((current) => [
-            ...current,
-            ...page.data.filter(
-              (item) => !current.some((existing) => existing.id === item.id)
-            ),
-          ]);
-        })
-        .catch((error_) => {
-          if (!controller.signal.aborted) {
-            setError(errorMessage(error_));
-          }
-        })
-        .finally(() => {
+        },
+        () => {
           paging = false;
           if (!controller.signal.aborted) {
             setLoadingMore(false);
           }
-        });
+        }
+      );
     };
     stopRef.current = (id) => {
       void (async () => {
@@ -165,141 +259,136 @@ export function ChildSessions({
           return;
         }
         setStoppingID(id);
-        try {
-          await client.session.interrupt(
-            { sessionID: id },
-            { signal: controller.signal }
-          );
-          await refresh();
-        } catch (error_) {
-          if (!controller.signal.aborted) {
-            setError(errorMessage(error_));
+        await runWithCleanup(
+          async () => {
+            try {
+              await client.session.interrupt(
+                { sessionID: id },
+                { signal: controller.signal }
+              );
+              await refresh();
+            } catch (error_) {
+              if (!controller.signal.aborted) {
+                setError(errorMessage(error_));
+              }
+            }
+          },
+          () => {
+            if (!controller.signal.aborted) {
+              setStoppingID(undefined);
+            }
           }
-        } finally {
-          if (!controller.signal.aborted) {
-            setStoppingID(undefined);
-          }
-        }
+        );
       })();
+    };
+    const armRetry = (resolve: () => void, delay: number) => {
+      releaseRetry = resolve;
+      retryTimer = setTimeout(resolve, delay);
+    };
+    const handleEvent = (event: ChildSessionEvent) => {
+      attempts = 0;
+      if (
+        event.type === "server.connected" ||
+        (event.type === "session.created" && event.data.parentID === sessionID)
+      ) {
+        scheduleRefresh();
+        return;
+      }
+      if (
+        !("sessionID" in event.data) ||
+        !knownIDs.current.has(event.data.sessionID)
+      ) {
+        return;
+      }
+      const id = event.data.sessionID;
+      if (
+        event.type === "session.deleted" ||
+        event.type === "session.archived" ||
+        event.type === "session.unarchived"
+      ) {
+        scheduleRefresh();
+        return;
+      }
+      if (event.type === "session.execution.started") {
+        setActiveIDs((current) => new Set([...current, id]));
+      }
+      if (
+        event.type === "session.execution.succeeded" ||
+        event.type === "session.execution.failed" ||
+        event.type === "session.execution.interrupted"
+      ) {
+        if (
+          event.type === "session.execution.interrupted" &&
+          event.data.reason === "shutdown"
+        ) {
+          scheduleRefresh();
+          return;
+        }
+        setActiveIDs((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+        const pending = client.session.get(
+          { sessionID: id },
+          { signal: controller.signal }
+        );
+        void (async () => {
+          try {
+            const item = await pending;
+            if (!controller.signal.aborted && knownIDs.current.has(id)) {
+              setItems((current) =>
+                current.map((existing) =>
+                  existing.id === id ? item : existing
+                )
+              );
+            }
+          } catch (error_) {
+            if (!controller.signal.aborted) {
+              setError(errorMessage(error_));
+            }
+          }
+        })();
+      }
+      if (event.type === "session.renamed") {
+        setItems((current) =>
+          current.map((item) =>
+            item.id === id ? { ...item, title: event.data.title } : item
+          )
+        );
+      }
+      if (event.type === "session.usage.updated") {
+        setItems((current) =>
+          current.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  cost: event.data.cost,
+                  tokens: event.data.tokens,
+                }
+              : item
+          )
+        );
+      }
     };
     void (async () => {
       await refresh();
       while (!controller.signal.aborted) {
         try {
-          for await (const event of client.event.subscribe({
-            signal: controller.signal,
-            types: [
-              "session.created",
-              "session.deleted",
-              "session.archived",
-              "session.unarchived",
-              "session.renamed",
-              "session.execution.started",
-              "session.execution.succeeded",
-              "session.execution.failed",
-              "session.execution.interrupted",
-              "session.usage.updated",
-            ],
-          })) {
-            if (controller.signal.aborted) {
-              break;
-            }
-            attempts = 0;
-            if (
-              event.type === "server.connected" ||
-              (event.type === "session.created" &&
-                event.data.parentID === sessionID)
-            ) {
-              scheduleRefresh();
-              continue;
-            }
-            if (
-              !("sessionID" in event.data) ||
-              !knownIDs.current.has(event.data.sessionID)
-            ) {
-              continue;
-            }
-            const id = event.data.sessionID;
-            if (
-              event.type === "session.deleted" ||
-              event.type === "session.archived" ||
-              event.type === "session.unarchived"
-            ) {
-              scheduleRefresh();
-              continue;
-            }
-            if (event.type === "session.execution.started") {
-              setActiveIDs((current) => new Set([...current, id]));
-            }
-            if (
-              event.type === "session.execution.succeeded" ||
-              event.type === "session.execution.failed" ||
-              event.type === "session.execution.interrupted"
-            ) {
-              if (
-                event.type === "session.execution.interrupted" &&
-                event.data.reason === "shutdown"
-              ) {
-                scheduleRefresh();
-                continue;
-              }
-              setActiveIDs((current) => {
-                const next = new Set(current);
-                next.delete(id);
-                return next;
-              });
-              void client.session
-                .get({ sessionID: id }, { signal: controller.signal })
-                .then((item) => {
-                  if (!controller.signal.aborted && knownIDs.current.has(id)) {
-                    setItems((current) =>
-                      current.map((existing) =>
-                        existing.id === id ? item : existing
-                      )
-                    );
-                  }
-                })
-                .catch((error_) => {
-                  if (!controller.signal.aborted) {
-                    setError(errorMessage(error_));
-                  }
-                });
-            }
-            if (event.type === "session.renamed") {
-              setItems((current) =>
-                current.map((item) =>
-                  item.id === id ? { ...item, title: event.data.title } : item
-                )
-              );
-            }
-            if (event.type === "session.usage.updated") {
-              setItems((current) =>
-                current.map((item) =>
-                  item.id === id
-                    ? {
-                        ...item,
-                        cost: event.data.cost,
-                        tokens: event.data.tokens,
-                      }
-                    : item
-                )
-              );
-            }
-          }
-          if (!controller.signal.aborted) {
-            throw new Error("Child session updates disconnected");
-          }
+          await followEvents(
+            subscribeChildSessionEvents(client, controller.signal),
+            controller.signal,
+            handleEvent
+          );
         } catch (error_) {
           if (controller.signal.aborted) {
             break;
           }
           setError(errorMessage(error_));
+          const delay = retryDelay(attempts);
+          attempts += 1;
           await new Promise<void>((resolve) => {
-            releaseRetry = resolve;
-            retryTimer = setTimeout(
-              resolve,
-              Math.min(1000 * 2 ** Math.min(attempts++, 4), 15_000)
-            );
+            armRetry(resolve, delay);
           });
           if (!controller.signal.aborted) {
             await refresh();
@@ -316,9 +405,9 @@ export function ChildSessions({
       clearTimeout(refreshTimer);
       clearTimeout(retryTimer);
       releaseRetry?.();
-      refreshRef.current = () => {};
-      moreRef.current = () => {};
-      stopRef.current = () => {};
+      refreshRef.current = ignore;
+      moreRef.current = ignore;
+      stopRef.current = ignore;
     };
   }, [client, sessionID, archived, foreground]);
 
@@ -359,15 +448,7 @@ export function ChildSessions({
       )}
       {items.map((item) => {
         const isActive = activeIDs.has(item.id);
-        const status = isActive
-          ? "Running"
-          : item.outcome === "succeeded"
-            ? "Completed"
-            : item.outcome === "failed"
-              ? "Failed"
-              : item.outcome === "interrupted"
-                ? "Stopped"
-                : "Idle";
+        const status = childStatus(isActive, item.outcome);
         return (
           <Card key={item.id}>
             <Row style={{ justifyContent: "space-between" }}>
@@ -379,11 +460,7 @@ export function ChildSessions({
               </BodyText>
               <BodyText
                 style={{
-                  color: isActive
-                    ? colors.success
-                    : item.outcome === "failed"
-                      ? colors.danger
-                      : colors.muted,
+                  color: childStatusColor(isActive, item.outcome, colors),
                 }}
               >
                 {status}
@@ -427,4 +504,4 @@ export function ChildSessions({
       )}
     </View>
   );
-}
+};

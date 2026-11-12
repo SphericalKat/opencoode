@@ -14,13 +14,13 @@ const paths = [
   "M591.429 32.8573V49.2859H624.286V32.8573H591.429ZM640.714 65.7144H591.429V82.143H640.714V98.5716H575V16.4287H640.714V65.7144Z",
 ];
 
-export function OpenCodeLogo({
+export const OpenCodeLogo = ({
   width = 160,
   height,
 }: {
   width?: number;
   height?: number;
-}) {
+}) => {
   const { colors } = useTheme();
   return (
     <Svg
@@ -35,4 +35,4 @@ export function OpenCodeLogo({
       ))}
     </Svg>
   );
-}
+};

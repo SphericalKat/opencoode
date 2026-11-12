@@ -2,8 +2,10 @@ import React, {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
 } from "react";
+import type { ForwardedRef } from "react";
 
 import { terminalHtml } from "../generated/terminal-html";
 import { terminalEvent } from "../lib/terminal";
@@ -13,14 +15,16 @@ import type {
   TerminalRendererProps,
 } from "./terminal-renderer.types";
 
-export const TerminalRenderer = forwardRef<
-  TerminalRendererHandle,
-  TerminalRendererProps
->(({ onEvent, onError }, ref) => {
+const TerminalRendererBase = (
+  { onEvent, onError }: TerminalRendererProps,
+  ref: ForwardedRef<TerminalRendererHandle>
+) => {
   const { colors } = useTheme();
   const frame = useRef<HTMLIFrameElement>(null);
   const onEventRef = useRef(onEvent);
-  onEventRef.current = onEvent;
+  useLayoutEffect(() => {
+    onEventRef.current = onEvent;
+  });
   useImperativeHandle(
     ref,
     () => ({
@@ -33,7 +37,7 @@ export const TerminalRenderer = forwardRef<
     []
   );
   useEffect(() => {
-    function receive(event: MessageEvent) {
+    const receive = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow) {
         return;
       }
@@ -53,9 +57,9 @@ export const TerminalRenderer = forwardRef<
           onEventRef.current(parsed);
         }
       } catch {
-        return;
+        // Ignore messages that are not valid terminal events.
       }
-    }
+    };
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
   }, []);
@@ -76,4 +80,9 @@ export const TerminalRenderer = forwardRef<
       }}
     />
   );
-});
+};
+
+export const TerminalRenderer = forwardRef<
+  TerminalRendererHandle,
+  TerminalRendererProps
+>(TerminalRendererBase);

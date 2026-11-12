@@ -3,7 +3,7 @@ import type {
   McpResourceCatalog,
   McpResourceTemplate,
 } from "@opencode/client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
@@ -28,7 +28,103 @@ interface Props {
   onAttachContext: (text: string) => void;
 }
 
-export function McpResources({ client, location, onAttachContext }: Props) {
+const ResourceCard = ({
+  resource,
+  onAttach,
+}: {
+  resource: McpResource;
+  onAttach: () => void;
+}) => {
+  const { colors } = useTheme();
+  return (
+    <Card>
+      <BodyText style={{ fontWeight: "600" }}>{resource.name}</BodyText>
+      <BodyText muted>
+        {resource.server}
+        {resource.mimeType ? ` · ${resource.mimeType}` : ""}
+      </BodyText>
+      <Text
+        selectable
+        style={{
+          color: colors.text,
+          fontFamily: mono,
+          fontSize: 13,
+          lineHeight: 19,
+        }}
+      >
+        {resource.uri}
+      </Text>
+      {resource.description && (
+        <Text
+          selectable
+          style={{
+            color: colors.muted,
+            fontFamily: sans,
+            fontSize: 15,
+            lineHeight: 22,
+          }}
+        >
+          {resource.description}
+        </Text>
+      )}
+      <Button title="Add resource reference" compact onPress={onAttach} />
+    </Card>
+  );
+};
+
+const TemplateCard = ({
+  resource,
+  onAttach,
+}: {
+  resource: McpResourceTemplate;
+  onAttach: (uri: string) => void;
+}) => {
+  const { colors } = useTheme();
+  const [uri, setUri] = useState("");
+  const unresolved = /[{}]/u.test(uri);
+  return (
+    <Card>
+      <BodyText style={{ fontWeight: "600" }}>{resource.name}</BodyText>
+      <BodyText muted>{resource.server} · Resource template</BodyText>
+      <Text
+        selectable
+        style={{
+          color: colors.text,
+          fontFamily: mono,
+          fontSize: 13,
+          lineHeight: 19,
+        }}
+      >
+        {resource.uriTemplate}
+      </Text>
+      {resource.description && (
+        <BodyText muted>{resource.description}</BodyText>
+      )}
+      <Field
+        label={`Resource URI for ${resource.name}`}
+        value={uri}
+        onChangeText={setUri}
+        placeholder="Enter a complete URI from this template"
+      />
+      <BodyText muted>
+        Replace each template parameter with the value that you need.
+      </BodyText>
+      {unresolved && (
+        <BodyText style={{ color: colors.danger }}>
+          Replace all template parameters before you add the reference.
+        </BodyText>
+      )}
+      <Button
+        title="Add template reference"
+        compact
+        disabled={!uri.trim() || unresolved}
+        onPress={() => onAttach(uri.trim())}
+      />
+    </Card>
+  );
+};
+
+export const McpResources = ({ client, location, onAttachContext }: Props) => {
   const [catalog, setCatalog] = useState<McpResourceCatalog>();
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(15);
@@ -37,15 +133,7 @@ export function McpResources({ client, location, onAttachContext }: Props) {
   const request = useRef<AbortController | undefined>(undefined);
   const { directory } = location;
 
-  useEffect(() => {
-    setCatalog(undefined);
-    setQuery("");
-    void refresh();
-    return () => request.current?.abort();
-  }, [client, directory]);
-  useEffect(() => setLimit(15), [query]);
-
-  async function refresh() {
+  const refresh = useCallback(async () => {
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
@@ -63,12 +151,19 @@ export function McpResources({ client, location, onAttachContext }: Props) {
       if (!controller.signal.aborted) {
         setError(errorMessage(error_));
       }
-    } finally {
-      if (!controller.signal.aborted) {
-        setLoading(false);
-      }
     }
-  }
+    if (!controller.signal.aborted) {
+      setLoading(false);
+    }
+  }, [client, directory]);
+
+  useEffect(() => {
+    setCatalog(undefined);
+    setQuery("");
+    refresh();
+    return () => request.current?.abort();
+  }, [refresh]);
+  useEffect(() => setLimit(15), [query]);
 
   const search = query.trim().toLowerCase();
   const matches = [
@@ -110,7 +205,9 @@ export function McpResources({ client, location, onAttachContext }: Props) {
           compact
           variant="ghost"
           busy={loading}
-          onPress={() => void refresh()}
+          onPress={() => {
+            refresh();
+          }}
         />
       </Row>
       <BodyText muted>
@@ -123,7 +220,12 @@ export function McpResources({ client, location, onAttachContext }: Props) {
         value={query}
         onChangeText={setQuery}
       />
-      <ErrorNotice error={error} onRetry={() => void refresh()} />
+      <ErrorNotice
+        error={error}
+        onRetry={() => {
+          refresh();
+        }}
+      />
       {loading && !catalog && <Busy />}
       {matches
         .slice(0, limit)
@@ -165,100 +267,4 @@ export function McpResources({ client, location, onAttachContext }: Props) {
       )}
     </View>
   );
-}
-
-function ResourceCard({
-  resource,
-  onAttach,
-}: {
-  resource: McpResource;
-  onAttach: () => void;
-}) {
-  const { colors } = useTheme();
-  return (
-    <Card>
-      <BodyText style={{ fontWeight: "600" }}>{resource.name}</BodyText>
-      <BodyText muted>
-        {resource.server}
-        {resource.mimeType ? ` · ${resource.mimeType}` : ""}
-      </BodyText>
-      <Text
-        selectable
-        style={{
-          color: colors.text,
-          fontFamily: mono,
-          fontSize: 13,
-          lineHeight: 19,
-        }}
-      >
-        {resource.uri}
-      </Text>
-      {resource.description && (
-        <Text
-          selectable
-          style={{
-            color: colors.muted,
-            fontFamily: sans,
-            fontSize: 15,
-            lineHeight: 22,
-          }}
-        >
-          {resource.description}
-        </Text>
-      )}
-      <Button title="Add resource reference" compact onPress={onAttach} />
-    </Card>
-  );
-}
-
-function TemplateCard({
-  resource,
-  onAttach,
-}: {
-  resource: McpResourceTemplate;
-  onAttach: (uri: string) => void;
-}) {
-  const { colors } = useTheme();
-  const [uri, setUri] = useState("");
-  const unresolved = /[{}]/.test(uri);
-  return (
-    <Card>
-      <BodyText style={{ fontWeight: "600" }}>{resource.name}</BodyText>
-      <BodyText muted>{resource.server} · Resource template</BodyText>
-      <Text
-        selectable
-        style={{
-          color: colors.text,
-          fontFamily: mono,
-          fontSize: 13,
-          lineHeight: 19,
-        }}
-      >
-        {resource.uriTemplate}
-      </Text>
-      {resource.description && (
-        <BodyText muted>{resource.description}</BodyText>
-      )}
-      <Field
-        label={`Resource URI for ${resource.name}`}
-        value={uri}
-        onChangeText={setUri}
-        placeholder="Enter a complete URI from this template"
-      />
-      <BodyText muted>
-        Replace each template parameter with the value that you need.
-      </BodyText>
-      {unresolved && (
-        <BodyText style={{ color: colors.danger }}>
-          Replace all template parameters before you add the reference.
-        </BodyText>
-      )}
-      <Button
-        title="Add template reference"
-        compact
-        disabled={!uri.trim() || unresolved}
-        onPress={() => onAttach(uri.trim())}
-      />
-    </Card>
-  );
-}
+};

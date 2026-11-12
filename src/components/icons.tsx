@@ -23,7 +23,7 @@ const artwork: Record<Name, { viewBox: string; paths: string[] }> = {
   },
 };
 
-export function NavIcon({
+export const NavIcon = ({
   name,
   color,
   size = 20,
@@ -31,7 +31,7 @@ export function NavIcon({
   name: Name;
   color: string;
   size?: number;
-}) {
+}) => {
   const icon = artwork[name];
   return (
     <Svg
@@ -52,4 +52,4 @@ export function NavIcon({
       ))}
     </Svg>
   );
-}
+};

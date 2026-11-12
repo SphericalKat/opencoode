@@ -4,9 +4,26 @@ import { ScrollView, Text } from "react-native";
 import { useTheme } from "../lib/theme";
 import { mono } from "./ui";
 
-export function Patch({ patch }: { patch: string }) {
-  const { colors } = useTheme();
+type PatchLineKind = "added" | "removed" | undefined;
+
+const patchLines = (patch: string): { line: string; kind: PatchLineKind }[] => {
   let inHunk = false;
+  return patch.split(/(?<=\n)/u).map((line) => {
+    if (line.startsWith("@@")) {
+      inHunk = true;
+    }
+    let kind: PatchLineKind;
+    if (inHunk && line.startsWith("+")) {
+      kind = "added";
+    } else if (inHunk && line.startsWith("-")) {
+      kind = "removed";
+    }
+    return { kind, line };
+  });
+};
+
+export const Patch = ({ patch }: { patch: string }) => {
+  const { colors } = useTheme();
   return (
     <ScrollView horizontal>
       <Text
@@ -18,16 +35,13 @@ export function Patch({ patch }: { patch: string }) {
           lineHeight: 20,
         }}
       >
-        {patch.split(/(?<=\n)/).map((line, index) => {
-          if (line.startsWith("@@")) {
-            inHunk = true;
+        {patchLines(patch).map(({ line, kind }, index) => {
+          let color: string | undefined;
+          if (kind === "added") {
+            color = colors.success;
+          } else if (kind === "removed") {
+            color = colors.danger;
           }
-          const color =
-            inHunk && line.startsWith("+")
-              ? colors.success
-              : inHunk && line.startsWith("-")
-                ? colors.danger
-                : undefined;
           return (
             <Text key={index} style={color ? { color } : undefined}>
               {line}
@@ -37,4 +51,4 @@ export function Patch({ patch }: { patch: string }) {
       </Text>
     </ScrollView>
   );
-}
+};

@@ -34,7 +34,7 @@ const modes = [
   { id: "cron", title: "Cron" },
 ] as const;
 
-function triggerLabel(item: ScheduleInfo) {
+const triggerLabel = (item: ScheduleInfo) => {
   const { when } = item;
   if (when.type === "in") {
     return `After ${when.in}`;
@@ -46,15 +46,49 @@ function triggerLabel(item: ScheduleInfo) {
     return `Every ${when.every}`;
   }
   return `Cron: ${when.cron}`;
-}
+};
 
-export function Schedules({
+const triggerFieldLabel = (mode: ScheduleDraft["mode"]) => {
+  if (mode === "at") {
+    return "Date and time";
+  }
+  if (mode === "cron") {
+    return "Cron expression";
+  }
+  if (mode === "every") {
+    return "Repeat interval";
+  }
+  return "Delay";
+};
+
+const triggerPlaceholder = (mode: ScheduleDraft["mode"]) => {
+  if (mode === "at") {
+    return "YYYY-MM-DDTHH:mm";
+  }
+  if (mode === "cron") {
+    return "0 9 * * 1-5";
+  }
+  return "20 minutes";
+};
+
+const runWithCleanup = async (
+  task: () => Promise<void>,
+  cleanup: () => void
+) => {
+  try {
+    await task();
+  } finally {
+    cleanup();
+  }
+};
+
+export const Schedules = ({
   client,
   sessionID,
 }: {
   client: Client;
   sessionID: string;
-}) {
+}) => {
   const [items, setItems] = useState<ScheduleInfo[]>([]);
   const [draft, setDraft] = useState<ScheduleDraft>(emptyDraft);
   const [adding, setAdding] = useState(false);
@@ -80,23 +114,31 @@ export function Schedules({
   }, []);
 
   const refresh = useCallback(async () => {
-    const id = ++request.current;
+    request.current += 1;
+    const id = request.current;
     setLoading(true);
     setError(undefined);
-    try {
-      const schedules = await client.experimental.schedule.list({ sessionID });
-      if (mounted.current && request.current === id) {
-        setItems(schedules);
+    await runWithCleanup(
+      async () => {
+        try {
+          const schedules = await client.experimental.schedule.list({
+            sessionID,
+          });
+          if (mounted.current && request.current === id) {
+            setItems(schedules);
+          }
+        } catch (error_) {
+          if (mounted.current && request.current === id) {
+            setError(errorMessage(error_));
+          }
+        }
+      },
+      () => {
+        if (mounted.current && request.current === id) {
+          setLoading(false);
+        }
       }
-    } catch (error_) {
-      if (mounted.current && request.current === id) {
-        setError(errorMessage(error_));
-      }
-    } finally {
-      if (mounted.current && request.current === id) {
-        setLoading(false);
-      }
-    }
+    );
   }, [client, sessionID]);
 
   useEffect(() => {
@@ -117,17 +159,22 @@ export function Schedules({
     const owner = scope.current;
     setBusy(true);
     setError(undefined);
-    try {
-      await action();
-    } catch (error_) {
-      if (mounted.current && owner === scope.current) {
-        setError(errorMessage(error_));
+    await runWithCleanup(
+      async () => {
+        try {
+          await action();
+        } catch (error_) {
+          if (mounted.current && owner === scope.current) {
+            setError(errorMessage(error_));
+          }
+        }
+      },
+      () => {
+        if (mounted.current) {
+          setBusy(false);
+        }
       }
-    } finally {
-      if (mounted.current) {
-        setBusy(false);
-      }
-    }
+    );
   };
   const mutate = async (action: () => Promise<unknown>) => {
     const owner = scope.current;
@@ -206,22 +253,8 @@ export function Schedules({
             ))}
           </Row>
           <Field
-            label={
-              draft.mode === "at"
-                ? "Date and time"
-                : draft.mode === "cron"
-                  ? "Cron expression"
-                  : draft.mode === "every"
-                    ? "Repeat interval"
-                    : "Delay"
-            }
-            placeholder={
-              draft.mode === "at"
-                ? "YYYY-MM-DDTHH:mm"
-                : draft.mode === "cron"
-                  ? "0 9 * * 1-5"
-                  : "20 minutes"
-            }
+            label={triggerFieldLabel(draft.mode)}
+            placeholder={triggerPlaceholder(draft.mode)}
             value={draft.trigger}
             onChangeText={(value) => change("trigger", value)}
           />
@@ -391,4 +424,4 @@ export function Schedules({
       ))}
     </View>
   );
-}
+};

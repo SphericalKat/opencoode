@@ -34,7 +34,7 @@ import {
   MessageDisclosureContext,
 } from "../lib/message-actions";
 import { useSheetCoordinator } from "../lib/sheets";
-import { darkColors, useTheme, useThemedStyles } from "../lib/theme";
+import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import {
   MotionDisclosureBody,
@@ -44,505 +44,11 @@ import {
 } from "./motion";
 import { ShellIcon } from "./shell-icon";
 
-export const colors = darkColors;
+export { darkColors as colors } from "../lib/theme";
 export const sans = "Inter";
 export const mono = "IBMPlexMono";
 export const touchTarget = Platform.OS === "android" ? 48 : 44;
-
-export function BodyText({
-  children,
-  muted,
-  style,
-  ...props
-}: TextProps & { muted?: boolean }) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  return (
-    <Text
-      {...props}
-      style={[styles.text, muted && { color: colors.muted }, style]}
-    >
-      {children}
-    </Text>
-  );
-}
-export function Heading({ children }: { children: React.ReactNode }) {
-  const styles = useThemedStyles(createStyles);
-  return (
-    <Text accessibilityRole="header" style={styles.heading}>
-      {children}
-    </Text>
-  );
-}
-export function Button({
-  title,
-  onPress,
-  variant = "secondary",
-  disabled,
-  busy,
-  compact,
-  selected,
-  accessibilityLabel,
-}: {
-  title: string;
-  onPress: () => void;
-  variant?: "primary" | "secondary" | "danger" | "ghost";
-  disabled?: boolean;
-  busy?: boolean;
-  compact?: boolean;
-  selected?: boolean;
-  accessibilityLabel?: string;
-}) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? title}
-      accessibilityState={{
-        busy: !!busy,
-        disabled: !!disabled || !!busy,
-        selected,
-      }}
-      aria-pressed={selected}
-      disabled={disabled || busy}
-      onPress={onPress}
-      style={[styles.buttonTarget, (disabled || busy) && { opacity: 0.55 }]}
-    >
-      {({ pressed }) => (
-        <PressFeedback
-          pressed={pressed}
-          disabled={disabled || busy}
-          style={[
-            styles.button,
-            compact && styles.compact,
-            variant === "primary" && styles.primary,
-            variant === "ghost" && styles.ghost,
-            variant === "danger" && styles.danger,
-            selected && styles.selectedButton,
-            pressed &&
-              (variant === "ghost" ? styles.ghostPressed : styles.pressed),
-          ]}
-        >
-          {busy ? (
-            <ActivityIndicator
-              size="small"
-              color={
-                selected
-                  ? colors.text
-                  : variant === "primary"
-                    ? colors.primaryText
-                    : colors.muted
-              }
-            />
-          ) : (
-            <Text
-              style={[
-                styles.buttonText,
-                variant === "primary" && { color: colors.primaryText },
-                variant === "danger" && { color: colors.danger },
-                selected && { color: colors.text },
-              ]}
-            >
-              {selected ? `✓ ${title}` : title}
-            </Text>
-          )}
-        </PressFeedback>
-      )}
-    </Pressable>
-  );
-}
-export function Field({
-  label,
-  style,
-  containerStyle,
-  ...props
-}: TextInputProps & { label?: string; containerStyle?: StyleProp<ViewStyle> }) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const [focused, setFocused] = useState(false);
-  return (
-    <View style={[{ gap: 8 }, containerStyle]}>
-      {label && (
-        <BodyText muted style={styles.fieldLabel}>
-          {label}
-        </BodyText>
-      )}
-      <TextInput
-        accessibilityLabel={label ?? props.placeholder}
-        placeholderTextColor={colors.faint}
-        selectionColor={colors.focus}
-        autoCapitalize="none"
-        autoCorrect={false}
-        {...props}
-        onFocus={(event) => {
-          setFocused(true);
-          props.onFocus?.(event);
-        }}
-        onBlur={(event) => {
-          setFocused(false);
-          props.onBlur?.(event);
-        }}
-        style={[
-          styles.input,
-          props.multiline && { minHeight: 100, textAlignVertical: "top" },
-          focused && { borderColor: colors.focus },
-          style,
-        ]}
-      />
-    </View>
-  );
-}
-export function Card({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: ViewStyle;
-}) {
-  const styles = useThemedStyles(createStyles);
-  return <View style={[styles.card, style]}>{children}</View>;
-}
-export function Row({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: ViewStyle;
-}) {
-  const styles = useThemedStyles(createStyles);
-  return <View style={[styles.row, style]}>{children}</View>;
-}
-export function Empty({ title, detail }: { title: string; detail?: string }) {
-  const styles = useThemedStyles(createStyles);
-  return (
-    <View style={styles.empty}>
-      <BodyText
-        style={{ fontSize: 17, fontWeight: "500", textAlign: "center" }}
-      >
-        {title}
-      </BodyText>
-      {detail && (
-        <BodyText muted style={{ lineHeight: 23, textAlign: "center" }}>
-          {detail}
-        </BodyText>
-      )}
-    </View>
-  );
-}
-export function ErrorNotice({
-  error,
-  onRetry,
-}: {
-  error: string | null | undefined;
-  onRetry?: () => void;
-}) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  if (!error) {
-    return null;
-  }
-  return (
-    <View accessibilityRole="alert" style={styles.error}>
-      <BodyText style={{ color: colors.danger, flex: 1 }}>{error}</BodyText>
-      {onRetry && <Button title="Retry" compact onPress={onRetry} />}
-    </View>
-  );
-}
-export function Busy() {
-  const { colors } = useTheme();
-  return <ActivityIndicator style={{ padding: 30 }} color={colors.muted} />;
-}
-export function Sheet({
-  visible,
-  title,
-  children,
-  onClose,
-  onDismiss,
-  scroll = true,
-  allowDuringRecovery = false,
-  fitContent = false,
-  showHeader = true,
-  contentStyle,
-}: {
-  visible: boolean;
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-  onDismiss?: () => void;
-  scroll?: boolean;
-  allowDuringRecovery?: boolean;
-  fitContent?: boolean;
-  showHeader?: boolean;
-  contentStyle?: StyleProp<ViewStyle>;
-}) {
-  const betaLayout = useBetaLayout();
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const reduced = useMotionPreference();
-  const { suspended, recoveryPending, presentSheet, dismissSheet } =
-    useSheetCoordinator();
-  const id = useId();
-  const effectiveVisible = visible && (allowDuringRecovery || !suspended);
-  const SafeAreaRoot =
-    Platform.OS === "web" ? React.Fragment : SafeAreaProvider;
-  const requested = useRef(effectiveVisible);
-  requested.current = effectiveVisible;
-  const logicalVisible = useRef(visible);
-  logicalVisible.current = visible;
-  const previousVisible = useRef(effectiveVisible);
-  const pendingDismiss = useRef(false);
-  const pendingAppDismiss = useRef(false);
-  const dismissRef = useRef(onDismiss);
-  dismissRef.current = onDismiss;
-  const notifyDismissed = useCallback(() => {
-    if (requested.current || !pendingDismiss.current) {
-      return;
-    }
-    pendingDismiss.current = false;
-    const deferActions = dismissSheet(id);
-    if (!logicalVisible.current) {
-      if (deferActions && !allowDuringRecovery) {
-        pendingAppDismiss.current = true;
-      } else {
-        dismissRef.current?.();
-      }
-    }
-  }, [dismissSheet, id, allowDuringRecovery]);
-  useLayoutEffect(() => {
-    if (effectiveVisible && !allowDuringRecovery) {
-      presentSheet(id);
-    }
-  }, [effectiveVisible, allowDuringRecovery, presentSheet, id]);
-  useEffect(
-    () => () => {
-      dismissSheet(id);
-    },
-    [dismissSheet, id]
-  );
-  useEffect(() => {
-    if (visible) {
-      pendingAppDismiss.current = false;
-      return;
-    }
-    if (!suspended && !recoveryPending && pendingAppDismiss.current) {
-      pendingAppDismiss.current = false;
-      dismissRef.current?.();
-    }
-  }, [suspended, recoveryPending, visible]);
-  useEffect(() => {
-    const wasVisible = previousVisible.current;
-    previousVisible.current = effectiveVisible;
-    if (effectiveVisible) {
-      pendingDismiss.current = false;
-      return;
-    }
-    if (!wasVisible) {
-      return;
-    }
-    pendingDismiss.current = true;
-    if (Platform.OS !== "android") {
-      return;
-    }
-    const frame = requestAnimationFrame(notifyDismissed);
-    return () => cancelAnimationFrame(frame);
-  }, [effectiveVisible, notifyDismissed]);
-  const content = (
-    <View style={[styles.sheetInner, fitContent && styles.fitInner]}>
-      {showHeader ? (
-        <View
-          style={[styles.sheetHeader, betaLayout && styles.betaSheetHeader]}
-        >
-          {betaLayout ? (
-            <BodyText accessibilityRole="header" style={styles.betaSheetTitle}>
-              {title}
-            </BodyText>
-          ) : (
-            <Heading>{title}</Heading>
-          )}
-          <Button title="Done" compact onPress={onClose} />
-        </View>
-      ) : (
-        <BodyText accessibilityRole="header" style={styles.hiddenHeading}>
-          {title}
-        </BodyText>
-      )}
-      {recoveryPending && !allowDuringRecovery && (
-        <BodyText accessibilityRole="alert" style={styles.recoveryNotice}>
-          Close this panel to open the connection wizard.
-        </BodyText>
-      )}
-      {scroll ? (
-        <ScrollView
-          style={[styles.sheetScroll, fitContent && styles.fitScroll]}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={
-            Platform.OS === "ios" ? "interactive" : "on-drag"
-          }
-          contentContainerStyle={[
-            styles.sheetContent,
-            betaLayout && styles.betaSheetContent,
-            contentStyle,
-          ]}
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        <View
-          style={[
-            styles.sheetBody,
-            fitContent && styles.fitScroll,
-            contentStyle,
-          ]}
-        >
-          {children}
-        </View>
-      )}
-    </View>
-  );
-  return (
-    <Modal
-      visible={effectiveVisible}
-      transparent={fitContent}
-      animationType={fitContent || reduced ? "fade" : "slide"}
-      presentationStyle={fitContent ? "overFullScreen" : "pageSheet"}
-      supportedOrientations={["portrait", "landscape-left", "landscape-right"]}
-      onRequestClose={onClose}
-      onDismiss={notifyDismissed}
-    >
-      <SafeAreaRoot>
-        {fitContent ? (
-          <KeyboardAvoidingView
-            style={styles.sheetOverlay}
-            behavior="padding"
-            automaticOffset
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Close ${title}`}
-              onPress={onClose}
-              style={styles.sheetScrim}
-            />
-            <SafeAreaView
-              edges={["bottom", "left", "right"]}
-              style={[
-                styles.fitSheet,
-                betaLayout && { backgroundColor: colors.bg },
-              ]}
-            >
-              {content}
-            </SafeAreaView>
-          </KeyboardAvoidingView>
-        ) : (
-          <SafeAreaView
-            style={[styles.sheet, betaLayout && { backgroundColor: colors.bg }]}
-          >
-            <KeyboardAvoidingView
-              style={styles.sheetLayout}
-              behavior="padding"
-              automaticOffset
-            >
-              {content}
-            </KeyboardAvoidingView>
-          </SafeAreaView>
-        )}
-      </SafeAreaRoot>
-    </Modal>
-  );
-}
-export async function confirmAction(
-  title: string,
-  message: string,
-  options: { confirmLabel?: string; destructive?: boolean } = {}
-): Promise<boolean> {
-  if (Platform.OS === "web") {
-    return window.confirm(`${title}\n\n${message}`);
-  }
-  return new Promise((resolve) =>
-    Alert.alert(
-      title,
-      message,
-      [
-        { onPress: () => resolve(false), style: "cancel", text: "Cancel" },
-        {
-          onPress: () => resolve(true),
-          style: options.destructive === false ? "default" : "destructive",
-          text: options.confirmLabel || "Continue",
-        },
-      ],
-      { cancelable: true, onDismiss: () => resolve(false) }
-    )
-  );
-}
-export function JsonView({ value }: { value: unknown }) {
-  const { colors } = useTheme();
-  return (
-    <Text
-      selectable
-      style={{
-        color: colors.text,
-        fontFamily: mono,
-        fontSize: 13,
-        lineHeight: 20,
-      }}
-    >
-      {JSON.stringify(value, null, 2)}
-    </Text>
-  );
-}
-export function Disclosure({
-  title,
-  children,
-  disclosureKey,
-}: {
-  title: string;
-  children: React.ReactNode;
-  disclosureKey?: string;
-}) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const openMessageActions = useContext(MessageActionsContext);
-  const disclosures = useContext(MessageDisclosureContext);
-  const [open, setOpen] = useState(() =>
-    disclosureKey ? (disclosures?.isOpen(disclosureKey) ?? false) : false
-  );
-  useLayoutEffect(() => {
-    setOpen(
-      disclosureKey ? (disclosures?.isOpen(disclosureKey) ?? false) : false
-    );
-  }, [disclosureKey, disclosures]);
-  return (
-    <Card style={styles.disclosure}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        accessibilityState={{ expanded: open }}
-        aria-expanded={open}
-        onPress={() =>
-          setOpen(
-            disclosureKey && disclosures
-              ? disclosures.toggle(disclosureKey)
-              : !open
-          )
-        }
-        onLongPress={Platform.OS === "web" ? undefined : openMessageActions}
-        style={({ pressed }) => [
-          styles.disclosureHeader,
-          pressed && styles.ghostPressed,
-        ]}
-      >
-        <BodyText style={{ flex: 1, fontWeight: "500" }}>{title}</BodyText>
-        <MotionDisclosureChevron open={open}>
-          <ShellIcon name="chevron" color={colors.muted} size={16} />
-        </MotionDisclosureChevron>
-      </Pressable>
-      <MotionDisclosureBody open={open} style={styles.disclosureBody}>
-        {children}
-      </MotionDisclosureBody>
-    </Card>
-  );
-}
-function createStyles(colors: ThemeColors) {
+const createStyles = (colors: ThemeColors) => {
   const inset = Platform.OS !== "android" || Number(Platform.Version) >= 29;
   return StyleSheet.create({
     betaSheetContent: { gap: 12, paddingHorizontal: 14 },
@@ -744,4 +250,547 @@ function createStyles(colors: ThemeColors) {
       lineHeight: 22,
     },
   });
-}
+};
+
+const busyIndicatorColor = (
+  themeColors: ThemeColors,
+  variant: "primary" | "secondary" | "danger" | "ghost",
+  selected: boolean | undefined
+) => {
+  if (selected) {
+    return themeColors.text;
+  }
+  return variant === "primary" ? themeColors.primaryText : themeColors.muted;
+};
+
+export const BodyText = ({
+  children,
+  muted,
+  style,
+  ...props
+}: TextProps & { muted?: boolean }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <Text
+      {...props}
+      style={[styles.text, muted && { color: colors.muted }, style]}
+    >
+      {children}
+    </Text>
+  );
+};
+export const Heading = ({ children }: { children: React.ReactNode }) => {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <Text accessibilityRole="header" style={styles.heading}>
+      {children}
+    </Text>
+  );
+};
+export const Button = ({
+  title,
+  onPress,
+  variant = "secondary",
+  disabled,
+  busy,
+  compact,
+  selected,
+  accessibilityLabel,
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: "primary" | "secondary" | "danger" | "ghost";
+  disabled?: boolean;
+  busy?: boolean;
+  compact?: boolean;
+  selected?: boolean;
+  accessibilityLabel?: string;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={{
+        busy: !!busy,
+        disabled: !!disabled || !!busy,
+        selected,
+      }}
+      aria-pressed={selected}
+      disabled={disabled || busy}
+      onPress={onPress}
+      style={[styles.buttonTarget, (disabled || busy) && { opacity: 0.55 }]}
+    >
+      {({ pressed }) => (
+        <PressFeedback
+          pressed={pressed}
+          disabled={disabled || busy}
+          style={[
+            styles.button,
+            compact && styles.compact,
+            variant === "primary" && styles.primary,
+            variant === "ghost" && styles.ghost,
+            variant === "danger" && styles.danger,
+            selected && styles.selectedButton,
+            pressed &&
+              (variant === "ghost" ? styles.ghostPressed : styles.pressed),
+          ]}
+        >
+          {busy ? (
+            <ActivityIndicator
+              size="small"
+              color={busyIndicatorColor(colors, variant, selected)}
+            />
+          ) : (
+            <Text
+              style={[
+                styles.buttonText,
+                variant === "primary" && { color: colors.primaryText },
+                variant === "danger" && { color: colors.danger },
+                selected && { color: colors.text },
+              ]}
+            >
+              {selected ? `✓ ${title}` : title}
+            </Text>
+          )}
+        </PressFeedback>
+      )}
+    </Pressable>
+  );
+};
+export const Field = ({
+  label,
+  style,
+  containerStyle,
+  ...props
+}: TextInputProps & {
+  label?: string;
+  containerStyle?: StyleProp<ViewStyle>;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={[{ gap: 8 }, containerStyle]}>
+      {label && (
+        <BodyText muted style={styles.fieldLabel}>
+          {label}
+        </BodyText>
+      )}
+      <TextInput
+        accessibilityLabel={label ?? props.placeholder}
+        placeholderTextColor={colors.faint}
+        selectionColor={colors.focus}
+        autoCapitalize="none"
+        autoCorrect={false}
+        {...props}
+        onFocus={(event) => {
+          setFocused(true);
+          props.onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          props.onBlur?.(event);
+        }}
+        style={[
+          styles.input,
+          props.multiline && { minHeight: 100, textAlignVertical: "top" },
+          focused && { borderColor: colors.focus },
+          style,
+        ]}
+      />
+    </View>
+  );
+};
+export const Card = ({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  return <View style={[styles.card, style]}>{children}</View>;
+};
+export const Row = ({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  return <View style={[styles.row, style]}>{children}</View>;
+};
+export const Empty = ({
+  title,
+  detail,
+}: {
+  title: string;
+  detail?: string;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.empty}>
+      <BodyText
+        style={{ fontSize: 17, fontWeight: "500", textAlign: "center" }}
+      >
+        {title}
+      </BodyText>
+      {detail && (
+        <BodyText muted style={{ lineHeight: 23, textAlign: "center" }}>
+          {detail}
+        </BodyText>
+      )}
+    </View>
+  );
+};
+export const ErrorNotice = ({
+  error,
+  onRetry,
+}: {
+  error: string | null | undefined;
+  onRetry?: () => void;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  if (!error) {
+    return null;
+  }
+  return (
+    <View accessibilityRole="alert" style={styles.error}>
+      <BodyText style={{ color: colors.danger, flex: 1 }}>{error}</BodyText>
+      {onRetry && <Button title="Retry" compact onPress={onRetry} />}
+    </View>
+  );
+};
+export const Busy = () => {
+  const { colors } = useTheme();
+  return <ActivityIndicator style={{ padding: 30 }} color={colors.muted} />;
+};
+type UiStyles = ReturnType<typeof createStyles>;
+
+const renderSheetHeader = ({
+  betaLayout,
+  onClose,
+  showHeader,
+  styles,
+  title,
+}: {
+  betaLayout: boolean;
+  onClose: () => void;
+  showHeader: boolean;
+  styles: UiStyles;
+  title: string;
+}) =>
+  showHeader ? (
+    <View style={[styles.sheetHeader, betaLayout && styles.betaSheetHeader]}>
+      {betaLayout ? (
+        <BodyText accessibilityRole="header" style={styles.betaSheetTitle}>
+          {title}
+        </BodyText>
+      ) : (
+        <Heading>{title}</Heading>
+      )}
+      <Button title="Done" compact onPress={onClose} />
+    </View>
+  ) : (
+    <BodyText accessibilityRole="header" style={styles.hiddenHeading}>
+      {title}
+    </BodyText>
+  );
+
+const renderSheetBody = ({
+  betaLayout,
+  children,
+  contentStyle,
+  fitContent,
+  scroll,
+  styles,
+}: {
+  betaLayout: boolean;
+  children: React.ReactNode;
+  contentStyle?: StyleProp<ViewStyle>;
+  fitContent: boolean;
+  scroll: boolean;
+  styles: UiStyles;
+}) =>
+  scroll ? (
+    <ScrollView
+      style={[styles.sheetScroll, fitContent && styles.fitScroll]}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+      contentContainerStyle={[
+        styles.sheetContent,
+        betaLayout && styles.betaSheetContent,
+        contentStyle,
+      ]}
+    >
+      {children}
+    </ScrollView>
+  ) : (
+    <View
+      style={[styles.sheetBody, fitContent && styles.fitScroll, contentStyle]}
+    >
+      {children}
+    </View>
+  );
+
+export const Sheet = ({
+  visible,
+  title,
+  children,
+  onClose,
+  onDismiss,
+  scroll = true,
+  allowDuringRecovery = false,
+  fitContent = false,
+  showHeader = true,
+  contentStyle,
+}: {
+  visible: boolean;
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  onDismiss?: () => void;
+  scroll?: boolean;
+  allowDuringRecovery?: boolean;
+  fitContent?: boolean;
+  showHeader?: boolean;
+  contentStyle?: StyleProp<ViewStyle>;
+}) => {
+  const betaLayout = useBetaLayout();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const reduced = useMotionPreference();
+  const { suspended, recoveryPending, presentSheet, dismissSheet } =
+    useSheetCoordinator();
+  const id = useId();
+  const effectiveVisible = visible && (allowDuringRecovery || !suspended);
+  const SafeAreaRoot =
+    Platform.OS === "web" ? React.Fragment : SafeAreaProvider;
+  const requested = useRef(effectiveVisible);
+  const logicalVisible = useRef(visible);
+  const previousVisible = useRef(effectiveVisible);
+  const pendingDismiss = useRef(false);
+  const pendingAppDismiss = useRef(false);
+  const dismissRef = useRef(onDismiss);
+  useLayoutEffect(() => {
+    requested.current = effectiveVisible;
+    logicalVisible.current = visible;
+    dismissRef.current = onDismiss;
+  });
+  const notifyDismissed = useCallback(() => {
+    if (requested.current || !pendingDismiss.current) {
+      return;
+    }
+    pendingDismiss.current = false;
+    const deferActions = dismissSheet(id);
+    if (!logicalVisible.current) {
+      if (deferActions && !allowDuringRecovery) {
+        pendingAppDismiss.current = true;
+      } else {
+        dismissRef.current?.();
+      }
+    }
+  }, [dismissSheet, id, allowDuringRecovery]);
+  useLayoutEffect(() => {
+    if (effectiveVisible && !allowDuringRecovery) {
+      presentSheet(id);
+    }
+  }, [effectiveVisible, allowDuringRecovery, presentSheet, id]);
+  useEffect(
+    () => () => {
+      dismissSheet(id);
+    },
+    [dismissSheet, id]
+  );
+  useEffect(() => {
+    if (visible) {
+      pendingAppDismiss.current = false;
+      return;
+    }
+    if (!suspended && !recoveryPending && pendingAppDismiss.current) {
+      pendingAppDismiss.current = false;
+      dismissRef.current?.();
+    }
+  }, [suspended, recoveryPending, visible]);
+  useEffect(() => {
+    const wasVisible = previousVisible.current;
+    previousVisible.current = effectiveVisible;
+    if (effectiveVisible) {
+      pendingDismiss.current = false;
+      return;
+    }
+    if (!wasVisible) {
+      return;
+    }
+    pendingDismiss.current = true;
+    if (Platform.OS !== "android") {
+      return;
+    }
+    const frame = requestAnimationFrame(notifyDismissed);
+    return () => cancelAnimationFrame(frame);
+  }, [effectiveVisible, notifyDismissed]);
+  const content = (
+    <View style={[styles.sheetInner, fitContent && styles.fitInner]}>
+      {renderSheetHeader({ betaLayout, onClose, showHeader, styles, title })}
+      {recoveryPending && !allowDuringRecovery && (
+        <BodyText accessibilityRole="alert" style={styles.recoveryNotice}>
+          Close this panel to open the connection wizard.
+        </BodyText>
+      )}
+      {renderSheetBody({
+        betaLayout,
+        children,
+        contentStyle,
+        fitContent,
+        scroll,
+        styles,
+      })}
+    </View>
+  );
+  return (
+    <Modal
+      visible={effectiveVisible}
+      transparent={fitContent}
+      animationType={fitContent || reduced ? "fade" : "slide"}
+      presentationStyle={fitContent ? "overFullScreen" : "pageSheet"}
+      supportedOrientations={["portrait", "landscape-left", "landscape-right"]}
+      onRequestClose={onClose}
+      onDismiss={notifyDismissed}
+    >
+      <SafeAreaRoot>
+        {fitContent ? (
+          <KeyboardAvoidingView
+            style={styles.sheetOverlay}
+            behavior="padding"
+            automaticOffset
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Close ${title}`}
+              onPress={onClose}
+              style={styles.sheetScrim}
+            />
+            <SafeAreaView
+              edges={["bottom", "left", "right"]}
+              style={[
+                styles.fitSheet,
+                betaLayout && { backgroundColor: colors.bg },
+              ]}
+            >
+              {content}
+            </SafeAreaView>
+          </KeyboardAvoidingView>
+        ) : (
+          <SafeAreaView
+            style={[styles.sheet, betaLayout && { backgroundColor: colors.bg }]}
+          >
+            <KeyboardAvoidingView
+              style={styles.sheetLayout}
+              behavior="padding"
+              automaticOffset
+            >
+              {content}
+            </KeyboardAvoidingView>
+          </SafeAreaView>
+        )}
+      </SafeAreaRoot>
+    </Modal>
+  );
+};
+export const confirmAction = async (
+  title: string,
+  message: string,
+  options: { confirmLabel?: string; destructive?: boolean } = {}
+): Promise<boolean> => {
+  if (Platform.OS === "web") {
+    return window.confirm(`${title}\n\n${message}`);
+  }
+  return await new Promise((resolve) => {
+    Alert.alert(
+      title,
+      message,
+      [
+        { onPress: () => resolve(false), style: "cancel", text: "Cancel" },
+        {
+          onPress: () => resolve(true),
+          style: options.destructive === false ? "default" : "destructive",
+          text: options.confirmLabel || "Continue",
+        },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) }
+    );
+  });
+};
+export const JsonView = ({ value }: { value: unknown }) => {
+  const { colors } = useTheme();
+  return (
+    <Text
+      selectable
+      style={{
+        color: colors.text,
+        fontFamily: mono,
+        fontSize: 13,
+        lineHeight: 20,
+      }}
+    >
+      {JSON.stringify(value, null, 2)}
+    </Text>
+  );
+};
+export const Disclosure = ({
+  title,
+  children,
+  disclosureKey,
+}: {
+  title: string;
+  children: React.ReactNode;
+  disclosureKey?: string;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const openMessageActions = useContext(MessageActionsContext);
+  const disclosures = useContext(MessageDisclosureContext);
+  const [open, setOpen] = useState(() =>
+    disclosureKey ? (disclosures?.isOpen(disclosureKey) ?? false) : false
+  );
+  useLayoutEffect(() => {
+    setOpen(
+      disclosureKey ? (disclosures?.isOpen(disclosureKey) ?? false) : false
+    );
+  }, [disclosureKey, disclosures]);
+  return (
+    <Card style={styles.disclosure}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ expanded: open }}
+        aria-expanded={open}
+        onPress={() =>
+          setOpen(
+            disclosureKey && disclosures
+              ? disclosures.toggle(disclosureKey)
+              : !open
+          )
+        }
+        onLongPress={Platform.OS === "web" ? undefined : openMessageActions}
+        style={({ pressed }) => [
+          styles.disclosureHeader,
+          pressed && styles.ghostPressed,
+        ]}
+      >
+        <BodyText style={{ flex: 1, fontWeight: "500" }}>{title}</BodyText>
+        <MotionDisclosureChevron open={open}>
+          <ShellIcon name="chevron" color={colors.muted} size={16} />
+        </MotionDisclosureChevron>
+      </Pressable>
+      <MotionDisclosureBody open={open} style={styles.disclosureBody}>
+        {children}
+      </MotionDisclosureBody>
+    </Card>
+  );
+};

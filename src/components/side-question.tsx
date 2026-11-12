@@ -1,5 +1,5 @@
 import * as Clipboard from "expo-clipboard";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
@@ -7,7 +7,7 @@ import type { Client } from "../lib/client";
 import { Markdown } from "./markdown";
 import { Button, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
-export function SideQuestion({
+export const SideQuestion = ({
   client,
   sessionID,
   initialQuestion,
@@ -17,7 +17,7 @@ export function SideQuestion({
   sessionID: string;
   initialQuestion?: string;
   onQuestionConsumed?: () => void;
-}) {
+}) => {
   const [question, setQuestion] = useState(initialQuestion ?? "");
   const [answer, setAnswer] = useState<{
     question: string;
@@ -29,8 +29,9 @@ export function SideQuestion({
   const request = useRef<AbortController | null>(null);
   const mounted = useRef(false);
   const epoch = useRef(0);
-  const consume = useRef(onQuestionConsumed);
-  consume.current = onQuestionConsumed;
+  const consume = useEffectEvent(() => {
+    onQuestionConsumed?.();
+  });
 
   const cancel = () => {
     epoch.current += 1;
@@ -38,6 +39,12 @@ export function SideQuestion({
     request.current = null;
     setBusy(false);
   };
+
+  const onAppStateChange = useEffectEvent((state: string) => {
+    if (state !== "active" && request.current) {
+      cancel();
+    }
+  });
 
   useEffect(() => {
     mounted.current = true;
@@ -47,9 +54,7 @@ export function SideQuestion({
     setBusy(false);
     setCopied(false);
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active" && request.current) {
-        cancel();
-      }
+      onAppStateChange(state);
     });
     return () => {
       mounted.current = false;
@@ -63,7 +68,7 @@ export function SideQuestion({
   useEffect(() => {
     if (initialQuestion !== undefined) {
       setQuestion(initialQuestion);
-      consume.current?.();
+      consume();
     }
   }, [client, sessionID, initialQuestion]);
 
@@ -73,24 +78,24 @@ export function SideQuestion({
       return;
     }
     const controller = new AbortController();
-    const current = ++epoch.current;
+    epoch.current += 1;
+    const { current } = epoch;
     request.current = controller;
     setBusy(true);
     setError(null);
     setCopied(false);
+    const finish = () => {
+      if (mounted.current && current === epoch.current) {
+        request.current = null;
+        setBusy(false);
+      }
+    };
+    let result: Awaited<ReturnType<Client["session"]["generate"]>>;
     try {
-      const result = await client.session.generate(
+      result = await client.session.generate(
         { prompt, sessionID },
         { signal: controller.signal }
       );
-      if (
-        !mounted.current ||
-        current !== epoch.current ||
-        controller.signal.aborted
-      ) {
-        return;
-      }
-      setAnswer({ question: prompt, text: result.text });
     } catch (error_) {
       if (
         mounted.current &&
@@ -99,12 +104,17 @@ export function SideQuestion({
       ) {
         setError(errorMessage(error_));
       }
-    } finally {
-      if (mounted.current && current === epoch.current) {
-        request.current = null;
-        setBusy(false);
-      }
+      finish();
+      return;
     }
+    if (
+      mounted.current &&
+      current === epoch.current &&
+      !controller.signal.aborted
+    ) {
+      setAnswer({ question: prompt, text: result.text });
+    }
+    finish();
   };
 
   const copy = async () => {
@@ -143,7 +153,9 @@ export function SideQuestion({
           variant="primary"
           disabled={!question.trim()}
           busy={busy}
-          onPress={() => void ask()}
+          onPress={() => {
+            ask();
+          }}
         />
         {busy && <Button title="Cancel request" onPress={cancel} />}
       </Row>
@@ -161,11 +173,13 @@ export function SideQuestion({
               title={copied ? "Copied" : "Copy answer"}
               compact
               disabled={!answer.text}
-              onPress={() => void copy()}
+              onPress={() => {
+                copy();
+              }}
             />
           </Row>
         </Card>
       )}
     </View>
   );
-}
+};

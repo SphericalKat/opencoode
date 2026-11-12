@@ -7,13 +7,128 @@ import type { Client } from "../lib/client";
 import { SessionForms } from "./session-forms";
 import { Button, Busy, ErrorNotice, Heading, BodyText, Row } from "./ui";
 
-export function GlobalForms({
+const noop = () => {
+  // Refresh is unavailable while the request list is not connected.
+};
+
+const createFormsSync = ({
+  client,
+  controller,
+  directory,
+  setError,
+  setForms,
+  setLoading,
+}: {
+  client: Client;
+  controller: AbortController;
+  directory: string;
+  setError: (error: string | null) => void;
+  setForms: (forms: FormInfo[]) => void;
+  setLoading: (loading: boolean) => void;
+}) => {
+  let request = 0;
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let releaseRetry: (() => void) | undefined;
+  let attempts = 0;
+
+  const refresh = async () => {
+    request += 1;
+    const current = request;
+    setLoading(true);
+    try {
+      const result = await client.form.list(
+        { location: { directory } },
+        { signal: controller.signal }
+      );
+      if (controller.signal.aborted || current !== request) {
+        return;
+      }
+      setForms(result.data.filter((form) => form.sessionID === "global"));
+      setError(null);
+    } catch (error_) {
+      if (!controller.signal.aborted && current === request) {
+        setError(errorMessage(error_));
+      }
+    } finally {
+      if (!controller.signal.aborted && current === request) {
+        setLoading(false);
+      }
+    }
+  };
+  const scheduleRefresh = () => {
+    if (refreshTimer) {
+      return;
+    }
+    refreshTimer = setTimeout(() => {
+      refreshTimer = undefined;
+      void refresh();
+    }, 150);
+  };
+  const waitForRetry = (delay: number) =>
+    new Promise<void>((resolve) => {
+      releaseRetry = resolve;
+      retryTimer = setTimeout(resolve, delay);
+    });
+  const run = async () => {
+    await refresh();
+    while (!controller.signal.aborted) {
+      try {
+        for await (const event of client.event.subscribe({
+          signal: controller.signal,
+          types: [
+            "form.created",
+            "form.replied",
+            "form.cancelled",
+            "location.shutdown",
+          ],
+        })) {
+          if (controller.signal.aborted) {
+            break;
+          }
+          attempts = 0;
+          if (
+            event.type === "server.connected" ||
+            !event.location ||
+            event.location.directory === directory
+          ) {
+            scheduleRefresh();
+          }
+        }
+        if (!controller.signal.aborted) {
+          throw new Error("The live connection closed");
+        }
+      } catch (error_) {
+        if (controller.signal.aborted) {
+          break;
+        }
+        setError(
+          `Pending request updates unavailable: ${errorMessage(error_)}`
+        );
+        const delay = Math.min(1000 * 2 ** Math.min(attempts, 4), 15_000);
+        attempts += 1;
+        await waitForRetry(delay);
+        if (!controller.signal.aborted) {
+          await refresh();
+        }
+      }
+    }
+  };
+  const dispose = () => {
+    clearTimeout(refreshTimer);
+    clearTimeout(retryTimer);
+    releaseRetry?.();
+  };
+  return { dispose, refresh, run };
+};
+
+export const GlobalForms = ({
   client,
   directory,
 }: {
   client: Client;
   directory: string;
-}) {
+}) => {
   const [forms, setForms] = useState<FormInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +136,7 @@ export function GlobalForms({
     AppState.currentState !== "background" &&
       AppState.currentState !== "inactive"
   );
-  const refreshRef = useRef<() => void>(() => {});
+  const refreshRef = useRef<() => void>(noop);
 
   useEffect(() => {
     const listener = AppState.addEventListener("change", (state) =>
@@ -37,105 +152,26 @@ export function GlobalForms({
     setForms([]);
     setError(null);
     const controller = new AbortController();
-    let request = 0;
-    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let releaseRetry: (() => void) | undefined;
-    let attempts = 0;
-
-    const refresh = async () => {
-      const current = ++request;
-      setLoading(true);
-      try {
-        const result = await client.form.list(
-          { location: { directory } },
-          { signal: controller.signal }
-        );
-        if (controller.signal.aborted || current !== request) {
-          return;
-        }
-        setForms(result.data.filter((form) => form.sessionID === "global"));
-        setError(null);
-      } catch (error_) {
-        if (!controller.signal.aborted && current === request) {
-          setError(errorMessage(error_));
-        }
-      } finally {
-        if (!controller.signal.aborted && current === request) {
-          setLoading(false);
-        }
-      }
-    };
+    const sync = createFormsSync({
+      client,
+      controller,
+      directory,
+      setError,
+      setForms,
+      setLoading,
+    });
     refreshRef.current = () => {
-      void refresh();
+      void sync.refresh();
     };
-    const scheduleRefresh = () => {
-      if (refreshTimer) {
-        return;
-      }
-      refreshTimer = setTimeout(() => {
-        refreshTimer = undefined;
-        void refresh();
-      }, 150);
-    };
-    void (async () => {
-      await refresh();
-      while (!controller.signal.aborted) {
-        try {
-          for await (const event of client.event.subscribe({
-            signal: controller.signal,
-            types: [
-              "form.created",
-              "form.replied",
-              "form.cancelled",
-              "location.shutdown",
-            ],
-          })) {
-            if (controller.signal.aborted) {
-              break;
-            }
-            attempts = 0;
-            if (
-              event.type === "server.connected" ||
-              !event.location ||
-              event.location.directory === directory
-            ) {
-              scheduleRefresh();
-            }
-          }
-          if (!controller.signal.aborted) {
-            throw new Error("The live connection closed");
-          }
-        } catch (error_) {
-          if (controller.signal.aborted) {
-            break;
-          }
-          setError(
-            `Pending request updates unavailable: ${errorMessage(error_)}`
-          );
-          await new Promise<void>((resolve) => {
-            releaseRetry = resolve;
-            retryTimer = setTimeout(
-              resolve,
-              Math.min(1000 * 2 ** Math.min(attempts++, 4), 15_000)
-            );
-          });
-          if (!controller.signal.aborted) {
-            await refresh();
-          }
-        }
-      }
-    })().catch((error_) => {
+    sync.run().catch((error_) => {
       if (!controller.signal.aborted) {
         setError(errorMessage(error_));
       }
     });
     return () => {
       controller.abort();
-      clearTimeout(refreshTimer);
-      clearTimeout(retryTimer);
-      releaseRetry?.();
-      refreshRef.current = () => {};
+      sync.dispose();
+      refreshRef.current = noop;
     };
   }, [client, directory, foreground]);
 
@@ -167,4 +203,4 @@ export function GlobalForms({
       />
     </View>
   );
-}
+};

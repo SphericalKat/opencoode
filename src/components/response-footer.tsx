@@ -7,13 +7,24 @@ import { errorMessage } from "../lib/client";
 import { useTheme } from "../lib/theme";
 import { BodyText } from "./ui";
 
-export function ResponseFooter({
+const styles = StyleSheet.create({
+  copy: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+    width: 48,
+  },
+  detail: { fontSize: 12, lineHeight: 17 },
+  footer: { alignItems: "center", flexDirection: "row", marginStart: -16 },
+});
+
+export const ResponseFooter = ({
   text,
   elapsedSeconds,
 }: {
   text: string;
   elapsedSeconds?: number;
-}) {
+}) => {
   const { colors } = useTheme();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,15 +101,4 @@ export function ResponseFooter({
       )}
     </View>
   );
-}
-
-const styles = StyleSheet.create({
-  copy: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
-    width: 48,
-  },
-  detail: { fontSize: 12, lineHeight: 17 },
-  footer: { alignItems: "center", flexDirection: "row", marginStart: -16 },
-});
+};

@@ -10,7 +10,7 @@ import { ClientError } from "@opencode/client";
 import * as Clipboard from "expo-clipboard";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Image, Linking, Platform, ScrollView, Text, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
@@ -30,55 +30,109 @@ import {
   sans,
 } from "./ui";
 
-async function openLink(url: string) {
+const openLink = async (url: string) => {
   await Linking.openURL(externalURL(url));
-}
+};
 
-export function AdvancedSettings({
+const imageExtension = (mime: string) => {
+  if (mime === "image/jpeg") {
+    return "jpg";
+  }
+  if (mime === "image/webp") {
+    return "webp";
+  }
+  return "png";
+};
+
+const saveImage = async (
+  image: GenerateImageResult["images"][number],
+  withNativePresentation: ReturnType<typeof useNativePresentation>
+) => {
+  const extension = imageExtension(image.mime);
+  const filename = `opencoode-${Date.now()}.${extension}`;
+  if (Platform.OS === "web") {
+    const link = document.createElement("a");
+    link.href = `data:${image.mime};base64,${image.data}`;
+    link.download = filename;
+    link.click();
+  } else {
+    if (!(await Sharing.isAvailableAsync())) {
+      throw new Error("File sharing is unavailable on this device");
+    }
+    const file = new File(Paths.cache, filename);
+    try {
+      await file.write(image.data, { encoding: "base64" });
+      await withNativePresentation(() =>
+        Sharing.shareAsync(file.uri, {
+          dialogTitle: "Save or share image",
+          mimeType: image.mime,
+        })
+      );
+    } finally {
+      if (file.exists) {
+        await file.delete();
+      }
+    }
+  }
+};
+
+const Meter = ({
+  label,
+  meter,
+}: {
+  label: string;
+  meter: UsageLimitsMeter;
+}) => {
+  const { colors } = useTheme();
+  const percent = Math.min(100, Math.max(0, meter.percent));
+  return (
+    <Card>
+      <Row style={{ justifyContent: "space-between" }}>
+        <BodyText>{label}</BodyText>
+        <BodyText
+          style={{ color: meter.limited ? colors.danger : colors.success }}
+        >
+          {Math.round(percent)}% used
+        </BodyText>
+      </Row>
+      <View
+        accessibilityRole="progressbar"
+        accessibilityValue={{ max: 100, min: 0, now: percent }}
+        style={{
+          backgroundColor: colors.raised,
+          borderRadius: 3,
+          height: 5,
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: meter.limited ? colors.danger : colors.success,
+            height: 5,
+            width: `${percent}%`,
+          }}
+        />
+      </View>
+      <BodyText muted>
+        Resets {new Date(meter.resetsAt).toLocaleString()}
+      </BodyText>
+    </Card>
+  );
+};
+
+const Usage = ({
   client,
   directory,
 }: {
   client: Client;
   directory: string;
-}) {
-  const { colors } = useTheme();
-  const [tool, setTool] = useState<"Usage" | "Search" | "Generate">("Usage");
-  return (
-    <View style={{ flex: 1 }}>
-      <Row style={{ padding: 18 }}>
-        {(["Usage", "Search", "Generate"] as const).map((item) => (
-          <Button
-            key={item}
-            title={item}
-            compact
-            variant={tool === item ? "primary" : "secondary"}
-            onPress={() => setTool(item)}
-          />
-        ))}
-      </Row>
-      {tool === "Usage" && <Usage client={client} directory={directory} />}
-      {tool === "Search" && <WebSearch client={client} directory={directory} />}
-      {tool === "Generate" && (
-        <Generate client={client} directory={directory} />
-      )}
-    </View>
-  );
-}
-
-function Usage({ client, directory }: { client: Client; directory: string }) {
-  const { colors } = useTheme();
+}) => {
+  useTheme();
   const [info, setInfo] = useState<UsageLimitsInfo | null>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const active = useRef(true);
-  useEffect(() => {
-    active.current = true;
-    void load();
-    return () => {
-      active.current = false;
-    };
-  }, []);
-  async function load() {
+  const load = async () => {
     setLoading(true);
     setError(null);
     try {
@@ -97,12 +151,21 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
             : errorMessage(error_)
         );
       }
-    } finally {
-      if (active.current) {
-        setLoading(false);
-      }
     }
-  }
+    if (active.current) {
+      setLoading(false);
+    }
+  };
+  const loadOnMount = useEffectEvent(() => {
+    void load();
+  });
+  useEffect(() => {
+    active.current = true;
+    loadOnMount();
+    return () => {
+      active.current = false;
+    };
+  }, []);
   return (
     <ScrollView contentContainerStyle={{ gap: 14, padding: 18 }}>
       <Row>
@@ -113,10 +176,17 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
           title="Refresh"
           compact
           busy={loading}
-          onPress={() => void load()}
+          onPress={() => {
+            void load();
+          }}
         />
       </Row>
-      <ErrorNotice error={error} onRetry={() => void load()} />
+      <ErrorNotice
+        error={error}
+        onRetry={() => {
+          void load();
+        }}
+      />
       {loading && !info && <Busy />}
       {info && (
         <>
@@ -167,53 +237,15 @@ function Usage({ client, directory }: { client: Client; directory: string }) {
       )}
     </ScrollView>
   );
-}
+};
 
-function Meter({ label, meter }: { label: string; meter: UsageLimitsMeter }) {
-  const { colors } = useTheme();
-  const percent = Math.min(100, Math.max(0, meter.percent));
-  return (
-    <Card>
-      <Row style={{ justifyContent: "space-between" }}>
-        <BodyText>{label}</BodyText>
-        <BodyText
-          style={{ color: meter.limited ? colors.danger : colors.success }}
-        >
-          {Math.round(percent)}% used
-        </BodyText>
-      </Row>
-      <View
-        accessibilityRole="progressbar"
-        accessibilityValue={{ max: 100, min: 0, now: percent }}
-        style={{
-          backgroundColor: colors.raised,
-          borderRadius: 3,
-          height: 5,
-          overflow: "hidden",
-        }}
-      >
-        <View
-          style={{
-            backgroundColor: meter.limited ? colors.danger : colors.success,
-            height: 5,
-            width: `${percent}%`,
-          }}
-        />
-      </View>
-      <BodyText muted>
-        Resets {new Date(meter.resetsAt).toLocaleString()}
-      </BodyText>
-    </Card>
-  );
-}
-
-function WebSearch({
+const WebSearch = ({
   client,
   directory,
 }: {
   client: Client;
   directory: string;
-}) {
+}) => {
   const { colors } = useTheme();
   const [providers, setProviders] = useState<WebSearchProvider[]>([]);
   const [provider, setProvider] = useState<string>();
@@ -231,6 +263,7 @@ function WebSearch({
         if (active.current) {
           setProviders(result.data);
         }
+        return null;
       })
       .catch((error_) => {
         if (active.current) {
@@ -242,7 +275,7 @@ function WebSearch({
       request.current?.abort();
     };
   }, [client, directory]);
-  async function search() {
+  const search = async () => {
     const abort = new AbortController();
     request.current?.abort();
     request.current = abort;
@@ -261,12 +294,11 @@ function WebSearch({
       if (active.current && !abort.signal.aborted) {
         setError(errorMessage(error_));
       }
-    } finally {
-      if (active.current && !abort.signal.aborted) {
-        setBusy(false);
-      }
     }
-  }
+    if (active.current && !abort.signal.aborted) {
+      setBusy(false);
+    }
+  };
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
@@ -311,7 +343,9 @@ function WebSearch({
         variant="primary"
         busy={busy}
         disabled={!query.trim()}
-        onPress={() => void search()}
+        onPress={() => {
+          void search();
+        }}
       />
       <ErrorNotice error={error} />
       {results?.map((result, index) => (
@@ -352,15 +386,15 @@ function WebSearch({
       )}
     </ScrollView>
   );
-}
+};
 
-function Generate({
+const Generate = ({
   client,
   directory,
 }: {
   client: Client;
   directory: string;
-}) {
+}) => {
   const { colors } = useTheme();
   const withNativePresentation = useNativePresentation();
   const [kind, setKind] = useState<"text" | "image">("text");
@@ -384,6 +418,7 @@ function Generate({
         if (active.current) {
           setModels(result.data.filter((item) => item.enabled));
         }
+        return null;
       })
       .catch((error_) => {
         if (active.current) {
@@ -405,7 +440,35 @@ function Generate({
       .toLowerCase()
       .includes(query.toLowerCase())
   );
-  async function generate() {
+  const runGeneration = async (abort: AbortController) => {
+    const ref = model
+      ? { id: model.id, providerID: model.providerID }
+      : undefined;
+    if (kind === "image" && ref) {
+      if (
+        !/^\d+:\d+$/u.test(aspect) ||
+        aspect.split(":").some((part) => Number(part) <= 0)
+      ) {
+        throw new Error("Enter an aspect ratio such as 1:1 or 16:9");
+      }
+      const result = await client.experimental.generate.image(
+        { aspect: aspect as `${number}:${number}`, model: ref, n: 1, prompt },
+        { signal: abort.signal }
+      );
+      if (active.current && !abort.signal.aborted) {
+        setImages(result);
+      }
+    } else {
+      const result = await client.experimental.generate.text(
+        { model: ref, prompt },
+        { signal: abort.signal }
+      );
+      if (active.current && !abort.signal.aborted) {
+        setText(result.text);
+      }
+    }
+  };
+  const generate = async () => {
     if (kind === "image" && !model) {
       setError("Select an image model");
       return;
@@ -418,32 +481,7 @@ function Generate({
     setText("");
     setImages(undefined);
     try {
-      const ref = model
-        ? { id: model.id, providerID: model.providerID }
-        : undefined;
-      if (kind === "image" && ref) {
-        if (
-          !/^\d+:\d+$/.test(aspect) ||
-          aspect.split(":").some((part) => Number(part) <= 0)
-        ) {
-          throw new Error("Enter an aspect ratio such as 1:1 or 16:9");
-        }
-        const result = await client.experimental.generate.image(
-          { aspect: aspect as `${number}:${number}`, model: ref, n: 1, prompt },
-          { signal: abort.signal }
-        );
-        if (active.current && !abort.signal.aborted) {
-          setImages(result);
-        }
-      } else {
-        const result = await client.experimental.generate.text(
-          { model: ref, prompt },
-          { signal: abort.signal }
-        );
-        if (active.current && !abort.signal.aborted) {
-          setText(result.text);
-        }
-      }
+      await runGeneration(abort);
     } catch (error_) {
       if (active.current && !abort.signal.aborted) {
         setError(
@@ -453,52 +491,26 @@ function Generate({
             : errorMessage(error_)
         );
       }
-    } finally {
-      if (active.current && !abort.signal.aborted) {
-        setBusy(false);
-      }
     }
-  }
-  async function shareImage(image: GenerateImageResult["images"][number]) {
+    if (active.current && !abort.signal.aborted) {
+      setBusy(false);
+    }
+  };
+  const shareImage = async (image: GenerateImageResult["images"][number]) => {
     setSharing(true);
     setError(null);
     try {
-      const extension =
-        image.mime === "image/jpeg"
-          ? "jpg"
-          : image.mime === "image/webp"
-            ? "webp"
-            : "png";
-      const filename = `opencoode-${Date.now()}.${extension}`;
-      if (Platform.OS === "web") {
-        const link = document.createElement("a");
-        link.href = `data:${image.mime};base64,${image.data}`;
-        link.download = filename;
-        link.click();
-      } else {
-        if (!(await Sharing.isAvailableAsync())) {
-          throw new Error("File sharing is unavailable on this device");
-        }
-        const file = new File(Paths.cache, filename);
-        try {
-          await file.write(image.data, { encoding: "base64" });
-          await withNativePresentation(() =>
-            Sharing.shareAsync(file.uri, {
-              dialogTitle: "Save or share image",
-              mimeType: image.mime,
-            })
-          );
-        } finally {
-          if (file.exists) {
-            await file.delete();
-          }
-        }
-      }
+      await saveImage(image, withNativePresentation);
     } catch (error_) {
       setError(errorMessage(error_));
-    } finally {
-      setSharing(false);
     }
+    setSharing(false);
+  };
+  let modelLabel = "Choose an available image model";
+  if (model) {
+    modelLabel = `${model.name} · ${model.providerID}`;
+  } else if (kind === "text") {
+    modelLabel = "Server default model";
   }
   return (
     <ScrollView
@@ -537,13 +549,7 @@ function Generate({
         />
       </Row>
       <Field label="Find a model" value={query} onChangeText={setQuery} />
-      <BodyText muted>
-        {model
-          ? `${model.name} · ${model.providerID}`
-          : kind === "text"
-            ? "Server default model"
-            : "Choose an available image model"}
-      </BodyText>
+      <BodyText muted>{modelLabel}</BodyText>
       <ScrollView horizontal contentContainerStyle={{ gap: 8 }}>
         {kind === "text" && (
           <Button
@@ -591,7 +597,9 @@ function Generate({
         variant="primary"
         busy={busy}
         disabled={!prompt.trim() || (kind === "image" && !model)}
-        onPress={() => void generate()}
+        onPress={() => {
+          void generate();
+        }}
       />
       {busy && (
         <Button
@@ -639,7 +647,9 @@ function Generate({
           <Button
             title={Platform.OS === "web" ? "Save image" : "Save or share image"}
             busy={sharing}
-            onPress={() => void shareImage(image)}
+            onPress={() => {
+              void shareImage(image);
+            }}
           />
         </Card>
       ))}
@@ -648,4 +658,35 @@ function Generate({
       )}
     </ScrollView>
   );
-}
+};
+
+export const AdvancedSettings = ({
+  client,
+  directory,
+}: {
+  client: Client;
+  directory: string;
+}) => {
+  useTheme();
+  const [tool, setTool] = useState<"Usage" | "Search" | "Generate">("Usage");
+  return (
+    <View style={{ flex: 1 }}>
+      <Row style={{ padding: 18 }}>
+        {(["Usage", "Search", "Generate"] as const).map((item) => (
+          <Button
+            key={item}
+            title={item}
+            compact
+            variant={tool === item ? "primary" : "secondary"}
+            onPress={() => setTool(item)}
+          />
+        ))}
+      </Row>
+      {tool === "Usage" && <Usage client={client} directory={directory} />}
+      {tool === "Search" && <WebSearch client={client} directory={directory} />}
+      {tool === "Generate" && (
+        <Generate client={client} directory={directory} />
+      )}
+    </View>
+  );
+};

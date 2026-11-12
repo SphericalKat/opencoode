@@ -1,4 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef } from "react";
+import type { ForwardRefRenderFunction } from "react";
 import { WebView } from "react-native-webview";
 
 import { terminalHtml } from "../generated/terminal-html";
@@ -11,10 +12,10 @@ import type {
 
 const source = { baseUrl: "about:blank", html: terminalHtml };
 
-export const TerminalRenderer = forwardRef<
+const TerminalRendererView: ForwardRefRenderFunction<
   TerminalRendererHandle,
   TerminalRendererProps
->(({ onEvent, onError }, ref) => {
+> = ({ onEvent, onError }, ref) => {
   const { colors } = useTheme();
   const view = useRef<WebView<object>>(null);
   useImperativeHandle(
@@ -50,7 +51,7 @@ export const TerminalRenderer = forwardRef<
             onEvent(parsed);
           }
         } catch {
-          return;
+          // Ignore messages that are not valid terminal events.
         }
       }}
       onError={(event) => onError(event.nativeEvent.description)}
@@ -69,4 +70,6 @@ export const TerminalRenderer = forwardRef<
       textZoom={100}
     />
   );
-});
+};
+
+export const TerminalRenderer = forwardRef(TerminalRendererView);

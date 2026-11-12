@@ -4,13 +4,13 @@ import { View } from "react-native";
 
 import { Card, BodyText, Row } from "./ui";
 
-export function SessionStats({
+export const SessionStats = ({
   session,
   running,
 }: {
   session: SessionInfo;
   running: boolean;
-}) {
+}) => {
   const usage = [
     ["Input tokens", session.tokens.input],
     ["Output tokens", session.tokens.output],
@@ -63,4 +63,4 @@ export function SessionStats({
       </Card>
     </View>
   );
-}
+};

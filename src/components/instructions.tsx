@@ -1,5 +1,11 @@
 import type { InstructionEntryInfo } from "@opencode/client";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { View } from "react-native";
 
 import { errorMessage } from "../lib/client";
@@ -15,13 +21,13 @@ import {
   confirmAction,
 } from "./ui";
 
-export function Instructions({
+export const Instructions = ({
   client,
   sessionID,
 }: {
   client: Client;
   sessionID: string;
-}) {
+}) => {
   const [entries, setEntries] = useState<InstructionEntryInfo[]>([]);
   const [key, setKey] = useState("");
   const [value, setValue] = useState("");
@@ -32,12 +38,14 @@ export function Instructions({
   const sequence = useRef(0);
   const mounted = useRef(true);
   const scope = useRef({ client, sessionID });
-  if (
-    scope.current.client !== client ||
-    scope.current.sessionID !== sessionID
-  ) {
-    scope.current = { client, sessionID };
-  }
+  useLayoutEffect(() => {
+    if (
+      scope.current.client !== client ||
+      scope.current.sessionID !== sessionID
+    ) {
+      scope.current = { client, sessionID };
+    }
+  });
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -47,7 +55,8 @@ export function Instructions({
   }, []);
 
   const refresh = useCallback(async () => {
-    const request = ++sequence.current;
+    sequence.current += 1;
+    const request = sequence.current;
     setLoading(true);
     setError(undefined);
     try {
@@ -61,10 +70,9 @@ export function Instructions({
       if (mounted.current && request === sequence.current) {
         setError(errorMessage(error_));
       }
-    } finally {
-      if (mounted.current && request === sequence.current) {
-        setLoading(false);
-      }
+    }
+    if (mounted.current && request === sequence.current) {
+      setLoading(false);
     }
   }, [client, sessionID]);
   useEffect(() => {
@@ -87,21 +95,19 @@ export function Instructions({
     setError(undefined);
     try {
       await operation();
-      if (owner !== scope.current || !mounted.current) {
-        return;
+      if (owner === scope.current && mounted.current) {
+        setKey("");
+        setValue("");
+        setJson(false);
+        await refresh();
       }
-      setKey("");
-      setValue("");
-      setJson(false);
-      await refresh();
     } catch (error_) {
       if (owner === scope.current && mounted.current) {
         setError(errorMessage(error_));
       }
-    } finally {
-      if (mounted.current) {
-        setBusy(false);
-      }
+    }
+    if (mounted.current) {
+      setBusy(false);
     }
   };
 
@@ -226,4 +232,4 @@ export function Instructions({
       </Card>
     </View>
   );
-}
+};

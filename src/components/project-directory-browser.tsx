@@ -32,15 +32,19 @@ interface Props {
   onOpenDirectory: (directory: string) => void;
 }
 
-function absolutePath(value: string) {
-  return (
-    value.startsWith("/") ||
-    /^[A-Za-z]:[\\/]/.test(value) ||
-    value.startsWith("\\\\")
-  );
-}
+const absolutePath = (value: string) =>
+  value.startsWith("/") ||
+  /^[A-Za-z]:[\\/]/u.test(value) ||
+  value.startsWith("\\\\");
 
-function normalizePath(value: string) {
+const rootOf = (path: string, unc: string[] | null) => {
+  if (unc) {
+    return `//${unc.join("/")}`;
+  }
+  return /^[A-Za-z]:\//u.test(path) ? path.slice(0, 3) : "/";
+};
+
+const normalizePath = (value: string) => {
   const path = value.replaceAll("\\", "/");
   const network =
     path.startsWith("//") && !path.startsWith("///")
@@ -51,11 +55,7 @@ function normalizePath(value: string) {
     network.every((part) => part !== "." && part !== "..")
       ? network
       : null;
-  const root = unc
-    ? `//${unc.join("/")}`
-    : /^[A-Za-z]:\//.test(path)
-      ? path.slice(0, 3)
-      : "/";
+  const root = rootOf(path, unc);
   const parts: string[] = [];
   for (const part of path.slice(root.length).split("/")) {
     if (!part || part === ".") {
@@ -71,15 +71,216 @@ function normalizePath(value: string) {
     root +
     (parts.length ? `${root.endsWith("/") ? "" : "/"}${parts.join("/")}` : "")
   );
-}
+};
 
-function entryPath(base: string, entry: FileSystemEntry) {
-  return normalizePath(
+const entryPath = (base: string, entry: FileSystemEntry) =>
+  normalizePath(
     absolutePath(entry.path) ? entry.path : `${base}/${entry.path}`
   );
-}
 
-export function ProjectDirectoryBrowser({
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: { flex: 1, minHeight: 0 },
+    detail: { fontFamily: mono, fontSize: 12 },
+    folder: {
+      alignItems: "center",
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: touchTarget + 8,
+      paddingVertical: 12,
+    },
+    footer: {
+      alignItems: "center",
+      borderColor: colors.border,
+      borderTopWidth: 1,
+      flexDirection: "row",
+      flexShrink: 0,
+      gap: 8,
+      padding: 16,
+    },
+    header: { gap: 10, padding: 16, paddingBottom: 8 },
+    list: { flexGrow: 1, paddingBottom: 16, paddingHorizontal: 16 },
+    path: { color: colors.muted, fontFamily: mono, fontSize: 13 },
+  });
+
+const RecentList = ({
+  busy,
+  pending,
+  projects,
+  onChangeValue,
+  onOpenDirectory,
+}: {
+  busy: boolean;
+  pending: boolean;
+  projects: Project[];
+  onChangeValue: (value: string) => void;
+  onOpenDirectory: (directory: string) => void;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <FlatList
+      style={{ flex: 1, minHeight: 0 }}
+      data={projects}
+      keyExtractor={(project) => project.id}
+      contentContainerStyle={styles.list}
+      ListEmptyComponent={
+        busy ? (
+          <Busy />
+        ) : (
+          <Empty
+            title="No recent projects"
+            detail="Browse to a folder on the server."
+          />
+        )
+      }
+      renderItem={({ item }) => (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open project ${item.name || fileName(item.canonical)}`}
+          disabled={pending}
+          onPress={() => {
+            Keyboard.dismiss();
+            onChangeValue(item.canonical);
+            onOpenDirectory(item.canonical);
+          }}
+          style={({ pressed }) => [
+            styles.folder,
+            pressed && { backgroundColor: colors.raised },
+          ]}
+        >
+          <NavIcon name="workspace" color={colors.muted} size={18} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <BodyText numberOfLines={2}>
+              {item.name || fileName(item.canonical)}
+            </BodyText>
+            <BodyText
+              muted
+              numberOfLines={1}
+              ellipsizeMode="middle"
+              style={styles.detail}
+            >
+              {item.canonical}
+            </BodyText>
+          </View>
+          <BodyText muted>›</BodyText>
+        </Pressable>
+      )}
+    />
+  );
+};
+
+const FolderList = ({
+  base,
+  browseError,
+  folders,
+  pending,
+  onBrowse,
+}: {
+  base: string;
+  browseError: string | null;
+  folders: FileSystemEntry[];
+  pending: boolean;
+  onBrowse: (path: string) => void;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <FlatList
+      style={{ flex: 1, minHeight: 0 }}
+      data={folders}
+      keyExtractor={(folder) => folder.path}
+      contentContainerStyle={styles.list}
+      ListEmptyComponent={
+        <Empty
+          title={browseError ? "Folder unavailable" : "No folders inside"}
+          detail={
+            browseError
+              ? "Enter another path or return to the parent folder."
+              : "You can open the current folder."
+          }
+        />
+      }
+      renderItem={({ item }) => (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Browse folder ${fileName(item.path)}`}
+          accessibilityHint={entryPath(base, item)}
+          disabled={pending}
+          onPress={() => onBrowse(entryPath(base, item))}
+          style={({ pressed }) => [
+            styles.folder,
+            pressed && { backgroundColor: colors.raised },
+          ]}
+        >
+          <NavIcon name="workspace" color={colors.muted} size={18} />
+          <BodyText numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>
+            {fileName(item.path)}
+          </BodyText>
+          <BodyText muted>›</BodyText>
+        </Pressable>
+      )}
+    />
+  );
+};
+
+const ListArea = ({
+  base,
+  browseError,
+  busy,
+  folders,
+  loading,
+  pending,
+  projects,
+  recent,
+  onBrowse,
+  onChangeValue,
+  onOpenDirectory,
+}: {
+  base: string;
+  browseError: string | null;
+  busy: boolean;
+  folders: FileSystemEntry[];
+  loading: boolean;
+  pending: boolean;
+  projects: Project[];
+  recent: boolean;
+  onBrowse: (path: string) => void;
+  onChangeValue: (value: string) => void;
+  onOpenDirectory: (directory: string) => void;
+}) => {
+  if (recent) {
+    return (
+      <RecentList
+        busy={busy}
+        pending={pending}
+        projects={projects}
+        onChangeValue={onChangeValue}
+        onOpenDirectory={onOpenDirectory}
+      />
+    );
+  }
+  if (loading) {
+    return (
+      <View style={{ flex: 1 }}>
+        <Busy />
+      </View>
+    );
+  }
+  return (
+    <FolderList
+      base={base}
+      browseError={browseError}
+      folders={folders}
+      pending={pending}
+      onBrowse={onBrowse}
+    />
+  );
+};
+
+const ProjectDirectoryBrowser = ({
   client,
   directory,
   value,
@@ -88,7 +289,7 @@ export function ProjectDirectoryBrowser({
   error,
   onChangeValue,
   onOpenDirectory,
-}: Props) {
+}: Props) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [path, setPath] = useState(() => normalizePath(directory));
@@ -121,9 +322,12 @@ export function ProjectDirectoryBrowser({
     setBrowseError(null);
     setActionError(null);
     setNotice(null);
-    void client.file
-      .list({ location: { directory }, path }, { signal: controller.signal })
-      .then((result) => {
+    const load = async () => {
+      try {
+        const result = await client.file.list(
+          { location: { directory }, path },
+          { signal: controller.signal }
+        );
         if (controller.signal.aborted) {
           return;
         }
@@ -131,24 +335,25 @@ export function ProjectDirectoryBrowser({
         setFolders(
           result.data
             .filter((entry) => entry.type === "directory")
-            .sort((a, b) => fileName(a.path).localeCompare(fileName(b.path)))
+            .toSorted((a, b) =>
+              fileName(a.path).localeCompare(fileName(b.path))
+            )
         );
-      })
-      .catch((error_) => {
+      } catch (error_) {
         if (!controller.signal.aborted) {
           setFolders([]);
           setBrowseError(errorMessage(error_));
         }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
+      }
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
+    };
+    load();
     return () => controller.abort();
   }, [client, directory, path, revision]);
 
-  function browse(next: string) {
+  const browse = (next: string) => {
     Keyboard.dismiss();
     if (!absolutePath(next.trim())) {
       setBrowseError("Enter an absolute folder path on the server");
@@ -163,9 +368,44 @@ export function ProjectDirectoryBrowser({
     } else {
       setPath(normalized);
     }
-  }
+  };
 
-  async function initializeGit() {
+  const runInitializeGit = async (controller: AbortController) => {
+    const location = await client.location.get(
+      { location: { directory: path } },
+      { signal: controller.signal }
+    );
+    const vcs = await client.vcs.get(
+      { location: { directory: location.directory } },
+      { signal: controller.signal }
+    );
+    if (controller.signal.aborted) {
+      return;
+    }
+    if (vcs.data.provider) {
+      setNotice(
+        `This folder already belongs to a ${vcs.data.provider} repository.`
+      );
+      return;
+    }
+    const confirmed = await confirmAction(
+      "Initialize Git?",
+      `Create a Git repository in ${location.project.directory}?`,
+      { confirmLabel: "Initialize Git", destructive: false }
+    );
+    if (!confirmed || controller.signal.aborted) {
+      return;
+    }
+    await client.vcs.init(
+      { location: { directory: location.directory }, provider: "git" },
+      { signal: controller.signal }
+    );
+    if (!controller.signal.aborted) {
+      setNotice(`Git initialized in ${location.project.directory}`);
+    }
+  };
+
+  const initializeGit = async () => {
     if (pending || action.current) {
       return;
     }
@@ -175,51 +415,19 @@ export function ProjectDirectoryBrowser({
     setActionError(null);
     setNotice(null);
     try {
-      const location = await client.location.get(
-        { location: { directory: path } },
-        { signal: controller.signal }
-      );
-      const vcs = await client.vcs.get(
-        { location: { directory: location.directory } },
-        { signal: controller.signal }
-      );
-      if (controller.signal.aborted) {
-        return;
-      }
-      if (vcs.data.provider) {
-        setNotice(
-          `This folder already belongs to a ${vcs.data.provider} repository.`
-        );
-        return;
-      }
-      const confirmed = await confirmAction(
-        "Initialize Git?",
-        `Create a Git repository in ${location.project.directory}?`,
-        { confirmLabel: "Initialize Git", destructive: false }
-      );
-      if (!confirmed || controller.signal.aborted) {
-        return;
-      }
-      await client.vcs.init(
-        { location: { directory: location.directory }, provider: "git" },
-        { signal: controller.signal }
-      );
-      if (!controller.signal.aborted) {
-        setNotice(`Git initialized in ${location.project.directory}`);
-      }
+      await runInitializeGit(controller);
     } catch (error_) {
       if (!controller.signal.aborted) {
         setActionError(errorMessage(error_));
       }
-    } finally {
-      if (mounted.current) {
-        setInitializing(false);
-      }
-      if (action.current === controller) {
-        action.current = null;
-      }
     }
-  }
+    if (mounted.current) {
+      setInitializing(false);
+    }
+    if (action.current === controller) {
+      action.current = null;
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -302,96 +510,19 @@ export function ProjectDirectoryBrowser({
         )}
         {recent && <BodyText muted>Recent projects</BodyText>}
       </View>
-      {recent ? (
-        <FlatList
-          style={{ flex: 1, minHeight: 0 }}
-          data={projects}
-          keyExtractor={(project) => project.id}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            busy ? (
-              <Busy />
-            ) : (
-              <Empty
-                title="No recent projects"
-                detail="Browse to a folder on the server."
-              />
-            )
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open project ${item.name || fileName(item.canonical)}`}
-              disabled={pending}
-              onPress={() => {
-                Keyboard.dismiss();
-                onChangeValue(item.canonical);
-                onOpenDirectory(item.canonical);
-              }}
-              style={({ pressed }) => [
-                styles.folder,
-                pressed && { backgroundColor: colors.raised },
-              ]}
-            >
-              <NavIcon name="workspace" color={colors.muted} size={18} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <BodyText numberOfLines={2}>
-                  {item.name || fileName(item.canonical)}
-                </BodyText>
-                <BodyText
-                  muted
-                  numberOfLines={1}
-                  ellipsizeMode="middle"
-                  style={styles.detail}
-                >
-                  {item.canonical}
-                </BodyText>
-              </View>
-              <BodyText muted>›</BodyText>
-            </Pressable>
-          )}
-        />
-      ) : loading ? (
-        <View style={{ flex: 1 }}>
-          <Busy />
-        </View>
-      ) : (
-        <FlatList
-          style={{ flex: 1, minHeight: 0 }}
-          data={folders}
-          keyExtractor={(folder) => folder.path}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <Empty
-              title={browseError ? "Folder unavailable" : "No folders inside"}
-              detail={
-                browseError
-                  ? "Enter another path or return to the parent folder."
-                  : "You can open the current folder."
-              }
-            />
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Browse folder ${fileName(item.path)}`}
-              accessibilityHint={entryPath(base, item)}
-              disabled={pending}
-              onPress={() => browse(entryPath(base, item))}
-              style={({ pressed }) => [
-                styles.folder,
-                pressed && { backgroundColor: colors.raised },
-              ]}
-            >
-              <NavIcon name="workspace" color={colors.muted} size={18} />
-              <BodyText numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>
-                {fileName(item.path)}
-              </BodyText>
-              <BodyText muted>›</BodyText>
-            </Pressable>
-          )}
-        />
-      )}
+      <ListArea
+        base={base}
+        browseError={browseError}
+        busy={busy}
+        folders={folders}
+        loading={loading}
+        pending={pending}
+        projects={projects}
+        recent={recent}
+        onBrowse={browse}
+        onChangeValue={onChangeValue}
+        onOpenDirectory={onOpenDirectory}
+      />
       <View style={styles.footer}>
         <View style={{ flex: 1 }}>
           <Button
@@ -418,32 +549,6 @@ export function ProjectDirectoryBrowser({
       </View>
     </View>
   );
-}
+};
 
-function createStyles(colors: ThemeColors) {
-  return StyleSheet.create({
-    container: { flex: 1, minHeight: 0 },
-    detail: { fontFamily: mono, fontSize: 12 },
-    folder: {
-      alignItems: "center",
-      borderBottomWidth: 1,
-      borderColor: colors.border,
-      flexDirection: "row",
-      gap: 12,
-      minHeight: touchTarget + 8,
-      paddingVertical: 12,
-    },
-    footer: {
-      alignItems: "center",
-      borderColor: colors.border,
-      borderTopWidth: 1,
-      flexDirection: "row",
-      flexShrink: 0,
-      gap: 8,
-      padding: 16,
-    },
-    header: { gap: 10, padding: 16, paddingBottom: 8 },
-    list: { flexGrow: 1, paddingBottom: 16, paddingHorizontal: 16 },
-    path: { color: colors.muted, fontFamily: mono, fontSize: 13 },
-  });
-}
+export { ProjectDirectoryBrowser };

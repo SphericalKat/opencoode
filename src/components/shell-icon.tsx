@@ -2,7 +2,7 @@ import React from "react";
 import { Platform } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
-export function ShellIcon({
+export const ShellIcon = ({
   name,
   color,
   size = 20,
@@ -19,7 +19,7 @@ export function ShellIcon({
     | "search";
   color: string;
   size?: number;
-}) {
+}) => {
   if (name === "back" && Platform.OS === "ios") {
     return (
       <Svg
@@ -138,4 +138,4 @@ export function ShellIcon({
       )}
     </Svg>
   );
-}
+};
