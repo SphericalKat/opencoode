@@ -87,18 +87,12 @@ export const ComposerChips = ({
 
 interface ModelTriggerProps extends Pick<
   ChatController,
-  | "betaLayout"
-  | "colors"
-  | "currentModel"
-  | "providerLabel"
-  | "setPanel"
-  | "styles"
+  "colors" | "currentModel" | "providerLabel" | "setPanel" | "styles"
 > {
   session: SessionInfo;
 }
 
 export const ModelTrigger = ({
-  betaLayout,
   colors,
   currentModel,
   providerLabel,
@@ -108,15 +102,15 @@ export const ModelTrigger = ({
 }: ModelTriggerProps) => (
   <Pressable
     accessibilityRole="button"
-    accessibilityLabel={`Choose model, ${betaLayout && providerLabel ? `${providerLabel}, ` : ""}${currentModel?.name || session.model?.id || "Server default"}`}
+    accessibilityLabel={`Choose model, ${providerLabel ? `${providerLabel}, ` : ""}${currentModel?.name || session.model?.id || "Server default"}`}
     onPress={() => setPanel("models")}
     style={({ pressed }) => [
       styles.modelTrigger,
-      betaLayout && styles.betaModelTrigger,
+      styles.betaModelTrigger,
       pressed && { opacity: 0.6 },
     ]}
   >
-    {betaLayout && providerLabel && (
+    {providerLabel && (
       <>
         <BodyText
           numberOfLines={1}
@@ -133,25 +127,24 @@ export const ModelTrigger = ({
       numberOfLines={1}
       style={[
         styles.modelTriggerText,
-        betaLayout && styles.betaTriggerText,
-        betaLayout && styles.betaModelName,
+        styles.betaTriggerText,
+        styles.betaModelName,
       ]}
     >
       {currentModel?.name || session.model?.id || "Server default"}
     </BodyText>
-    <ChatGlyph name="down" size={betaLayout ? 12 : 14} color={colors.muted} />
+    <ChatGlyph name="down" size={12} color={colors.muted} />
   </Pressable>
 );
 
 interface VariantTriggerProps extends Pick<
   ChatController,
-  "betaLayout" | "colors" | "currentModel" | "pending" | "setPanel" | "styles"
+  "colors" | "currentModel" | "pending" | "setPanel" | "styles"
 > {
   session: SessionInfo;
 }
 
 export const VariantTrigger = ({
-  betaLayout,
   colors,
   currentModel,
   pending,
@@ -159,7 +152,6 @@ export const VariantTrigger = ({
   setPanel,
   styles,
 }: VariantTriggerProps) =>
-  betaLayout &&
   !!currentModel?.variants.length && (
     <Pressable
       accessibilityRole="button"
@@ -181,83 +173,32 @@ export const VariantTrigger = ({
 
 type StopControlsProps = Pick<
   ChatController,
-  | "active"
-  | "betaLayout"
-  | "capabilities"
-  | "delivery"
-  | "hasPrompt"
-  | "interrupt"
-  | "jumpToLatest"
-  | "pending"
-  | "setDelivery"
-  | "showLatestControl"
-  | "stopping"
+  "active" | "hasPrompt" | "interrupt" | "pending" | "stopping"
 >;
 
 export const StopControls = ({
   active,
-  betaLayout,
-  capabilities,
-  delivery,
   hasPrompt,
   interrupt,
-  jumpToLatest,
   pending,
-  setDelivery,
-  showLatestControl,
   stopping,
-}: StopControlsProps) => (
-  <>
-    {betaLayout && active && hasPrompt && (
-      <ChatIconButton
-        name="stop"
-        label="Stop generation"
-        compactFace
-        disabled={pending || stopping}
-        onPress={() => {
-          void interrupt();
-        }}
-      />
-    )}
-    {!betaLayout && (
-      <>
-        {capabilities.delivery && active && hasPrompt && (
-          <Button
-            title={delivery === "steer" ? "Steer" : "Queue"}
-            accessibilityLabel="Message delivery"
-            compact
-            variant="ghost"
-            onPress={() =>
-              setDelivery((value) => (value === "steer" ? "queue" : "steer"))
-            }
-          />
-        )}
-        {active && hasPrompt && (
-          <ChatIconButton
-            name="stop"
-            label="Stop generation"
-            disabled={pending || stopping}
-            onPress={() => {
-              void interrupt();
-            }}
-          />
-        )}
-        {!(active && hasPrompt) && showLatestControl && (
-          <ChatIconButton
-            name="down"
-            label="Jump to latest"
-            onPress={jumpToLatest}
-          />
-        )}
-      </>
-    )}
-  </>
-);
+}: StopControlsProps) =>
+  active &&
+  hasPrompt && (
+    <ChatIconButton
+      name="stop"
+      label="Stop generation"
+      compactFace
+      disabled={pending || stopping}
+      onPress={() => {
+        void interrupt();
+      }}
+    />
+  );
 
 type SendButtonProps = Pick<
   ChatController,
   | "active"
-  | "betaLayout"
   | "delivery"
   | "hasPrompt"
   | "interrupt"
@@ -269,7 +210,6 @@ type SendButtonProps = Pick<
 
 export const SendButton = ({
   active,
-  betaLayout,
   delivery,
   hasPrompt,
   interrupt,
@@ -282,7 +222,7 @@ export const SendButton = ({
     name={active && !hasPrompt ? "stop" : "up"}
     label={sendButtonLabel(active, hasPrompt, delivery)}
     raised
-    compactFace={betaLayout}
+    compactFace
     busy={pending}
     disabled={active && !hasPrompt ? !stopReady || stopping : !hasPrompt}
     onPress={() => {
@@ -298,20 +238,15 @@ export const SendButton = ({
 interface ComposerToolbarProps extends Pick<
   ChatController,
   | "active"
-  | "betaLayout"
-  | "capabilities"
   | "colors"
   | "currentModel"
   | "delivery"
   | "hasPrompt"
   | "interrupt"
-  | "jumpToLatest"
   | "pending"
   | "providerLabel"
   | "send"
-  | "setDelivery"
   | "setPanel"
-  | "showLatestControl"
   | "stopReady"
   | "stopping"
   | "styles"
@@ -321,36 +256,28 @@ interface ComposerToolbarProps extends Pick<
 
 export const ComposerToolbar = ({
   active,
-  betaLayout,
-  capabilities,
   colors,
   currentModel,
   delivery,
   hasPrompt,
   interrupt,
-  jumpToLatest,
   pending,
   providerLabel,
   send,
   session,
-  setDelivery,
   setPanel,
-  showLatestControl,
   stopReady,
   stopping,
   styles,
 }: ComposerToolbarProps) => (
-  <View
-    style={[styles.composerToolbar, betaLayout && styles.betaComposerToolbar]}
-  >
+  <View style={[styles.composerToolbar, styles.betaComposerToolbar]}>
     <ChatIconButton
       name="plus"
       label="Message tools"
-      compactFace={betaLayout}
+      compactFace
       onPress={() => setPanel("tools")}
     />
     <ModelTrigger
-      betaLayout={betaLayout}
       colors={colors}
       currentModel={currentModel}
       providerLabel={providerLabel}
@@ -359,7 +286,6 @@ export const ComposerToolbar = ({
       session={session}
     />
     <VariantTrigger
-      betaLayout={betaLayout}
       colors={colors}
       currentModel={currentModel}
       pending={pending}
@@ -369,20 +295,13 @@ export const ComposerToolbar = ({
     />
     <StopControls
       active={active}
-      betaLayout={betaLayout}
-      capabilities={capabilities}
-      delivery={delivery}
       hasPrompt={hasPrompt}
       interrupt={interrupt}
-      jumpToLatest={jumpToLatest}
       pending={pending}
-      setDelivery={setDelivery}
-      showLatestControl={showLatestControl}
       stopping={stopping}
     />
     <SendButton
       active={active}
-      betaLayout={betaLayout}
       delivery={delivery}
       hasPrompt={hasPrompt}
       interrupt={interrupt}
@@ -399,7 +318,6 @@ interface ComposerBodyProps extends Pick<
   | "active"
   | "agents"
   | "attachments"
-  | "betaLayout"
   | "capabilities"
   | "colors"
   | "composerHeight"
@@ -408,7 +326,6 @@ interface ComposerBodyProps extends Pick<
   | "draft"
   | "hasPrompt"
   | "interrupt"
-  | "jumpToLatest"
   | "maximumComposerHeight"
   | "minimumComposerHeight"
   | "pending"
@@ -418,14 +335,12 @@ interface ComposerBodyProps extends Pick<
   | "selectedSkills"
   | "send"
   | "setAttachments"
-  | "setDelivery"
   | "setDraft"
   | "setPanel"
   | "setRestoredSkillIDs"
   | "setSelectedAgentIDs"
   | "setSelectedMessageID"
   | "setSelectedSkills"
-  | "showLatestControl"
   | "stopReady"
   | "stopping"
   | "styles"
@@ -438,7 +353,6 @@ export const ComposerBody = ({
   active,
   agents,
   attachments,
-  betaLayout,
   capabilities,
   colors,
   composerHeight,
@@ -447,7 +361,6 @@ export const ComposerBody = ({
   draft,
   hasPrompt,
   interrupt,
-  jumpToLatest,
   maximumComposerHeight,
   minimumComposerHeight,
   pending,
@@ -458,14 +371,12 @@ export const ComposerBody = ({
   send,
   session,
   setAttachments,
-  setDelivery,
   setDraft,
   setPanel,
   setRestoredSkillIDs,
   setSelectedAgentIDs,
   setSelectedMessageID,
   setSelectedSkills,
-  showLatestControl,
   stopReady,
   stopping,
   styles,
@@ -486,7 +397,7 @@ export const ComposerBody = ({
     <Field
       accessibilityLabel="Message"
       placeholder={
-        betaLayout && (capabilities.commands || capabilities.files)
+        capabilities.commands || capabilities.files
           ? "Ask anything, / for commands, @ for context…"
           : "Ask anything…"
       }
@@ -497,7 +408,7 @@ export const ComposerBody = ({
       onFocus={() => setSelectedMessageID(null)}
       style={[
         styles.composerInput,
-        betaLayout && styles.betaComposerInput,
+        styles.betaComposerInput,
         {
           height: draft
             ? Math.max(minimumComposerHeight, composerHeight)
@@ -509,20 +420,15 @@ export const ComposerBody = ({
     />
     <ComposerToolbar
       active={active}
-      betaLayout={betaLayout}
-      capabilities={capabilities}
       colors={colors}
       currentModel={currentModel}
       delivery={delivery}
       hasPrompt={hasPrompt}
       interrupt={interrupt}
-      jumpToLatest={jumpToLatest}
       pending={pending}
       providerLabel={providerLabel}
       send={send}
-      setDelivery={setDelivery}
       setPanel={setPanel}
-      showLatestControl={showLatestControl}
       stopReady={stopReady}
       stopping={stopping}
       styles={styles}
@@ -537,7 +443,6 @@ interface ComposerProps extends Pick<
   | "activity"
   | "agents"
   | "attachments"
-  | "betaLayout"
   | "capabilities"
   | "colors"
   | "composerHeight"
@@ -559,7 +464,6 @@ interface ComposerProps extends Pick<
   | "send"
   | "sending"
   | "setAttachments"
-  | "setDelivery"
   | "setDraft"
   | "setPanel"
   | "setRestoredSkillIDs"
@@ -567,7 +471,6 @@ interface ComposerProps extends Pick<
   | "setSelectedMessageID"
   | "setSelectedSkills"
   | "showActivityBar"
-  | "showLatestControl"
   | "stopReady"
   | "stopping"
   | "streamStatus"
@@ -583,7 +486,6 @@ export const Composer = ({
   activity,
   agents,
   attachments,
-  betaLayout,
   capabilities,
   colors,
   composerHeight,
@@ -606,7 +508,6 @@ export const Composer = ({
   sending,
   session,
   setAttachments,
-  setDelivery,
   setDraft,
   setPanel,
   setRestoredSkillIDs,
@@ -614,7 +515,6 @@ export const Composer = ({
   setSelectedMessageID,
   setSelectedSkills,
   showActivityBar,
-  showLatestControl,
   stopReady,
   stopping,
   streamStatus,
@@ -622,7 +522,7 @@ export const Composer = ({
   updateComposerHeight,
   visible,
 }: ComposerProps) => (
-  <View style={[styles.composerDock, betaLayout && styles.betaComposerDock]}>
+  <View style={[styles.composerDock, styles.betaComposerDock]}>
     <AgentActivityBar
       activity={activity}
       connectionStatus={streamStatus}
@@ -632,13 +532,12 @@ export const Composer = ({
       show={showActivityBar}
       onReview={jumpToLatest}
     />
-    <View style={[styles.composer, betaLayout && styles.betaComposer]}>
+    <View style={[styles.composer, styles.betaComposer]}>
       {draftLoaded ? (
         <ComposerBody
           active={active}
           agents={agents}
           attachments={attachments}
-          betaLayout={betaLayout}
           capabilities={capabilities}
           colors={colors}
           composerHeight={composerHeight}
@@ -647,7 +546,6 @@ export const Composer = ({
           draft={draft}
           hasPrompt={hasPrompt}
           interrupt={interrupt}
-          jumpToLatest={jumpToLatest}
           maximumComposerHeight={maximumComposerHeight}
           minimumComposerHeight={minimumComposerHeight}
           pending={pending}
@@ -657,14 +555,12 @@ export const Composer = ({
           selectedSkills={selectedSkills}
           send={send}
           setAttachments={setAttachments}
-          setDelivery={setDelivery}
           setDraft={setDraft}
           setPanel={setPanel}
           setRestoredSkillIDs={setRestoredSkillIDs}
           setSelectedAgentIDs={setSelectedAgentIDs}
           setSelectedMessageID={setSelectedMessageID}
           setSelectedSkills={setSelectedSkills}
-          showLatestControl={showLatestControl}
           stopReady={stopReady}
           stopping={stopping}
           styles={styles}

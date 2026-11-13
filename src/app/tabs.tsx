@@ -20,11 +20,10 @@ interface ChatColumnProps {
   attachmentContext: string | undefined;
   attachmentPath: string | undefined;
   betaHome: boolean;
-  betaLayout: boolean;
   chatBackend: ChatBackend | null;
   connectionRevision: number;
   onAttachmentConsumed: () => void;
-  onOpenNavigation: (() => void) | undefined;
+  onOpenNavigation: () => void;
   onOpenSession: (id: string) => void;
   onSelectionChange: (selected: boolean) => void;
   onSessionChanged: () => void;
@@ -40,7 +39,6 @@ const ChatColumn = ({
   attachmentContext,
   attachmentPath,
   betaHome,
-  betaLayout,
   chatBackend,
   connectionRevision,
   onAttachmentConsumed,
@@ -55,9 +53,8 @@ const ChatColumn = ({
   tab,
 }: ChatColumnProps) => {
   const styles = useThemedStyles(createStyles);
-  const hidden = betaLayout && betaHome;
   return (
-    <View style={[styles.full, hidden && styles.hidden]}>
+    <View style={[styles.full, betaHome && styles.hidden]}>
       {sessionID && chatBackend ? (
         <ChatScreen
           key={`${active.id}:${connectionRevision}:${sessionID}`}
@@ -65,12 +62,10 @@ const ChatColumn = ({
           sessionID={sessionID}
           serverID={active.id}
           draftKey={`${active.id}:${sessionID}`}
-          betaLayout={betaLayout}
           onSelectionChange={onSelectionChange}
           onSessionInfo={onSessionInfo}
           sessionPanelRequest={sessionPanelRequest}
-          visible={tab === "sessions" && (!betaLayout || !betaHome)}
-          projectLabel={projectLabel}
+          visible={tab === "sessions" && !betaHome}
           onOpenNavigation={onOpenNavigation}
           onSessionChanged={onSessionChanged}
           onOpenSession={onOpenSession}
@@ -96,10 +91,9 @@ interface SessionsTabProps extends ChatColumnProps {
   client: ServerClient;
   directory: string;
   onChooseDirectory: () => void;
-  onNewSession: ((directory: string) => void) | undefined;
+  onNewSession: (directory: string) => void;
   onOpenSessionFromList: (id: string) => Promise<boolean>;
   revision: number;
-  wide: boolean;
 }
 
 export const SessionsTab = ({
@@ -111,76 +105,60 @@ export const SessionsTab = ({
   onOpenNavigation,
   onOpenSessionFromList,
   revision,
-  wide,
   ...chat
 }: SessionsTabProps) => {
   const styles = useThemedStyles(createStyles);
-  const { active, betaHome, betaLayout, connectionRevision, sessionID, tab } =
-    chat;
-  const showList = !wide && (betaLayout || !sessionID);
-  const showChat = wide || !!sessionID;
-  const listHidden = betaLayout && !betaHome && !!sessionID;
+  const { active, betaHome, connectionRevision, sessionID, tab } = chat;
+  const listHidden = !betaHome && !!sessionID;
   return (
     <MotionScreen
       visible={tab === "sessions"}
       style={[styles.full, styles.row, tab !== "sessions" && styles.hidden]}
     >
-      {showList && (
-        <View style={[styles.full, listHidden && styles.hidden]}>
-          <SessionsScreen
-            key={`${active.id}:${connectionRevision}`}
-            client={client}
-            directory={directory}
-            betaLayout={betaLayout}
-            projectScope={betaHomeProject}
-            onChooseDirectory={onChooseDirectory}
-            onNewSession={onNewSession}
-            selectedSessionID={sessionID ?? undefined}
-            revision={revision}
-            onOpenSession={onOpenSessionFromList}
-            onOpenNavigation={onOpenNavigation}
-          />
-        </View>
+      <View style={[styles.full, listHidden && styles.hidden]}>
+        <SessionsScreen
+          key={`${active.id}:${connectionRevision}`}
+          client={client}
+          directory={directory}
+          projectScope={betaHomeProject}
+          onChooseDirectory={onChooseDirectory}
+          onNewSession={onNewSession}
+          selectedSessionID={sessionID ?? undefined}
+          revision={revision}
+          onOpenSession={onOpenSessionFromList}
+        />
+      </View>
+      {!!sessionID && (
+        <ChatColumn {...chat} onOpenNavigation={onOpenNavigation} />
       )}
-      {showChat && <ChatColumn {...chat} onOpenNavigation={onOpenNavigation} />}
     </MotionScreen>
   );
 };
 
 interface WorkspaceTabProps {
   active: Connection;
-  backLabel: string;
-  betaLayout: boolean;
   client: ServerClient;
   connectionRevision: number;
   directory: string;
   mounted: boolean;
   onAttachFile: (path: string, contextText?: string) => Promise<boolean>;
-  onBack: () => void;
   onDirectoryChange: (directory: string) => void;
-  onOpenNavigation: () => void;
   section: WorkspaceSection;
   sessionID: string | null;
   tab: Tab;
-  wide: boolean;
 }
 
 export const WorkspaceTab = ({
   active,
-  backLabel,
-  betaLayout,
   client,
   connectionRevision,
   directory,
   mounted,
   onAttachFile,
-  onBack,
   onDirectoryChange,
-  onOpenNavigation,
   section,
   sessionID,
   tab,
-  wide,
 }: WorkspaceTabProps) => {
   const styles = useThemedStyles(createStyles);
   if (!mounted) {
@@ -197,14 +175,10 @@ export const WorkspaceTab = ({
         connection={active}
         directory={directory}
         sessionID={sessionID ?? undefined}
-        section={betaLayout ? section : undefined}
-        hideChrome={betaLayout}
+        section={section}
         visible={tab === "workspace"}
         onDirectoryChange={onDirectoryChange}
         onAttachFile={onAttachFile}
-        onBack={wide ? undefined : onBack}
-        backLabel={backLabel}
-        onOpenNavigation={wide ? undefined : onOpenNavigation}
       />
     </MotionScreen>
   );
@@ -213,7 +187,6 @@ export const WorkspaceTab = ({
 interface SettingsTabProps {
   active: Connection;
   backLabel: string;
-  betaLayout: boolean;
   client: ServerClient;
   connectionRevision: number;
   directory: string;
@@ -223,13 +196,11 @@ interface SettingsTabProps {
   onManageServers: () => void;
   onOpenNavigation: () => void;
   tab: Tab;
-  wide: boolean;
 }
 
 export const SettingsTab = ({
   active,
   backLabel,
-  betaLayout,
   client,
   connectionRevision,
   directory,
@@ -239,7 +210,6 @@ export const SettingsTab = ({
   onManageServers,
   onOpenNavigation,
   tab,
-  wide,
 }: SettingsTabProps) => {
   const styles = useThemedStyles(createStyles);
   if (!mounted) {
@@ -254,14 +224,13 @@ export const SettingsTab = ({
         key={`${active.id}:${connectionRevision}:${directory}`}
         client={client}
         directory={directory}
-        betaLayout={betaLayout}
         onManageServers={onManageServers}
         serverLabel={active.name}
         visible={tab === "settings"}
         onBackStateChange={onBackStateChange}
-        onBack={wide ? undefined : onBack}
+        onBack={onBack}
         backLabel={backLabel}
-        onOpenNavigation={wide ? undefined : onOpenNavigation}
+        onOpenNavigation={onOpenNavigation}
       />
     </MotionScreen>
   );

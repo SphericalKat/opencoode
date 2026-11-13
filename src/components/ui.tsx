@@ -28,7 +28,6 @@ import type {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import { useBetaLayout } from "../lib/beta-layout";
 import {
   MessageActionsContext,
   MessageDisclosureContext,
@@ -567,27 +566,21 @@ export const Busy = () => {
 type UiStyles = ReturnType<typeof createStyles>;
 
 const renderSheetHeader = ({
-  betaLayout,
   onClose,
   showHeader,
   styles,
   title,
 }: {
-  betaLayout: boolean;
   onClose: () => void;
   showHeader: boolean;
   styles: UiStyles;
   title: string;
 }) =>
   showHeader ? (
-    <View style={[styles.sheetHeader, betaLayout && styles.betaSheetHeader]}>
-      {betaLayout ? (
-        <BodyText accessibilityRole="header" style={styles.betaSheetTitle}>
-          {title}
-        </BodyText>
-      ) : (
-        <Heading>{title}</Heading>
-      )}
+    <View style={[styles.sheetHeader, styles.betaSheetHeader]}>
+      <BodyText accessibilityRole="header" style={styles.betaSheetTitle}>
+        {title}
+      </BodyText>
       <Button title="Done" compact onPress={onClose} />
     </View>
   ) : (
@@ -597,14 +590,12 @@ const renderSheetHeader = ({
   );
 
 const renderSheetBody = ({
-  betaLayout,
   children,
   contentStyle,
   fitContent,
   scroll,
   styles,
 }: {
-  betaLayout: boolean;
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   fitContent: boolean;
@@ -618,7 +609,7 @@ const renderSheetBody = ({
       keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
       contentContainerStyle={[
         styles.sheetContent,
-        betaLayout && styles.betaSheetContent,
+        styles.betaSheetContent,
         contentStyle,
       ]}
     >
@@ -655,7 +646,6 @@ export const Sheet = ({
   showHeader?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
 }) => {
-  const betaLayout = useBetaLayout();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const reduced = useMotionPreference();
@@ -730,14 +720,13 @@ export const Sheet = ({
   }, [effectiveVisible, notifyDismissed]);
   const content = (
     <View style={[styles.sheetInner, fitContent && styles.fitInner]}>
-      {renderSheetHeader({ betaLayout, onClose, showHeader, styles, title })}
+      {renderSheetHeader({ onClose, showHeader, styles, title })}
       {recoveryPending && !allowDuringRecovery && (
         <BodyText accessibilityRole="alert" style={styles.recoveryNotice}>
           Close this panel to open the connection wizard.
         </BodyText>
       )}
       {renderSheetBody({
-        betaLayout,
         children,
         contentStyle,
         fitContent,
@@ -771,18 +760,13 @@ export const Sheet = ({
             />
             <SafeAreaView
               edges={["bottom", "left", "right"]}
-              style={[
-                styles.fitSheet,
-                betaLayout && { backgroundColor: colors.bg },
-              ]}
+              style={[styles.fitSheet, { backgroundColor: colors.bg }]}
             >
               {content}
             </SafeAreaView>
           </KeyboardAvoidingView>
         ) : (
-          <SafeAreaView
-            style={[styles.sheet, betaLayout && { backgroundColor: colors.bg }]}
-          >
+          <SafeAreaView style={[styles.sheet, { backgroundColor: colors.bg }]}>
             <KeyboardAvoidingView
               style={styles.sheetLayout}
               behavior="padding"

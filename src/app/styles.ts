@@ -1,7 +1,5 @@
-import { Platform, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 
-import { sans } from "../components/ui";
-import { pageInset } from "../lib/layout";
 import type { ThemeColors } from "../lib/theme";
 
 export const createStyles = (colors: ThemeColors) =>
@@ -10,56 +8,10 @@ export const createStyles = (colors: ThemeColors) =>
     betaOnboarding: { justifyContent: "center", paddingVertical: 32 },
     body: { flex: 1, flexDirection: "row", minHeight: 0 },
     boot: { alignItems: "center", flex: 1, justifyContent: "center" },
-    contextDetail: { fontSize: 11, lineHeight: 16 },
-    contextText: { flex: 1, gap: 1, minWidth: 0 },
-    drawer: {
-      backgroundColor: colors.bg,
-      borderColor: colors.border,
-      borderRightWidth: 1,
-      height: "100%",
-    },
     flex: { flex: 1 },
     full: { flex: 1, minHeight: 0, minWidth: 0 },
     hidden: { display: "none" },
-    iconButton: {
-      alignItems: "center",
-      borderRadius: 8,
-      height: Platform.OS === "android" ? 48 : 44,
-      justifyContent: "center",
-      width: Platform.OS === "android" ? 48 : 44,
-    },
     main: { flex: 1, minHeight: 0, minWidth: 0 },
-    navigationBrand: {
-      alignItems: "center",
-      flexDirection: "row",
-      height: Platform.OS === "android" ? 48 : 64,
-      justifyContent: "space-between",
-      paddingHorizontal: pageInset,
-    },
-    navigationFooter: {
-      borderColor: colors.border,
-      borderTopWidth: 1,
-      gap: 4,
-      paddingHorizontal: pageInset,
-      paddingTop: 8,
-    },
-    navigationLink: {
-      alignItems: "center",
-      borderRadius: 8,
-      flex: 1,
-      flexDirection: "row",
-      gap: 8,
-      justifyContent: "center",
-      minHeight: Platform.OS === "android" ? 48 : 44,
-    },
-    navigationLinkText: {
-      color: colors.muted,
-      fontFamily: sans,
-      fontSize: 13,
-      lineHeight: 19,
-    },
-    navigationLinks: { flexDirection: "row", gap: 4 },
-    navigationSessions: { flex: 1, marginTop: 8, minHeight: 0 },
     onboarding: {
       alignSelf: "center",
       flexGrow: 1,
@@ -69,41 +21,12 @@ export const createStyles = (colors: ThemeColors) =>
       paddingVertical: 40,
       width: "100%",
     },
-    onboardingBrand: { gap: 16, marginBottom: 20 },
     pressed: { backgroundColor: colors.selected },
-    projectChoice: {
-      alignItems: "center",
-      backgroundColor: colors.panel,
-      borderColor: colors.border,
-      borderRadius: 8,
-      borderWidth: 1,
-      flexDirection: "row",
-      gap: 10,
-      marginHorizontal: pageInset,
-      minHeight: Platform.OS === "android" ? 48 : 56,
-      paddingHorizontal: 15,
-      paddingVertical: 10,
-    },
     projectName: { fontSize: 14, fontWeight: "500" },
     row: { flexDirection: "row" },
     safe: { backgroundColor: colors.bg, flex: 1 },
-    selectedDestination: { backgroundColor: colors.panel },
-    serverChoice: {
-      alignItems: "center",
-      borderRadius: 8,
-      flexDirection: "row",
-      gap: 10,
-      minHeight: 48,
-      paddingHorizontal: 16,
-    },
     serverName: { fontSize: 13, fontWeight: "500" },
     shell: { flex: 1, flexDirection: "row", minHeight: 0 },
-    sidebar: {
-      backgroundColor: colors.bg,
-      borderColor: colors.border,
-      borderRightWidth: 1,
-      width: 288,
-    },
     welcome: {
       alignItems: "center",
       flex: 1,

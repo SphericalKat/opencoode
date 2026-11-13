@@ -41,7 +41,6 @@ import "prismjs/components/prism-yaml";
 import "prismjs/components/prism-css";
 import "prismjs/components/prism-markup";
 
-import { useBetaLayout } from "../lib/beta-layout";
 import { MessageActionsContext } from "../lib/message-actions";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
@@ -55,7 +54,7 @@ const parser = new MarkdownIt({
 });
 const SelectionContext = createContext(true);
 
-const createStyles = (colors: ThemeColors, beta: boolean) => ({
+const createStyles = (colors: ThemeColors) => ({
   ...StyleSheet.create({
     bold: { fontWeight: "700" },
     cell: {
@@ -129,7 +128,7 @@ const createStyles = (colors: ThemeColors, beta: boolean) => ({
       textAlign: "right",
     },
     muted: { color: colors.muted },
-    paragraph: { gap: beta ? 16 : 0, minWidth: 0 },
+    paragraph: { gap: 16, minWidth: 0 },
     quote: {
       borderLeftColor: colors.border,
       borderLeftWidth: 3,
@@ -160,21 +159,18 @@ const createStyles = (colors: ThemeColors, beta: boolean) => ({
       color: colors.text,
       flexShrink: 1,
       fontFamily: sans,
-      fontSize: beta ? 15 : 17,
-      lineHeight: beta ? 23 : 26,
+      fontSize: 15,
+      lineHeight: 23,
       ...Platform.select({ web: { overflowWrap: "anywhere" } as TextStyle }),
     },
   }),
-  headingLineHeights: beta
-    ? [27, 26, 25, 24, 23, 23]
-    : [32, 31, 30, 29, 28, 27],
-  headingSizes: beta ? [22, 21, 20, 19, 18, 18] : [24, 22, 20, 18, 16, 14],
+  headingLineHeights: [27, 26, 25, 24, 23, 23],
+  headingSizes: [22, 21, 20, 19, 18, 18],
 });
 
 const useMarkdownStyles = () => {
   const { colors } = useTheme();
-  const beta = useBetaLayout();
-  return useMemo(() => createStyles(colors, beta), [colors, beta]);
+  return useMemo(() => createStyles(colors), [colors]);
 };
 
 interface Node {

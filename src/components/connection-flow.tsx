@@ -11,9 +11,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import Svg, { Path, Rect } from "react-native-svg";
 
-import { useBetaLayout } from "../lib/beta-layout";
 import { errorMessage, normalizeConnection } from "../lib/client";
 import type { Connection } from "../lib/client";
 import { parsePairingPayload } from "../lib/pairing";
@@ -88,47 +86,8 @@ const serverName = (value: string) => {
   }
 };
 
-const PairingIcon = ({ color }: { color: string }) => (
-  <Svg width={52} height={52} viewBox="0 0 32 32" fill="none" aria-hidden>
-    <Rect
-      x={4}
-      y={4}
-      width={8}
-      height={8}
-      rx={1}
-      stroke={color}
-      strokeWidth={1.5}
-    />
-    <Rect
-      x={20}
-      y={4}
-      width={8}
-      height={8}
-      rx={1}
-      stroke={color}
-      strokeWidth={1.5}
-    />
-    <Rect
-      x={4}
-      y={20}
-      width={8}
-      height={8}
-      rx={1}
-      stroke={color}
-      strokeWidth={1.5}
-    />
-    <Path
-      d="M20 20h4v4h4v4h-8v-4M28 20v-4M16 4v4M4 16h4M12 16h8M16 20v8"
-      stroke={color}
-      strokeWidth={1.5}
-      strokeLinecap="square"
-    />
-  </Svg>
-);
-
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    actions: { gap: 4 },
     back: { alignSelf: "flex-start", marginLeft: -10 },
     betaActions: { gap: 8 },
     betaCommand: {
@@ -188,7 +147,6 @@ const createStyles = (colors: ThemeColors) =>
       width: "70%",
     },
     instruction: { fontSize: 14, fontWeight: "500" },
-    intro: { alignItems: "center", gap: 12, paddingBottom: 8, paddingTop: 8 },
     manage: { paddingBottom: 10, paddingLeft: 32 },
     privacy: {
       fontSize: 12,
@@ -237,7 +195,7 @@ const getInitialStep = (
 };
 
 const getBackStep = (step: Step, betaStart: boolean): Step => {
-  if (step === "home" || betaStart) {
+  if (betaStart) {
     return "servers";
   }
   if (step === "password") {
@@ -251,10 +209,7 @@ const shouldShowBack = (
   submitted: boolean,
   canReturnToServers: boolean,
   betaStart: boolean
-) =>
-  step !== "servers" &&
-  !submitted &&
-  (canReturnToServers || (step !== "home" && !betaStart));
+) => step !== "servers" && !submitted && (canReturnToServers || !betaStart);
 
 const ConnectionNotice = ({
   error,
@@ -311,13 +266,6 @@ const PrivacyNote = ({ styles }: { styles: Styles }) => (
   </BodyText>
 );
 
-const homeTitle = (unavailableID?: string, activeID?: string) => {
-  if (unavailableID) {
-    return "Reconnect to a server";
-  }
-  return activeID ? "Add a server" : "Connect to a server";
-};
-
 const useServersGuard = (
   step: Step,
   connectionCount: number,
@@ -360,7 +308,6 @@ export const ConnectionFlow = ({
 }: Props) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const beta = useBetaLayout();
   const [navigation, setNavigation] = useState(() => ({
     direction: 0 as -1 | 0 | 1,
     revision: 0,
@@ -662,7 +609,7 @@ export const ConnectionFlow = ({
     };
   }, [step, cameraReady, setStep]);
 
-  const betaStart = beta && (step === "home" || step === "pair");
+  const betaStart = step === "home" || step === "pair";
   const canReturnToServers = connections.length > 0 && !unavailableID;
   const backStep = getBackStep(step, betaStart);
   const back = shouldShowBack(
@@ -924,42 +871,6 @@ export const ConnectionFlow = ({
     </>
   );
 
-  const renderPair = () => (
-    <>
-      <Heading>Paste a pairing link</Heading>
-      <BodyText muted>
-        Copy the pairing link from the server on your computer.
-      </BodyText>
-      <Field
-        label="Pairing link"
-        placeholder="http://your-computer:4096/auth/connect/…"
-        value={pairingText}
-        onChangeText={(value) => {
-          clearError();
-          setPairingText(value);
-        }}
-        keyboardType="url"
-        autoComplete="off"
-        autoFocus
-        returnKeyType="go"
-        onSubmitEditing={() => acceptPairing(pairingText)}
-      />
-      <Button
-        title="Connect"
-        variant="primary"
-        disabled={!pairingText.trim() || busy}
-        onPress={() => acceptPairing(pairingText)}
-      />
-      <Button
-        title="Scan QR code instead"
-        variant="ghost"
-        onPress={() => {
-          void scan();
-        }}
-      />
-    </>
-  );
-
   const renderAddress = () => (
     <>
       <Heading>Enter the server address</Heading>
@@ -1045,60 +956,6 @@ export const ConnectionFlow = ({
     </>
   );
 
-  const renderHome = () => (
-    <>
-      {unavailableID && activeID && savedServers}
-      <View style={styles.intro}>
-        <PairingIcon color={colors.muted} />
-        <Heading>{homeTitle(unavailableID, activeID)}</Heading>
-        <BodyText muted style={styles.center}>
-          {unavailableID
-            ? "Retry a saved server or pair with a server again."
-            : "Your computer does the work. Pick up the conversation here."}
-        </BodyText>
-      </View>
-      <View style={styles.actions}>
-        <Button
-          title="Scan QR code"
-          variant="primary"
-          busy={reading}
-          disabled={busy}
-          onPress={() => {
-            void scan();
-          }}
-        />
-        <Button
-          title="Paste pairing link"
-          disabled={busy}
-          onPress={() => {
-            void pastePairing();
-          }}
-        />
-      </View>
-      <Card>
-        <BodyText style={styles.instruction}>On your computer</BodyText>
-        <BodyText muted>
-          OpenCode: run the command below. Pi: use /mobile in an active session
-          with the companion extension installed. Then scan the QR code or paste
-          the pairing link.
-        </BodyText>
-        <BodyText selectable style={styles.command}>
-          opencode pair
-        </BodyText>
-      </Card>
-      <Button
-        title="Connect with a server address"
-        variant="ghost"
-        disabled={busy}
-        onPress={() => {
-          onChangeForm(blankForm);
-          go("address");
-        }}
-      />
-      {unavailableID && !activeID && savedServers}
-    </>
-  );
-
   const renderStep = () => {
     if (submission || connecting) {
       return renderConnecting();
@@ -1112,16 +969,10 @@ export const ConnectionFlow = ({
     if (step === "scan") {
       return renderScan();
     }
-    if (step === "pair") {
-      return renderPair();
-    }
     if (step === "address") {
       return renderAddress();
     }
-    if (step === "password") {
-      return renderPassword();
-    }
-    return renderHome();
+    return renderPassword();
   };
 
   return (
@@ -1130,7 +981,7 @@ export const ConnectionFlow = ({
       transitionKey={navigation.revision}
       direction={navigation.direction}
       enabled={!busy && step !== "scan"}
-      style={[styles.container, beta && styles.betaContainer]}
+      style={[styles.container, styles.betaContainer]}
     >
       {back && <View style={styles.back}>{back}</View>}
       <ConnectionNotice

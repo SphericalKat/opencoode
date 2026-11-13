@@ -4,9 +4,7 @@ import Svg, { Path } from "react-native-svg";
 import { ShellIcon } from "../../components/shell-icon";
 import { BodyText, Button, ErrorNotice, Field, Row } from "../../components/ui";
 import { useTheme, useThemedStyles } from "../../lib/theme";
-import { headerTitle, searchPlaceholder } from "./format";
-import { NewSessionIconButton } from "./new-session-buttons";
-import type { NewSessionButtonProps } from "./new-session-buttons";
+import { searchPlaceholder } from "./format";
 import { createStyles } from "./styles";
 
 interface ProjectSelectorProps {
@@ -51,91 +49,21 @@ const ProjectSelector = ({
   );
 };
 
-interface HeadingRowProps extends NewSessionButtonProps {
-  archived: boolean;
-  compact: boolean;
-  compactHeader: boolean;
-  onOpenActions: () => void;
-  onOpenNavigation: (() => void) | undefined;
-}
-
-const HeadingRow = ({
-  archived,
-  busy,
-  compact,
-  compactHeader,
-  creating,
-  onOpenActions,
-  onOpenNavigation,
-  onPress,
-}: HeadingRowProps) => {
-  const styles = useThemedStyles(createStyles);
-  const { colors } = useTheme();
-  return (
-    <Row style={styles.headingRow}>
-      {!compact && onOpenNavigation && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open navigation"
-          onPress={onOpenNavigation}
-          style={({ pressed }) => [
-            styles.navigationButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <ShellIcon name="menu" color={colors.text} />
-        </Pressable>
-      )}
-      <View style={styles.headingText}>
-        <BodyText
-          accessibilityRole="header"
-          numberOfLines={1}
-          style={[
-            styles.title,
-            compactHeader && styles.compactTitle,
-            compact && Platform.OS === "android" && styles.drawerTitle,
-          ]}
-        >
-          {headerTitle(archived, compact)}
-        </BodyText>
-      </View>
-      <NewSessionIconButton busy={busy} creating={creating} onPress={onPress} />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Session list actions"
-        onPress={onOpenActions}
-        style={({ pressed }) => [
-          styles.actionButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <ShellIcon name="more" color={colors.muted} size={18} />
-      </Pressable>
-    </Row>
-  );
-};
-
 interface SearchProps {
   archived: boolean;
-  betaHome: boolean;
   onChangeSearch: (value: string) => void;
   search: string;
 }
 
-const AndroidSearch = ({
-  archived,
-  betaHome,
-  onChangeSearch,
-  search,
-}: SearchProps) => {
+const AndroidSearch = ({ archived, onChangeSearch, search }: SearchProps) => {
   const styles = useThemedStyles(createStyles);
   const { colors, scheme } = useTheme();
   return (
     <View
       style={[
         styles.androidSearch,
-        betaHome && styles.betaSearch,
-        betaHome && {
+        styles.betaSearch,
+        {
           backgroundColor: scheme === "dark" ? colors.panel : colors.raised,
         },
       ]}
@@ -147,7 +75,7 @@ const AndroidSearch = ({
         value={search}
         onChangeText={onChangeSearch}
         containerStyle={styles.searchField}
-        style={[styles.androidSearchInput, betaHome && styles.betaSearchInput]}
+        style={[styles.androidSearchInput, styles.betaSearchInput]}
       />
       {!!search && (
         <Pressable
@@ -172,7 +100,7 @@ const NativeSearchRow = ({
   onChangeSearch,
   onChooseHistory,
   search,
-}: Omit<SearchProps, "betaHome"> & { onChooseHistory: () => void }) => {
+}: SearchProps & { onChooseHistory: () => void }) => {
   const styles = useThemedStyles(createStyles);
   return (
     <Row style={styles.searchRow}>
@@ -212,20 +140,13 @@ const NativeSearchRow = ({
 
 interface SessionsHeaderProps {
   archived: boolean;
-  betaHome: boolean;
-  busy: boolean;
-  compact: boolean;
   compactHeader: boolean;
-  creating: boolean;
   error: string | undefined;
   listError: string | undefined;
   onChangeSearch: (value: string) => void;
   onChooseHistory: () => void;
-  onOpenActions: () => void;
-  onOpenNavigation: (() => void) | undefined;
   onOpenProjects: () => void;
   onRefresh: () => void;
-  onStartSession: () => void;
   projectLabel: string;
   projectsOpen: boolean;
   search: string;
@@ -235,20 +156,13 @@ interface SessionsHeaderProps {
 
 export const SessionsHeader = ({
   archived,
-  betaHome,
-  busy,
-  compact,
   compactHeader,
-  creating,
   error,
   listError,
   onChangeSearch,
   onChooseHistory,
-  onOpenActions,
-  onOpenNavigation,
   onOpenProjects,
   onRefresh,
-  onStartSession,
   projectLabel,
   projectsOpen,
   search,
@@ -261,31 +175,17 @@ export const SessionsHeader = ({
       style={[
         styles.header,
         compactHeader && styles.compactHeader,
-        betaHome && styles.betaHeader,
+        styles.betaHeader,
       ]}
     >
-      {betaHome ? (
-        <ProjectSelector
-          expanded={projectsOpen}
-          label={projectLabel}
-          onPress={onOpenProjects}
-        />
-      ) : (
-        <HeadingRow
-          archived={archived}
-          busy={busy}
-          compact={compact}
-          compactHeader={compactHeader}
-          creating={creating}
-          onOpenActions={onOpenActions}
-          onOpenNavigation={onOpenNavigation}
-          onPress={onStartSession}
-        />
-      )}
+      <ProjectSelector
+        expanded={projectsOpen}
+        label={projectLabel}
+        onPress={onOpenProjects}
+      />
       {Platform.OS === "android" ? (
         <AndroidSearch
           archived={archived}
-          betaHome={betaHome}
           onChangeSearch={onChangeSearch}
           search={search}
         />

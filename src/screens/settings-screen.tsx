@@ -45,7 +45,6 @@ export const SettingsScreen = ({
   onBack,
   backLabel,
   onOpenNavigation,
-  betaLayout = false,
   onManageServers,
   serverLabel,
 }: {
@@ -58,7 +57,6 @@ export const SettingsScreen = ({
   onBack?: () => void;
   backLabel?: string;
   onOpenNavigation?: () => void;
-  betaLayout?: boolean;
   onManageServers?: () => void;
   serverLabel?: string;
 }) => {
@@ -67,7 +65,6 @@ export const SettingsScreen = ({
   const { width } = useWindowDimensions();
   // A resize must not replace the navigator and discard an open editor.
   const [nativeStackEnabled] = useReducer(keepState, width, isNativeStackWidth);
-  const wide = !betaLayout && !nativeStackEnabled && width >= 920;
   const [section, setSection] = useState<Section | null>(null);
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
   const mounted = useRef(true);
@@ -78,7 +75,7 @@ export const SettingsScreen = ({
     () => filterSections(sections, hasClient, hasModelCatalog),
     [hasClient, hasModelCatalog, sections]
   );
-  const selected = resolveSelected(section, availableSections, wide);
+  const selected = resolveSelected(section, availableSections);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -110,14 +107,12 @@ export const SettingsScreen = ({
     onBackStateChange,
     section,
     visible,
-    wide,
   });
   const updateNativeBackState = useNativeStackBackHandling({
     nativeStackEnabled,
     navigationRef,
     onBackStateChange,
     visible,
-    wide,
   });
 
   const renderIndex = () => (
@@ -131,7 +126,6 @@ export const SettingsScreen = ({
       }}
       sections={availableSections}
       selected={selected}
-      wide={wide}
       onManageServers={onManageServers}
       serverLabel={serverLabel}
     />
@@ -146,20 +140,18 @@ export const SettingsScreen = ({
   );
 
   return (
-    <View style={[styles.screen, !wide && styles.narrowScreen]}>
+    <View style={[styles.screen, styles.narrowScreen]}>
       {nativeStackEnabled ? (
         <SafeAreaInsetsContext.Provider value={zeroInsets}>
           <View style={styles.nativeNavigation}>
             <SettingsNativeStack
               availableSections={availableSections}
               backLabel={backLabel}
-              betaLayout={betaLayout}
               client={client}
               directory={directory}
               modelCatalog={modelCatalog}
               navigationRef={navigationRef}
               onBack={onBack}
-              onOpenNavigation={onOpenNavigation}
               onReady={updateNativeBackState}
               renderIndex={renderIndex}
             />
@@ -175,7 +167,6 @@ export const SettingsScreen = ({
           renderSection={renderSection}
           section={section}
           selected={selected}
-          wide={wide}
         />
       )}
     </View>

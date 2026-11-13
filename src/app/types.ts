@@ -1,5 +1,3 @@
-import type { ServerInfo } from "@opencode/client";
-
 import type { Connection, connect, createClient } from "../lib/client";
 import type { useSheetCoordinator } from "../lib/sheets";
 import type { useUnsavedGuard } from "../lib/unsaved";
@@ -12,7 +10,6 @@ export interface AppliedConnection {
   connected: Connection;
   connections: Connection[];
   directory: string;
-  info: ServerInfo | null;
   preserveWorkspace: boolean;
   sessionID: string | undefined;
 }

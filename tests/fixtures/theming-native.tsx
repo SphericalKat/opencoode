@@ -11,7 +11,6 @@ import Inter from "../../assets/fonts/Inter.ttf";
 import { Markdown } from "../../src/components/markdown";
 import { Patch } from "../../src/components/patch";
 import { Button } from "../../src/components/ui";
-import { BetaLayoutContext } from "../../src/lib/beta-layout";
 import type { ChatBackend } from "../../src/lib/chat-backend";
 import { SheetCoordinatorProvider } from "../../src/lib/sheets";
 import { ThemeProvider, useTheme } from "../../src/lib/theme";
@@ -83,7 +82,6 @@ const Content = () => {
         backend={backend}
         sessionID={session.id}
         serverID="visual-42"
-        betaLayout={true}
         onSessionChanged={noop}
         onOpenSession={noop}
       />
@@ -134,15 +132,13 @@ const Demo = () => {
   return (
     <SafeAreaProvider>
       <KeyboardProvider>
-        <BetaLayoutContext.Provider value={true}>
-          <ThemeProvider>
-            <SheetCoordinatorProvider>
-              <UnsavedProvider>
-                <Content />
-              </UnsavedProvider>
-            </SheetCoordinatorProvider>
-          </ThemeProvider>
-        </BetaLayoutContext.Provider>
+        <ThemeProvider>
+          <SheetCoordinatorProvider>
+            <UnsavedProvider>
+              <Content />
+            </UnsavedProvider>
+          </SheetCoordinatorProvider>
+        </ThemeProvider>
       </KeyboardProvider>
     </SafeAreaProvider>
   );

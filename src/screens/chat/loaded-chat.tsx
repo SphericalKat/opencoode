@@ -38,7 +38,6 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     attachments,
     backend,
     beginUserScroll,
-    betaLayout,
     canCopySelected,
     capabilities,
     catalogError,
@@ -74,12 +73,10 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     maintainPosition,
     maximumComposerHeight,
     minimumComposerHeight,
-    onOpenNavigation,
     onOpenSession,
     opencodeClient,
     pending,
     permissions,
-    projectLabel,
     providerLabel,
     refresh,
     renderMessage,
@@ -92,7 +89,6 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     sessionID,
     setAttachments,
     setCatalogRevision,
-    setDelivery,
     setDraft,
     setError,
     setFollowing,
@@ -103,7 +99,6 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     setSelectedSkills,
     showActivityBar,
     showError,
-    showHeaderActivity,
     showLatestControl,
     stopReady,
     stopping,
@@ -120,29 +115,20 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     <>
       <ChatHeader
         actionMessage={actionMessage}
-        activity={activity}
         backend={backend}
-        betaLayout={betaLayout}
         canCopySelected={canCopySelected}
         capabilities={capabilities}
         client={client}
-        colors={colors}
         copySelected={copySelected}
         draftLoaded={draftLoaded}
         editMessage={editMessage}
-        foreground={foreground}
-        onOpenNavigation={onOpenNavigation}
         onOpenSession={onOpenSession}
         pending={pending}
-        projectLabel={projectLabel}
         run={run}
         sessionID={sessionID}
         setPanel={setPanel}
         setSelectedMessageID={setSelectedMessageID}
-        showHeaderActivity={showHeaderActivity}
         styles={styles}
-        visible={visible}
-        session={session}
       />
       <ErrorBanners
         catalogError={catalogError}
@@ -167,7 +153,6 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
       <TranscriptList
         activityNotice={activityNotice}
         beginUserScroll={beginUserScroll}
-        betaLayout={betaLayout}
         capabilities={capabilities}
         contentSizeChanged={contentSizeChanged}
         cursor={cursor}
@@ -204,7 +189,6 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         activity={activity}
         agents={agents}
         attachments={attachments}
-        betaLayout={betaLayout}
         capabilities={capabilities}
         colors={colors}
         composerHeight={composerHeight}
@@ -226,7 +210,6 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         send={send}
         sending={sending}
         setAttachments={setAttachments}
-        setDelivery={setDelivery}
         setDraft={setDraft}
         setPanel={setPanel}
         setRestoredSkillIDs={setRestoredSkillIDs}
@@ -234,7 +217,6 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         setSelectedMessageID={setSelectedMessageID}
         setSelectedSkills={setSelectedSkills}
         showActivityBar={showActivityBar}
-        showLatestControl={showLatestControl}
         stopReady={stopReady}
         stopping={stopping}
         streamStatus={streamStatus}

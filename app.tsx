@@ -1,5 +1,5 @@
 import { useFonts } from "expo-font";
-import { Platform, useWindowDimensions, View } from "react-native";
+import { View } from "react-native";
 
 import ibmPlexMonoFont from "./assets/fonts/IBMPlexMono-Text.ttf";
 import interFont from "./assets/fonts/Inter.ttf";
@@ -13,14 +13,12 @@ const fonts = {
 };
 
 const App = () => {
-  const { width } = useWindowDimensions();
-  const betaLayout = Platform.OS === "android" && width < 920;
   const [fontsReady, fontError] = useFonts(fonts);
   if (!fontsReady && !fontError) {
     return <View style={{ backgroundColor: "#080808", flex: 1 }} />;
   }
   return (
-    <AppProviders betaLayout={betaLayout}>
+    <AppProviders>
       <ThemedStatusBar />
       <MobileApp />
     </AppProviders>

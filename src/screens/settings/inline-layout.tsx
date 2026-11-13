@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import { BackHandler, View } from "react-native";
 
 import { ScreenHeader } from "../../components/screen-header";
-import { BodyText, Row } from "../../components/ui";
 import { useThemedStyles } from "../../lib/theme";
 import type { SettingsNavigationRef } from "./navigation";
 import type { Section } from "./sections";
@@ -24,19 +23,8 @@ export const filterSections = (
 
 export const resolveSelected = (
   section: Section | null,
-  availableSections: Section[],
-  wide: boolean
-) => {
-  if (section !== null && availableSections.includes(section)) {
-    return section;
-  }
-  if (!wide) {
-    return null;
-  }
-  return availableSections.includes("Accounts")
-    ? "Accounts"
-    : (availableSections[0] ?? null);
-};
+  availableSections: Section[]
+) => (section !== null && availableSections.includes(section) ? section : null);
 
 export const useInlineBackHandling = ({
   changeSection,
@@ -44,24 +32,22 @@ export const useInlineBackHandling = ({
   onBackStateChange,
   section,
   visible,
-  wide,
 }: {
   changeSection: (next: Section | null) => Promise<boolean>;
   nativeStackEnabled: boolean;
   onBackStateChange?: (canGoBack: boolean) => void;
   section: Section | null;
   visible: boolean;
-  wide: boolean;
 }) => {
   useEffect(() => {
     if (nativeStackEnabled) {
       return;
     }
-    onBackStateChange?.(visible && !wide && section !== null);
+    onBackStateChange?.(visible && section !== null);
     return () => onBackStateChange?.(false);
-  }, [nativeStackEnabled, onBackStateChange, visible, wide, section]);
+  }, [nativeStackEnabled, onBackStateChange, visible, section]);
   useEffect(() => {
-    if (nativeStackEnabled || !visible || wide || section === null) {
+    if (nativeStackEnabled || !visible || section === null) {
       return;
     }
     const subscription = BackHandler.addEventListener(
@@ -72,7 +58,7 @@ export const useInlineBackHandling = ({
       }
     );
     return () => subscription.remove();
-  }, [nativeStackEnabled, visible, wide, section, changeSection]);
+  }, [nativeStackEnabled, visible, section, changeSection]);
 };
 
 export const useNativeStackBackHandling = ({
@@ -80,21 +66,19 @@ export const useNativeStackBackHandling = ({
   navigationRef,
   onBackStateChange,
   visible,
-  wide,
 }: {
   nativeStackEnabled: boolean;
   navigationRef: SettingsNavigationRef;
   onBackStateChange?: (canGoBack: boolean) => void;
   visible: boolean;
-  wide: boolean;
 }) => {
   const updateNativeBackState = useCallback(() => {
     if (!nativeStackEnabled) {
       return;
     }
     const canGoBack = navigationRef.current?.canGoBack() ?? false;
-    onBackStateChange?.(visible && !wide && canGoBack);
-  }, [nativeStackEnabled, navigationRef, onBackStateChange, visible, wide]);
+    onBackStateChange?.(visible && canGoBack);
+  }, [nativeStackEnabled, navigationRef, onBackStateChange, visible]);
   useEffect(() => {
     updateNativeBackState();
     return () => onBackStateChange?.(false);
@@ -127,7 +111,6 @@ export const SettingsInlineLayout = ({
   renderSection,
   section,
   selected,
-  wide,
 }: {
   backLabel?: string;
   changeSection: (next: Section | null) => Promise<boolean>;
@@ -137,46 +120,31 @@ export const SettingsInlineLayout = ({
   renderSection: (value: Section) => React.ReactElement;
   section: Section | null;
   selected: Section | null;
-  wide: boolean;
 }) => {
   const styles = useThemedStyles(createStyles);
   const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
   const atIndex = section === null;
   return (
     <>
-      {!wide && (
-        <ScreenHeader
-          title={selected ?? "Settings"}
-          backLabel={atIndex ? backLabel : "Settings"}
-          onBack={
-            atIndex
-              ? onBack
-              : () => {
-                  void changeSection(null);
-                }
-          }
-          onOpenNavigation={atIndex ? onOpenNavigation : undefined}
-          onRefresh={atIndex ? undefined : headerRefresh?.refresh}
-          refreshing={headerRefresh?.loading}
-        />
-      )}
-      <HeaderRefreshContext.Provider value={wide ? null : setHeaderRefresh}>
-        <View style={[styles.content, !wide && styles.narrowContent]}>
-          {(wide || atIndex) && renderIndex()}
-          {selected && (wide || !atIndex) && (
-            <View style={styles.detail}>
-              {wide && (
-                <Row style={styles.detailHeader}>
-                  <BodyText
-                    accessibilityRole="header"
-                    style={styles.detailTitle}
-                  >
-                    {selected}
-                  </BodyText>
-                </Row>
-              )}
-              {renderSection(selected)}
-            </View>
+      <ScreenHeader
+        title={selected ?? "Settings"}
+        backLabel={atIndex ? backLabel : "Settings"}
+        onBack={
+          atIndex
+            ? onBack
+            : () => {
+                void changeSection(null);
+              }
+        }
+        onOpenNavigation={atIndex ? onOpenNavigation : undefined}
+        onRefresh={atIndex ? undefined : headerRefresh?.refresh}
+        refreshing={headerRefresh?.loading}
+      />
+      <HeaderRefreshContext.Provider value={setHeaderRefresh}>
+        <View style={[styles.content, styles.narrowContent]}>
+          {atIndex && renderIndex()}
+          {selected && !atIndex && (
+            <View style={styles.detail}>{renderSection(selected)}</View>
           )}
         </View>
       </HeaderRefreshContext.Provider>

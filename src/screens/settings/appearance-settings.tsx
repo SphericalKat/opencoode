@@ -2,8 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 
 import { ShellIcon } from "../../components/shell-icon";
-import { Button, ErrorNotice, BodyText, Sheet } from "../../components/ui";
-import { useBetaLayout } from "../../lib/beta-layout";
+import { ErrorNotice, BodyText, Sheet } from "../../components/ui";
 import { errorMessage } from "../../lib/client";
 import { paletteOptions, useTheme, useThemedStyles } from "../../lib/theme";
 import type { Appearance } from "../../lib/theme";
@@ -18,10 +17,8 @@ const appearanceLabel = (value: Appearance) => {
 };
 
 export const AppearanceSettings = () => {
-  const { appearance, scheme, setAppearance, palette, setPalette, colors } =
-    useTheme();
+  const { appearance, setAppearance, palette, setPalette, colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const betaLayout = useBetaLayout();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [choosing, setChoosing] = useState(false);
@@ -100,107 +97,80 @@ export const AppearanceSettings = () => {
     </>
   );
   const choiceLabel = appearanceLabel(appearance);
-  if (betaLayout) {
-    return (
-      <Page error={error}>
-        <View style={styles.betaAppearanceCard}>
-          <View style={styles.detail}>
-            <BodyText style={styles.betaSettingTitle}>Color scheme</BodyText>
-            <BodyText muted style={styles.betaDescription}>
-              Choose the color scheme for the app.
-            </BodyText>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Color scheme: ${choiceLabel}`}
-            accessibilityState={{ disabled: busy, expanded: choosing }}
-            disabled={busy}
-            onPress={() => setChoosing(true)}
-            style={styles.betaChooserTarget}
-          >
-            <View style={styles.betaSettingChooser}>
-              {busy ? (
-                <ActivityIndicator size="small" color={colors.muted} />
-              ) : (
-                <BodyText style={styles.betaBackLabel}>{choiceLabel}</BodyText>
-              )}
-              <View style={{ transform: [{ rotate: "90deg" }] }}>
-                <ShellIcon name="chevron" size={12} color={colors.text} />
-              </View>
-            </View>
-          </Pressable>
-        </View>
-        {palettePicker}
-        <Sheet
-          visible={choosing}
-          title="Color scheme"
-          fitContent
-          contentStyle={{ gap: 0 }}
-          onClose={() => {
-            if (!busy) {
-              setChoosing(false);
-            }
-          }}
-        >
-          <ErrorNotice error={error} />
-          {(["system", "light", "dark"] as const).map((value) => (
-            <Pressable
-              key={value}
-              accessibilityRole="button"
-              accessibilityLabel={appearanceLabel(value)}
-              accessibilityState={{
-                disabled: busy,
-                selected: appearance === value,
-              }}
-              disabled={busy}
-              style={({ pressed }) => [
-                styles.betaCategoryRow,
-                pressed && { backgroundColor: colors.raised },
-              ]}
-              onPress={() => {
-                setBusy(true);
-                setError(null);
-                void setAppearance(value)
-                  .then(() => setChoosing(false))
-                  .catch((error_) => setError(errorMessage(error_)))
-                  .finally(() => setBusy(false));
-              }}
-            >
-              <BodyText style={[styles.betaBackLabel, styles.detail]}>
-                {appearanceLabel(value)}
-              </BodyText>
-              {appearance === value && (
-                <BodyText accessibilityElementsHidden>✓</BodyText>
-              )}
-            </Pressable>
-          ))}
-        </Sheet>
-      </Page>
-    );
-  }
   return (
     <Page error={error}>
-      <BodyText muted>
-        Use your device theme or choose a fixed color scheme.
-      </BodyText>
-      {(["system", "light", "dark"] as const).map((value) => (
-        <Button
-          key={value}
-          title={appearanceLabel(value)}
-          selected={appearance === value}
-          variant={appearance === value ? "primary" : "secondary"}
+      <View style={styles.betaAppearanceCard}>
+        <View style={styles.detail}>
+          <BodyText style={styles.betaSettingTitle}>Color scheme</BodyText>
+          <BodyText muted style={styles.betaDescription}>
+            Choose the color scheme for the app.
+          </BodyText>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Color scheme: ${choiceLabel}`}
+          accessibilityState={{ disabled: busy, expanded: choosing }}
           disabled={busy}
-          onPress={() => {
-            setBusy(true);
-            setError(null);
-            void setAppearance(value)
-              .catch((error_) => setError(errorMessage(error_)))
-              .finally(() => setBusy(false));
-          }}
-        />
-      ))}
-      <BodyText muted>Current theme: {scheme}</BodyText>
+          onPress={() => setChoosing(true)}
+          style={styles.betaChooserTarget}
+        >
+          <View style={styles.betaSettingChooser}>
+            {busy ? (
+              <ActivityIndicator size="small" color={colors.muted} />
+            ) : (
+              <BodyText style={styles.betaBackLabel}>{choiceLabel}</BodyText>
+            )}
+            <View style={{ transform: [{ rotate: "90deg" }] }}>
+              <ShellIcon name="chevron" size={12} color={colors.text} />
+            </View>
+          </View>
+        </Pressable>
+      </View>
       {palettePicker}
+      <Sheet
+        visible={choosing}
+        title="Color scheme"
+        fitContent
+        contentStyle={{ gap: 0 }}
+        onClose={() => {
+          if (!busy) {
+            setChoosing(false);
+          }
+        }}
+      >
+        <ErrorNotice error={error} />
+        {(["system", "light", "dark"] as const).map((value) => (
+          <Pressable
+            key={value}
+            accessibilityRole="button"
+            accessibilityLabel={appearanceLabel(value)}
+            accessibilityState={{
+              disabled: busy,
+              selected: appearance === value,
+            }}
+            disabled={busy}
+            style={({ pressed }) => [
+              styles.betaCategoryRow,
+              pressed && { backgroundColor: colors.raised },
+            ]}
+            onPress={() => {
+              setBusy(true);
+              setError(null);
+              void setAppearance(value)
+                .then(() => setChoosing(false))
+                .catch((error_) => setError(errorMessage(error_)))
+                .finally(() => setBusy(false));
+            }}
+          >
+            <BodyText style={[styles.betaBackLabel, styles.detail]}>
+              {appearanceLabel(value)}
+            </BodyText>
+            {appearance === value && (
+              <BodyText accessibilityElementsHidden>✓</BodyText>
+            )}
+          </Pressable>
+        ))}
+      </Sheet>
     </Page>
   );
 };

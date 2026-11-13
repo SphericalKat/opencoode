@@ -1,4 +1,4 @@
-import type { Project, ServerInfo } from "@opencode/client";
+import type { Project } from "@opencode/client";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import type { OpenSessionTab } from "../components/beta-navigation";
@@ -12,7 +12,6 @@ import type { SessionPanelRequest, Tab } from "./types";
 export const useAppState = () => {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [active, setActive] = useState<Connection | null>(null);
-  const [info, setInfo] = useState<ServerInfo | null>(null);
   const [connectionRevision, setConnectionRevision] = useState(0);
   const [booting, setBooting] = useState(true);
   const [connecting, setConnecting] = useState(false);
@@ -123,7 +122,6 @@ export const useAppState = () => {
     flowRevision,
     foreground,
     form,
-    info,
     locationSyncRef,
     messageSelected,
     navigationOpen,
@@ -166,7 +164,6 @@ export const useAppState = () => {
     setFlowRevision,
     setForeground,
     setForm,
-    setInfo,
     setMessageSelected,
     setNavigationOpen,
     setNewDirectory,

@@ -16,7 +16,6 @@ import {
 } from "../../components/ui";
 import { UserMessageBubble } from "../../components/user-message-bubble";
 import type { AgentActivity } from "../../lib/activity";
-import { useBetaLayout } from "../../lib/beta-layout";
 import type { Client } from "../../lib/client";
 import { MessageActionsContext } from "../../lib/message-actions";
 import { useTheme, useThemedStyles } from "../../lib/theme";
@@ -96,7 +95,6 @@ export const renderAssistantMessage = ({
   directory,
   selectable,
   styles,
-  betaLayout,
 }: {
   message: SessionMessageAssistant;
   live?: boolean;
@@ -106,7 +104,6 @@ export const renderAssistantMessage = ({
   directory: string;
   selectable: boolean;
   styles: ReturnType<typeof createStyles>;
-  betaLayout: boolean;
 }) => (
   <View style={styles.assistant}>
     {message.content.map((part, index) => (
@@ -126,8 +123,7 @@ export const renderAssistantMessage = ({
       />
     ))}
     {message.error && <ErrorNotice error={message.error.message} />}
-    {betaLayout &&
-      !live &&
+    {!live &&
       message.content.some(
         (part) => part.type === "text" && !!part.text.trim()
       ) && <CompletedAssistantFooter key={message.id} message={message} />}
@@ -181,7 +177,6 @@ export const MessageContentBody = ({
   selectable: boolean;
 }) => {
   const styles = useThemedStyles(createStyles);
-  const betaLayout = useBetaLayout();
   if (message.type === "idle") {
     return message.error ? <ErrorNotice error={message.error.message} /> : null;
   }
@@ -189,7 +184,6 @@ export const MessageContentBody = ({
     return renderAssistantMessage({
       activityKind,
       animate,
-      betaLayout,
       client,
       directory,
       live,

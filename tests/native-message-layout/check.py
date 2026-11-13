@@ -3,8 +3,8 @@ import json
 import re
 import sys
 
-expected = {(w, b, phase) for w in (320, 360, 393) for b in (True, False) for phase in ('initial', 'send', 'scroll')}
-expected.update({(393, True, 'short'), (393, True, 'attachment')})
+expected = {(w, phase) for w in (320, 360, 393) for phase in ('initial', 'send', 'scroll')}
+expected.update({(393, 'short'), (393, 'attachment')})
 cases = []
 away = {}
 for line in open(sys.argv[1]):
@@ -13,7 +13,7 @@ for line in open(sys.argv[1]):
         continue
     kind, data = match[1], json.loads(match[2])
     if kind == 'AWAY':
-        away[(data['w'], data['b'])] = data['offset']
+        away[data['w']] = data['offset']
     elif kind == 'CASE':
         cases.append((data, {'BUBBLE': [], 'TEXT': [], 'NEXT': [], 'ATTACHMENT': []}))
     elif cases:
@@ -22,7 +22,7 @@ for line in open(sys.argv[1]):
 seen = set()
 failed = False
 for case, measurements in cases:
-    key = (case.get('w'), case.get('b'), case.get('phase'))
+    key = (case.get('w'), case.get('phase'))
     if key not in expected or key in seen:
         print(key, 'unexpected or duplicate case')
         failed = True
@@ -40,7 +40,7 @@ for case, measurements in cases:
     gap = next_row['y'] - bottom
     attachments = measurements['ATTACHMENT']
     attachment_ok = case['phase'] != 'attachment' or (len(attachments) == 1 and attachments[0]['x'] >= left + 11 and attachments[0]['y'] >= top + 11 and attachments[0]['x'] + attachments[0]['w'] <= right - 11 and attachments[0]['y'] + attachments[0]['h'] <= bottom - 11)
-    scroll_ok = case['phase'] != 'scroll' or ((case['w'], case['b']) in away and case.get('offset', 0) - away[(case['w'], case['b'])] > 500)
+    scroll_ok = case['phase'] != 'scroll' or (case['w'] in away and case.get('offset', 0) - away[case['w']] > 500)
     aligned = abs(right - (case['w'] - 16)) <= 1
     ok = padding >= 11 and gap >= -0.5 and scroll_ok and attachment_ok and aligned
     print(key, 'minimum padding:', round(padding, 2), 'next row gap:', round(gap, 2), 'scroll:', scroll_ok, 'right aligned:', aligned, 'PASS' if ok else 'FAIL')

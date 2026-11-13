@@ -1,24 +1,17 @@
-import { Keyboard, Linking, useWindowDimensions, View } from "react-native";
+import { Keyboard, Linking, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ConnectionFlow } from "../components/connection-flow";
 import { OpenCodeLogo } from "../components/open-code-logo";
 import { Busy, BodyText } from "../components/ui";
-import { useBetaLayout } from "../lib/beta-layout";
 import { useSheetCoordinator } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import { useUnsavedGuard } from "../lib/unsaved";
 import { PiWorkspace } from "../screens/pi-workspace";
 import { ConnectionProbe } from "./connection-probe";
 import { flowError } from "./connection-utils";
-import { NavigationPanel } from "./navigation-panel";
 import { Onboarding } from "./onboarding";
-import {
-  BetaSheets,
-  NavigationDrawer,
-  ProjectsSheet,
-  ServersSheet,
-} from "./sheets";
+import { BetaSheets, ProjectsSheet, ServersSheet } from "./sheets";
 import { ShellFrame } from "./shell-frame";
 import { deriveShellView } from "./shell-view";
 import { createStyles } from "./styles";
@@ -33,10 +26,7 @@ import { useWorkspaceActions } from "./use-workspace-actions";
 
 export const MobileApp = () => {
   const { colors } = useTheme();
-  const betaLayout = useBetaLayout();
   const styles = useThemedStyles(createStyles);
-  const { width } = useWindowDimensions();
-  const wide = width >= 920;
   const confirmNavigation = useUnsavedGuard();
   const { suspendSheets, resumeSheets } = useSheetCoordinator();
   const state = useAppState();
@@ -61,7 +51,6 @@ export const MobileApp = () => {
     flowRevision,
     foreground,
     form,
-    info,
     messageSelected,
     navigationOpen,
     newDirectory,
@@ -103,7 +92,7 @@ export const MobileApp = () => {
     workspaceSection,
   } = state;
   const { chatBackend, client, onPiConnectionLost, recordSessionInfo } =
-    useClientBindings(state, { betaLayout });
+    useClientBindings(state);
   const { selectServer } = useConnection(state, { confirmNavigation });
   const {
     afterBetaNavigation,
@@ -116,7 +105,6 @@ export const MobileApp = () => {
     showBetaHome,
     syncSelectedLocation,
   } = useSessionNavigation(state, {
-    betaLayout,
     client,
     confirmNavigation,
     recordSessionInfo,
@@ -130,7 +118,6 @@ export const MobileApp = () => {
     client,
     resumeSheets,
     suspendSheets,
-    wide,
   });
   const { onProbeFailure, onProbeHealthy } = useConnectionRecovery(state, {
     resumeSheets,
@@ -181,7 +168,7 @@ export const MobileApp = () => {
     tab,
     workspaceSection,
   });
-  const framed = betaLayout && tab !== "settings";
+  const framed = tab !== "settings";
   const returnToSessions = () => {
     void changeTab("sessions");
   };
@@ -218,31 +205,6 @@ export const MobileApp = () => {
     showServerSheetRef.current();
   };
   const closeNavigation = () => setNavigationOpen(false);
-  const navigation =
-    client && active ? (
-      <NavigationPanel
-        active={active}
-        client={client}
-        connectionRevision={connectionRevision}
-        directory={directory}
-        info={info}
-        onChangeTab={(next) => {
-          void changeTab(next);
-        }}
-        onClose={closeNavigation}
-        onOpenProjects={() => {
-          void openProjects();
-        }}
-        onOpenServers={openServers}
-        onOpenSession={openSession}
-        projectLabel={projectLabel}
-        revision={revision}
-        sessionID={sessionID}
-        tab={tab}
-        wide={wide}
-      />
-    ) : null;
-  const openNavigationUnlessWide = wide ? undefined : openNavigation;
   const bumpRevision = () => setRevision((value) => value + 1);
 
   if (booting) {
@@ -271,7 +233,7 @@ export const MobileApp = () => {
           onConnectionLost={onPiConnectionLost}
         />
       )}
-      {!active && <Onboarding betaLayout={betaLayout}>{serverForm}</Onboarding>}
+      {!active && <Onboarding>{serverForm}</Onboarding>}
       {client && active && (
         <ConnectionProbe
           key={connectionRevision}
@@ -287,12 +249,10 @@ export const MobileApp = () => {
       {client && active && (
         <ShellFrame
           betaHome={betaHome}
-          betaLayout={betaLayout}
           creatingSession={creatingSession}
           currentOpenTab={currentOpenTab}
           directory={directory}
           error={error}
-          navigation={navigation}
           onMore={() => {
             Keyboard.dismiss();
             setBetaMoreOpen(true);
@@ -311,7 +271,6 @@ export const MobileApp = () => {
           sessionID={sessionID}
           showMessageSelection={showMessageSelection}
           tab={tab}
-          wide={wide}
         >
           <SessionsTab
             active={active}
@@ -319,7 +278,6 @@ export const MobileApp = () => {
             attachmentPath={attachmentPath}
             betaHome={betaHome}
             betaHomeProject={betaHomeProject}
-            betaLayout={betaLayout}
             chatBackend={chatBackend}
             client={client}
             connectionRevision={connectionRevision}
@@ -331,14 +289,10 @@ export const MobileApp = () => {
             onChooseDirectory={() => {
               void openProjects();
             }}
-            onNewSession={
-              betaLayout
-                ? (target) => {
-                    void createBetaSession(target);
-                  }
-                : undefined
-            }
-            onOpenNavigation={openNavigationUnlessWide}
+            onNewSession={(target) => {
+              void createBetaSession(target);
+            }}
+            onOpenNavigation={openNavigation}
             onOpenSession={(id) => {
               void openSession(id);
               bumpRevision();
@@ -355,29 +309,22 @@ export const MobileApp = () => {
             sessionID={sessionID}
             sessionPanelRequest={sessionPanelRequest}
             tab={tab}
-            wide={wide}
           />
           <WorkspaceTab
             active={active}
-            backLabel={returnLabel}
-            betaLayout={betaLayout}
             client={client}
             connectionRevision={connectionRevision}
             directory={directory}
             mounted={!!visited.workspace}
             onAttachFile={attachFile}
-            onBack={returnToSessions}
             onDirectoryChange={changeDirectory}
-            onOpenNavigation={openNavigation}
             section={workspaceSection}
             sessionID={sessionID}
             tab={tab}
-            wide={wide}
           />
           <SettingsTab
             active={active}
             backLabel={returnLabel}
-            betaLayout={betaLayout}
             client={client}
             connectionRevision={connectionRevision}
             directory={directory}
@@ -387,23 +334,11 @@ export const MobileApp = () => {
             onManageServers={openServers}
             onOpenNavigation={openNavigation}
             tab={tab}
-            wide={wide}
           />
         </ShellFrame>
       )}
-      <NavigationDrawer
-        active={active}
-        betaLayout={betaLayout}
-        onClose={closeNavigation}
-        onDismiss={onNavigationDismissed}
-        open={navigationOpen}
-        wide={wide}
-      >
-        {navigation}
-      </NavigationDrawer>
       <BetaSheets
         active={active}
-        betaLayout={betaLayout}
         currentTabID={currentOpenTab?.id}
         moreOpen={betaMoreOpen}
         navigationOpen={navigationOpen}

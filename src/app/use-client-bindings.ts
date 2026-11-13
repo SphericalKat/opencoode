@@ -6,14 +6,7 @@ import { createClient } from "../lib/client";
 import { noop } from "./constants";
 import type { MobileState } from "./use-app-state";
 
-interface UseClientBindingsDeps {
-  betaLayout: boolean;
-}
-
-export const useClientBindings = (
-  model: MobileState,
-  deps: UseClientBindingsDeps
-) => {
+export const useClientBindings = (model: MobileState) => {
   const {
     active,
     recoverConnectionRef,
@@ -21,7 +14,6 @@ export const useClientBindings = (
     sessionID,
     setOpenTabs,
   } = model;
-  const { betaLayout } = deps;
   const client = useMemo(
     () => (active && active.backend !== "pi" ? createClient(active) : null),
     [active]
@@ -65,7 +57,7 @@ export const useClientBindings = (
   );
 
   useEffect(() => {
-    if (!betaLayout || !client || !sessionID) {
+    if (!client || !sessionID) {
       return;
     }
     const controller = new AbortController();
@@ -79,7 +71,7 @@ export const useClientBindings = (
       })
       .catch(noop);
     return () => controller.abort();
-  }, [betaLayout, client, sessionID, recordSessionInfo]);
+  }, [client, sessionID, recordSessionInfo]);
   return {
     chatBackend,
     client,

@@ -9,7 +9,6 @@ import type { ConfirmNavigation, ServerClient, Tab } from "./types";
 import type { MobileState } from "./use-app-state";
 
 interface UseSessionNavigationDeps {
-  betaLayout: boolean;
   client: ServerClient | null;
   confirmNavigation: ConfirmNavigation;
   recordSessionInfo: (session: SessionInfo) => void;
@@ -54,7 +53,7 @@ export const useSessionNavigation = (
     setWorkspaceSection,
     tab,
   } = model;
-  const { betaLayout, client, confirmNavigation, recordSessionInfo } = deps;
+  const { client, confirmNavigation, recordSessionInfo } = deps;
   const showBetaHome = useCallback(() => {
     selectionRef.current += 1;
     openingSessionRef.current = null;
@@ -71,34 +70,15 @@ export const useSessionNavigation = (
       if (tab === "settings" && settingsCanGoBackRef.current) {
         return false;
       }
-      if (betaLayout && messageSelected && !betaHome && tab === "sessions") {
+      if (messageSelected && !betaHome && tab === "sessions") {
         return false;
       }
       if (sessionID && tab === "sessions") {
-        if (betaLayout && !betaHome) {
+        if (!betaHome) {
           showBetaHome();
           return true;
         }
-        if (betaLayout) {
-          return false;
-        }
-        const request = epochRef.current;
-        selectionRef.current += 1;
-        const navigation = selectionRef.current;
-        void confirmNavigation().then((leave) => {
-          if (
-            leave &&
-            activeRef.current === active &&
-            request === epochRef.current &&
-            navigation === selectionRef.current
-          ) {
-            selectedSessionRef.current = null;
-            setSessionID(null);
-            setPendingLocation(null);
-          }
-          return null;
-        });
-        return true;
+        return false;
       }
       if (tab !== "sessions") {
         setTab("sessions");
@@ -111,18 +91,10 @@ export const useSessionNavigation = (
     active,
     sessionID,
     tab,
-    confirmNavigation,
-    betaLayout,
     betaHome,
     messageSelected,
     showBetaHome,
-    activeRef,
-    setPendingLocation,
-    setSessionID,
-    selectedSessionRef,
-    epochRef,
     settingsCanGoBackRef,
-    selectionRef,
     setTab,
   ]);
 
@@ -146,13 +118,11 @@ export const useSessionNavigation = (
         directoryRef.current = nextDirectory;
         selectedSessionRef.current = null;
         setBetaHome(true);
-        if (betaLayout) {
-          setTab("sessions");
-          setBetaHomeProject({
-            directory: nextDirectory,
-            revision: navigation,
-          });
-        }
+        setTab("sessions");
+        setBetaHomeProject({
+          directory: nextDirectory,
+          revision: navigation,
+        });
         setDirectory(nextDirectory);
         setNewDirectory(nextDirectory);
         setSessionID(null);
@@ -166,7 +136,6 @@ export const useSessionNavigation = (
     [
       active,
       confirmNavigation,
-      betaLayout,
       setBetaHomeProject,
       setAttachmentContext,
       setProjectsOpen,
@@ -462,10 +431,8 @@ export const useSessionNavigation = (
   };
 
   const changeTab = async (next: Tab) => {
-    if (betaLayout) {
-      selectionRef.current += 1;
-      openingSessionRef.current = null;
-    }
+    selectionRef.current += 1;
+    openingSessionRef.current = null;
     if (next === "sessions" || next === tab) {
       setTab(next);
       setNavigationOpen(false);

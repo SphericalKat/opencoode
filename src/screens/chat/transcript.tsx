@@ -187,7 +187,6 @@ interface TranscriptListProps extends Pick<
   ChatController,
   | "activityNotice"
   | "beginUserScroll"
-  | "betaLayout"
   | "capabilities"
   | "contentSizeChanged"
   | "cursor"
@@ -224,7 +223,6 @@ interface TranscriptListProps extends Pick<
 export const TranscriptList = ({
   activityNotice,
   beginUserScroll,
-  betaLayout,
   capabilities,
   contentSizeChanged,
   cursor,
@@ -267,9 +265,7 @@ export const TranscriptList = ({
         ItemSeparatorComponent={MessageSeparator}
         maintainVisibleContentPosition={maintainPosition}
         style={styles.transcript}
-        contentContainerStyle={
-          betaLayout ? styles.betaMessages : styles.messages
-        }
+        contentContainerStyle={styles.betaMessages}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         onLoad={listLoaded}
@@ -321,7 +317,7 @@ export const TranscriptList = ({
           />
         }
       />
-      {betaLayout && showLatestControl && (
+      {showLatestControl && (
         <View style={styles.betaLatestOverlay}>
           <ChatIconButton
             name="down"

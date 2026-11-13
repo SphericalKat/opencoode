@@ -21,19 +21,6 @@ export const sessionDateGroup = (time: number): string => {
   return date.toDateString() === today.toDateString() ? "Yesterday" : "Older";
 };
 
-export const updatedLabel = (time: number): string => {
-  const date = new Date(time);
-  const today = new Date();
-  return date.toDateString() === today.toDateString()
-    ? date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-    : date.toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "short",
-        year:
-          date.getFullYear() === today.getFullYear() ? undefined : "numeric",
-      });
-};
-
 export const sessionStatus = (
   session: SessionInfo,
   working: boolean
@@ -62,17 +49,12 @@ export const visibleSessionStatus = (status: string): string | undefined =>
     ? status
     : undefined;
 
-export const childLabel = (session: SessionInfo): string | undefined =>
-  session.parentID ? "Child session" : undefined;
-
 export const startsDateGroup = ({
-  betaHome,
   group,
   index,
   search,
   sessions,
 }: {
-  betaHome: boolean;
   group: string;
   index: number;
   search: string;
@@ -80,8 +62,8 @@ export const startsDateGroup = ({
 }): boolean =>
   Platform.OS === "android" &&
   !search.trim() &&
-  (!betaHome || index > 0) &&
-  (index === 0 || sessionDateGroup(sessions[index - 1].time.updated) !== group);
+  index > 0 &&
+  sessionDateGroup(sessions[index - 1].time.updated) !== group;
 
 export const isTranscript = (
   transcript: { info?: unknown; messages?: unknown } | null | undefined
@@ -93,13 +75,6 @@ export const isTranscript = (
     return false;
   }
   return Array.isArray(transcript.messages);
-};
-
-export const headerTitle = (archived: boolean, compact: boolean): string => {
-  if (Platform.OS === "android" && archived) {
-    return "Archived sessions";
-  }
-  return compact ? "Your sessions" : "Sessions";
 };
 
 export const betaGroupLabel = (
@@ -172,20 +147,6 @@ export const projectSelectorLabel = (
     directoryName(projectDirectory)
   );
 };
-
-export const metadataLine = (
-  item: SessionInfo,
-  visibleStatus: string | undefined,
-  unread: boolean
-): string =>
-  [
-    visibleStatus,
-    unread ? "Unread" : undefined,
-    updatedLabel(item.time.updated),
-    childLabel(item),
-  ]
-    .filter(Boolean)
-    .join(" · ");
 
 export const searchPlaceholder = (archived: boolean): string =>
   archived ? "Search archived sessions" : "Search sessions";

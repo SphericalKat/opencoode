@@ -22,7 +22,6 @@ import {
 } from "react-native";
 
 import { Patch } from "../components/patch";
-import { ScreenHeader } from "../components/screen-header";
 import { TerminalPanel } from "../components/terminal-panel";
 import {
   Busy,
@@ -65,11 +64,7 @@ interface Props {
   ) => Promise<boolean | undefined> | undefined;
   visible?: boolean;
   sessionID?: string;
-  onBack?: () => void;
-  backLabel?: string;
-  onOpenNavigation?: () => void;
-  section?: WorkspaceSection;
-  hideChrome?: boolean;
+  section: WorkspaceSection;
 }
 
 const createStyles = (colors: ThemeColors) =>
@@ -92,15 +87,6 @@ const createStyles = (colors: ThemeColors) =>
       minHeight: 58,
       paddingVertical: 12,
     },
-    header: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 4,
-      justifyContent: "space-between",
-      paddingBottom: 12,
-      paddingHorizontal: pageInset,
-      paddingTop: 12,
-    },
     list: { flexGrow: 1, paddingBottom: 24, paddingHorizontal: pageInset },
     mediaPreview: {
       alignItems: "center",
@@ -110,32 +96,6 @@ const createStyles = (colors: ThemeColors) =>
       minHeight: 0,
     },
     screen: { backgroundColor: colors.bg, flex: 1, minHeight: 0 },
-    selectedTab: { backgroundColor: colors.panel },
-    tabs: {
-      backgroundColor: colors.raised,
-      borderRadius: 14,
-      flexDirection: "row",
-      gap: 2,
-      marginBottom: 12,
-      marginHorizontal: pageInset,
-      padding: 4,
-    },
-    title: {
-      fontSize: 25,
-      fontWeight: "500",
-      letterSpacing: -0.5,
-      lineHeight: 31,
-    },
-    workspaceTab: {
-      alignItems: "center",
-      borderRadius: 10,
-      flex: 1,
-      justifyContent: "center",
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: 0,
-      paddingHorizontal: 4,
-      paddingVertical: 9,
-    },
   });
 
 interface OpenFile {
@@ -1671,68 +1631,11 @@ const Workspace = ({
   onAttachFile,
   visible = true,
   sessionID,
-  onBack,
-  backLabel,
-  onOpenNavigation,
-  section,
-  hideChrome = false,
+  section: activeTab,
 }: Props) => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const [tab, setTab] = useState<WorkspaceSection>("Files");
-  const activeTab = section ?? tab;
   return (
     <View style={styles.screen}>
-      {!hideChrome &&
-        (onBack ? (
-          <ScreenHeader
-            title="Workspace"
-            backLabel={backLabel}
-            onBack={onBack}
-            onOpenNavigation={onOpenNavigation}
-          />
-        ) : (
-          <View style={styles.header}>
-            <BodyText accessibilityRole="header" style={styles.title}>
-              Workspace
-            </BodyText>
-          </View>
-        ))}
-      {!hideChrome && (
-        <View
-          accessibilityRole="tablist"
-          accessibilityLabel="Workspace sections"
-          style={[styles.tabs, onBack && { marginTop: 12 }]}
-        >
-          {(["Files", "Changes", "Worktrees", "Terminal"] as const).map(
-            (item) => (
-              <Pressable
-                key={item}
-                accessibilityRole="tab"
-                accessibilityLabel={item}
-                accessibilityState={{ selected: activeTab === item }}
-                aria-selected={activeTab === item}
-                style={({ pressed }) => [
-                  styles.workspaceTab,
-                  activeTab === item && styles.selectedTab,
-                  pressed && { opacity: 0.65 },
-                ]}
-                onPress={() => setTab(item)}
-              >
-                <BodyText
-                  style={{
-                    color: activeTab === item ? colors.text : colors.muted,
-                    fontSize: 14,
-                    textAlign: "center",
-                  }}
-                >
-                  {item}
-                </BodyText>
-              </Pressable>
-            )
-          )}
-        </View>
-      )}
       <View
         style={[styles.screen, activeTab !== "Files" && { display: "none" }]}
       >

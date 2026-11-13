@@ -124,15 +124,6 @@ export const createStyles = (colors: ThemeColors) =>
       paddingVertical: 4,
     },
     headerLeading: { marginEnd: 24 - pageInset, marginStart: pageInset - 24 },
-    headerSubtitle: { alignItems: "center", flexDirection: "row", gap: 6 },
-    headerTitle: {
-      flex: 1,
-      gap: 1,
-      minWidth: 0,
-      paddingHorizontal: 4,
-      paddingStart: pageInset - 8,
-    },
-    headerTitleWithNavigation: { paddingStart: pageInset - 4 },
     headerTrailing: { marginEnd: pageInset - 24, marginStart: 24 - pageInset },
     iconFace: {
       alignItems: "center",
@@ -147,12 +138,6 @@ export const createStyles = (colors: ThemeColors) =>
       height: Platform.OS === "android" ? 48 : 44,
       justifyContent: "center",
       width: Platform.OS === "android" ? 48 : 44,
-    },
-    messages: {
-      flexGrow: 1,
-      padding: 16,
-      paddingBottom: 24,
-      paddingHorizontal: pageInset,
     },
     modelList: { paddingBottom: 24, paddingHorizontal: 12 },
     modelRow: {
@@ -176,7 +161,6 @@ export const createStyles = (colors: ThemeColors) =>
     },
     modelTriggerText: { color: colors.muted, flexShrink: 1, fontSize: 13 },
     notice: { fontFamily: mono, fontSize: 12 },
-    projectLabel: { flexShrink: 1, fontSize: 13, lineHeight: 17 },
     radio: {
       alignItems: "center",
       borderColor: colors.muted,

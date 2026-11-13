@@ -5,14 +5,6 @@ import type { ThemeColors } from "../../lib/theme";
 
 export const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    actionButton: {
-      alignItems: "center",
-      justifyContent: "center",
-      marginEnd: -16,
-      marginStart: Platform.OS === "android" ? 0 : 16,
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: Platform.OS === "android" ? 48 : 44,
-    },
     androidSearch: {
       alignItems: "center",
       backgroundColor: colors.panel,
@@ -82,7 +74,6 @@ export const createStyles = (colors: ThemeColors) =>
       width: 40,
     },
     compactHeader: { paddingTop: 8 },
-    compactTitle: { fontSize: 19, letterSpacing: -0.2, lineHeight: 24 },
     dateGroup: {
       fontSize: 13,
       lineHeight: 19,
@@ -90,7 +81,6 @@ export const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 12,
       paddingTop: 4,
     },
-    drawerTitle: { fontSize: 15, fontWeight: "500", lineHeight: 21 },
     filter: {
       alignItems: "center",
       justifyContent: "center",
@@ -104,8 +94,6 @@ export const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: pageInset,
       paddingTop: 6,
     },
-    headingRow: { flexWrap: "nowrap", gap: Platform.OS === "android" ? 0 : 8 },
-    headingText: { flex: 1, gap: 2, minWidth: 0 },
     laterDateGroup: { paddingTop: 16 },
     list: {
       flexGrow: 1,
@@ -121,20 +109,6 @@ export const createStyles = (colors: ThemeColors) =>
       minHeight: Platform.OS === "android" ? 48 : 44,
     },
     metadata: { fontSize: 12, lineHeight: 17 },
-    navigationButton: {
-      alignItems: "center",
-      justifyContent: "center",
-      marginEnd: 16,
-      marginStart: -16,
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: Platform.OS === "android" ? 48 : 44,
-    },
-    newButton: {
-      alignItems: "center",
-      justifyContent: "center",
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: Platform.OS === "android" ? 48 : 44,
-    },
     pressed: { opacity: 0.55 },
     projectBadge: {
       alignItems: "center",
@@ -161,13 +135,6 @@ export const createStyles = (colors: ThemeColors) =>
     },
     projectSelectorLabel: { flex: 1, fontSize: 14, lineHeight: 19 },
     projectSheetContent: { gap: 0 },
-    rowAction: {
-      alignItems: "center",
-      justifyContent: "center",
-      marginRight: 4,
-      minHeight: Platform.OS === "android" ? 48 : 44,
-      minWidth: Platform.OS === "android" ? 48 : 44,
-    },
     screen: { backgroundColor: colors.bg, flex: 1 },
     search: {
       backgroundColor: colors.panel,
