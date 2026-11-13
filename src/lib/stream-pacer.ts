@@ -10,6 +10,7 @@ const BRIDGE_FACTOR = 1.25;
 const MAX_DRAIN_WINDOW = 1500;
 
 export interface StreamPacer {
+  drain: (interval: number) => number;
   feed: (characters: number, now: number) => void;
   reset: () => void;
   take: (interval: number) => boolean;
@@ -23,6 +24,14 @@ export const createStreamPacer = (): StreamPacer => {
   let lastArrival: number | undefined;
 
   return {
+    drain: (interval) => {
+      if (budget <= 0) {
+        return 0;
+      }
+      const amount = Math.min(budget, drainPerMs * interval);
+      budget -= amount;
+      return amount;
+    },
     feed: (characters, now) => {
       if (characters <= 0) {
         return;

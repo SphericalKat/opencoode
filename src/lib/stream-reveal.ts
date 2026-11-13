@@ -9,7 +9,6 @@ export interface RevealPiece {
 }
 
 export const REVEAL_DURATION = 600;
-export const MERGE_WINDOW = 100;
 // A span starts fading when it mounts, which can trail the text's arrival by a
 // slow render. A chunk settles only after this grace, so pruning never cuts a
 // fade short.
@@ -29,22 +28,70 @@ export const pruneChunks = (
   return firstLive === -1 ? [] : chunks.slice(firstLive);
 };
 
-export const recordGrowth = (
-  chunks: RevealChunk[],
-  previousLength: number,
-  nextLength: number,
-  now: number
-): RevealChunk[] => {
-  const live = pruneChunks(chunks, now);
-  if (nextLength <= previousLength) {
-    return live.filter((chunk) => chunk.start < nextLength);
+export interface RevealRange {
+  start: number;
+  end: number;
+}
+
+export interface RevealState {
+  chunks: RevealChunk[];
+  shown: number;
+}
+
+export const RELEASE_INTERVAL = 100;
+// The slowest release, in characters per tick, so a backlog always drains even
+// when the pacer has no budget left for it.
+export const MIN_RELEASE = 6;
+const MAX_WORD_EXTENSION = 24;
+const WHITESPACE = /\s/u;
+
+const wordEnd = (text: string, target: number): number => {
+  const limit = Math.min(text.length, target + MAX_WORD_EXTENSION);
+  for (let index = target; index < limit; index += 1) {
+    if (WHITESPACE.test(text[index])) {
+      return index + 1;
+    }
   }
-  const last = live.at(-1);
-  if (last && now - last.startedAt < MERGE_WINDOW) {
-    return live;
-  }
-  return [...live, { start: previousLength, startedAt: now }];
+  return Math.min(text.length, target);
 };
+
+const skipAtomic = (target: number, atomic: RevealRange[]): number => {
+  const inside = atomic.find(
+    (range) => range.start < target && target < range.end
+  );
+  return inside ? inside.end : target;
+};
+
+// Releases the next run of buffered text as a new chunk. The run ends at a
+// word boundary, and a code block or table is released whole.
+export const releaseText = (
+  state: RevealState,
+  text: string,
+  atomic: RevealRange[],
+  amount: number,
+  now: number
+): RevealState => {
+  const step = Math.max(MIN_RELEASE, Math.ceil(amount));
+  const target = skipAtomic(wordEnd(text, state.shown + step), atomic);
+  if (target <= state.shown) {
+    return state;
+  }
+  return {
+    chunks: [
+      ...pruneChunks(state.chunks, now),
+      { start: state.shown, startedAt: now },
+    ],
+    shown: target,
+  };
+};
+
+export const clampReveal = (state: RevealState, length: number): RevealState =>
+  length >= state.shown
+    ? state
+    : {
+        chunks: state.chunks.filter((chunk) => chunk.start < length),
+        shown: length,
+      };
 
 const pushPiece = (pieces: RevealPiece[], text: string, startedAt?: number) => {
   if (!text) {

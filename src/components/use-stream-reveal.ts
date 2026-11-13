@@ -1,54 +1,96 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { SETTLE_AFTER, pruneChunks, recordGrowth } from "../lib/stream-reveal";
-import type { RevealChunk } from "../lib/stream-reveal";
+import { createStreamPacer } from "../lib/stream-pacer";
+import {
+  RELEASE_INTERVAL,
+  SETTLE_AFTER,
+  clampReveal,
+  pruneChunks,
+  releaseText,
+} from "../lib/stream-reveal";
+import type { RevealRange, RevealState } from "../lib/stream-reveal";
 import { useMotionPreference } from "./motion";
 
-interface RevealState {
-  chunks: RevealChunk[];
+export interface VisibleText {
+  atomic: RevealRange[];
+  text: string;
+}
+
+interface HookState extends RevealState {
   length: number;
 }
 
 export const useStreamReveal = (
-  length: number,
+  visible: VisibleText,
   streaming: boolean
-): RevealChunk[] => {
+): RevealState => {
   const reduced = useMotionPreference();
-  const [state, setState] = useState<RevealState>({ chunks: [], length });
-  // Recording during render keeps new text from showing opaque for a frame.
+  const { length } = visible.text;
+  const buffering = streaming && !reduced;
+  const pacer = useMemo(() => createStreamPacer(), []);
+  const [state, setState] = useState<HookState>({
+    chunks: [],
+    length,
+    shown: length,
+  });
+  // Updating during render keeps new text out of the frame that receives it.
   if (state.length !== length) {
-    const record = (streaming && !reduced) || length < state.length;
+    const hold = buffering && length > state.length;
     setState((current) => {
-      const now = Date.now();
-      return {
-        chunks: record
-          ? recordGrowth(current.chunks, current.length, length, now)
-          : pruneChunks(current.chunks, now),
-        length,
-      };
+      const clamped = clampReveal(current, length);
+      return { ...clamped, length, shown: hold ? clamped.shown : length };
     });
   }
-  // Fades run on the UI thread, so React only hears about a chunk again when
-  // it finishes and its text can render as plain text.
-  const nextFinish = state.chunks[0]?.startedAt;
+
+  const latest = useRef(visible);
+  const fedLength = useRef(length);
   useEffect(() => {
-    if (nextFinish === undefined) {
+    latest.current = visible;
+    const added = length - fedLength.current;
+    fedLength.current = length;
+    if (added > 0 && buffering) {
+      pacer.feed(added, Date.now());
+    }
+  }, [visible, length, buffering, pacer]);
+
+  const buffered = state.shown < length;
+  useEffect(() => {
+    if (!buffered) {
       return;
     }
-    const finish = nextFinish + SETTLE_AFTER;
+    const timer = setInterval(() => {
+      const { atomic, text } = latest.current;
+      const amount = pacer.drain(RELEASE_INTERVAL);
+      setState((current) => ({
+        ...current,
+        ...releaseText(current, text, atomic, amount, Date.now()),
+      }));
+    }, RELEASE_INTERVAL);
+    return () => clearInterval(timer);
+  }, [buffered, pacer]);
+
+  // Fades run on the UI thread, so React only hears about a chunk again when
+  // it settles and its text can render as plain text.
+  const nextSettle = state.chunks[0]?.startedAt;
+  useEffect(() => {
+    if (nextSettle === undefined) {
+      return;
+    }
+    const settle = nextSettle + SETTLE_AFTER;
     const timer = setTimeout(
       () => {
         // A timer that fires a millisecond early would otherwise leave the
         // head chunk in place with no timer left to remove it.
-        const now = Math.max(Date.now(), finish);
+        const now = Math.max(Date.now(), settle);
         setState((current) => ({
           ...current,
           chunks: pruneChunks(current.chunks, now),
         }));
       },
-      Math.max(0, finish - Date.now())
+      Math.max(0, settle - Date.now())
     );
     return () => clearTimeout(timer);
-  }, [nextFinish]);
-  return state.chunks;
+  }, [nextSettle]);
+
+  return state;
 };
