@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       android_signing: ${{ steps.signing.outputs.ready }}
-      android_runner: ${{ steps.runner.outputs.labels }}
+      android_self_hosted: ${{ steps.runner.outputs.self_hosted }}
     steps:
       - name: Require an existing versioned release
         run: |
@@ -57,14 +57,16 @@ jobs:
         id: runner
         env:
           GH_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+        # GitHub drops a job output that contains a secret value, and a secret masks "opencoode".
+        # So the output carries a boolean, and the Android job holds the labels.
         run: |
-          labels='"ubuntu-latest"'
+          self_hosted=false
           if [[ -n "$GH_TOKEN" ]] && gh api "repos/$GH_REPO/actions/runners" \
             --jq '.runners[] | select(.status == "online") | .labels[].name' | grep -qx opencoode-pc; then
-            labels='["self-hosted","opencoode-pc"]'
+            self_hosted=true
           fi
-          echo "labels=$labels" >> "$GITHUB_OUTPUT"
-          echo "Android runner: $labels" >> "$GITHUB_STEP_SUMMARY"
+          echo "self_hosted=$self_hosted" >> "$GITHUB_OUTPUT"
+          echo "Android runner is self-hosted: $self_hosted" >> "$GITHUB_STEP_SUMMARY"
 
   android:
     needs: prepare
@@ -72,7 +74,7 @@ jobs:
     concurrency:
       group: release-artifacts-${{ inputs.tag }}-android
       cancel-in-progress: false
-    runs-on: ${{ fromJSON(needs.prepare.outputs.android_runner) }}
+    runs-on: ${{ needs.prepare.outputs.android_self_hosted == 'true' && fromJSON('["self-hosted","opencoode-pc"]') || 'ubuntu-latest' }}
     timeout-minutes: 60
     env:
       RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
