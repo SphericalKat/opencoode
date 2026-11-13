@@ -34,6 +34,7 @@ const HapticsSetting = ({
         accessibilityLabel="Haptic feedback"
         value={enabled}
         trackColor={{ false: colors.border, true: colors.accent }}
+        thumbColor={colors.accentText}
         onValueChange={(next) => {
           onError(null);
           void setHapticsEnabled(next)
