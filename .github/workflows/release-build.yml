@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       android_signing: ${{ steps.signing.outputs.ready }}
+      android_runner: ${{ steps.runner.outputs.labels }}
     steps:
       - name: Require an existing versioned release
         run: |
@@ -51,13 +52,27 @@ jobs:
             echo 'Android artifacts skipped: configure all four release signing secrets in docs/releases.md.' >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # A job that targets an offline self-hosted runner waits in the queue instead of falling back.
+      - name: Select Android runner
+        id: runner
+        env:
+          GH_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+        run: |
+          labels='"ubuntu-latest"'
+          if [[ -n "$GH_TOKEN" ]] && gh api "repos/$GH_REPO/actions/runners" \
+            --jq '.runners[] | select(.status == "online") | .labels[].name' | grep -qx opencoode-pc; then
+            labels='["self-hosted","opencoode-pc"]'
+          fi
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+          echo "Android runner: $labels" >> "$GITHUB_STEP_SUMMARY"
+
   android:
     needs: prepare
     if: needs.prepare.outputs.android_signing == 'true'
     concurrency:
       group: release-artifacts-${{ inputs.tag }}-android
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.prepare.outputs.android_runner) }}
     timeout-minutes: 60
     env:
       RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}

@@ -4,7 +4,7 @@
 
 The release configuration follows [Rush Hour](https://github.com/SphericalKat/rush-hour/blob/main/.github/workflows/release-please.yml). Release Please opens a release PR after a conventional commit reaches `develop`. The PR updates the changelog, package versions, Expo version, and native build versions. The PR title uses `Release Opencoode <version>`.
 
-After the release PR merges, the workflow creates a version tag and a GitHub release. The same workflow then calls the artifact workflow directly. This avoids the GitHub restriction on new workflow events from `GITHUB_TOKEN`. Native builds run on GitHub runners. They do not use this computer or EAS credits. The workflows contain no test jobs and do not submit apps to stores.
+After the release PR merges, the workflow creates a version tag and a GitHub release. The same workflow then calls the artifact workflow directly. This avoids the GitHub restriction on new workflow events from `GITHUB_TOKEN`. Native builds run on the maintainer's computer if its runner is online, and on GitHub runners otherwise. See [Self-hosted Android runner](#self-hosted-android-runner). Native builds do not use EAS credits. The workflows contain no test jobs and do not submit apps to stores.
 
 The Android job uses `pnpm/setup@v3.1.2` to install Node.js 26 and the pnpm version from `package.json`. The action caches the pnpm store through `pnpm-lock.yaml`. The job uses `pnpm install --frozen-lockfile` and `pnpm exec expo prebuild`. Dependency changes require an updated lockfile before the release.
 
@@ -63,6 +63,53 @@ Native versions use `major * 10000 + minor * 100 + patch` for Android and `X.Y.Z
 4. Start the workflow.
 
 The workflow replaces assets with the same filename after a successful rebuild. The workflow does not create another release or change its notes.
+
+## Self-hosted Android runner
+
+The `prepare` job selects the runner for the Android job. If a runner with the `opencoode-pc` label is online, the Android job runs on it. Otherwise, the Android job runs on `ubuntu-latest`. The job summary records the selected runner.
+
+GitHub does not fall back from an offline self-hosted runner. A job that targets one waits in the queue. For this reason, `prepare` reads the runner status before the Android job starts. A busy runner counts as online, so the Android job waits for it. If the computer goes offline during a build, the build fails. Rerun it through [Retry an artifact build](#retry-an-artifact-build).
+
+The runner status requires the `RUNNER_STATUS_TOKEN` repository secret. `GITHUB_TOKEN` cannot list runners. If the secret is absent, the Android job always uses `ubuntu-latest`.
+
+### Create the status token
+
+1. Open **GitHub → Settings → Developer settings → Fine-grained tokens**.
+2. Generate a token with access to `SphericalKat/opencoode` only.
+3. Grant the **Administration: Read-only** repository permission.
+4. Save the token as the `RUNNER_STATUS_TOKEN` Actions secret in this repository.
+
+### Runner installation
+
+The runner follows the [GitHub procedure to add a self-hosted runner](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners).
+
+| Property     | Value                                                    |
+| ------------ | -------------------------------------------------------- |
+| Directory    | `~/actions-runner`                                       |
+| Runner name  | `crucible`                                               |
+| Labels       | `self-hosted`, `Linux`, `X64`, `opencoode-pc`            |
+| systemd unit | `actions.runner.SphericalKat-opencoode.crucible.service` |
+| Service user | `sphericalkat`                                           |
+
+The systemd unit starts at boot. The runner `.env` and `.path` files contain only `LANG` and the system `PATH`. The setup actions install Java, the Android SDK, and Node.js for each job.
+
+### Manage the runner
+
+Run these commands in `~/actions-runner`:
+
+| Action | Command |
+| --- | --- |
+| Show the status | `sudo ./svc.sh status` |
+| Stop the runner | `sudo ./svc.sh stop` |
+| Start the runner | `sudo ./svc.sh start` |
+| Turn off start at boot | `sudo systemctl disable actions.runner.SphericalKat-opencoode.crucible.service` |
+| Remove the service | `sudo ./svc.sh uninstall` |
+
+If you stop the runner, new release builds use `ubuntu-latest`. To remove the runner from GitHub, stop and uninstall the service first. Then run `./config.sh remove --token <token>` with a token from `gh api -X POST repos/SphericalKat/opencoode/actions/runners/remove-token --jq .token`.
+
+### Security
+
+This repository is public. GitHub recommends self-hosted runners only for private repositories. A pull request from a fork can change a workflow to target the `opencoode-pc` label. That workflow then runs on this computer. The repository requires approval for fork pull request workflows from first-time contributors only. Do not approve a fork workflow that targets a self-hosted runner.
 
 ## Setup evidence
 
