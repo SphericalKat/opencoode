@@ -288,7 +288,6 @@ const PiWorkspaceSession = ({
       {!settingsOpen && !selected && (
         <BetaTabStrip
           current={currentTab}
-          count={tabs.length}
           busy={busy || !session}
           onOpen={() => setNavigationOpen(true)}
         />

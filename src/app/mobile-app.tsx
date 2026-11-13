@@ -265,7 +265,6 @@ export const MobileApp = () => {
             void syncSelectedLocation();
           }}
           onSelectPane={openBetaPane}
-          openTabCount={openTabs.length}
           pendingLocation={pendingLocation}
           selectedPane={selectedPane}
           sessionID={sessionID}

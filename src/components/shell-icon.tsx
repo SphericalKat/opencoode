@@ -11,6 +11,7 @@ export const ShellIcon = ({
     | "menu"
     | "close"
     | "chevron"
+    | "chevron-down"
     | "back"
     | "compose"
     | "more"
@@ -83,6 +84,15 @@ export const ShellIcon = ({
       {name === "chevron" && (
         <Path
           d="m9 5 7 7-7 7"
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+      {name === "chevron-down" && (
+        <Path
+          d="m5 9 7 7 7-7"
           stroke={color}
           strokeWidth={1.5}
           strokeLinecap="round"
