@@ -51,7 +51,8 @@ Use the `android-cli` skill for native builds, device interaction, and screensho
 - `pnpm android` starts Metro; it does not compile a new native APK. For a native development build, use `pnpm exec expo run:android --device`.
 - For a Gradle-only APK build, run `./gradlew :app:assembleDebug` from `android/`. Its output is `android/app/build/outputs/apk/debug/app-debug.apk` relative to the repository root.
 - The Android CLI also supports `android build`; inspect `android build --help` for build-reference arguments. Deploy an existing APK with `android run --device <serial> --apks <apk-path> --activity dev.opencoode.mobile.MainActivity`.
-- Select the target explicitly when multiple devices are connected. Discover serials with `adb devices`; inspect existing AVDs with `android emulator list` before starting another emulator.
+- Use the `android-emulator` skill to start a private emulator for each task. Shut it down with the skill before the task ends.
+- Select the target explicitly when multiple devices are connected. Use only the emulator that your task started.
 - Debug builds need Metro. For a USB-connected device, reverse its selected Metro port with `adb -s <serial> reverse tcp:<port> tcp:<port>`.
 - On an emulator, a debug build loads its bundle from `10.0.2.2:8081`, the host computer, so `adb reverse` has no effect. To use a different Metro port, set `debug_http_host` in `shared_prefs/dev.opencoode.mobile_preferences.xml` with `adb shell run-as dev.opencoode.mobile`, then restart the app.
 - Rebuild the APK when `develop` adds a native module. An old APK with a newer bundle can fail in ways the source change did not cause.
