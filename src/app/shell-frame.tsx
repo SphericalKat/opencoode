@@ -11,6 +11,10 @@ import type {
   SessionPane,
 } from "../components/beta-navigation";
 import { ErrorNotice } from "../components/ui";
+import {
+  SelectionBarOverlay,
+  SelectionBarProvider,
+} from "../lib/selection-bar";
 import { useThemedStyles } from "../lib/theme";
 import { createStyles } from "./styles";
 import type { Tab } from "./types";
@@ -63,7 +67,6 @@ interface ShellFrameProps {
   pendingLocation: { directory: string; sessionID: string } | null;
   selectedPane: SessionPane;
   sessionID: string | null;
-  showMessageSelection: boolean;
   tab: Tab;
 }
 
@@ -82,41 +85,45 @@ export const ShellFrame = ({
   pendingLocation,
   selectedPane,
   sessionID,
-  showMessageSelection,
   tab,
 }: ShellFrameProps) => {
   const styles = useThemedStyles(createStyles);
-  const framed = tab !== "settings" && !showMessageSelection;
+  const framed = tab !== "settings";
   const showSessionNavigation = framed && !betaHome && !!sessionID;
   return (
-    <View style={styles.shell}>
-      <View style={styles.main}>
-        {framed && (
-          <BetaTabStrip
-            current={currentOpenTab}
-            busy={creatingSession}
-            onOpen={onOpenNavigation}
-          />
-        )}
-        <StatusBanners
-          error={error}
-          onRetryLocation={onRetryLocation}
-          pendingLocation={pendingLocation}
-          sessionID={sessionID}
-        />
-        <SessionSurface style={styles.body} framed={framed}>
-          {showSessionNavigation && (
-            <BetaSessionNavigation
-              pane={selectedPane}
-              directory={directory}
-              onSelect={onSelectPane}
-              onMore={onMore}
-              onProject={onProject}
-            />
+    <SelectionBarProvider>
+      <View style={styles.shell}>
+        <View style={styles.main}>
+          {framed && (
+            <View>
+              <BetaTabStrip
+                current={currentOpenTab}
+                busy={creatingSession}
+                onOpen={onOpenNavigation}
+              />
+              <SelectionBarOverlay />
+            </View>
           )}
-          {children}
-        </SessionSurface>
+          <StatusBanners
+            error={error}
+            onRetryLocation={onRetryLocation}
+            pendingLocation={pendingLocation}
+            sessionID={sessionID}
+          />
+          <SessionSurface style={styles.body} framed={framed}>
+            {showSessionNavigation && (
+              <BetaSessionNavigation
+                pane={selectedPane}
+                directory={directory}
+                onSelect={onSelectPane}
+                onMore={onMore}
+                onProject={onProject}
+              />
+            )}
+            {children}
+          </SessionSurface>
+        </View>
       </View>
-    </View>
+    </SelectionBarProvider>
   );
 };

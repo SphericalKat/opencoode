@@ -51,7 +51,6 @@ export const MobileApp = () => {
     flowRevision,
     foreground,
     form,
-    messageSelected,
     navigationOpen,
     newDirectory,
     openTabs,
@@ -153,21 +152,15 @@ export const MobileApp = () => {
     />
   );
 
-  const {
-    currentOpenTab,
-    projectLabel,
-    returnLabel,
-    selectedPane,
-    showMessageSelection,
-  } = deriveShellView({
-    betaHome,
-    directory,
-    messageSelected,
-    openTabs,
-    sessionID,
-    tab,
-    workspaceSection,
-  });
+  const { currentOpenTab, projectLabel, returnLabel, selectedPane } =
+    deriveShellView({
+      betaHome,
+      directory,
+      openTabs,
+      sessionID,
+      tab,
+      workspaceSection,
+    });
   const framed = tab !== "settings";
   const returnToSessions = () => {
     void changeTab("sessions");
@@ -268,7 +261,6 @@ export const MobileApp = () => {
           pendingLocation={pendingLocation}
           selectedPane={selectedPane}
           sessionID={sessionID}
-          showMessageSelection={showMessageSelection}
           tab={tab}
         >
           <SessionsTab
