@@ -1,5 +1,5 @@
 import * as Clipboard from "expo-clipboard";
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -21,6 +21,7 @@ import { PressFeedback } from "../../components/motion";
 import { ShellIcon } from "../../components/shell-icon";
 import { Button, ErrorNotice, BodyText, Row } from "../../components/ui";
 import { errorMessage } from "../../lib/client";
+import { MessageActionsContext } from "../../lib/message-actions";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { createStyles } from "./styles";
 
@@ -184,6 +185,7 @@ export const CodeBlock = ({
   selectable?: boolean;
 }) => {
   const styles = useThemedStyles(createStyles);
+  const selectMessage = useContext(MessageActionsContext);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -204,8 +206,23 @@ export const CodeBlock = ({
         />
       </Row>
       {error && <ErrorNotice error={error} />}
-      <ScrollView horizontal>
-        <Text selectable={selectable} style={styles.codeText}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        directionalLockEnabled
+        persistentScrollbar
+        showsHorizontalScrollIndicator
+      >
+        {/* A long-press handler makes this Text the JS responder instead of
+            the message row. On Android the row would otherwise intercept
+            every move, and this ScrollView could never start a drag. */}
+        <Text
+          selectable={selectable}
+          onLongPress={
+            !selectable && Platform.OS !== "web" ? selectMessage : undefined
+          }
+          style={styles.codeText}
+        >
           {code}
         </Text>
       </ScrollView>

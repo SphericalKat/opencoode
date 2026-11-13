@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { View } from "react-native";
 
 import { GlobalForms } from "../../components/global-forms";
 import {
@@ -17,7 +16,7 @@ import {
 import type { Client } from "../../lib/client";
 import { externalURL, withSettingsRequest } from "../../lib/settings";
 import { useTheme, useThemedStyles } from "../../lib/theme";
-import { Page, runBusy, useResource } from "./shared";
+import { Page, SettingsCardHeader, runBusy, useResource } from "./shared";
 import { createStyles } from "./styles";
 
 export const Mcp = ({
@@ -87,30 +86,31 @@ export const Mcp = ({
       </Row>
       <ErrorNotice error={errorAction} />
       {data?.map((item) => (
-        <Card key={item.name}>
-          <Row style={{ justifyContent: "space-between" }}>
-            <View style={{ flex: 1 }}>
-              <BodyText style={styles.name}>{item.title || item.name}</BodyText>
-              <BodyText muted>
-                {item.name} · {item.status.status.replace("_", " ")}
-              </BodyText>
-            </View>
-            <Button
-              title={
-                item.status.status === "connected" ? "Disconnect" : "Connect"
-              }
-              busy={busy}
-              compact
-              onPress={() => {
-                void run(async (signal) => {
-                  const input = { location: { directory }, server: item.name };
-                  await (item.status.status === "connected"
-                    ? client.experimental.mcp.disconnect(input, { signal })
-                    : client.experimental.mcp.connect(input, { signal }));
-                });
-              }}
-            />
-          </Row>
+        <Card key={item.name} style={styles.card}>
+          <SettingsCardHeader
+            action={
+              <Button
+                title={
+                  item.status.status === "connected" ? "Disconnect" : "Connect"
+                }
+                busy={busy}
+                compact
+                onPress={() => {
+                  void run(async (signal) => {
+                    const input = {
+                      location: { directory },
+                      server: item.name,
+                    };
+                    await (item.status.status === "connected"
+                      ? client.experimental.mcp.disconnect(input, { signal })
+                      : client.experimental.mcp.connect(input, { signal }));
+                  });
+                }}
+              />
+            }
+            subtitle={`${item.name} · ${item.status.status.replace("_", " ")}`}
+            title={item.title || item.name}
+          />
           {"error" in item.status && (
             <BodyText style={{ color: colors.danger }}>
               {item.status.error}

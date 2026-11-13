@@ -48,6 +48,8 @@ export { darkColors as colors } from "../lib/theme";
 export const sans = "Inter";
 export const mono = "IBMPlexMono";
 export const touchTarget = Platform.OS === "android" ? 48 : 44;
+export const compactButtonSize = 32;
+export const disabledOpacity = 0.55;
 const createStyles = (colors: ThemeColors) => {
   const inset = Platform.OS !== "android" || Number(Platform.Version) >= 29;
   return StyleSheet.create({
@@ -98,17 +100,32 @@ const createStyles = (colors: ThemeColors) => {
       padding: 14,
       paddingHorizontal: 15,
     },
-    compact: { minHeight: 32, paddingHorizontal: 10, paddingVertical: 5 },
+    compact: {
+      minHeight: compactButtonSize,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
     danger: { backgroundColor: colors.raised },
-    disclosure: { gap: 0, padding: 0 },
+    disclosure: { gap: 0, paddingHorizontal: 0, paddingVertical: 0 },
     disclosureBody: { gap: 10, padding: 14, paddingTop: 0 },
+    disclosureEmbedded: {
+      borderTopColor: colors.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    disclosureEmbeddedBody: { paddingBottom: 0, paddingHorizontal: 0 },
+    disclosureEmbeddedHeader: { paddingHorizontal: 0, paddingVertical: 0 },
     disclosureHeader: {
       alignItems: "center",
       borderRadius: 8,
       flexDirection: "row",
+      flex: 1,
       gap: 8,
       minHeight: touchTarget,
       padding: 14,
+    },
+    disclosureHeaderRow: {
+      alignItems: "center",
+      flexDirection: "row",
     },
     empty: {
       alignItems: "center",
@@ -126,6 +143,23 @@ const createStyles = (colors: ThemeColors) => {
       padding: 12,
     },
     fieldLabel: { fontSize: 14, fontWeight: "500", letterSpacing: 0 },
+    fieldInputContainer: { position: "relative" },
+    fieldSecureInput: {
+      minHeight: touchTarget + 2,
+      paddingRight: touchTarget + 4,
+    },
+    fieldVisibilityButton: {
+      alignItems: "center",
+      borderRadius: 7,
+      bottom: 1,
+      justifyContent: "center",
+      minHeight: touchTarget,
+      position: "absolute",
+      right: 1,
+      top: 1,
+      width: touchTarget,
+    },
+    fieldVisibilityDisabled: { opacity: disabledOpacity },
     fitInner: { flex: 0, flexShrink: 1 },
     fitScroll: { flex: 0, flexShrink: 1 },
     fitSheet: {
@@ -320,8 +354,16 @@ export const Button = ({
       }}
       aria-pressed={selected}
       disabled={disabled || busy}
+      hitSlop={compact ? (touchTarget - compactButtonSize) / 2 : undefined}
       onPress={onPress}
-      style={[styles.buttonTarget, (disabled || busy) && { opacity: 0.55 }]}
+      style={[
+        styles.buttonTarget,
+        compact && {
+          minHeight: compactButtonSize,
+          minWidth: compactButtonSize,
+        },
+        (disabled || busy) && { opacity: disabledOpacity },
+      ]}
     >
       {({ pressed }) => (
         <PressFeedback
@@ -360,6 +402,36 @@ export const Button = ({
     </Pressable>
   );
 };
+const FieldVisibilityToggle = ({
+  disabled,
+  label,
+  onToggle,
+  visible,
+}: {
+  disabled: boolean;
+  label?: string;
+  onToggle: () => void;
+  visible: boolean;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <Pressable
+      accessibilityLabel={`${visible ? "Hide" : "Show"} ${label ?? "password"}`}
+      accessibilityRole="button"
+      accessibilityState={{ disabled, selected: visible }}
+      disabled={disabled}
+      onPress={onToggle}
+      style={({ pressed }) => [
+        styles.fieldVisibilityButton,
+        pressed && styles.ghostPressed,
+        disabled && styles.fieldVisibilityDisabled,
+      ]}
+    >
+      <ShellIcon name={visible ? "eye-off" : "eye"} color={colors.muted} />
+    </Pressable>
+  );
+};
 export const Field = ({
   label,
   style,
@@ -372,6 +444,36 @@ export const Field = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [focused, setFocused] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const canToggleVisibility = props.secureTextEntry && !props.multiline;
+  const input = (
+    <TextInput
+      accessibilityLabel={label ?? props.placeholder}
+      placeholderTextColor={colors.faint}
+      selectionColor={colors.focus}
+      autoCapitalize="none"
+      autoCorrect={false}
+      {...props}
+      secureTextEntry={
+        canToggleVisibility ? !passwordVisible : props.secureTextEntry
+      }
+      onFocus={(event) => {
+        setFocused(true);
+        props.onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        setFocused(false);
+        props.onBlur?.(event);
+      }}
+      style={[
+        styles.input,
+        props.multiline && { minHeight: 100, textAlignVertical: "top" },
+        focused && { borderColor: colors.focus },
+        style,
+        canToggleVisibility && styles.fieldSecureInput,
+      ]}
+    />
+  );
   return (
     <View style={[{ gap: 8 }, containerStyle]}>
       {label && (
@@ -379,28 +481,19 @@ export const Field = ({
           {label}
         </BodyText>
       )}
-      <TextInput
-        accessibilityLabel={label ?? props.placeholder}
-        placeholderTextColor={colors.faint}
-        selectionColor={colors.focus}
-        autoCapitalize="none"
-        autoCorrect={false}
-        {...props}
-        onFocus={(event) => {
-          setFocused(true);
-          props.onFocus?.(event);
-        }}
-        onBlur={(event) => {
-          setFocused(false);
-          props.onBlur?.(event);
-        }}
-        style={[
-          styles.input,
-          props.multiline && { minHeight: 100, textAlignVertical: "top" },
-          focused && { borderColor: colors.focus },
-          style,
-        ]}
-      />
+      {canToggleVisibility ? (
+        <View style={styles.fieldInputContainer}>
+          {input}
+          <FieldVisibilityToggle
+            disabled={props.editable === false}
+            label={label}
+            onToggle={() => setPasswordVisible((visible) => !visible)}
+            visible={passwordVisible}
+          />
+        </View>
+      ) : (
+        input
+      )}
     </View>
   );
 };
@@ -743,10 +836,14 @@ export const Disclosure = ({
   title,
   children,
   disclosureKey,
+  headerAction,
+  variant = "card",
 }: {
   title: string;
   children: React.ReactNode;
   disclosureKey?: string;
+  headerAction?: React.ReactNode;
+  variant?: "card" | "embedded";
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -765,33 +862,49 @@ export const Disclosure = ({
     setOpen(initialOpen);
   }
   return (
-    <Card style={styles.disclosure}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        accessibilityState={{ expanded: open }}
-        aria-expanded={open}
-        onPress={() =>
-          setOpen(
-            disclosureKey && disclosures
-              ? disclosures.toggle(disclosureKey)
-              : !open
-          )
-        }
-        onLongPress={Platform.OS === "web" ? undefined : openMessageActions}
-        style={({ pressed }) => [
-          styles.disclosureHeader,
-          pressed && styles.ghostPressed,
+    <View
+      style={[
+        variant === "card" && styles.card,
+        styles.disclosure,
+        variant === "embedded" && styles.disclosureEmbedded,
+      ]}
+    >
+      <View style={styles.disclosureHeaderRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={title}
+          accessibilityState={{ expanded: open }}
+          aria-expanded={open}
+          onPress={() =>
+            setOpen(
+              disclosureKey && disclosures
+                ? disclosures.toggle(disclosureKey)
+                : !open
+            )
+          }
+          onLongPress={Platform.OS === "web" ? undefined : openMessageActions}
+          style={({ pressed }) => [
+            styles.disclosureHeader,
+            variant === "embedded" && styles.disclosureEmbeddedHeader,
+            pressed && styles.ghostPressed,
+          ]}
+        >
+          <BodyText style={{ flex: 1, fontWeight: "500" }}>{title}</BodyText>
+          <MotionDisclosureChevron open={open}>
+            <ShellIcon name="chevron" color={colors.muted} size={16} />
+          </MotionDisclosureChevron>
+        </Pressable>
+        {headerAction}
+      </View>
+      <MotionDisclosureBody
+        open={open}
+        style={[
+          styles.disclosureBody,
+          variant === "embedded" && styles.disclosureEmbeddedBody,
         ]}
       >
-        <BodyText style={{ flex: 1, fontWeight: "500" }}>{title}</BodyText>
-        <MotionDisclosureChevron open={open}>
-          <ShellIcon name="chevron" color={colors.muted} size={16} />
-        </MotionDisclosureChevron>
-      </Pressable>
-      <MotionDisclosureBody open={open} style={styles.disclosureBody}>
         {children}
       </MotionDisclosureBody>
-    </Card>
+    </View>
   );
 };

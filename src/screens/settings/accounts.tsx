@@ -1,6 +1,5 @@
 import type { CredentialEntry, IntegrationInfo } from "@opencode/client";
 import { useState } from "react";
-import { View } from "react-native";
 
 import {
   Button,
@@ -17,7 +16,7 @@ import type { Client } from "../../lib/client";
 import { withSettingsRequest } from "../../lib/settings";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { ConnectIntegration } from "./connect-integration";
-import { Page, runBusy, useResource } from "./shared";
+import { Page, SettingsCardHeader, runBusy, useResource } from "./shared";
 import { createStyles } from "./styles";
 
 export const Accounts = ({
@@ -92,43 +91,42 @@ export const Accounts = ({
         <BodyText style={styles.sectionLabel}>SAVED ACCOUNTS</BodyText>
       )}
       {data?.credentials.map((item) => (
-        <Card key={item.id}>
-          <Row style={{ justifyContent: "space-between" }}>
-            <View style={{ flex: 1 }}>
-              <BodyText style={styles.name}>
-                {item.label || item.integrationID}
-              </BodyText>
-              <BodyText muted>
-                {item.integrationID} · {item.value.type}
-                {item.active ? " · Active" : ""}
-              </BodyText>
-            </View>
-            <Button
-              title="Manage"
-              compact
-              onPress={() => {
-                setCredential(item);
-                setLabel(item.label);
-                setActionError(null);
-              }}
-            />
-          </Row>
+        <Card key={item.id} style={styles.card}>
+          <SettingsCardHeader
+            action={
+              <Button
+                title="Manage"
+                compact
+                onPress={() => {
+                  setCredential(item);
+                  setLabel(item.label);
+                  setActionError(null);
+                }}
+              />
+            }
+            subtitle={`${item.integrationID} · ${item.value.type}${item.active ? " · Active" : ""}`}
+            title={item.label || item.integrationID}
+          />
         </Card>
       ))}
       <BodyText style={styles.sectionLabel}>CONNECT AN ACCOUNT</BodyText>
       {integrations.slice(0, limit).map((item) => (
-        <Card key={item.id}>
-          <Row style={{ justifyContent: "space-between" }}>
-            <View style={{ flex: 1 }}>
-              <BodyText style={styles.name}>{item.name}</BodyText>
-              <BodyText muted>
-                {item.connections.length
-                  ? `${item.connections.length} connection${item.connections.length === 1 ? "" : "s"}`
-                  : "Not connected"}
-              </BodyText>
-            </View>
-            <Button title="Connect" compact onPress={() => setSelected(item)} />
-          </Row>
+        <Card key={item.id} style={styles.card}>
+          <SettingsCardHeader
+            action={
+              <Button
+                title="Connect"
+                compact
+                onPress={() => setSelected(item)}
+              />
+            }
+            subtitle={
+              item.connections.length
+                ? `${item.connections.length} connection${item.connections.length === 1 ? "" : "s"}`
+                : "Not connected"
+            }
+            title={item.name}
+          />
           {item.connections.map(
             (connection, index) =>
               connection.status && (
