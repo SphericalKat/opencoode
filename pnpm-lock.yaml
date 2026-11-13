@@ -170,8 +170,8 @@ importers:
         specifier: ^5.2.14
         version: 5.2.14(2f50ada847a109a988fda16217b0be98)
       '@opencode/client':
-        specifier: 2.2.7
-        version: 2.2.7(effect@4.1.0)
+        specifier: 2.3.0
+        version: 2.3.0(effect@4.1.0)
       '@pchmn/expo-material3-theme':
         specifier: ^1.4.0
         version: 1.4.0(expo@58.0.21(c588cad047954d8994664631d910b031))(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1)
@@ -1173,8 +1173,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@opencode/client@2.2.7':
-    resolution: {integrity: sha512-L1nqJqEBEHyg+OwJaMYA5jX8OA4nZ1Jxehp8xTw5u4kzKEgqLes2re7yWzXJSZmybZ5Kv4rX24gJjYHeegwf7g==}
+  '@opencode/client@2.3.0':
+    resolution: {integrity: sha512-xu74XGiYIqLZ2FzIrtjaR5UNWWXY3fRln0WLgZoQTR/wWMgG+T9XGQQGCl8ry8jnCFsJVokiHemBqft9oMzC1A==}
     peerDependencies:
       effect: 4.1.0
       solid-js: '>=1.9.0'
@@ -1184,11 +1184,11 @@ packages:
       solid-js:
         optional: true
 
-  '@opencode/protocol@2.2.7':
-    resolution: {integrity: sha512-J86R/rNrFC0KRJd4G5i2yT5FG7FB4M9Yh418NS3PcTHoWP1jwWKLV85L5JvGYPwb7sKtahyxPeN88Q/Mw+pZvQ==}
+  '@opencode/protocol@2.3.0':
+    resolution: {integrity: sha512-V37zTGXVa1j9aXUvUY01YN1EtfMMSWoT5pSCc6M0UsGdTUZX6QL/vMgGVGzPvbt7+Z8Vo40/0DFRPyqT4sdvnw==}
 
-  '@opencode/schema@2.2.7':
-    resolution: {integrity: sha512-A+aUfvpcPm8mN0ptFl2GUHwDFjyrCuLdig3jjQCRoOghF+un1+vVKek1IwIph935vMNqAwRDnwtvZDtHFiGokA==}
+  '@opencode/schema@2.3.0':
+    resolution: {integrity: sha512-9CPS4+BXWUs3ELIWo68AA2q4XEPMkRYwpGYdqd/wNz3jRTOB8swef+2/z+igkCel+UtlX+dAlGTmSnid/JcoKw==}
 
   '@oxc-project/types@0.154.0':
     resolution: {integrity: sha512-KYOUGQFlLWR+s4QMV2Q9ko38TZm7EdO87Qm7rvZLqk/webse/cDjtyxKhg/47l0byCbs/k46LT8qc4PKjAikzA==}
@@ -4775,19 +4775,19 @@ snapshots:
   '@noxcturnal/noxcturnal-win32-x64-msvc@0.1.11':
     optional: true
 
-  '@opencode/client@2.2.7(effect@4.1.0)':
+  '@opencode/client@2.3.0(effect@4.1.0)':
     dependencies:
-      '@opencode/protocol': 2.2.7
-      '@opencode/schema': 2.2.7
+      '@opencode/protocol': 2.3.0
+      '@opencode/schema': 2.3.0
     optionalDependencies:
       effect: 4.1.0
 
-  '@opencode/protocol@2.2.7':
+  '@opencode/protocol@2.3.0':
     dependencies:
-      '@opencode/schema': 2.2.7
+      '@opencode/schema': 2.3.0
       effect: 4.1.0
 
-  '@opencode/schema@2.2.7':
+  '@opencode/schema@2.3.0':
     dependencies:
       '@standard-schema/spec': 1.1.0
       effect: 4.1.0
