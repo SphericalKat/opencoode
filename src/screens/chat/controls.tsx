@@ -204,7 +204,13 @@ export const CodeBlock = ({
         />
       </Row>
       {error && <ErrorNotice error={error} />}
-      <ScrollView horizontal>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        directionalLockEnabled
+        persistentScrollbar
+        showsHorizontalScrollIndicator
+      >
         <Text selectable={selectable} style={styles.codeText}>
           {code}
         </Text>
