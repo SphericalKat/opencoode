@@ -17,7 +17,7 @@ export const filterSections = (
   sections.filter(
     (value) =>
       hasClient ||
-      value === "Appearance" ||
+      value === "Look and feel" ||
       (value === "Models" && hasModelCatalog)
   );
 

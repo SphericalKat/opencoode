@@ -34,7 +34,7 @@ interface Props {
   onConnectionLost: (error: unknown) => void;
   foreground: boolean;
 }
-const settingsSections: Section[] = ["Appearance", "Models"];
+const settingsSections: Section[] = ["Look and feel", "Models"];
 
 const PiWorkspaceSession = ({
   connection,
