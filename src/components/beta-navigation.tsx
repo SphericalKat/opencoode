@@ -229,7 +229,7 @@ export const BetaTabStrip = ({
       {busy ? (
         <ActivityIndicator size="small" color={colors.muted} />
       ) : (
-        <ShellIcon name="chevron-down" size={16} color={colors.muted} />
+        <ShellIcon name="chevron-up-down" size={16} color={colors.muted} />
       )}
     </Pressable>
   );
