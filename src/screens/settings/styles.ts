@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 
-import { sans } from "../../components/ui";
+import { sans, touchTarget } from "../../components/ui";
 import { pageInset } from "../../lib/layout";
 import type { ThemeColors } from "../../lib/theme";
 
@@ -45,6 +45,7 @@ export const createStyles = (colors: ThemeColors) =>
       lineHeight: 21,
     },
     card: { gap: 16, padding: 16, paddingHorizontal: 16 },
+    cardActions: { minHeight: touchTarget },
     cardHeader: {
       flexWrap: "nowrap",
       gap: 12,

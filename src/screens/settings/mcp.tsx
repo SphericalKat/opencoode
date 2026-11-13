@@ -124,7 +124,7 @@ export const Mcp = ({
               {item.integrationID || item.name}.
             </BodyText>
           )}
-          <Row>
+          <Row style={styles.cardActions}>
             <Button
               title="Remove"
               variant="danger"
