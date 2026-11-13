@@ -13,6 +13,7 @@ import {
   parseComposer,
   projectLiveEvent,
   serverFileUri,
+  withoutReverted,
 } from "../src/lib/chat";
 import { createStreamBatch } from "../src/lib/stream-batch";
 
@@ -189,6 +190,27 @@ test("message pages deduplicate overlap and retain the latest content in chronol
   };
   const updated = { ...early, text: "After" };
   assert.deepEqual(mergeMessages([late, early], [updated]), [updated, late]);
+});
+
+const userMessage = (id: string, created: number): SessionMessageInfo => ({
+  id,
+  text: id,
+  time: { created },
+  type: "user",
+});
+
+test("a staged revert hides its target message and everything after it", () => {
+  const messages = [
+    userMessage("one", 1),
+    userMessage("two", 2),
+    userMessage("three", 3),
+  ];
+  assert.deepEqual(
+    withoutReverted(messages, "two").map((message) => message.id),
+    ["one"]
+  );
+  assert.deepEqual(withoutReverted(messages, undefined), messages);
+  assert.deepEqual(withoutReverted(messages, "not-loaded"), messages);
 });
 
 test("batched token updates flush before the authoritative text end and cannot append afterward", async () => {

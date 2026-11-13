@@ -20,6 +20,19 @@ export const mergeMessages = (
   return sorted;
 };
 
+// A staged revert removes its target message and everything after it once
+// the next prompt arrives, so the transcript hides that range already.
+export const withoutReverted = (
+  messages: SessionMessageInfo[],
+  revertMessageID: string | undefined
+): SessionMessageInfo[] => {
+  if (!revertMessageID) {
+    return messages;
+  }
+  const index = messages.findIndex((message) => message.id === revertMessageID);
+  return index === -1 ? messages : messages.slice(0, index);
+};
+
 export type ComposerSubmission =
   | { type: "prompt"; text: string }
   | { type: "shell"; command: string }

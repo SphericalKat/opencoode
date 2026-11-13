@@ -109,28 +109,9 @@ export const useDraftEditing = ({
       }
     });
 
-  const editMessage = async (
+  const fillComposer = (
     message: Extract<SessionMessageInfo, { type: "user" }>
   ) => {
-    if (!draftLoaded) {
-      return;
-    }
-    if (
-      (draft ||
-        attachments.length ||
-        selectedSkills.length ||
-        restoredSkillIDs.length ||
-        selectedAgentIDs.length) &&
-      !(await confirmAction(
-        "Replace the message draft?",
-        "This opens the earlier message in the composer and replaces the current draft."
-      ))
-    ) {
-      return;
-    }
-    if (!alive.current) {
-      return;
-    }
     setDraft(message.text);
     setAttachments(
       (message.files ?? []).map((file) => ({
@@ -155,6 +136,39 @@ export const useDraftEditing = ({
     setSelectedMessageID(null);
     setPanel(null);
   };
+
+  const editMessage = (
+    message: Extract<SessionMessageInfo, { type: "user" }>
+  ) =>
+    run(async () => {
+      if (!draftLoaded) {
+        return;
+      }
+      if (
+        (draft ||
+          attachments.length ||
+          selectedSkills.length ||
+          restoredSkillIDs.length ||
+          selectedAgentIDs.length) &&
+        !(await confirmAction(
+          "Replace the message draft?",
+          "This opens the earlier message in the composer and replaces the current draft."
+        ))
+      ) {
+        return;
+      }
+      // The next prompt commits the staged revert on the server, which
+      // replaces this message and removes everything after it.
+      await opencodeClient?.session.revert.stage({
+        files: true,
+        messageID: message.id,
+        sessionID,
+      });
+      if (!alive.current) {
+        return;
+      }
+      fillComposer(message);
+    });
 
   return { editInbox, editMessage };
 };

@@ -114,8 +114,8 @@ export const MessageSheet = ({
         )}
         {actionMessage.type === "user" && (
           <Button
-            title="Edit & resend"
-            disabled={!draftLoaded}
+            title="Edit message"
+            disabled={!draftLoaded || pending || active}
             onPress={() => {
               void editMessage(actionMessage);
             }}

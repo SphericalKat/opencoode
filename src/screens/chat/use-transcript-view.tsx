@@ -11,6 +11,7 @@ import {
 import type { TranscriptItem } from "../../components/assistant-turn";
 import { sessionActivity } from "../../lib/activity";
 import type { AgentActivity } from "../../lib/activity";
+import { withoutReverted } from "../../lib/chat";
 import { MessageRow } from "./message-rows";
 import type { OpenCodeClient } from "./session-sync";
 import type { SessionState } from "./use-session-state";
@@ -52,7 +53,7 @@ export const useTranscriptView = ({
 }: UseTranscriptViewOptions) => {
   const {
     session,
-    messages,
+    messages: loadedMessages,
     forms,
     permissions,
     active,
@@ -60,6 +61,11 @@ export const useTranscriptView = ({
     streamStatus,
     backendWaiting,
   } = sync;
+  const revertMessageID = session?.revert?.messageID;
+  const messages = useMemo(
+    () => withoutReverted(loadedMessages, revertMessageID),
+    [loadedMessages, revertMessageID]
+  );
   const activity = useMemo<AgentActivity>(
     () =>
       backendWaiting

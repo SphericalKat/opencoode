@@ -8,6 +8,7 @@ import type { ChatController } from "./use-chat-controller";
 
 interface RenderSelectionHeaderProps extends Pick<
   ChatController,
+  | "active"
   | "backend"
   | "canCopySelected"
   | "capabilities"
@@ -28,6 +29,7 @@ interface RenderSelectionHeaderProps extends Pick<
 
 export const renderSelectionHeader = ({
   actionMessage,
+  active,
   backend,
   canCopySelected,
   capabilities,
@@ -66,7 +68,7 @@ export const renderSelectionHeader = ({
         title="Edit"
         compact
         variant="ghost"
-        disabled={!draftLoaded || pending}
+        disabled={!draftLoaded || pending || active}
         onPress={() => {
           void editMessage(actionMessage);
         }}
@@ -104,6 +106,7 @@ export const renderSelectionHeader = ({
 type ChatHeaderProps = Pick<
   ChatController,
   | "actionMessage"
+  | "active"
   | "backend"
   | "canCopySelected"
   | "capabilities"
@@ -122,6 +125,7 @@ type ChatHeaderProps = Pick<
 
 export const ChatHeader = ({
   actionMessage,
+  active,
   backend,
   canCopySelected,
   capabilities,
@@ -148,6 +152,7 @@ export const ChatHeader = ({
     >
       {renderSelectionHeader({
         actionMessage,
+        active,
         backend,
         canCopySelected,
         capabilities,
