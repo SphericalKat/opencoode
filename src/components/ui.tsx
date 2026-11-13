@@ -26,6 +26,7 @@ import type {
   TextProps,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import Animated from "react-native-reanimated";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -40,6 +41,7 @@ import {
   MotionDisclosureChevron,
   PressFeedback,
   useMotionPreference,
+  useSheetTransition,
 } from "./motion";
 import { ShellIcon } from "./shell-icon";
 
@@ -173,6 +175,7 @@ const createStyles = (colors: ThemeColors) => {
       overflow: "hidden",
       width: "100%",
     },
+    fitSheetSafeArea: { flexShrink: 1 },
     ghost: {
       backgroundColor: "transparent",
       borderColor: "transparent",
@@ -623,6 +626,13 @@ const renderSheetBody = ({
     </View>
   );
 
+const sheetAnimationType = (fitContent: boolean, reduced: boolean) => {
+  if (fitContent) {
+    return "none";
+  }
+  return reduced ? "fade" : "slide";
+};
+
 export const Sheet = ({
   visible,
   title,
@@ -653,11 +663,13 @@ export const Sheet = ({
     useSheetCoordinator();
   const id = useId();
   const effectiveVisible = visible && (allowDuringRecovery || !suspended);
+  const transition = useSheetTransition(fitContent && effectiveVisible);
+  const modalVisible = fitContent ? transition.presented : effectiveVisible;
   const SafeAreaRoot =
     Platform.OS === "web" ? React.Fragment : SafeAreaProvider;
   const requested = useRef(effectiveVisible);
   const logicalVisible = useRef(visible);
-  const previousVisible = useRef(effectiveVisible);
+  const previousVisible = useRef(modalVisible);
   const pendingDismiss = useRef(false);
   const pendingAppDismiss = useRef(false);
   const dismissRef = useRef(onDismiss);
@@ -703,8 +715,8 @@ export const Sheet = ({
   }, [suspended, recoveryPending, visible]);
   useEffect(() => {
     const wasVisible = previousVisible.current;
-    previousVisible.current = effectiveVisible;
-    if (effectiveVisible) {
+    previousVisible.current = modalVisible;
+    if (modalVisible) {
       pendingDismiss.current = false;
       return;
     }
@@ -717,7 +729,7 @@ export const Sheet = ({
     }
     const frame = requestAnimationFrame(notifyDismissed);
     return () => cancelAnimationFrame(frame);
-  }, [effectiveVisible, notifyDismissed]);
+  }, [modalVisible, notifyDismissed]);
   const content = (
     <View style={[styles.sheetInner, fitContent && styles.fitInner]}>
       {renderSheetHeader({ onClose, showHeader, styles, title })}
@@ -737,9 +749,9 @@ export const Sheet = ({
   );
   return (
     <Modal
-      visible={effectiveVisible}
+      visible={modalVisible}
       transparent={fitContent}
-      animationType={fitContent || reduced ? "fade" : "slide"}
+      animationType={sheetAnimationType(fitContent, reduced)}
       presentationStyle={fitContent ? "overFullScreen" : "pageSheet"}
       supportedOrientations={["portrait", "landscape-left", "landscape-right"]}
       onRequestClose={onClose}
@@ -752,18 +764,29 @@ export const Sheet = ({
             behavior="padding"
             automaticOffset
           >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Close ${title}`}
-              onPress={onClose}
-              style={styles.sheetScrim}
-            />
-            <SafeAreaView
-              edges={["bottom", "left", "right"]}
-              style={[styles.fitSheet, { backgroundColor: colors.bg }]}
+            <Animated.View style={[styles.sheetScrim, transition.scrimStyle]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Close ${title}`}
+                onPress={onClose}
+                style={StyleSheet.absoluteFill}
+              />
+            </Animated.View>
+            <Animated.View
+              onLayout={transition.handlePanelLayout}
+              style={[
+                styles.fitSheet,
+                { backgroundColor: colors.bg },
+                transition.panelStyle,
+              ]}
             >
-              {content}
-            </SafeAreaView>
+              <SafeAreaView
+                edges={["bottom", "left", "right"]}
+                style={styles.fitSheetSafeArea}
+              >
+                {content}
+              </SafeAreaView>
+            </Animated.View>
           </KeyboardAvoidingView>
         ) : (
           <SafeAreaView style={[styles.sheet, { backgroundColor: colors.bg }]}>
