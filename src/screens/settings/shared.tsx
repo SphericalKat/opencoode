@@ -8,9 +8,9 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ScrollView } from "react-native";
+import { ScrollView, View } from "react-native";
 
-import { Button, Busy, ErrorNotice, Row } from "../../components/ui";
+import { BodyText, Button, Busy, ErrorNotice, Row } from "../../components/ui";
 import { errorMessage } from "../../lib/client";
 import { withSettingsRequest } from "../../lib/settings";
 import { useThemedStyles } from "../../lib/theme";
@@ -149,5 +149,26 @@ export const Page = ({
       {loading && <Busy />}
       {children}
     </ScrollView>
+  );
+};
+
+export const SettingsCardHeader = ({
+  action,
+  subtitle,
+  title,
+}: {
+  action?: React.ReactNode;
+  subtitle: string;
+  title: string;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <Row style={styles.cardHeader}>
+      <View style={styles.cardText}>
+        <BodyText style={styles.cardTitle}>{title}</BodyText>
+        <BodyText muted>{subtitle}</BodyText>
+      </View>
+      {action}
+    </Row>
   );
 };

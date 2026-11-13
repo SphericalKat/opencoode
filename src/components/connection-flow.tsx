@@ -1033,14 +1033,12 @@ export const ConnectionFlow = ({
         <Field
           label="Name"
           value={form.name}
-          editable={!busy}
           onChangeText={(name) => onChangeForm({ ...form, name })}
         />
         <Field
           label="Username"
           placeholder="Username"
           value={form.username ?? "opencode"}
-          editable={!busy}
           onChangeText={(username) => onChangeForm({ ...form, username })}
         />
       </Disclosure>

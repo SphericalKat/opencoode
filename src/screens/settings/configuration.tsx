@@ -8,6 +8,7 @@ import {
   Card,
   confirmAction,
   Disclosure,
+  disabledOpacity,
   ErrorNotice,
   Field,
   JsonView,
@@ -22,40 +23,66 @@ import { useUnsavedChanges } from "../../lib/unsaved";
 import { Page, runBusy, useResource } from "./shared";
 import { createStyles } from "./styles";
 
+type ConfigAction =
+  | { kind: "reload" }
+  | { kind: "open-project" }
+  | { kind: "edit"; path: string }
+  | { kind: "shell"; path: string | null }
+  | { kind: "save" };
+
+const sameConfigAction = (
+  current: ConfigAction | null,
+  expected: ConfigAction
+): boolean => {
+  if (!current || current.kind !== expected.kind) {
+    return false;
+  }
+  if (current.kind === "edit" && expected.kind === "edit") {
+    return current.path === expected.path;
+  }
+  if (current.kind === "shell" && expected.kind === "shell") {
+    return current.path === expected.path;
+  }
+  return true;
+};
+
+const rowStatus = (
+  activeAction: ConfigAction | null,
+  expected: ConfigAction
+): "busy" | "disabled" | "idle" => {
+  if (!activeAction) {
+    return "idle";
+  }
+  return sameConfigAction(activeAction, expected) ? "busy" : "disabled";
+};
+
 const ConfigActionRow = ({
-  action,
-  activeAction,
-  busy,
   onPress,
   showDivider,
+  status,
   title,
 }: {
-  action: string;
-  activeAction: string | null;
-  busy: boolean;
   onPress: () => void;
   showDivider: boolean;
+  status: "busy" | "disabled" | "idle";
   title: string;
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const isActive = activeAction === action;
-  const dimmed = busy && !isActive;
+  const isActive = status === "busy";
+  const dimmed = status === "disabled";
   return (
     <View>
-      {showDivider && (
-        <View pointerEvents="none" style={styles.sectionDivider} />
-      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={title}
-        accessibilityState={{ busy: isActive, disabled: busy }}
-        disabled={busy}
+        accessibilityState={{ busy: isActive, disabled: status !== "idle" }}
+        disabled={status !== "idle"}
         onPress={onPress}
         style={({ pressed }) => [
           styles.sectionRow,
           pressed && { backgroundColor: colors.raised },
-          dimmed && { opacity: 0.55 },
+          dimmed && { opacity: disabledOpacity },
         ]}
       >
         <View style={styles.detail}>
@@ -67,9 +94,97 @@ const ConfigActionRow = ({
           <ShellIcon name="chevron" size={16} color={colors.muted} />
         )}
       </Pressable>
+      {showDivider && (
+        <View pointerEvents="none" style={styles.sectionDivider} />
+      )}
     </View>
   );
 };
+
+const DefaultShellDisclosure = ({
+  activeAction,
+  busy,
+  onSelectDefault,
+  onSelectShell,
+  shells,
+}: {
+  activeAction: ConfigAction | null;
+  busy: boolean;
+  onSelectDefault: () => void;
+  onSelectShell: (path: string, name: string) => void;
+  shells?: { acceptable: boolean; name: string; path: string }[];
+}) => (
+  <Disclosure title="Default shell">
+    <BodyText muted>
+      This sets the shell for commands on your OpenCode server.
+    </BodyText>
+    <Button
+      title="Use system default"
+      busy={sameConfigAction(activeAction, { kind: "shell", path: null })}
+      disabled={busy}
+      onPress={onSelectDefault}
+    />
+    {shells?.map((shell) => (
+      <Button
+        key={shell.path}
+        title={`${shell.name} · ${shell.path}`}
+        disabled={busy || !shell.acceptable}
+        busy={sameConfigAction(activeAction, {
+          kind: "shell",
+          path: shell.path,
+        })}
+        onPress={() => onSelectShell(shell.path, shell.name)}
+      />
+    ))}
+  </Disclosure>
+);
+
+const ConfigEditorSheet = ({
+  activeAction,
+  busy,
+  editing,
+  errorAction,
+  onChangeText,
+  onClose,
+  onSave,
+  text,
+}: {
+  activeAction: ConfigAction | null;
+  busy: boolean;
+  editing?: { original: string | null; path: string };
+  errorAction: string | null;
+  onChangeText: (next: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+  text: string;
+}) => (
+  <Sheet visible={!!editing} title="Edit configuration" onClose={onClose}>
+    <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
+      {editing?.path}
+    </BodyText>
+    <ErrorNotice error={errorAction} />
+    <Field
+      label="JSON or JSONC"
+      multiline
+      editable={!busy}
+      value={text}
+      onChangeText={onChangeText}
+      style={{
+        fontFamily: mono,
+        fontSize: 13,
+        lineHeight: 21,
+        minHeight: 360,
+      }}
+    />
+    <Button
+      title="Save and reload"
+      busy={sameConfigAction(activeAction, { kind: "save" })}
+      variant="primary"
+      disabled={busy || text === editing?.original}
+      onPress={onSave}
+    />
+  </Sheet>
+);
 
 export const Configuration = ({
   client,
@@ -103,11 +218,11 @@ export const Configuration = ({
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
-  const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [activeAction, setActiveAction] = useState<ConfigAction | null>(null);
   const busy = activeAction !== null;
   const busyLock = useRef(false);
   const run = async (
-    action: string,
+    action: ConfigAction,
     task: (signal: AbortSignal) => Promise<void>
   ) => {
     if (busyLock.current) {
@@ -139,13 +254,11 @@ export const Configuration = ({
       )}
       <View style={styles.groupPanel}>
         <ConfigActionRow
-          action="reload"
-          activeAction={activeAction}
-          busy={busy}
           showDivider={false}
+          status={rowStatus(activeAction, { kind: "reload" })}
           title="Reload server configuration"
           onPress={() => {
-            void run("reload", async (signal) => {
+            void run({ kind: "reload" }, async (signal) => {
               await client.location.reload({ signal });
               await refresh(signal);
               signal.throwIfAborted();
@@ -154,13 +267,11 @@ export const Configuration = ({
           }}
         />
         <ConfigActionRow
-          action="open-project"
-          activeAction={activeAction}
-          busy={busy}
           showDivider
+          status={rowStatus(activeAction, { kind: "open-project" })}
           title="Open project configuration"
           onPress={() => {
-            void run("open-project", async (signal) => {
+            void run({ kind: "open-project" }, async (signal) => {
               const path = `${directory.replace(/[\\/]+$/u, "")}/opencode.jsonc`;
               try {
                 const source = new TextDecoder().decode(
@@ -204,23 +315,34 @@ export const Configuration = ({
               {entry.path && (
                 <Button
                   title="Edit source file"
-                  busy={activeAction === `edit:${entry.path}`}
+                  busy={
+                    entry.path
+                      ? sameConfigAction(activeAction, {
+                          kind: "edit",
+                          path: entry.path,
+                        })
+                      : false
+                  }
                   disabled={busy}
                   onPress={() => {
-                    void run(`edit:${entry.path}`, async (signal) => {
-                      if (!entry.path) {
-                        return;
+                    const editPath = entry.path;
+                    if (!editPath) {
+                      return;
+                    }
+                    void run(
+                      { kind: "edit", path: editPath },
+                      async (signal) => {
+                        const source = new TextDecoder().decode(
+                          await client.file.read(
+                            { location: { directory }, path: editPath },
+                            { signal }
+                          )
+                        );
+                        signal.throwIfAborted();
+                        setEditing({ original: source, path: editPath });
+                        setText(source);
                       }
-                      const source = new TextDecoder().decode(
-                        await client.file.read(
-                          { location: { directory }, path: entry.path },
-                          { signal }
-                        )
-                      );
-                      signal.throwIfAborted();
-                      setEditing({ original: source, path: entry.path });
-                      setText(source);
-                    });
+                    );
                   }}
                 />
               )}
@@ -228,49 +350,39 @@ export const Configuration = ({
           )}
         </Card>
       ))}
-      <Disclosure title="Default shell">
-        <BodyText muted>
-          This sets the shell for commands on your OpenCode server.
-        </BodyText>
-        <Button
-          title="Use system default"
-          busy={activeAction === "shell:default"}
-          disabled={busy}
-          onPress={() => {
-            void run("shell:default", async (signal) => {
-              await client.experimental.config.update(
-                { shell: null },
-                { signal }
-              );
-              await refresh(signal);
-              signal.throwIfAborted();
-              setNotice("I set the shell to the system default.");
-            });
-          }}
-        />
-        {data?.shells.map((shell) => (
-          <Button
-            key={shell.path}
-            title={`${shell.name} · ${shell.path}`}
-            disabled={busy || !shell.acceptable}
-            busy={activeAction === `shell:${shell.path}`}
-            onPress={() => {
-              void run(`shell:${shell.path}`, async (signal) => {
-                await client.experimental.config.update(
-                  { shell: shell.path },
-                  { signal }
-                );
-                await refresh(signal);
-                signal.throwIfAborted();
-                setNotice(`I selected ${shell.name}.`);
-              });
-            }}
-          />
-        ))}
-      </Disclosure>
-      <Sheet
-        visible={!!editing}
-        title="Edit configuration"
+      <DefaultShellDisclosure
+        activeAction={activeAction}
+        busy={busy}
+        shells={data?.shells}
+        onSelectDefault={() => {
+          void run({ kind: "shell", path: null }, async (signal) => {
+            await client.experimental.config.update(
+              { shell: null },
+              { signal }
+            );
+            await refresh(signal);
+            signal.throwIfAborted();
+            setNotice("I set the shell to the system default.");
+          });
+        }}
+        onSelectShell={(shellPath, shellName) => {
+          void run({ kind: "shell", path: shellPath }, async (signal) => {
+            await client.experimental.config.update(
+              { shell: shellPath },
+              { signal }
+            );
+            await refresh(signal);
+            signal.throwIfAborted();
+            setNotice(`I selected ${shellName}.`);
+          });
+        }}
+      />
+      <ConfigEditorSheet
+        activeAction={activeAction}
+        busy={busy}
+        editing={editing}
+        errorAction={errorAction}
+        onChangeText={setText}
         onClose={() => {
           if (busy) {
             return;
@@ -289,52 +401,30 @@ export const Configuration = ({
             });
           }
         }}
-      >
-        <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
-          {editing?.path}
-        </BodyText>
-        <ErrorNotice error={errorAction} />
-        <Field
-          label="JSON or JSONC"
-          multiline
-          editable={!busy}
-          value={text}
-          onChangeText={setText}
-          style={{
-            fontFamily: mono,
-            fontSize: 13,
-            lineHeight: 21,
-            minHeight: 360,
-          }}
-        />
-        <Button
-          title="Save and reload"
-          busy={activeAction === "save"}
-          variant="primary"
-          disabled={busy || text === editing?.original}
-          onPress={() => {
-            void run("save", async (signal) => {
-              if (!editing) {
-                return;
-              }
-              await saveConfigFile(
-                client,
-                directory,
-                editing.path,
-                editing.original,
-                text,
-                signal
-              );
-              setEditing({ ...editing, original: text });
-              await client.location.reload({ signal });
-              await refresh(signal);
-              signal.throwIfAborted();
-              setEditing(undefined);
-              setNotice("I saved and reloaded the configuration.");
-            });
-          }}
-        />
-      </Sheet>
+        onSave={() => {
+          const current = editing;
+          if (!current) {
+            return;
+          }
+          void run({ kind: "save" }, async (signal) => {
+            await saveConfigFile(
+              client,
+              directory,
+              current.path,
+              current.original,
+              text,
+              signal
+            );
+            setEditing({ ...current, original: text });
+            await client.location.reload({ signal });
+            await refresh(signal);
+            signal.throwIfAborted();
+            setEditing(undefined);
+            setNotice("I saved and reloaded the configuration.");
+          });
+        }}
+        text={text}
+      />
     </Page>
   );
 };

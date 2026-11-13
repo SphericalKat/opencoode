@@ -48,6 +48,8 @@ export { darkColors as colors } from "../lib/theme";
 export const sans = "Inter";
 export const mono = "IBMPlexMono";
 export const touchTarget = Platform.OS === "android" ? 48 : 44;
+export const compactButtonSize = 32;
+export const disabledOpacity = 0.55;
 const createStyles = (colors: ThemeColors) => {
   const inset = Platform.OS !== "android" || Number(Platform.Version) >= 29;
   return StyleSheet.create({
@@ -98,7 +100,11 @@ const createStyles = (colors: ThemeColors) => {
       padding: 14,
       paddingHorizontal: 15,
     },
-    compact: { minHeight: 32, paddingHorizontal: 10, paddingVertical: 5 },
+    compact: {
+      minHeight: compactButtonSize,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
     danger: { backgroundColor: colors.raised },
     disclosure: { gap: 0, paddingHorizontal: 0, paddingVertical: 0 },
     disclosureBody: { gap: 10, padding: 14, paddingTop: 0 },
@@ -107,14 +113,19 @@ const createStyles = (colors: ThemeColors) => {
       borderTopWidth: StyleSheet.hairlineWidth,
     },
     disclosureEmbeddedBody: { paddingBottom: 0, paddingHorizontal: 0 },
-    disclosureEmbeddedHeader: { paddingHorizontal: 0 },
+    disclosureEmbeddedHeader: { paddingHorizontal: 0, paddingVertical: 0 },
     disclosureHeader: {
       alignItems: "center",
       borderRadius: 8,
       flexDirection: "row",
+      flex: 1,
       gap: 8,
       minHeight: touchTarget,
       padding: 14,
+    },
+    disclosureHeaderRow: {
+      alignItems: "center",
+      flexDirection: "row",
     },
     empty: {
       alignItems: "center",
@@ -148,7 +159,7 @@ const createStyles = (colors: ThemeColors) => {
       top: 1,
       width: touchTarget,
     },
-    fieldVisibilityDisabled: { opacity: 0.55 },
+    fieldVisibilityDisabled: { opacity: disabledOpacity },
     fitInner: { flex: 0, flexShrink: 1 },
     fitScroll: { flex: 0, flexShrink: 1 },
     fitSheet: {
@@ -343,12 +354,15 @@ export const Button = ({
       }}
       aria-pressed={selected}
       disabled={disabled || busy}
-      hitSlop={compact ? (touchTarget - 32) / 2 : undefined}
+      hitSlop={compact ? (touchTarget - compactButtonSize) / 2 : undefined}
       onPress={onPress}
       style={[
         styles.buttonTarget,
-        compact && { minHeight: 32, minWidth: 32 },
-        (disabled || busy) && { opacity: 0.55 },
+        compact && {
+          minHeight: compactButtonSize,
+          minWidth: compactButtonSize,
+        },
+        (disabled || busy) && { opacity: disabledOpacity },
       ]}
     >
       {({ pressed }) => (
@@ -385,6 +399,36 @@ export const Button = ({
           )}
         </PressFeedback>
       )}
+    </Pressable>
+  );
+};
+const FieldVisibilityToggle = ({
+  disabled,
+  label,
+  onToggle,
+  visible,
+}: {
+  disabled: boolean;
+  label?: string;
+  onToggle: () => void;
+  visible: boolean;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <Pressable
+      accessibilityLabel={`${visible ? "Hide" : "Show"} ${label ?? "password"}`}
+      accessibilityRole="button"
+      accessibilityState={{ disabled, selected: visible }}
+      disabled={disabled}
+      onPress={onToggle}
+      style={({ pressed }) => [
+        styles.fieldVisibilityButton,
+        pressed && styles.ghostPressed,
+        disabled && styles.fieldVisibilityDisabled,
+      ]}
+    >
+      <ShellIcon name={visible ? "eye-off" : "eye"} color={colors.muted} />
     </Pressable>
   );
 };
@@ -440,26 +484,12 @@ export const Field = ({
       {canToggleVisibility ? (
         <View style={styles.fieldInputContainer}>
           {input}
-          <Pressable
-            accessibilityLabel={`${passwordVisible ? "Hide" : "Show"} ${label ?? "password"}`}
-            accessibilityRole="button"
-            accessibilityState={{
-              disabled: props.editable === false,
-              selected: passwordVisible,
-            }}
+          <FieldVisibilityToggle
             disabled={props.editable === false}
-            onPress={() => setPasswordVisible((visible) => !visible)}
-            style={({ pressed }) => [
-              styles.fieldVisibilityButton,
-              pressed && styles.ghostPressed,
-              props.editable === false && styles.fieldVisibilityDisabled,
-            ]}
-          >
-            <ShellIcon
-              name={passwordVisible ? "eye-off" : "eye"}
-              color={colors.muted}
-            />
-          </Pressable>
+            label={label}
+            onToggle={() => setPasswordVisible((visible) => !visible)}
+            visible={passwordVisible}
+          />
         </View>
       ) : (
         input
@@ -806,11 +836,13 @@ export const Disclosure = ({
   title,
   children,
   disclosureKey,
+  headerAction,
   variant = "card",
 }: {
   title: string;
   children: React.ReactNode;
   disclosureKey?: string;
+  headerAction?: React.ReactNode;
   variant?: "card" | "embedded";
 }) => {
   const { colors } = useTheme();
@@ -837,30 +869,33 @@ export const Disclosure = ({
         variant === "embedded" && styles.disclosureEmbedded,
       ]}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        accessibilityState={{ expanded: open }}
-        aria-expanded={open}
-        onPress={() =>
-          setOpen(
-            disclosureKey && disclosures
-              ? disclosures.toggle(disclosureKey)
-              : !open
-          )
-        }
-        onLongPress={Platform.OS === "web" ? undefined : openMessageActions}
-        style={({ pressed }) => [
-          styles.disclosureHeader,
-          variant === "embedded" && styles.disclosureEmbeddedHeader,
-          pressed && styles.ghostPressed,
-        ]}
-      >
-        <BodyText style={{ flex: 1, fontWeight: "500" }}>{title}</BodyText>
-        <MotionDisclosureChevron open={open}>
-          <ShellIcon name="chevron" color={colors.muted} size={16} />
-        </MotionDisclosureChevron>
-      </Pressable>
+      <View style={styles.disclosureHeaderRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={title}
+          accessibilityState={{ expanded: open }}
+          aria-expanded={open}
+          onPress={() =>
+            setOpen(
+              disclosureKey && disclosures
+                ? disclosures.toggle(disclosureKey)
+                : !open
+            )
+          }
+          onLongPress={Platform.OS === "web" ? undefined : openMessageActions}
+          style={({ pressed }) => [
+            styles.disclosureHeader,
+            variant === "embedded" && styles.disclosureEmbeddedHeader,
+            pressed && styles.ghostPressed,
+          ]}
+        >
+          <BodyText style={{ flex: 1, fontWeight: "500" }}>{title}</BodyText>
+          <MotionDisclosureChevron open={open}>
+            <ShellIcon name="chevron" color={colors.muted} size={16} />
+          </MotionDisclosureChevron>
+        </Pressable>
+        {headerAction}
+      </View>
       <MotionDisclosureBody
         open={open}
         style={[

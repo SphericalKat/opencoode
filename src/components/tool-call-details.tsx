@@ -421,15 +421,8 @@ const CodeSection = ({
             </Pressable>
           )}
         </ScrollView>
-        {(!section.label || disclosed) && (
-          <CopyAction
-            value={section.text}
-            label={
-              section.label
-                ? `Copy ${section.label.toLowerCase()}`
-                : "Copy command"
-            }
-          />
+        {!section.label && !disclosed && (
+          <CopyAction value={section.text} label="Copy command" />
         )}
       </View>
     </View>
@@ -521,7 +514,13 @@ const ToolCallDetailsView = ({
       ))}
       {state.status === "error" && <ErrorNotice error={state.error.message} />}
       {!fallback && (
-        <Disclosure disclosureKey={`${tool.id}:arguments`} title="Arguments">
+        <Disclosure
+          disclosureKey={`${tool.id}:arguments`}
+          headerAction={
+            <CopyAction value={argumentsText} label="Copy arguments" />
+          }
+          title="Arguments"
+        >
           <CodeSection
             section={{ label: "Arguments", text: argumentsText }}
             disclosed

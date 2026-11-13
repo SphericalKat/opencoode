@@ -223,7 +223,6 @@ export const ConnectIntegration = ({
                   label="API key"
                   secureTextEntry
                   value={key}
-                  editable={!busy}
                   onChangeText={setKey}
                 />
               )}

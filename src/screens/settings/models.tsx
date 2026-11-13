@@ -16,7 +16,7 @@ import {
 import type { Client } from "../../lib/client";
 import { useThemedStyles } from "../../lib/theme";
 import type { ModelCatalog } from "./sections";
-import { Page, useResource } from "./shared";
+import { Page, SettingsCardHeader, useResource } from "./shared";
 import { createStyles } from "./styles";
 
 const ModelCard = ({
@@ -29,15 +29,13 @@ const ModelCard = ({
   const styles = useThemedStyles(createStyles);
   return (
     <Card style={styles.card}>
-      <Row style={styles.cardHeader}>
-        <View style={styles.cardText}>
-          <BodyText style={styles.cardTitle}>{item.name}</BodyText>
-          <BodyText muted>
-            {item.providerID} · {item.enabled ? "Available" : "Not connected"}
-          </BodyText>
-        </View>
-        <Button title="Details" compact onPress={() => onSelect(item)} />
-      </Row>
+      <SettingsCardHeader
+        action={
+          <Button title="Details" compact onPress={() => onSelect(item)} />
+        }
+        subtitle={`${item.providerID} · ${item.enabled ? "Available" : "Not connected"}`}
+        title={item.name}
+      />
     </Card>
   );
 };
