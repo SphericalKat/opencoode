@@ -60,7 +60,6 @@ interface ShellFrameProps {
   onProject: () => void;
   onRetryLocation: () => void;
   onSelectPane: (pane: SessionPane) => void;
-  openTabCount: number;
   pendingLocation: { directory: string; sessionID: string } | null;
   selectedPane: SessionPane;
   sessionID: string | null;
@@ -80,7 +79,6 @@ export const ShellFrame = ({
   onProject,
   onRetryLocation,
   onSelectPane,
-  openTabCount,
   pendingLocation,
   selectedPane,
   sessionID,
@@ -96,7 +94,6 @@ export const ShellFrame = ({
         {framed && (
           <BetaTabStrip
             current={currentOpenTab}
-            count={openTabCount}
             busy={creatingSession}
             onOpen={onOpenNavigation}
           />

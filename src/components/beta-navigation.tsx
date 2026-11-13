@@ -46,7 +46,6 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: 48,
     },
-    count: { fontSize: 14, lineHeight: 19, paddingHorizontal: 4 },
     divider: {
       backgroundColor: colors.border,
       height: StyleSheet.hairlineWidth,
@@ -203,12 +202,10 @@ const ProjectBadge = ({ directory }: { directory: string }) => {
 
 export const BetaTabStrip = ({
   current,
-  count,
   busy,
   onOpen,
 }: {
   current?: OpenSessionTab;
-  count: number;
   busy?: boolean;
   onOpen: () => void;
 }) => {
@@ -217,7 +214,7 @@ export const BetaTabStrip = ({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Tabs. ${current?.title || "Home"}. ${count} open ${count === 1 ? "session" : "sessions"}`}
+      accessibilityLabel={`Tabs. ${current?.title || "Home"}`}
       onPress={onOpen}
       style={({ pressed }) => [styles.strip, pressed && styles.pressed]}
     >
@@ -232,9 +229,7 @@ export const BetaTabStrip = ({
       {busy ? (
         <ActivityIndicator size="small" color={colors.muted} />
       ) : (
-        <BodyText muted style={styles.count}>
-          {count}
-        </BodyText>
+        <ShellIcon name="chevron-up-down" size={16} color={colors.muted} />
       )}
     </Pressable>
   );

@@ -26,6 +26,14 @@ Use Conventional Commits for every agent-authored commit title. Prefer the same 
 
 Example: `fix(markdown): keep user messages inside their bubbles`.
 
+### Screenshots in pull requests
+
+If a PR changes what the app shows, include before and after screenshots in its description when possible.
+
+- Capture the "before" screenshot from the base branch and the "after" screenshot from the PR branch.
+- Use the same device, screen, and data for both screenshots.
+- Attach each image with `gh pr create --attach '<file>#<alt text>'`, and reference it in the body as `![alt text](./<file>)`.
+
 ## Linting and formatting
 
 Ultracite runs Oxlint and Oxfmt with the `core`, `react` and `react-native` presets. The config is in `oxlint.config.ts` and `oxfmt.config.ts`. CI runs `pnpm check` in the "Lint and format" job of `.github/workflows/ci.yml`. A PR must pass it.
