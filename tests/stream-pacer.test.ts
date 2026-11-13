@@ -70,3 +70,17 @@ test("a pause long enough to be a new stream does not bridge the silence", () =>
 test("no text means no ticks", () => {
   assert.deepEqual(tickTimes([], 1000), []);
 });
+
+test("drain releases each burst in full over the expected gap", () => {
+  const pacer = createStreamPacer();
+  pacer.feed(200, 0);
+  let released = 0;
+  let ticks = 0;
+  for (let amount = pacer.drain(INTERVAL); amount > 0;) {
+    released += amount;
+    ticks += 1;
+    amount = pacer.drain(INTERVAL);
+  }
+  assert.equal(Math.round(released), 200);
+  assert.ok(ticks > 1);
+});
