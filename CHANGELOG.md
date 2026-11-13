@@ -1,5 +1,62 @@
 # Changelog
 
+## [1.6.0](https://github.com/SphericalKat/opencoode/compare/v1.5.1...v1.6.0) (2026-11-13)
+
+
+### Features
+
+* **app:** use the beta layout on every platform and width ([fff1ac5](https://github.com/SphericalKat/opencoode/commit/fff1ac57a9266615013206a46858e48691c11a82))
+* **app:** use the beta layout on every platform and width ([b80195e](https://github.com/SphericalKat/opencoode/commit/b80195e8e607772731cf4108b7421272fd4c7045))
+* **chat:** add stream reveal chunk model for streamed text ([63d073b](https://github.com/SphericalKat/opencoode/commit/63d073b3a5013c919a6dc6d5f5a0456ea333b98e))
+* **chat:** fade in streamed reply text chunk by chunk ([77e7caf](https://github.com/SphericalKat/opencoode/commit/77e7cafc534a2b43124ac5496a726478c13b6fe8))
+* **chat:** fade in streamed reply text while it arrives ([f0e0760](https://github.com/SphericalKat/opencoode/commit/f0e0760d3e1d50e4386ea13289d75475412fcdf0))
+* **haptics:** add haptic feedback for streaming and key actions ([f2f2c3c](https://github.com/SphericalKat/opencoode/commit/f2f2c3c46e8dcc36ca599699b8ff1a3bc9f7b172))
+* **haptics:** tick while responses stream and on key actions ([09ab5ed](https://github.com/SphericalKat/opencoode/commit/09ab5edb4f9ea9175f5227bc7403afbd226a561a))
+* **markdown:** fade in streamed text chunk by chunk ([74eba86](https://github.com/SphericalKat/opencoode/commit/74eba8635b2cfb23257352f80d869af04c9a3ca4))
+* **markdown:** release buffered stream text word by word ([f73da4d](https://github.com/SphericalKat/opencoode/commit/f73da4d8f16bd752ae975d0196a849bc862b3bcd))
+* **settings:** refine Configuration action list and disclosure ([b914708](https://github.com/SphericalKat/opencoode/commit/b91470870ab05642b157eebf5a00781da18101b8))
+* **settings:** rename Appearance to Look and feel for the haptics switch ([3741665](https://github.com/SphericalKat/opencoode/commit/374166590b7ab5ca83ada49b25c68e6653e4499a))
+* **theme:** accent the send button and active tab in Material You ([2e274ba](https://github.com/SphericalKat/opencoode/commit/2e274ba32544fed1b5b799d37c111016d5d18625))
+* **theme:** accent the send button and active tab in Material You ([c64fe34](https://github.com/SphericalKat/opencoode/commit/c64fe3490ff84fbf64c87f9a52778fb0434462d4))
+* **ui:** add secure input visibility toggles ([ccdca4d](https://github.com/SphericalKat/opencoode/commit/ccdca4dfd0b75d649746886958fbf0b315cb825e))
+* **ui:** improve scrolling, spacing, and inputs in chat and settings ([3da1136](https://github.com/SphericalKat/opencoode/commit/3da1136c62225888897dcde19a0a972cb24eeeae))
+
+
+### Bug Fixes
+
+* **chat:** align copy buttons and code block padding ([b1cff2d](https://github.com/SphericalKat/opencoode/commit/b1cff2dd19c60922e70264a923b628f588a3b3c9))
+* **chat:** align copy buttons and code block padding ([8a4dfd5](https://github.com/SphericalKat/opencoode/commit/8a4dfd5d82d3296e0e26d3a2e7c7b09bbba65ac2))
+* **chat:** edit an earlier message by reverting from it ([03905ff](https://github.com/SphericalKat/opencoode/commit/03905fffdbcbb12fe0ad1bfb3ef430ec062525e4))
+* **chat:** edit an earlier message by reverting from it ([b4b2c21](https://github.com/SphericalKat/opencoode/commit/b4b2c211662137d806b213782fd83e7fe2ac8d53))
+* **chat:** make message long-press feel native ([3f1ab57](https://github.com/SphericalKat/opencoode/commit/3f1ab577d3030ee9d6022c05a18fba6b99c34146))
+* **chat:** show a ripple while a message is pressed ([c82fe47](https://github.com/SphericalKat/opencoode/commit/c82fe472ad7b7da531dd4827653441d60ec1f052))
+* **chat:** show the selection bar over the tab strip without moving the transcript ([4e57d20](https://github.com/SphericalKat/opencoode/commit/4e57d20a0a0bc0d88758526cec782d29118b6971))
+* **haptics:** match the haptics switch thumb to the palette ([814b95b](https://github.com/SphericalKat/opencoode/commit/814b95b5158d8d3842319651b076abf475d00e8f))
+* **haptics:** pace streaming ticks evenly between text bursts ([4f5a579](https://github.com/SphericalKat/opencoode/commit/4f5a57986ad9c28bf5c9b309e00de384cce6550c))
+* **markdown:** enable nested horizontal code scrolling ([cb10c38](https://github.com/SphericalKat/opencoode/commit/cb10c38de10d3fe5ab06e0d57ec24dd4c7005cda))
+* **markdown:** let code blocks and tables scroll inside message rows ([0ebf953](https://github.com/SphericalKat/opencoode/commit/0ebf9539c6f306cfd1d6a5520d08154621b7c9ea))
+* **navigation:** center the tab strip chevron on the lowercase letters ([aa5eb0e](https://github.com/SphericalKat/opencoode/commit/aa5eb0e0398e604fb65ee35d4a1d5dfbf624b135))
+* **navigation:** put the tab strip chevron beside the title ([b4d0838](https://github.com/SphericalKat/opencoode/commit/b4d0838223465e80a8089a8afd55cefc01658981))
+* **navigation:** put the tab strip chevron beside the title and add a ripple ([d65717d](https://github.com/SphericalKat/opencoode/commit/d65717d6d399cfda4f5f91598ef70b530bcf8ce4))
+* **navigation:** replace the tab strip count and slide sheets up ([0f2c9c5](https://github.com/SphericalKat/opencoode/commit/0f2c9c597ae19a39c31e3138bf18f9e8391dfbf5))
+* **navigation:** show a chevron instead of the tab count in the tab strip ([42a2cd5](https://github.com/SphericalKat/opencoode/commit/42a2cd5c42aa8bb97a8776386481248b2c69a46d))
+* **navigation:** use an up-and-down chevron on the tab strip ([8acf492](https://github.com/SphericalKat/opencoode/commit/8acf492d4549857dcaf36ff0344a109d439bbfb1))
+* **release:** pass the runner choice as a boolean job output ([6e579e6](https://github.com/SphericalKat/opencoode/commit/6e579e613b94844405920b8960830796083c933c))
+* **release:** pass the runner choice as a boolean job output ([94e9cb3](https://github.com/SphericalKat/opencoode/commit/94e9cb3b0e8abec33e681d564c5c3e558cb6f6ed))
+* **settings:** preserve the MCP remove touch area ([f6e1fb8](https://github.com/SphericalKat/opencoode/commit/f6e1fb8a850f138f67edb0fb443a4ba03f35dd2d))
+* **sheets:** drag and dismiss bottom sheets with gorhom bottom sheet ([31e7a9e](https://github.com/SphericalKat/opencoode/commit/31e7a9eb1fd565ad33daef877dc54077b80efc1b))
+* **sheets:** drag and dismiss sheets without re-rendering the app ([c48b54a](https://github.com/SphericalKat/opencoode/commit/c48b54ac582f068fd7bc031145b7e077bf9435a1))
+* **ui:** align Disclosure and simplify tool arguments ([1654b42](https://github.com/SphericalKat/opencoode/commit/1654b42d9bd8875b74962090a472154b664242c3))
+* **ui:** balance compact buttons and settings cards ([809b4a2](https://github.com/SphericalKat/opencoode/commit/809b4a2fa7073adc0491c5ece5fd3ea3d60934fa))
+* **ui:** resolve code review findings across UI and settings ([d674b5e](https://github.com/SphericalKat/opencoode/commit/d674b5ef922a270c56f9ee0c4040f1585c1690ab))
+* **ui:** slide short sheets up from the bottom instead of fading them in ([a3d3e61](https://github.com/SphericalKat/opencoode/commit/a3d3e61417a0188b3116d3e25d48ce98abf77526))
+
+
+### Performance Improvements
+
+* **markdown:** run streamed text fades on the UI thread ([d439d8c](https://github.com/SphericalKat/opencoode/commit/d439d8cb98ff18f10588deb3790b1b9dcc47dfe7))
+* **navigation:** keep sheet toggles from re-rendering the app ([2932ebc](https://github.com/SphericalKat/opencoode/commit/2932ebca0837c036079ee3eb35e6625c60704f45))
+
 ## [1.5.1](https://github.com/SphericalKat/opencoode/compare/v1.5.0...v1.5.1) (2026-11-13)
 
 
