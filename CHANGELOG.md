@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.5.0](https://github.com/SphericalKat/opencoode/compare/v1.4.0...v1.5.0) (2026-11-13)
+
+
+### Features
+
+* **navigation:** add server shortcut to tabs sheet ([84a041b](https://github.com/SphericalKat/opencoode/commit/84a041b2b0ddd22628de9742fbbf37e231a018aa))
+* **navigation:** add server shortcut to tabs sheet ([daac813](https://github.com/SphericalKat/opencoode/commit/daac813497f1975e81047f4b832571d221848fea))
+* show tool-result images automatically in conversations ([b2800b4](https://github.com/SphericalKat/opencoode/commit/b2800b4fe61de1f178824e96c93d36017541235d))
+* **theme:** add palettes and syntax colors ([ee0bbb4](https://github.com/SphericalKat/opencoode/commit/ee0bbb4cddb9d0ee3926e1eddfd7fdb10291491e))
+* **theme:** add palettes and syntax colors ([058eec0](https://github.com/SphericalKat/opencoode/commit/058eec0c3c91fea4f8d76f2c2398745ff48253cc))
+
+
+### Bug Fixes
+
+* **connection:** show timeout guidance when server discovery times out ([c55ed19](https://github.com/SphericalKat/opencoode/commit/c55ed190f82958fa7ed0e7ca5f6afcbb874e1dc2))
+* **deps:** update dependency @opencode/client to v2.2.7 ([19365fd](https://github.com/SphericalKat/opencoode/commit/19365fd91b708d54aabd70e3f59f6510408b6efc))
+* **deps:** update dependency @opencode/client to v2.2.7 ([b0984dc](https://github.com/SphericalKat/opencoode/commit/b0984dc93319cf01d0b1f975ccd69c6b3b484b43))
+* **deps:** update dependency react-native-keyboard-controller to v1.23.0 ([1ecf038](https://github.com/SphericalKat/opencoode/commit/1ecf038f11a434c39f23bab53c80dff879a87a9e))
+* **deps:** update dependency react-native-keyboard-controller to v1.23.0 ([16fa745](https://github.com/SphericalKat/opencoode/commit/16fa745532117d84a6267e7eff6462ccf73444c4))
+* **deps:** update dependency react-native-svg to v15.16.1 ([55837f3](https://github.com/SphericalKat/opencoode/commit/55837f36d8a955fc7902776f77f46817ab6f57d4))
+* **deps:** update dependency react-native-svg to v15.16.1 ([d65e802](https://github.com/SphericalKat/opencoode/commit/d65e80200e11284914c72afd9cce7fd938c4b8a5))
+* **release:** build the app bundle without ABI splits ([75653ff](https://github.com/SphericalKat/opencoode/commit/75653ff1940aa01b19f28e615d25876fb9450945))
+* retain artifact retries for existing universal APK releases ([efd478f](https://github.com/SphericalKat/opencoode/commit/efd478fc3d8147f1f251fa965090c9532896e46d))
+* **theme:** preserve default frames and space fixture controls ([40d687f](https://github.com/SphericalKat/opencoode/commit/40d687f52241f526e0cad5e660b7bc5ef6e6d81b))
+
+
+### Performance Improvements
+
+* reduce Android release size with ABI splits and R8 ([9c9bb26](https://github.com/SphericalKat/opencoode/commit/9c9bb26896c30cd8aee1f137e1689aeacb746220))
+* **release:** compress native libraries in GitHub APKs ([453715a](https://github.com/SphericalKat/opencoode/commit/453715a74936b6a366bff36eabfb55f256c41595))
+* **release:** ship compressed per-ABI APKs on GitHub ([30b6dea](https://github.com/SphericalKat/opencoode/commit/30b6dea55bbe09e051bf2c7f823c964a29c34d9f))
+
 ## [1.4.0](https://github.com/SphericalKat/opencoode/compare/v1.3.0...v1.4.0) (2026-10-30)
 
 ### Features
