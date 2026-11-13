@@ -1,4 +1,3 @@
-import * as Clipboard from "expo-clipboard";
 import MarkdownIt from "markdown-it";
 import type { Token } from "markdown-it";
 import Prism from "prismjs";
@@ -21,6 +20,8 @@ import {
   View,
 } from "react-native";
 import type { TextStyle } from "react-native";
+
+import { copyText } from "../lib/clipboard";
 import "prismjs/components/prism-clike";
 import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-typescript";
@@ -485,7 +486,7 @@ const CodeView = ({ code, language }: { code: string; language: string }) => {
           variant="ghost"
           accessibilityLabel="Copy code"
           onPress={() => {
-            void Clipboard.setStringAsync(code)
+            void copyText(code)
               .then(() => setFeedback({ code, failed: false }))
               .catch(() => setFeedback({ code, failed: true }));
           }}

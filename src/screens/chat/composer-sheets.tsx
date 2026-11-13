@@ -14,6 +14,7 @@ import {
   Sheet,
 } from "../../components/ui";
 import { serverFileUri } from "../../lib/chat";
+import { playHaptic } from "../../lib/haptics";
 import type { ChatController } from "./use-chat-controller";
 
 interface AgentsSheetProps extends Pick<
@@ -63,6 +64,9 @@ export const AgentsSheet = ({
               selected={session.agent === agent.id}
               disabled={pending}
               onPress={() => {
+                if (session.agent !== agent.id) {
+                  playHaptic("select");
+                }
                 void run(
                   () =>
                     opencodeClient.session.switchAgent({
@@ -165,12 +169,22 @@ export const ToolsSheet = ({
           <Button
             title="Steer current work"
             selected={delivery === "steer"}
-            onPress={() => setDelivery("steer")}
+            onPress={() => {
+              if (delivery !== "steer") {
+                playHaptic("select");
+              }
+              setDelivery("steer");
+            }}
           />
           <Button
             title="Queue after current work"
             selected={delivery === "queue"}
-            onPress={() => setDelivery("queue")}
+            onPress={() => {
+              if (delivery !== "queue") {
+                playHaptic("select");
+              }
+              setDelivery("queue");
+            }}
           />
         </Row>
       </>

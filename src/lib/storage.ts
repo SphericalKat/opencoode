@@ -134,3 +134,11 @@ export const saveWorkspace = (
   workspace: Workspace
 ): Promise<void> =>
   write(workspaceKey(connectionID), JSON.stringify(workspace));
+
+const hapticsKey = "opencoode.haptics";
+
+export const loadHapticsEnabled = async (): Promise<boolean> =>
+  (await read(hapticsKey)) !== "off";
+
+export const saveHapticsEnabled = (enabled: boolean): Promise<void> =>
+  write(hapticsKey, enabled ? null : "off");

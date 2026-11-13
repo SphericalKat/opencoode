@@ -9,12 +9,12 @@ export type Section =
   | "Plugins"
   | "Permissions"
   | "Advanced"
-  | "Appearance";
+  | "Look and feel";
 export type ModelCatalog = Pick<Client["model"], "list">;
 export const sectionDescriptions: Record<Section, string> = {
   Accounts: "Provider connections and credentials",
   Advanced: "Usage, web search, and generation",
-  Appearance: "System, light, or dark theme",
+  "Look and feel": "Theme, colors, and haptic feedback",
   Config: "Server configuration and shell",
   MCP: "Tool servers and pending requests",
   Models: "Available models and capabilities",
@@ -23,7 +23,7 @@ export const sectionDescriptions: Record<Section, string> = {
   Skills: "Skills in this workspace",
 };
 export const sectionGroups: { title: string; items: Section[] }[] = [
-  { items: ["Appearance", "Config"], title: "General" },
+  { items: ["Look and feel", "Config"], title: "General" },
   { items: ["Accounts", "Models", "MCP"], title: "Connections" },
   { items: ["Skills", "Plugins", "Permissions"], title: "Agent" },
   { items: ["Advanced"], title: "Advanced" },

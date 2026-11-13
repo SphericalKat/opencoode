@@ -1,7 +1,7 @@
 import type { SessionInfo, SessionMessageInfo } from "@opencode/client";
-import * as Clipboard from "expo-clipboard";
 
 import { Button, confirmAction, ErrorNotice, Sheet } from "../../components/ui";
+import { copyText } from "../../lib/clipboard";
 import { MessageRow } from "./message-rows";
 import type { ChatController } from "./use-chat-controller";
 
@@ -91,7 +91,7 @@ export const MessageSheet = ({
           <Button
             title="Copy message"
             onPress={() => {
-              void Clipboard.setStringAsync(actionMessage.text)
+              void copyText(actionMessage.text)
                 .then(() => setPanel(null))
                 .catch(showError);
             }}
@@ -101,7 +101,7 @@ export const MessageSheet = ({
           <Button
             title="Copy response"
             onPress={() => {
-              void Clipboard.setStringAsync(
+              void copyText(
                 actionMessage.content
                   .filter((part) => part.type === "text")
                   .map((part) => part.text)

@@ -33,7 +33,7 @@ export const SettingsSection = ({
   directory: string;
   section: Section;
 }) => {
-  if (section === "Appearance") {
+  if (section === "Look and feel") {
     return (
       <View key={`${directory}:${section}`} style={{ flex: 1 }}>
         <AppearanceSettings />

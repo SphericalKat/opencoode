@@ -1,9 +1,9 @@
-import * as Clipboard from "expo-clipboard";
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
 
 import { errorMessage } from "../lib/client";
+import { copyText } from "../lib/clipboard";
 import { useTheme } from "../lib/theme";
 import { BodyText } from "./ui";
 
@@ -37,7 +37,7 @@ export const ResponseFooter = ({
           onPress={(event) => {
             event.stopPropagation();
             setError(null);
-            void Clipboard.setStringAsync(text)
+            void copyText(text)
               .then(() => setCopied(true))
               .catch((error_) => {
                 setCopied(false);

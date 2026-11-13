@@ -1,8 +1,8 @@
 import type { SessionMessageInfo } from "@opencode/client";
-import * as Clipboard from "expo-clipboard";
 import { useEffect, useState } from "react";
 import { BackHandler, Platform } from "react-native";
 
+import { copyText } from "../../lib/clipboard";
 import { messageText } from "./message-rows";
 import type { Panel, Alive, SetPanel } from "./types";
 
@@ -84,7 +84,7 @@ export const useMessageSelection = ({
       const messageID = actionMessage.id;
       const text = messageText(actionMessage);
       if (text) {
-        void Clipboard.setStringAsync(text)
+        void copyText(text)
           .then((copied) => {
             if (alive.current) {
               setSelectedMessageID((current) =>

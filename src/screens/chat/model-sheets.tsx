@@ -10,6 +10,7 @@ import {
   Row,
   Sheet,
 } from "../../components/ui";
+import { playHaptic } from "../../lib/haptics";
 import { modelPreferenceID } from "../../lib/model-preferences";
 import { ChatIconButton } from "./controls";
 import { emptyModelsTitle, emptyModelsDetail } from "./labels";
@@ -224,6 +225,7 @@ export const renderModelRow = ({
       disabled={pending}
       onPress={() => {
         if (!selected) {
+          playHaptic("select");
           void chooseModel(model);
         }
       }}

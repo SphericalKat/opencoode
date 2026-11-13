@@ -1,9 +1,9 @@
-import * as Clipboard from "expo-clipboard";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { copyText } from "../lib/clipboard";
 import { objectKey } from "../lib/object-key";
 import { Markdown } from "./markdown";
 import { Button, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
@@ -126,7 +126,7 @@ const SideQuestionBody = ({
     }
     const { current } = epoch;
     try {
-      await Clipboard.setStringAsync(answer.text);
+      await copyText(answer.text);
       if (mounted.current && current === epoch.current) {
         setCopied(true);
       }

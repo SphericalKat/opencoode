@@ -2,6 +2,7 @@ import type { SessionInfo } from "@opencode/client";
 import { Pressable, View } from "react-native";
 
 import { BodyText } from "../../components/ui";
+import { playHaptic } from "../../lib/haptics";
 import { useThemedStyles } from "../../lib/theme";
 import {
   isUnread,
@@ -70,7 +71,10 @@ const SessionMain = ({
       accessibilityLabel={`Open ${item.title || "Untitled session"}`}
       accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`}
       onPress={() => onOpen(item.id)}
-      onLongPress={manage}
+      onLongPress={() => {
+        playHaptic("longPress");
+        manage();
+      }}
       accessibilityActions={[{ label: "Manage session", name: "manage" }]}
       onAccessibilityAction={(event) => {
         if (event.nativeEvent.actionName === "manage") {

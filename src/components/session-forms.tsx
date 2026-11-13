@@ -10,6 +10,7 @@ import {
   prepareFormAnswer,
 } from "../lib/forms";
 import type { FormValues } from "../lib/forms";
+import { playHaptic } from "../lib/haptics";
 import { useTheme } from "../lib/theme";
 import {
   Button,
@@ -442,8 +443,9 @@ const PendingPermission = ({
   const { colors } = useTheme();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const reply = (decision: "once" | "always" | "reject") =>
-    replyToPermission({
+  const reply = (decision: "once" | "always" | "reject") => {
+    playHaptic(decision === "reject" ? "failure" : "success");
+    return replyToPermission({
       client,
       decision,
       message,
@@ -453,6 +455,7 @@ const PendingPermission = ({
       sessionID,
       setBusy,
     });
+  };
   return (
     <Card style={{ borderColor: colors.success }}>
       <BodyText style={{ color: colors.success, fontWeight: "600" }}>
