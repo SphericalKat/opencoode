@@ -14,6 +14,7 @@ import {
   Linking,
   PixelRatio,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -465,6 +466,7 @@ const CodeView = ({ code, language }: { code: string; language: string }) => {
   const styles = useMarkdownStyles();
   const { colors } = useTheme();
   const selectable = useContext(SelectionContext);
+  const selectMessage = useContext(MessageActionsContext);
   const highlighted = useMemo(
     () => highlightCode(code, language, colors),
     [code, language, colors]
@@ -507,7 +509,16 @@ const CodeView = ({ code, language }: { code: string; language: string }) => {
         showsHorizontalScrollIndicator
         contentContainerStyle={styles.codeContent}
       >
-        <Text selectable={selectable} style={styles.codeText}>
+        {/* A long-press handler makes this Text the JS responder instead of
+            the message row. On Android the row would otherwise intercept
+            every move, and this ScrollView could never start a drag. */}
+        <Text
+          selectable={selectable}
+          onLongPress={
+            !selectable && Platform.OS !== "web" ? selectMessage : undefined
+          }
+          style={styles.codeText}
+        >
           {highlighted ?? code}
         </Text>
       </ScrollView>
@@ -532,6 +543,7 @@ const tableTextAlign = (
 const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
   const styles = useMarkdownStyles();
   const selectable = useContext(SelectionContext);
+  const selectMessage = useContext(MessageActionsContext);
   const [availableWidth, setAvailableWidth] = useState(0);
   const rows = node.children.flatMap((section) => section.children);
   const columnCount = Math.max(1, ...rows.map((row) => row.children.length));
@@ -586,9 +598,19 @@ const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
         contentContainerStyle={{ width: contentWidth }}
         style={styles.tableScroll}
       >
-        <View style={[styles.table, { width: contentWidth }]}>
+        {/* The table claims the JS responder so the message row does not.
+            On Android the row would otherwise intercept every move, and this
+            ScrollView could never start a drag. */}
+        <Pressable
+          accessible={false}
+          importantForAccessibility="no"
+          focusable={false}
+          disabled={!selectMessage || Platform.OS === "web"}
+          onLongPress={selectMessage}
+          style={[styles.table, { width: contentWidth }]}
+        >
           {rows.map(renderRow)}
-        </View>
+        </Pressable>
       </ScrollView>
       {contentWidth > availableWidth && availableWidth > 0 && (
         <Text style={[styles.tableHint, muted && styles.muted]}>
