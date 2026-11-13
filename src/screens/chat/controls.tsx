@@ -1,4 +1,3 @@
-import * as Clipboard from "expo-clipboard";
 import React, { useContext, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,6 +20,7 @@ import { PressFeedback } from "../../components/motion";
 import { ShellIcon } from "../../components/shell-icon";
 import { Button, ErrorNotice, BodyText, Row } from "../../components/ui";
 import { errorMessage } from "../../lib/client";
+import { copyText } from "../../lib/clipboard";
 import { MessageActionsContext } from "../../lib/message-actions";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { createStyles } from "./styles";
@@ -199,7 +199,7 @@ export const CodeBlock = ({
           compact
           variant="ghost"
           onPress={() => {
-            void Clipboard.setStringAsync(code)
+            void copyText(code)
               .then(() => setCopied(true))
               .catch((error_) => setError(errorMessage(error_)));
           }}

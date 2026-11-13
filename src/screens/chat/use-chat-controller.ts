@@ -19,6 +19,7 @@ import { useMessageSelection } from "./use-message-selection";
 import { useModelSelection } from "./use-model-selection";
 import { useOlderMessages } from "./use-older-messages";
 import { usePanelRequest } from "./use-panel-request";
+import { useResponseHaptics } from "./use-response-haptics";
 import { useRunAction } from "./use-run-action";
 import { useScreenReader } from "./use-screen-reader";
 import { useSendMessage } from "./use-send-message";
@@ -189,6 +190,17 @@ export const useChatController = ({
     showError,
     submitting,
     sync,
+  });
+  useResponseHaptics({
+    active: sync.active,
+    following: scroll.followingLatest,
+    foreground,
+    messages: sync.messages,
+    pendingInputCount: sync.permissions.length + sync.forms.length,
+    screenReaderEnabled,
+    sessionID,
+    stopping: messageSend.stopping,
+    visible,
   });
   const device = useDeviceAttachments({
     alive,

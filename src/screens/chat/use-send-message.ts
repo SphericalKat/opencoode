@@ -4,6 +4,7 @@ import { withCleanup } from "../../lib/async";
 import { parseComposer } from "../../lib/chat";
 import { errorMessage } from "../../lib/client";
 import { saveDraft } from "../../lib/drafts";
+import { playHaptic } from "../../lib/haptics";
 import type { CoreClient, OpenCodeClient, Capabilities } from "./session-sync";
 import type { Alive, SetPanel } from "./types";
 import type { ComposerDraft } from "./use-composer-draft";
@@ -105,6 +106,7 @@ export const useSendMessage = ({
     if (submitting.current) {
       return;
     }
+    playHaptic("send");
     setSending(true);
     await withCleanup(
       () =>
@@ -203,6 +205,7 @@ export const useSendMessage = ({
 
   const interrupt = () =>
     run(async () => {
+      playHaptic("stop");
       setStopping(true);
       try {
         await client.session.interrupt({ sessionID });

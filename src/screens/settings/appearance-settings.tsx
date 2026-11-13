@@ -1,13 +1,52 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, Switch, View } from "react-native";
 
 import { ShellIcon } from "../../components/shell-icon";
 import { ErrorNotice, BodyText, Sheet } from "../../components/ui";
 import { errorMessage } from "../../lib/client";
+import {
+  playHaptic,
+  setHapticsEnabled,
+  useHapticsEnabled,
+} from "../../lib/haptics";
 import { paletteOptions, useTheme, useThemedStyles } from "../../lib/theme";
 import type { Appearance } from "../../lib/theme";
 import { Page } from "./shared";
 import { createStyles } from "./styles";
+
+const HapticsSetting = ({
+  onError,
+}: {
+  onError: (message: string | null) => void;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const enabled = useHapticsEnabled();
+  return (
+    <View style={styles.betaAppearanceCard}>
+      <View style={styles.detail}>
+        <BodyText style={styles.betaSettingTitle}>Haptic feedback</BodyText>
+        <BodyText muted style={styles.betaDescription}>
+          Feel responses stream in, and feel taps, selections and results.
+        </BodyText>
+      </View>
+      <Switch
+        accessibilityLabel="Haptic feedback"
+        value={enabled}
+        trackColor={{ false: colors.border, true: colors.accent }}
+        onValueChange={(next) => {
+          onError(null);
+          void setHapticsEnabled(next)
+            .then(() => {
+              playHaptic("select");
+              return null;
+            })
+            .catch((error_) => onError(errorMessage(error_)));
+        }}
+      />
+    </View>
+  );
+};
 
 const appearanceLabel = (value: Appearance) => {
   if (value === "system") {
@@ -127,6 +166,7 @@ export const AppearanceSettings = () => {
         </Pressable>
       </View>
       {palettePicker}
+      <HapticsSetting onError={setError} />
       <Sheet
         visible={choosing}
         title="Color scheme"

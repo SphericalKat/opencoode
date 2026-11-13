@@ -17,6 +17,7 @@ import {
 import { UserMessageBubble } from "../../components/user-message-bubble";
 import type { AgentActivity } from "../../lib/activity";
 import type { Client } from "../../lib/client";
+import { playHaptic } from "../../lib/haptics";
 import { MessageActionsContext } from "../../lib/message-actions";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { CodeBlock, MessageText } from "./controls";
@@ -294,10 +295,10 @@ export const MessageRowBody = ({
 }: MessageRowProps) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const select = useCallback(
-    () => onSelect?.(message.id),
-    [onSelect, message.id]
-  );
+  const select = useCallback(() => {
+    playHaptic("longPress");
+    onSelect?.(message.id);
+  }, [onSelect, message.id]);
   const separateContent = screenReader || Platform.OS === "web";
   if (message.type === "idle" && !message.error) {
     return null;
@@ -340,7 +341,7 @@ export const MessageRowBody = ({
         separateContent ? undefined : () => onSelect(message.id)
       }
       focusable={!screenReader}
-      onLongPress={() => onSelect(message.id)}
+      onLongPress={select}
       onPress={selectionActive ? () => onSelect(message.id) : undefined}
       style={styles.selectableMessage}
     >

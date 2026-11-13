@@ -6,7 +6,6 @@ import type {
   VcsInfo,
   WorktreeDirectory,
 } from "@opencode/client";
-import * as Clipboard from "expo-clipboard";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
@@ -38,6 +37,7 @@ import {
 } from "../components/ui";
 import { errorMessage } from "../lib/client";
 import type { Client, Connection } from "../lib/client";
+import { copyText } from "../lib/clipboard";
 import { pageInset } from "../lib/layout";
 import { useNativePresentation } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
@@ -513,9 +513,7 @@ const FileActionRows = ({
           title={copied ? "Copied" : "Copy text"}
           compact
           onPress={() => {
-            void Clipboard.setStringAsync(file.text)
-              .then(onCopied)
-              .catch(onCopyError);
+            void copyText(file.text).then(onCopied).catch(onCopyError);
           }}
         />
       )}

@@ -3,7 +3,6 @@ import type {
   SessionMessageAssistantTool,
   ToolContent,
 } from "@opencode/client";
-import * as Clipboard from "expo-clipboard";
 import React, { memo, useContext, useMemo, useState } from "react";
 import {
   Platform,
@@ -17,6 +16,7 @@ import Svg, { Path, Rect } from "react-native-svg";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { copyText } from "../lib/clipboard";
 import { MessageActionsContext } from "../lib/message-actions";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
@@ -291,7 +291,7 @@ const CopyAction = ({ value, label }: { value: string; label: string }) => {
         accessibilityLabel={copied ? "Copied" : label}
         onPress={(event) => {
           event.stopPropagation();
-          void Clipboard.setStringAsync(value)
+          void copyText(value)
             .then(() => {
               setCopied(true);
               setError(undefined);

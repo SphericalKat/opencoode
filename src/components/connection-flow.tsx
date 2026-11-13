@@ -14,6 +14,7 @@ import {
 
 import { errorMessage, normalizeConnection } from "../lib/client";
 import type { Connection } from "../lib/client";
+import { playHaptic } from "../lib/haptics";
 import { parsePairingPayload } from "../lib/pairing";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
@@ -840,7 +841,9 @@ export const ConnectionFlow = ({
               return;
             }
             acceptedScan.current = true;
-            if (!acceptPairing(data)) {
+            const accepted = acceptPairing(data);
+            playHaptic(accepted ? "success" : "failure");
+            if (!accepted) {
               setLocalError(
                 "This QR code is not a server pairing code. Scan a pairing code from your computer."
               );

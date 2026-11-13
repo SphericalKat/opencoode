@@ -7,7 +7,6 @@ import type {
   WebSearchResult,
 } from "@opencode/client";
 import { ClientError } from "@opencode/client";
-import * as Clipboard from "expo-clipboard";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
@@ -15,6 +14,7 @@ import { Image, Linking, Platform, ScrollView, Text, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { copyText } from "../lib/clipboard";
 import { externalURL } from "../lib/settings";
 import { useNativePresentation } from "../lib/sheets";
 import { useTheme } from "../lib/theme";
@@ -648,7 +648,7 @@ const Generate = ({
             title="Copy text"
             compact
             onPress={() => {
-              void Clipboard.setStringAsync(text).catch((error_) =>
+              void copyText(text).catch((error_) =>
                 setError(errorMessage(error_))
               );
             }}
