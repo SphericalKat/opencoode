@@ -499,7 +499,14 @@ const CodeView = ({ code, language }: { code: string; language: string }) => {
           {selectable ? "Select the text or try again." : "Try again."}
         </Text>
       )}
-      <ScrollView horizontal contentContainerStyle={styles.codeContent}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        directionalLockEnabled
+        persistentScrollbar
+        showsHorizontalScrollIndicator
+        contentContainerStyle={styles.codeContent}
+      >
         <Text selectable={selectable} style={styles.codeText}>
           {highlighted ?? code}
         </Text>
