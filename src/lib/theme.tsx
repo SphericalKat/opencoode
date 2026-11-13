@@ -33,6 +33,8 @@ export interface ThemeColors {
   primaryText: string;
   selected: string;
   danger: string;
+  emphasis: string;
+  onEmphasis: string;
   dangerBackground: string;
   dangerBorder: string;
   blue: string;
@@ -58,6 +60,8 @@ export const darkColors: ThemeColors = {
   border: "#ffffff12",
   controlTopEdge: "#ffffff16",
   danger: "#f17471",
+  emphasis: "#f0f0f0",
+  onEmphasis: "#171717",
   dangerBackground: "#461516",
   dangerBorder: "#97252b",
   faint: "#858585",
@@ -90,6 +94,8 @@ export const lightColors: ThemeColors = {
   border: "#0000001a",
   controlTopEdge: "#ffffffcc",
   danger: "#b82d35",
+  emphasis: "#161616",
+  onEmphasis: "#fafafa",
   dangerBackground: "#fceceb",
   dangerBorder: "#f2bbb7",
   faint: "#808080",
@@ -145,13 +151,16 @@ const betaDarkColors: ThemeColors = {
   ...darkColors,
   bg: "#161616",
   border: "#ffffff1a",
+  emphasis: "#fafafa",
   frame: "#080808",
+  onEmphasis: "#161616",
   text: "#fafafa",
 };
 const betaLightColors: ThemeColors = {
   ...lightColors,
   bg: "#ffffff",
   input: "#fafafa",
+  onEmphasis: "#ffffff",
   panel: "#fafafa",
   selected: "#f2f2f2",
 };
@@ -172,11 +181,13 @@ const mapPreset = (
     danger: color("text-diff-delete-base", fallback.danger),
     dangerBackground: color("surface-critical-weak", fallback.dangerBackground),
     dangerBorder: color("border-critical-base", fallback.dangerBorder),
+    emphasis: color("text-base", fallback.emphasis),
     faint: color("text-weaker", fallback.faint),
     focus: color("border-focus", fallback.focus),
     frame: color("background-base", fallback.bg),
     input: color("input-base", fallback.input),
     muted: color("text-weak", fallback.muted),
+    onEmphasis: color("background-base", fallback.onEmphasis),
     panel: color("surface-base", fallback.panel),
     primary: color("button-primary-base", fallback.primary),
     primaryText: color("background-base", fallback.primaryText),
@@ -211,16 +222,20 @@ const dynamicColors = (
   danger: t.error,
   dangerBackground: t.errorContainer,
   dangerBorder: t.error,
+  // Wallpaper palettes are often near-gray, so surfaces alone do not show
+  // the palette. The primary color marks the send button and active tab.
+  emphasis: t.primary,
   faint: t.outline,
   focus: t.primary,
   frame: t.background,
   input: t.surfaceContainer,
   muted: t.onSurfaceVariant,
+  onEmphasis: t.onPrimary,
   panel: t.surface,
   primary: t.primary,
   primaryText: t.onPrimary,
   raised: t.surfaceContainerHigh,
-  selected: t.secondaryContainer,
+  selected: t.primaryContainer,
   syntaxConstant: t.tertiary,
   syntaxKeyword: t.primary,
   syntaxProperty: t.secondary,

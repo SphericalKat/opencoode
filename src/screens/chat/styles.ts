@@ -29,9 +29,9 @@ export const createStyles = (colors: ThemeColors) =>
     betaModelTrigger: { gap: 3, minWidth: 0, paddingHorizontal: 4 },
     betaProviderLabel: { maxWidth: 80 },
     betaRaisedFace: {
-      backgroundColor: colors.text,
-      borderColor: colors.text,
-      borderTopColor: colors.text,
+      backgroundColor: colors.emphasis,
+      borderColor: colors.emphasis,
+      borderTopColor: colors.emphasis,
     },
     betaTriggerText: { color: colors.muted, flexShrink: 1, fontSize: 14 },
     betaVariantTrigger: {
