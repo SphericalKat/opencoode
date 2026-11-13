@@ -124,7 +124,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 8,
       paddingTop: 12,
     },
-    selectedTab: { borderBottomColor: colors.text },
+    selectedTab: { borderBottomColor: colors.emphasis },
     serverDetail: { fontSize: 12, lineHeight: 17 },
     serverName: { fontSize: 14, lineHeight: 19 },
     serverRow: {

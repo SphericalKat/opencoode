@@ -99,7 +99,7 @@ export const ChatIconButton = ({
   const styles = useThemedStyles(createStyles);
   let glyphColor = colors.muted;
   if (raised) {
-    glyphColor = compactFace ? colors.bg : colors.primaryText;
+    glyphColor = compactFace ? colors.onEmphasis : colors.primaryText;
   } else if (selected) {
     glyphColor = colors.text;
   }
