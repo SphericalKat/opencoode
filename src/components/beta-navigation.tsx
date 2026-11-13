@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import {
   ActivityIndicator,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -155,7 +156,14 @@ const createStyles = (colors: ThemeColors) =>
       minHeight: 48,
       paddingHorizontal: 16,
     },
-    stripTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
+    stripLabel: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexShrink: 1,
+      gap: 4,
+      minWidth: 0,
+    },
+    stripTitle: { flexShrink: 1, fontSize: 14, lineHeight: 19 },
     surface: { flex: 1, minHeight: 0, minWidth: 0 },
     tabText: { fontSize: 14, lineHeight: 19 },
   });
@@ -216,21 +224,27 @@ export const BetaTabStrip = ({
       accessibilityRole="button"
       accessibilityLabel={`Tabs. ${current?.title || "Home"}`}
       onPress={onOpen}
-      style={({ pressed }) => [styles.strip, pressed && styles.pressed]}
+      android_ripple={{ alpha: 0.12, color: colors.text, foreground: true }}
+      style={({ pressed }) => [
+        styles.strip,
+        pressed && Platform.OS !== "android" && styles.pressed,
+      ]}
     >
       {current ? (
         <ProjectBadge directory={current.directory} />
       ) : (
         <HomeIcon color={colors.muted} />
       )}
-      <BodyText numberOfLines={1} style={styles.stripTitle}>
-        {current?.title || "Home"}
-      </BodyText>
-      {busy ? (
-        <ActivityIndicator size="small" color={colors.muted} />
-      ) : (
-        <ShellIcon name="chevron-up-down" size={16} color={colors.muted} />
-      )}
+      <View style={styles.stripLabel}>
+        <BodyText numberOfLines={1} style={styles.stripTitle}>
+          {current?.title || "Home"}
+        </BodyText>
+        {busy ? (
+          <ActivityIndicator size="small" color={colors.muted} />
+        ) : (
+          <ShellIcon name="chevron-up-down" size={14} color={colors.muted} />
+        )}
+      </View>
     </Pressable>
   );
 };
