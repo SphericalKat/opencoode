@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.1](https://github.com/SphericalKat/opencoode/compare/v1.5.0...v1.5.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **chat:** stop image placeholder from crashing Android ([c7435a4](https://github.com/SphericalKat/opencoode/commit/c7435a48ed5476a93d19c3ebbf199c29258c8014))
+* **chat:** stop image placeholder from crashing Android ([ca2d859](https://github.com/SphericalKat/opencoode/commit/ca2d8596ecbdc391e067492fbe710710ec7f3fc7))
+
 ## [1.5.0](https://github.com/SphericalKat/opencoode/compare/v1.4.0...v1.5.0) (2026-11-13)
 
 
