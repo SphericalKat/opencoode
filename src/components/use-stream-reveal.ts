@@ -1,27 +1,20 @@
 import { useEffect, useState } from "react";
 
-import { pruneChunks, recordGrowth } from "../lib/stream-reveal";
+import { SETTLE_AFTER, pruneChunks, recordGrowth } from "../lib/stream-reveal";
 import type { RevealChunk } from "../lib/stream-reveal";
 import { useMotionPreference } from "./motion";
-
-const TICK_INTERVAL = 33;
 
 interface RevealState {
   chunks: RevealChunk[];
   length: number;
-  now: number;
 }
 
 export const useStreamReveal = (
   length: number,
   streaming: boolean
-): RevealState => {
+): RevealChunk[] => {
   const reduced = useMotionPreference();
-  const [state, setState] = useState<RevealState>({
-    chunks: [],
-    length,
-    now: 0,
-  });
+  const [state, setState] = useState<RevealState>({ chunks: [], length });
   // Recording during render keeps new text from showing opaque for a frame.
   if (state.length !== length) {
     const record = (streaming && !reduced) || length < state.length;
@@ -32,22 +25,30 @@ export const useStreamReveal = (
           ? recordGrowth(current.chunks, current.length, length, now)
           : pruneChunks(current.chunks, now),
         length,
-        now,
       };
     });
   }
-  const live = state.chunks.length > 0;
+  // Fades run on the UI thread, so React only hears about a chunk again when
+  // it finishes and its text can render as plain text.
+  const nextFinish = state.chunks[0]?.startedAt;
   useEffect(() => {
-    if (!live) {
+    if (nextFinish === undefined) {
       return;
     }
-    const timer = setInterval(() => {
-      setState((current) => {
-        const now = Date.now();
-        return { ...current, chunks: pruneChunks(current.chunks, now), now };
-      });
-    }, TICK_INTERVAL);
-    return () => clearInterval(timer);
-  }, [live]);
-  return state;
+    const finish = nextFinish + SETTLE_AFTER;
+    const timer = setTimeout(
+      () => {
+        // A timer that fires a millisecond early would otherwise leave the
+        // head chunk in place with no timer left to remove it.
+        const now = Math.max(Date.now(), finish);
+        setState((current) => ({
+          ...current,
+          chunks: pruneChunks(current.chunks, now),
+        }));
+      },
+      Math.max(0, finish - Date.now())
+    );
+    return () => clearTimeout(timer);
+  }, [nextFinish]);
+  return state.chunks;
 };

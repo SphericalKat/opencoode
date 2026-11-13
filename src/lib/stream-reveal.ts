@@ -5,20 +5,24 @@ export interface RevealChunk {
 
 export interface RevealPiece {
   text: string;
-  opacity: number;
+  startedAt?: number;
 }
 
 export const REVEAL_DURATION = 600;
 export const MERGE_WINDOW = 100;
-
-export const chunkOpacity = (chunk: RevealChunk, now: number): number =>
-  Math.min(1, Math.max(0, (now - chunk.startedAt) / REVEAL_DURATION));
+// A span starts fading when it mounts, which can trail the text's arrival by a
+// slow render. A chunk settles only after this grace, so pruning never cuts a
+// fade short.
+const MOUNT_GRACE = 300;
+export const SETTLE_AFTER = REVEAL_DURATION + MOUNT_GRACE;
 
 export const pruneChunks = (
   chunks: RevealChunk[],
   now: number
 ): RevealChunk[] => {
-  const firstLive = chunks.findIndex((chunk) => chunkOpacity(chunk, now) < 1);
+  const firstLive = chunks.findIndex(
+    (chunk) => now - chunk.startedAt < SETTLE_AFTER
+  );
   if (firstLive === 0) {
     return chunks;
   }
@@ -42,35 +46,34 @@ export const recordGrowth = (
   return [...live, { start: previousLength, startedAt: now }];
 };
 
-const pushPiece = (pieces: RevealPiece[], text: string, opacity: number) => {
+const pushPiece = (pieces: RevealPiece[], text: string, startedAt?: number) => {
   if (!text) {
     return;
   }
   const last = pieces.at(-1);
-  if (last && last.opacity === opacity) {
+  if (last && last.startedAt === startedAt) {
     last.text += text;
     return;
   }
-  pieces.push({ opacity, text });
+  pieces.push(startedAt === undefined ? { text } : { startedAt, text });
 };
 
 export const splitReveal = (
   text: string,
   start: number,
-  chunks: RevealChunk[],
-  now: number
+  chunks: RevealChunk[]
 ): RevealPiece[] => {
   const pieces: RevealPiece[] = [];
   const end = start + text.length;
   const cut = (offset: number) =>
     Math.min(text.length, Math.max(0, offset - start));
-  pushPiece(pieces, text.slice(0, cut(chunks[0]?.start ?? end)), 1);
+  pushPiece(pieces, text.slice(0, cut(chunks[0]?.start ?? end)));
   for (const [index, chunk] of chunks.entries()) {
     const chunkEnd = chunks[index + 1]?.start ?? end;
     pushPiece(
       pieces,
       text.slice(cut(chunk.start), cut(chunkEnd)),
-      chunkOpacity(chunk, now)
+      chunk.startedAt
     );
   }
   return pieces;

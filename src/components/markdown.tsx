@@ -23,7 +23,7 @@ import type { TextStyle } from "react-native";
 
 import { copyText } from "../lib/clipboard";
 import { MessageActionsContext } from "../lib/message-actions";
-import { splitReveal, withAlpha } from "../lib/stream-reveal";
+import { splitReveal } from "../lib/stream-reveal";
 import "prismjs/components/prism-clike";
 import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-typescript";
@@ -47,6 +47,7 @@ import "prismjs/components/prism-markup";
 import type { RevealChunk } from "../lib/stream-reveal";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { FadeSpan } from "./fade-span";
 import { Button, mono, sans } from "./ui";
 import { useStreamReveal } from "./use-stream-reveal";
 
@@ -270,7 +271,6 @@ interface Reveal {
   chunks: RevealChunk[];
   color: string;
   from: number;
-  now: number;
   spans: Map<Token, Span>;
 }
 
@@ -283,8 +283,6 @@ const revealFor = (node: Node, reveal?: Reveal): Reveal | undefined =>
     ? reveal
     : undefined;
 
-// Nested Text has no reliable per-span opacity on native, so a fading piece
-// takes its inherited color with alpha instead.
 const revealText = (
   text: string,
   token: Token,
@@ -298,18 +296,17 @@ const revealText = (
   if (start + text.length <= reveal.from) {
     return text;
   }
-  return splitReveal(text, start, reveal.chunks, reveal.now).map(
-    (piece, index) => {
-      const color =
-        piece.opacity < 1 ? withAlpha(reveal.color, piece.opacity) : undefined;
-      return color ? (
-        <Text key={index} selectable={selectable} style={{ color }}>
-          {piece.text}
-        </Text>
-      ) : (
-        piece.text
-      );
-    }
+  return splitReveal(text, start, reveal.chunks).map((piece) =>
+    piece.startedAt === undefined ? (
+      piece.text
+    ) : (
+      <FadeSpan
+        key={piece.startedAt}
+        text={piece.text}
+        color={reveal.color}
+        selectable={selectable}
+      />
+    )
   );
 };
 
@@ -932,17 +929,14 @@ const MarkdownView = ({
     }
   }, [text]);
   const measured = useMemo(() => nodes && measureNodes(nodes), [nodes]);
-  const { chunks, now } = useStreamReveal(
-    measured?.length ?? text.length,
-    streaming
-  );
+  const chunks = useStreamReveal(measured?.length ?? text.length, streaming);
   const color = muted ? colors.muted : colors.text;
   const reveal = useMemo<Reveal | undefined>(
     () =>
       measured && chunks.length
-        ? { chunks, color, from: chunks[0].start, now, spans: measured.spans }
+        ? { chunks, color, from: chunks[0].start, spans: measured.spans }
         : undefined,
-    [measured, chunks, color, now]
+    [measured, chunks, color]
   );
   return (
     <SelectionContext.Provider value={selectable}>
