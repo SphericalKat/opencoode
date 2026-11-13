@@ -85,7 +85,9 @@ export const RevertBanner = ({
   session.revert && (
     <View style={styles.revert}>
       <BodyText>A revert is staged</BodyText>
-      <BodyText muted>Later messages are excluded from the context.</BodyText>
+      <BodyText muted>
+        The next message replaces the hidden messages. Restore brings them back.
+      </BodyText>
       <Row>
         <Button
           title="Restore"

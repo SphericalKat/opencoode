@@ -115,6 +115,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     <>
       <ChatHeader
         actionMessage={actionMessage}
+        active={active}
         backend={backend}
         canCopySelected={canCopySelected}
         capabilities={capabilities}
