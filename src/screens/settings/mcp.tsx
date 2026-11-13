@@ -87,10 +87,12 @@ export const Mcp = ({
       </Row>
       <ErrorNotice error={errorAction} />
       {data?.map((item) => (
-        <Card key={item.name}>
-          <Row style={{ justifyContent: "space-between" }}>
-            <View style={{ flex: 1 }}>
-              <BodyText style={styles.name}>{item.title || item.name}</BodyText>
+        <Card key={item.name} style={styles.card}>
+          <Row style={styles.cardHeader}>
+            <View style={styles.cardText}>
+              <BodyText style={styles.cardTitle}>
+                {item.title || item.name}
+              </BodyText>
               <BodyText muted>
                 {item.name} · {item.status.status.replace("_", " ")}
               </BodyText>
@@ -122,28 +124,30 @@ export const Mcp = ({
               {item.integrationID || item.name}.
             </BodyText>
           )}
-          <Button
-            title="Remove"
-            variant="danger"
-            compact
-            busy={busy}
-            onPress={() => {
-              void confirmAction(
-                "Remove MCP server?",
-                `This removes ${item.name} from the project configuration.`
-              ).then((confirmed) => {
-                if (confirmed) {
-                  void run(async (signal) => {
-                    await client.experimental.mcp.remove(
-                      { location: { directory }, server: item.name },
-                      { signal }
-                    );
-                  });
-                }
-                return confirmed;
-              });
-            }}
-          />
+          <Row>
+            <Button
+              title="Remove"
+              variant="danger"
+              compact
+              busy={busy}
+              onPress={() => {
+                void confirmAction(
+                  "Remove MCP server?",
+                  `This removes ${item.name} from the project configuration.`
+                ).then((confirmed) => {
+                  if (confirmed) {
+                    void run(async (signal) => {
+                      await client.experimental.mcp.remove(
+                        { location: { directory }, server: item.name },
+                        { signal }
+                      );
+                    });
+                  }
+                  return confirmed;
+                });
+              }}
+            />
+          </Row>
         </Card>
       ))}
       {data && !data.length && (
