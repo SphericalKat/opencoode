@@ -11,7 +11,7 @@ import {
   MentionsSheet,
 } from "./composer-sheets";
 import { ChatKeyboardView } from "./controls";
-import { ChatHeader } from "./header";
+import { SelectionBar } from "./header";
 import { MessageSheet, SelectTextSheet } from "./message-sheets";
 import { VariantsSheet, ModelsSheet } from "./model-sheets";
 import {
@@ -111,26 +111,30 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     updateScrollPosition,
     visible,
   } = chat;
+  const selectionBar = (
+    <SelectionBar
+      visible={visible}
+      actionMessage={actionMessage}
+      active={active}
+      backend={backend}
+      canCopySelected={canCopySelected}
+      capabilities={capabilities}
+      client={client}
+      copySelected={copySelected}
+      draftLoaded={draftLoaded}
+      editMessage={editMessage}
+      onOpenSession={onOpenSession}
+      pending={pending}
+      run={run}
+      sessionID={sessionID}
+      setPanel={setPanel}
+      setSelectedMessageID={setSelectedMessageID}
+      styles={styles}
+    />
+  );
   return (
     <>
-      <ChatHeader
-        actionMessage={actionMessage}
-        active={active}
-        backend={backend}
-        canCopySelected={canCopySelected}
-        capabilities={capabilities}
-        client={client}
-        copySelected={copySelected}
-        draftLoaded={draftLoaded}
-        editMessage={editMessage}
-        onOpenSession={onOpenSession}
-        pending={pending}
-        run={run}
-        sessionID={sessionID}
-        setPanel={setPanel}
-        setSelectedMessageID={setSelectedMessageID}
-        styles={styles}
-      />
+      {selectionBar}
       <ErrorBanners
         catalogError={catalogError}
         error={error}

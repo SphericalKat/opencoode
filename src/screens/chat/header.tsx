@@ -1,8 +1,8 @@
 import type { SessionMessageInfo } from "@opencode/client";
 import { View } from "react-native";
 
-import { MotionContent } from "../../components/motion";
 import { Button, BodyText } from "../../components/ui";
+import { usePublishSelectionBar } from "../../lib/selection-bar";
 import { ChatIconButton } from "./controls";
 import type { ChatController } from "./use-chat-controller";
 
@@ -121,9 +121,10 @@ type ChatHeaderProps = Pick<
   | "setPanel"
   | "setSelectedMessageID"
   | "styles"
->;
+> & { placement: "shell" | "inline" };
 
 export const ChatHeader = ({
+  placement,
   actionMessage,
   active,
   backend,
@@ -145,10 +146,12 @@ export const ChatHeader = ({
     return null;
   }
   return (
-    <MotionContent
-      variant="context"
-      transitionKey
-      style={[styles.header, styles.selectionHeader]}
+    <View
+      style={
+        placement === "shell"
+          ? [styles.header, styles.shellSelectionHeader]
+          : [styles.header, styles.selectionHeader]
+      }
     >
       {renderSelectionHeader({
         actionMessage,
@@ -168,6 +171,20 @@ export const ChatHeader = ({
         setSelectedMessageID,
         styles,
       })}
-    </MotionContent>
+    </View>
   );
+};
+
+// Inside the app shell the bar sits over the tab strip, so the transcript
+// stays still. Without a shell slot it renders inline above the transcript.
+export const SelectionBar = ({
+  visible,
+  ...props
+}: Omit<ChatHeaderProps, "placement"> & { visible: boolean }) => {
+  const inShell = usePublishSelectionBar(
+    visible && props.actionMessage ? (
+      <ChatHeader placement="shell" {...props} />
+    ) : null
+  );
+  return inShell ? null : <ChatHeader placement="inline" {...props} />;
 };

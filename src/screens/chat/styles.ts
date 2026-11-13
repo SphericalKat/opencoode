@@ -202,6 +202,11 @@ export const createStyles = (colors: ThemeColors) =>
       paddingStart: pageInset - 4,
     },
     selectionHeader: { backgroundColor: colors.panel },
+    shellSelectionHeader: {
+      backgroundColor: colors.frame,
+      borderBottomWidth: 0,
+      minHeight: 48,
+    },
     selectionMarker: {
       borderRadius: 1,
       bottom: 0,

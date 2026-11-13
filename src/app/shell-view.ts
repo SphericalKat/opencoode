@@ -25,13 +25,11 @@ export interface ShellView {
   projectLabel: string;
   returnLabel: string;
   selectedPane: SessionPane;
-  showMessageSelection: boolean;
 }
 
 export interface ShellViewInput {
   betaHome: boolean;
   directory: string;
-  messageSelected: boolean;
   openTabs: OpenSessionTab[];
   sessionID: string | null;
   tab: Tab;
@@ -41,7 +39,6 @@ export interface ShellViewInput {
 export const deriveShellView = ({
   betaHome,
   directory,
-  messageSelected,
   openTabs,
   sessionID,
   tab,
@@ -54,6 +51,4 @@ export const deriveShellView = ({
   projectLabel: lastPathSegment.exec(directory)?.[0] || "Project",
   returnLabel: sessionID ? "Chat" : "Sessions",
   selectedPane: tab === "workspace" ? workspaceSection : "Session",
-  showMessageSelection:
-    messageSelected && tab === "sessions" && !betaHome && !!sessionID,
 });

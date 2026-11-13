@@ -343,6 +343,7 @@ export const MessageRowBody = ({
       focusable={!screenReader}
       onLongPress={select}
       onPress={selectionActive ? () => onSelect(message.id) : undefined}
+      android_ripple={{ alpha: 0.12, color: colors.text, foreground: true }}
       style={styles.selectableMessage}
     >
       {selected && (
