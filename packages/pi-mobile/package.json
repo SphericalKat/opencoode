@@ -2,6 +2,7 @@
   "name": "@opencoode/pi-mobile",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "qrcode-terminal": "^0.12.0"
