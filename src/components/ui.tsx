@@ -100,8 +100,14 @@ const createStyles = (colors: ThemeColors) => {
     },
     compact: { minHeight: 32, paddingHorizontal: 10, paddingVertical: 5 },
     danger: { backgroundColor: colors.raised },
-    disclosure: { gap: 0, padding: 0 },
+    disclosure: { gap: 0, paddingHorizontal: 0, paddingVertical: 0 },
     disclosureBody: { gap: 10, padding: 14, paddingTop: 0 },
+    disclosureEmbedded: {
+      borderTopColor: colors.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    disclosureEmbeddedBody: { paddingBottom: 0, paddingHorizontal: 0 },
+    disclosureEmbeddedHeader: { paddingHorizontal: 0 },
     disclosureHeader: {
       alignItems: "center",
       borderRadius: 8,
@@ -743,10 +749,12 @@ export const Disclosure = ({
   title,
   children,
   disclosureKey,
+  variant = "card",
 }: {
   title: string;
   children: React.ReactNode;
   disclosureKey?: string;
+  variant?: "card" | "embedded";
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -765,7 +773,13 @@ export const Disclosure = ({
     setOpen(initialOpen);
   }
   return (
-    <Card style={styles.disclosure}>
+    <View
+      style={[
+        variant === "card" && styles.card,
+        styles.disclosure,
+        variant === "embedded" && styles.disclosureEmbedded,
+      ]}
+    >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={title}
@@ -781,6 +795,7 @@ export const Disclosure = ({
         onLongPress={Platform.OS === "web" ? undefined : openMessageActions}
         style={({ pressed }) => [
           styles.disclosureHeader,
+          variant === "embedded" && styles.disclosureEmbeddedHeader,
           pressed && styles.ghostPressed,
         ]}
       >
@@ -789,9 +804,15 @@ export const Disclosure = ({
           <ShellIcon name="chevron" color={colors.muted} size={16} />
         </MotionDisclosureChevron>
       </Pressable>
-      <MotionDisclosureBody open={open} style={styles.disclosureBody}>
+      <MotionDisclosureBody
+        open={open}
+        style={[
+          styles.disclosureBody,
+          variant === "embedded" && styles.disclosureEmbeddedBody,
+        ]}
+      >
         {children}
       </MotionDisclosureBody>
-    </Card>
+    </View>
   );
 };
