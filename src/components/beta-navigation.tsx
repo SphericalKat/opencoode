@@ -1,7 +1,6 @@
-import React, { useMemo } from "react";
+import React from "react";
 import {
   ActivityIndicator,
-  PanResponder,
   Platform,
   Pressable,
   StyleSheet,
@@ -78,14 +77,6 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: "column",
       overflow: "hidden",
     },
-    grip: {
-      backgroundColor: colors.faint,
-      borderRadius: 2,
-      height: 4,
-      opacity: 0.5,
-      width: 32,
-    },
-    gripTarget: { alignItems: "center", height: 28, justifyContent: "center" },
     menuRow: {
       alignItems: "center",
       flexDirection: "row",
@@ -338,28 +329,6 @@ export const BetaSessionNavigation = ({
   );
 };
 
-export const SheetGrip = ({ onClose }: { onClose: () => void }) => {
-  const styles = useThemedStyles(createStyles);
-  const pan = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, state) =>
-          state.dy > 8 && state.dy > Math.abs(state.dx),
-        onPanResponderRelease: (_, state) => {
-          if (state.dy > 40 || state.vy > 0.5) {
-            onClose();
-          }
-        },
-      }),
-    [onClose]
-  );
-  return (
-    <View accessible={false} style={styles.gripTarget} {...pan.panHandlers}>
-      <View style={styles.grip} />
-    </View>
-  );
-};
-
 export const BetaTabsSheet = ({
   visible,
   tabs,
@@ -403,7 +372,6 @@ export const BetaTabsSheet = ({
       onDismiss={onDismiss}
       contentStyle={styles.sheetContent}
     >
-      <SheetGrip onClose={onClose} />
       {tabs.map((item) => (
         <View
           key={item.id}
@@ -560,7 +528,6 @@ export const BetaMoreSheet = ({
       onClose={onClose}
       onDismiss={onDismiss}
     >
-      <SheetGrip onClose={onClose} />
       {onView &&
         (["Files", "Terminal", "Worktrees"] as const).map((view) => (
           <Pressable

@@ -1,3 +1,16 @@
+import {
+  BottomSheetBackdrop,
+  BottomSheetHandle,
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetTextInput,
+  BottomSheetView,
+  useBottomSheetInternal,
+} from "@gorhom/bottom-sheet";
+import type {
+  BottomSheetBackdropProps,
+  BottomSheetHandleProps,
+} from "@gorhom/bottom-sheet";
 import React, {
   useCallback,
   useContext,
@@ -10,6 +23,7 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Modal,
   Platform,
   Pressable,
@@ -17,6 +31,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import type {
@@ -26,8 +41,12 @@ import type {
   TextProps,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import Animated from "react-native-reanimated";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { ReduceMotion } from "react-native-reanimated";
+import {
+  SafeAreaProvider,
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import {
   MessageActionsContext,
@@ -41,7 +60,6 @@ import {
   MotionDisclosureChevron,
   PressFeedback,
   useMotionPreference,
-  useSheetTransition,
 } from "./motion";
 import { ShellIcon } from "./shell-icon";
 
@@ -162,20 +180,18 @@ const createStyles = (colors: ThemeColors) => {
       width: touchTarget,
     },
     fieldVisibilityDisabled: { opacity: disabledOpacity },
-    fitInner: { flex: 0, flexShrink: 1 },
-    fitScroll: { flex: 0, flexShrink: 1 },
     fitSheet: {
-      alignSelf: "center",
-      backgroundColor: colors.panel,
+      borderRadius: 0,
       borderTopLeftRadius: 16,
       borderTopRightRadius: 16,
-      flexShrink: 1,
-      maxHeight: "85%",
-      maxWidth: 680,
-      overflow: "hidden",
-      width: "100%",
     },
-    fitSheetSafeArea: { flexShrink: 1 },
+    fitSheetHandle: {
+      backgroundColor: colors.faint,
+      borderRadius: 2,
+      height: 4,
+      opacity: 0.5,
+      width: 32,
+    },
     ghost: {
       backgroundColor: "transparent",
       borderColor: "transparent",
@@ -277,8 +293,6 @@ const createStyles = (colors: ThemeColors) => {
       width: "100%",
     },
     sheetLayout: { flex: 1, minHeight: 0 },
-    sheetOverlay: { flex: 1, justifyContent: "flex-end" },
-    sheetScrim: { ...StyleSheet.absoluteFill, backgroundColor: "#00000070" },
     sheetScroll: { flex: 1, minHeight: 0 },
     text: {
       color: colors.text,
@@ -449,8 +463,10 @@ export const Field = ({
   const [focused, setFocused] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const canToggleVisibility = props.secureTextEntry && !props.multiline;
+  // gorhom only moves a sheet for the keyboard when its own input has focus.
+  const Input = useBottomSheetInternal(true) ? BottomSheetTextInput : TextInput;
   const input = (
-    <TextInput
+    <Input
       accessibilityLabel={label ?? props.placeholder}
       placeholderTextColor={colors.faint}
       selectionColor={colors.focus}
@@ -595,19 +611,17 @@ const renderSheetHeader = ({
 const renderSheetBody = ({
   children,
   contentStyle,
-  fitContent,
   scroll,
   styles,
 }: {
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
-  fitContent: boolean;
   scroll: boolean;
   styles: UiStyles;
 }) =>
   scroll ? (
     <ScrollView
-      style={[styles.sheetScroll, fitContent && styles.fitScroll]}
+      style={styles.sheetScroll}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
       contentContainerStyle={[
@@ -619,18 +633,143 @@ const renderSheetBody = ({
       {children}
     </ScrollView>
   ) : (
-    <View
-      style={[styles.sheetBody, fitContent && styles.fitScroll, contentStyle]}
-    >
-      {children}
-    </View>
+    <View style={[styles.sheetBody, contentStyle]}>{children}</View>
   );
 
-const sheetAnimationType = (fitContent: boolean, reduced: boolean) => {
-  if (fitContent) {
-    return "none";
-  }
-  return reduced ? "fade" : "slide";
+const fitSheetMaxWidth = 680;
+const fitSheetMaxHeight = 0.85;
+const fitSheetBackdropOpacity = 0.44;
+
+const FitSheet = ({
+  visible,
+  title,
+  header,
+  children,
+  contentStyle,
+  scroll,
+  onPresentedChange,
+  onDismiss,
+}: {
+  visible: boolean;
+  title: string;
+  header: React.ReactNode;
+  children: React.ReactNode;
+  contentStyle?: StyleProp<ViewStyle>;
+  scroll: boolean;
+  onPresentedChange: (presented: boolean) => void;
+  onDismiss: () => void;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const reduced = useMotionPreference();
+  const insets = useSafeAreaInsets();
+  const { height, width } = useWindowDimensions();
+  const modal = useRef<BottomSheetModal>(null);
+  // gorhom leaves a never-presented or already-dismissed modal stuck in its
+  // dismissing state if dismiss() is called on it, so track presentation here.
+  const presented = useRef(false);
+  useLayoutEffect(() => {
+    if (visible) {
+      presented.current = true;
+      onPresentedChange(true);
+      modal.current?.present();
+    } else if (presented.current) {
+      modal.current?.dismiss();
+    }
+  }, [visible, onPresentedChange]);
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        if (!presented.current) {
+          return false;
+        }
+        modal.current?.dismiss();
+        return true;
+      }
+    );
+    return () => subscription.remove();
+  }, [visible]);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  // gorhom can still report a dismissal after the sheet unmounts.
+  const handleDismiss = useCallback(() => {
+    presented.current = false;
+    if (!mounted.current) {
+      return;
+    }
+    onPresentedChange(false);
+    onDismiss();
+  }, [onPresentedChange, onDismiss]);
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        accessibilityLabel={`Close ${title}`}
+        accessibilityHint={null}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={fitSheetBackdropOpacity}
+        pressBehavior="close"
+      />
+    ),
+    [title]
+  );
+  const sideInsets = { paddingLeft: insets.left, paddingRight: insets.right };
+  const renderHandle = (props: BottomSheetHandleProps) => (
+    <BottomSheetHandle
+      {...props}
+      accessible={false}
+      indicatorStyle={styles.fitSheetHandle}
+      style={sideInsets}
+    >
+      {header}
+    </BottomSheetHandle>
+  );
+  const contentInsets = { ...sideInsets, paddingBottom: insets.bottom };
+  return (
+    <BottomSheetModal
+      ref={modal}
+      stackBehavior="push"
+      enableDynamicSizing
+      maxDynamicContentSize={height * fitSheetMaxHeight}
+      topInset={insets.top}
+      overrideReduceMotion={reduced ? ReduceMotion.Always : ReduceMotion.Never}
+      keyboardBlurBehavior="restore"
+      backdropComponent={renderBackdrop}
+      handleComponent={renderHandle}
+      backgroundStyle={[styles.fitSheet, { backgroundColor: colors.bg }]}
+      style={{
+        marginHorizontal: Math.max(0, (width - fitSheetMaxWidth) / 2),
+      }}
+      onDismiss={handleDismiss}
+    >
+      {scroll ? (
+        <BottomSheetScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={contentInsets}
+        >
+          <View
+            style={[styles.sheetContent, styles.betaSheetContent, contentStyle]}
+          >
+            {children}
+          </View>
+        </BottomSheetScrollView>
+      ) : (
+        <BottomSheetView style={contentInsets}>
+          <View style={contentStyle}>{children}</View>
+        </BottomSheetView>
+      )}
+    </BottomSheetModal>
+  );
 };
 
 export const Sheet = ({
@@ -663,8 +802,12 @@ export const Sheet = ({
     useSheetCoordinator();
   const id = useId();
   const effectiveVisible = visible && (allowDuringRecovery || !suspended);
-  const transition = useSheetTransition(fitContent && effectiveVisible);
-  const modalVisible = fitContent ? transition.presented : effectiveVisible;
+  const [fitPresented, setFitPresented] = useState(false);
+  // A fit sheet stays logically visible until gorhom finishes its close
+  // animation, whether the parent or a gesture started the close.
+  const modalVisible = fitContent
+    ? effectiveVisible || fitPresented
+    : effectiveVisible;
   const SafeAreaRoot =
     Platform.OS === "web" ? React.Fragment : SafeAreaProvider;
   const requested = useRef(effectiveVisible);
@@ -673,10 +816,12 @@ export const Sheet = ({
   const pendingDismiss = useRef(false);
   const pendingAppDismiss = useRef(false);
   const dismissRef = useRef(onDismiss);
+  const closeRef = useRef(onClose);
   useLayoutEffect(() => {
     requested.current = effectiveVisible;
     logicalVisible.current = visible;
     dismissRef.current = onDismiss;
+    closeRef.current = onClose;
   });
   const notifyDismissed = useCallback(() => {
     if (requested.current || !pendingDismiss.current) {
@@ -692,6 +837,11 @@ export const Sheet = ({
       }
     }
   }, [dismissSheet, id, allowDuringRecovery]);
+  const handleFitDismissed = useCallback(() => {
+    if (requested.current) {
+      closeRef.current();
+    }
+  }, []);
   useLayoutEffect(() => {
     if (effectiveVisible && !allowDuringRecovery) {
       presentSheet(id);
@@ -724,81 +874,63 @@ export const Sheet = ({
       return;
     }
     pendingDismiss.current = true;
+    if (fitContent) {
+      notifyDismissed();
+      return;
+    }
     if (Platform.OS !== "android") {
       return;
     }
     const frame = requestAnimationFrame(notifyDismissed);
     return () => cancelAnimationFrame(frame);
-  }, [modalVisible, notifyDismissed]);
-  const content = (
-    <View style={[styles.sheetInner, fitContent && styles.fitInner]}>
+  }, [modalVisible, fitContent, notifyDismissed]);
+  const header = (
+    <>
       {renderSheetHeader({ onClose, showHeader, styles, title })}
       {recoveryPending && !allowDuringRecovery && (
         <BodyText accessibilityRole="alert" style={styles.recoveryNotice}>
           Close this panel to open the connection wizard.
         </BodyText>
       )}
-      {renderSheetBody({
-        children,
-        contentStyle,
-        fitContent,
-        scroll,
-        styles,
-      })}
-    </View>
+    </>
   );
+  if (fitContent) {
+    return (
+      <FitSheet
+        visible={effectiveVisible}
+        title={title}
+        header={header}
+        contentStyle={contentStyle}
+        scroll={scroll}
+        onPresentedChange={setFitPresented}
+        onDismiss={handleFitDismissed}
+      >
+        {children}
+      </FitSheet>
+    );
+  }
   return (
     <Modal
       visible={modalVisible}
-      transparent={fitContent}
-      animationType={sheetAnimationType(fitContent, reduced)}
-      presentationStyle={fitContent ? "overFullScreen" : "pageSheet"}
+      animationType={reduced ? "fade" : "slide"}
+      presentationStyle="pageSheet"
       supportedOrientations={["portrait", "landscape-left", "landscape-right"]}
       onRequestClose={onClose}
       onDismiss={notifyDismissed}
     >
       <SafeAreaRoot>
-        {fitContent ? (
+        <SafeAreaView style={[styles.sheet, { backgroundColor: colors.bg }]}>
           <KeyboardAvoidingView
-            style={styles.sheetOverlay}
+            style={styles.sheetLayout}
             behavior="padding"
             automaticOffset
           >
-            <Animated.View style={[styles.sheetScrim, transition.scrimStyle]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Close ${title}`}
-                onPress={onClose}
-                style={StyleSheet.absoluteFill}
-              />
-            </Animated.View>
-            <Animated.View
-              onLayout={transition.handlePanelLayout}
-              style={[
-                styles.fitSheet,
-                { backgroundColor: colors.bg },
-                transition.panelStyle,
-              ]}
-            >
-              <SafeAreaView
-                edges={["bottom", "left", "right"]}
-                style={styles.fitSheetSafeArea}
-              >
-                {content}
-              </SafeAreaView>
-            </Animated.View>
+            <View style={styles.sheetInner}>
+              {header}
+              {renderSheetBody({ children, contentStyle, scroll, styles })}
+            </View>
           </KeyboardAvoidingView>
-        ) : (
-          <SafeAreaView style={[styles.sheet, { backgroundColor: colors.bg }]}>
-            <KeyboardAvoidingView
-              style={styles.sheetLayout}
-              behavior="padding"
-              automaticOffset
-            >
-              {content}
-            </KeyboardAvoidingView>
-          </SafeAreaView>
-        )}
+        </SafeAreaView>
       </SafeAreaRoot>
     </Modal>
   );
