@@ -57,6 +57,7 @@ const createStyles = (colors: ThemeColors) =>
       width: touchTarget,
     },
     divider: { borderTopColor: colors.border, borderTopWidth: 1 },
+    disclosedContent: { padding: 0, paddingTop: 0 },
     more: { justifyContent: "center", minHeight: touchTarget },
     output: { backgroundColor: colors.bg },
     panel: {
@@ -345,11 +346,13 @@ const CodeSection = ({
   section,
   output,
   divided,
+  disclosed,
   selectable,
 }: {
   section: Section;
   output?: boolean;
   divided?: boolean;
+  disclosed?: boolean;
   selectable: boolean;
 }) => {
   const styles = useThemedStyles(createStyles);
@@ -362,7 +365,7 @@ const CodeSection = ({
   );
   return (
     <View style={[output && styles.output, divided && styles.divider]}>
-      {section.label ? (
+      {section.label && !disclosed ? (
         <View style={styles.sectionHeader}>
           <BodyText muted style={styles.sectionLabel}>
             {section.label}
@@ -379,7 +382,10 @@ const CodeSection = ({
         <ScrollView
           nestedScrollEnabled
           style={styles.viewport}
-          contentContainerStyle={styles.codeContent}
+          contentContainerStyle={[
+            styles.codeContent,
+            disclosed && styles.disclosedContent,
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           <Text
@@ -415,8 +421,15 @@ const CodeSection = ({
             </Pressable>
           )}
         </ScrollView>
-        {!section.label && (
-          <CopyAction value={section.text} label="Copy command" />
+        {(!section.label || disclosed) && (
+          <CopyAction
+            value={section.text}
+            label={
+              section.label
+                ? `Copy ${section.label.toLowerCase()}`
+                : "Copy command"
+            }
+          />
         )}
       </View>
     </View>
@@ -509,12 +522,11 @@ const ToolCallDetailsView = ({
       {state.status === "error" && <ErrorNotice error={state.error.message} />}
       {!fallback && (
         <Disclosure disclosureKey={`${tool.id}:arguments`} title="Arguments">
-          <View style={styles.panel}>
-            <CodeSection
-              section={{ label: "Arguments", text: argumentsText }}
-              selectable={selectable}
-            />
-          </View>
+          <CodeSection
+            section={{ label: "Arguments", text: argumentsText }}
+            disclosed
+            selectable={selectable}
+          />
         </Disclosure>
       )}
     </View>
