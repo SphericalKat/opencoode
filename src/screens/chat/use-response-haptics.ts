@@ -1,8 +1,9 @@
 import type { SessionMessageInfo } from "@opencode/client";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 
 import { STREAM_TICK_INTERVAL, playHaptic } from "../../lib/haptics";
+import { createStreamPacer } from "../../lib/stream-pacer";
 
 interface UseResponseHapticsOptions {
   active: boolean;
@@ -49,10 +50,26 @@ export const useResponseHaptics = ({
 }: UseResponseHapticsOptions) => {
   const onScreen = foreground && visible;
   const streamed = useRef<StreamedText | null>(null);
-  const lastTick = useRef(0);
+  const pacer = useMemo(() => createStreamPacer(), []);
+  const ticker = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const wasActive = useRef(active);
   const stoppedTurn = useRef(false);
   const pendingInput = useRef(pendingInputCount);
+  const audible = active && onScreen && following;
+
+  const stopTicking = useCallback(() => {
+    clearInterval(ticker.current);
+    ticker.current = undefined;
+    pacer.reset();
+  }, [pacer]);
+
+  useEffect(() => {
+    if (!audible) {
+      stopTicking();
+    }
+  }, [audible, stopTicking]);
+
+  useEffect(() => stopTicking, [stopTicking]);
 
   useEffect(() => {
     const latest = latestAssistantText(messages);
@@ -63,25 +80,27 @@ export const useResponseHaptics = ({
     if (!latest || previous?.sessionID !== sessionID) {
       return;
     }
-    const grew =
+    const added =
       previous.messageID === latest.messageID
-        ? latest.length > previous.length
-        : latest.length > 0;
-    if (
-      !grew ||
-      !active ||
-      !onScreen ||
-      !following ||
-      screenReaderEnabled.current
-    ) {
+        ? latest.length - previous.length
+        : latest.length;
+    if (added <= 0 || !audible || screenReaderEnabled.current) {
       return;
     }
-    const now = Date.now();
-    if (now - lastTick.current >= STREAM_TICK_INTERVAL) {
-      lastTick.current = now;
-      playHaptic("streamTick");
+    pacer.feed(added, Date.now());
+    if (ticker.current !== undefined) {
+      return;
     }
-  }, [messages, sessionID, active, onScreen, following, screenReaderEnabled]);
+    playHaptic("streamTick");
+    ticker.current = setInterval(() => {
+      if (pacer.take(STREAM_TICK_INTERVAL)) {
+        playHaptic("streamTick");
+      } else {
+        clearInterval(ticker.current);
+        ticker.current = undefined;
+      }
+    }, STREAM_TICK_INTERVAL);
+  }, [messages, sessionID, audible, pacer, screenReaderEnabled]);
 
   useEffect(() => {
     if (stopping) {

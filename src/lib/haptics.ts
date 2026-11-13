@@ -22,7 +22,6 @@ export type Haptic =
   | "failure"
   | "attention"
   | "copy"
-  | "threshold"
   | "select";
 
 interface AndroidEffect {
@@ -62,10 +61,6 @@ const ANDROID: Record<Haptic, AndroidEffect[]> = {
     { minApi: 30, type: AndroidHaptics.Confirm },
     { minApi: 0, type: AndroidHaptics.Context_Click },
   ],
-  threshold: [
-    { minApi: 34, type: AndroidHaptics.Segment_Tick },
-    { minApi: 0, type: AndroidHaptics.Clock_Tick },
-  ],
 };
 
 const IOS: Record<Haptic, () => Promise<void>> = {
@@ -78,13 +73,12 @@ const IOS: Record<Haptic, () => Promise<void>> = {
   stop: () => impactAsync(ImpactFeedbackStyle.Medium),
   streamTick: selectionAsync,
   success: () => notificationAsync(NotificationFeedbackType.Success),
-  threshold: selectionAsync,
 };
 
 const apiLevel = Platform.OS === "android" ? Number(Platform.Version) : 0;
 
 // The soft Android 14 tick tolerates a faster rate than its older fallback.
-export const STREAM_TICK_INTERVAL = apiLevel >= 34 ? 70 : 120;
+export const STREAM_TICK_INTERVAL = apiLevel >= 34 ? 50 : 100;
 
 const androidEffect = (haptic: Haptic) =>
   ANDROID[haptic].find((effect) => apiLevel >= effect.minApi)?.type;
