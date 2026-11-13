@@ -1,7 +1,7 @@
 """Add on-demand native measurement probes in a disposable source copy."""
 from pathlib import Path
 
-bubble = Path('src/components/UserMessageBubble.tsx')
+bubble = Path('src/components/user-message-bubble.tsx')
 s = bubble.read_text().replace("import React from 'react';", "import React, {useRef} from 'react';\nimport {useRepro45Probe} from './repro45Probe';")
 s = s.replace('  const { colors } = useTheme();', "  const { colors } = useTheme(); const probe = useRef<React.ComponentRef<typeof View>>(null); useRepro45Probe(probe, 'BUBBLE');")
 s = s.replace('<View style=', '<View ref={probe} style=')

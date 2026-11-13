@@ -1,0 +1,434 @@
+import type { ScheduleInfo } from "@opencode/client";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { View } from "react-native";
+
+import { errorMessage } from "../lib/client";
+import type { Client } from "../lib/client";
+import { prepareSchedule } from "../lib/schedules";
+import type { ScheduleDraft } from "../lib/schedules";
+import {
+  Button,
+  Busy,
+  Card,
+  ErrorNotice,
+  Field,
+  BodyText,
+  Row,
+  confirmAction,
+} from "./ui";
+
+const emptyDraft: ScheduleDraft = {
+  after: "",
+  mode: "in",
+  name: "",
+  prompt: "",
+  runs: "",
+  timezone: "",
+  trigger: "",
+  until: "",
+};
+const modes = [
+  { id: "in", title: "After a delay" },
+  { id: "at", title: "At a time" },
+  { id: "every", title: "Repeat" },
+  { id: "cron", title: "Cron" },
+] as const;
+
+const triggerLabel = (item: ScheduleInfo) => {
+  const { when } = item;
+  if (when.type === "in") {
+    return `After ${when.in}`;
+  }
+  if (when.type === "at") {
+    return `At ${when.at}`;
+  }
+  if (when.type === "every") {
+    return `Every ${when.every}`;
+  }
+  return `Cron: ${when.cron}`;
+};
+
+const triggerFieldLabel = (mode: ScheduleDraft["mode"]) => {
+  if (mode === "at") {
+    return "Date and time";
+  }
+  if (mode === "cron") {
+    return "Cron expression";
+  }
+  if (mode === "every") {
+    return "Repeat interval";
+  }
+  return "Delay";
+};
+
+const triggerPlaceholder = (mode: ScheduleDraft["mode"]) => {
+  if (mode === "at") {
+    return "YYYY-MM-DDTHH:mm";
+  }
+  if (mode === "cron") {
+    return "0 9 * * 1-5";
+  }
+  return "20 minutes";
+};
+
+const runWithCleanup = async (
+  task: () => Promise<void>,
+  cleanup: () => void
+) => {
+  try {
+    await task();
+  } finally {
+    cleanup();
+  }
+};
+
+export const Schedules = ({
+  client,
+  sessionID,
+}: {
+  client: Client;
+  sessionID: string;
+}) => {
+  const [items, setItems] = useState<ScheduleInfo[]>([]);
+  const [draft, setDraft] = useState<ScheduleDraft>(emptyDraft);
+  const [adding, setAdding] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [detail, setDetail] = useState<ScheduleInfo>();
+  const request = useRef(0);
+  const scope = useRef({ client, sessionID });
+  const [seenScope, setSeenScope] = useState({ client, sessionID });
+  if (seenScope.client !== client || seenScope.sessionID !== sessionID) {
+    setSeenScope({ client, sessionID });
+    setItems([]);
+    setDetail(undefined);
+    setAdding(false);
+    setDraft(emptyDraft);
+    setLoading(true);
+    setError(undefined);
+  }
+  useEffect(() => {
+    scope.current = { client, sessionID };
+  }, [client, sessionID]);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      request.current += 1;
+    };
+  }, []);
+
+  const load = useCallback(async () => {
+    request.current += 1;
+    const id = request.current;
+    await runWithCleanup(
+      async () => {
+        try {
+          const schedules = await client.experimental.schedule.list({
+            sessionID,
+          });
+          if (mounted.current && request.current === id) {
+            setItems(schedules);
+          }
+        } catch (error_) {
+          if (mounted.current && request.current === id) {
+            setError(errorMessage(error_));
+          }
+        }
+      },
+      () => {
+        if (mounted.current && request.current === id) {
+          setLoading(false);
+        }
+      }
+    );
+  }, [client, sessionID]);
+
+  const refresh = async () => {
+    setLoading(true);
+    setError(undefined);
+    await load();
+  };
+
+  useEffect(() => {
+    void load();
+    return () => {
+      request.current += 1;
+    };
+  }, [load]);
+
+  const run = async (action: () => Promise<void>) => {
+    if (busy) {
+      return;
+    }
+    const owner = scope.current;
+    setBusy(true);
+    setError(undefined);
+    await runWithCleanup(
+      async () => {
+        try {
+          await action();
+        } catch (error_) {
+          if (mounted.current && owner === scope.current) {
+            setError(errorMessage(error_));
+          }
+        }
+      },
+      () => {
+        if (mounted.current) {
+          setBusy(false);
+        }
+      }
+    );
+  };
+  const mutate = async (action: () => Promise<unknown>) => {
+    const owner = scope.current;
+    await action();
+    if (owner !== scope.current || !mounted.current) {
+      return;
+    }
+    setDetail(undefined);
+    await refresh();
+  };
+  const change = (field: keyof ScheduleDraft, value: string) =>
+    setDraft((previous) => ({ ...previous, [field]: value }));
+  const repeating = draft.mode === "every" || draft.mode === "cron";
+
+  return (
+    <View style={{ gap: 14 }}>
+      <BodyText muted>
+        Schedules run on the server. They need OpenCode 2.2.1 or later and
+        experimental.schedules in this session configuration.
+      </BodyText>
+      <Row>
+        <Button
+          title={adding ? "Cancel new schedule" : "+ Schedule prompt"}
+          compact
+          disabled={busy}
+          onPress={() => setAdding(!adding)}
+        />
+        <Button
+          title="Refresh"
+          compact
+          disabled={busy || loading}
+          onPress={() => {
+            void refresh();
+          }}
+        />
+      </Row>
+      <ErrorNotice
+        error={error}
+        onRetry={() => {
+          void refresh();
+        }}
+      />
+      {loading && <Busy />}
+      {!loading && !error && items.length === 0 && (
+        <BodyText muted>No schedules for this session</BodyText>
+      )}
+      {adding && (
+        <Card>
+          <Field
+            label="Name (optional)"
+            value={draft.name}
+            onChangeText={(value) => change("name", value)}
+          />
+          <Field
+            label="Prompt"
+            multiline
+            placeholder="What must OpenCode do when this schedule runs?"
+            value={draft.prompt}
+            onChangeText={(value) => change("prompt", value)}
+          />
+          <Row>
+            {modes.map((mode) => (
+              <Button
+                key={mode.id}
+                title={mode.title}
+                compact
+                variant={draft.mode === mode.id ? "primary" : "secondary"}
+                onPress={() =>
+                  setDraft((previous) => ({
+                    ...previous,
+                    mode: mode.id,
+                    trigger: "",
+                  }))
+                }
+              />
+            ))}
+          </Row>
+          <Field
+            label={triggerFieldLabel(draft.mode)}
+            placeholder={triggerPlaceholder(draft.mode)}
+            value={draft.trigger}
+            onChangeText={(value) => change("trigger", value)}
+          />
+          <Field
+            label="Time zone (optional)"
+            placeholder="Server time zone, or enter Asia/Kolkata"
+            value={draft.timezone}
+            onChangeText={(value) => change("timezone", value)}
+          />
+          {repeating && (
+            <>
+              <Field
+                label="Maximum runs (optional)"
+                keyboardType="number-pad"
+                placeholder="Leave empty for no run limit"
+                value={draft.runs}
+                onChangeText={(value) => change("runs", value)}
+              />
+              <Field
+                label="Stop after a duration (optional)"
+                placeholder="8 hours"
+                value={draft.after}
+                onChangeText={(value) => change("after", value)}
+              />
+              <Field
+                label="Stop at a time (optional)"
+                placeholder="YYYY-MM-DDTHH:mm"
+                value={draft.until}
+                onChangeText={(value) => change("until", value)}
+              />
+              <BodyText muted>
+                The schedule stops at the first limit. Without limits, it
+                repeats until you pause or delete it.
+              </BodyText>
+            </>
+          )}
+          <Button
+            title="Create schedule"
+            variant="primary"
+            busy={busy}
+            onPress={() => {
+              void run(async () => {
+                const input = prepareSchedule(sessionID, draft);
+                const owner = scope.current;
+                await client.experimental.schedule.create(input);
+                if (owner !== scope.current || !mounted.current) {
+                  return;
+                }
+                setAdding(false);
+                setDraft(emptyDraft);
+                await refresh();
+              });
+            }}
+          />
+        </Card>
+      )}
+      {items.map((item) => (
+        <Card key={item.id}>
+          <BodyText style={{ fontSize: 17, fontWeight: "600" }}>
+            {item.name || "Scheduled prompt"}
+          </BodyText>
+          <BodyText>
+            {triggerLabel(item)} · {item.tz}
+          </BodyText>
+          <BodyText muted>
+            {item.status} · {item.runCount} runs
+            {item.remainingRuns === undefined
+              ? ""
+              : ` · ${item.remainingRuns} remaining`}
+          </BodyText>
+          {item.nextDueAt !== undefined && (
+            <BodyText muted>
+              Next: {new Date(item.nextDueAt).toLocaleString()}
+            </BodyText>
+          )}
+          <BodyText numberOfLines={3}>{item.action.prompt}</BodyText>
+          <Row>
+            <Button
+              title="Details"
+              compact
+              disabled={busy}
+              onPress={() => {
+                void run(async () => {
+                  const owner = scope.current;
+                  const result = await client.experimental.schedule.get({
+                    scheduleID: item.id,
+                  });
+                  if (owner === scope.current && mounted.current) {
+                    setDetail(result);
+                  }
+                });
+              }}
+            />
+            {item.status !== "done" && (
+              <Button
+                title={item.status === "paused" ? "Resume" : "Pause"}
+                compact
+                disabled={busy}
+                onPress={() => {
+                  void run(() =>
+                    mutate(() =>
+                      item.status === "paused"
+                        ? client.experimental.schedule.resume({
+                            scheduleID: item.id,
+                          })
+                        : client.experimental.schedule.pause({
+                            scheduleID: item.id,
+                          })
+                    )
+                  );
+                }}
+              />
+            )}
+            <Button
+              title="Delete"
+              compact
+              variant="danger"
+              disabled={busy}
+              onPress={() => {
+                void run(async () => {
+                  const owner = scope.current;
+                  if (
+                    (await confirmAction(
+                      "Delete schedule?",
+                      `Delete ${item.name || "this scheduled prompt"}?`
+                    )) &&
+                    owner === scope.current &&
+                    mounted.current
+                  ) {
+                    await mutate(() =>
+                      client.experimental.schedule.delete({
+                        scheduleID: item.id,
+                      })
+                    );
+                  }
+                });
+              }}
+            />
+          </Row>
+          {detail?.id === item.id && (
+            <View style={{ gap: 8 }}>
+              <BodyText selectable>{detail.action.prompt}</BodyText>
+              <BodyText muted>Current status: {detail.status}</BodyText>
+              {detail.lastFiredAt !== undefined && (
+                <BodyText muted>
+                  Last run: {new Date(detail.lastFiredAt).toLocaleString()} ·{" "}
+                  {detail.lastOutcome || "No outcome reported"}
+                </BodyText>
+              )}
+              {detail.endsAt !== undefined && (
+                <BodyText muted>
+                  Ends: {new Date(detail.endsAt).toLocaleString()}
+                </BodyText>
+              )}
+              <BodyText selectable muted>
+                {detail.id}
+              </BodyText>
+              <Button
+                title="Hide details"
+                compact
+                variant="ghost"
+                onPress={() => setDetail(undefined)}
+              />
+            </View>
+          )}
+        </Card>
+      ))}
+    </View>
+  );
+};

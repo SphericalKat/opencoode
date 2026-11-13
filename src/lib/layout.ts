@@ -1,3 +1,3 @@
-import { Platform } from 'react-native';
+import { Platform } from "react-native";
 
-export const pageInset = Platform.OS === 'ios' ? 20 : 16;
+export const pageInset = Platform.OS === "ios" ? 20 : 16;

@@ -1,21 +1,14 @@
 # Mobile UX audit
 
-I used the full review mode from Make Interfaces Feel Better.
-I used realistic edge values from Break UI through an isolated OpenCode server.
-I did not add mock data or a demo switch to the product.
+I used the full review mode from Make Interfaces Feel Better. I used realistic edge values from Break UI through an isolated OpenCode server. I did not add mock data or a demo switch to the product.
 
 ## Scope
 
-I inspected the React Native Web preview at 360 × 640, 390 × 844, and 1024 × 768.
-The app uses React Native StyleSheet, OC-2 colors, Inter, and IBM Plex Mono.
-I preserved that styling system throughout this review.
+I inspected the React Native Web preview at 360 × 640, 390 × 844, and 1024 × 768. The app uses React Native StyleSheet, OC-2 colors, Inter, and IBM Plex Mono. I preserved that styling system throughout this review.
 
-I created three temporary sessions through the real API.
-Their titles covered a long task, Japanese with a long personal name, and one character.
-I also entered a realistic long workstation name in the audit tab's connection profile.
+I created three temporary sessions through the real API. Their titles covered a long task, Japanese with a long personal name, and one character. I also entered a realistic long workstation name in the audit tab's connection profile.
 
-The browser preview does not establish native keyboard, VoiceOver, or TalkBack behavior.
-The native verification record covers the separate device checks.
+The browser preview does not establish native keyboard, VoiceOver, or TalkBack behavior. The native verification record covers the separate device checks.
 
 | Category | Evidence inspected | Result |
 | --- | --- | --- |
@@ -29,19 +22,17 @@ The native verification record covers the separate device checks.
 
 | Severity | Location | Before | After | Why |
 | --- | --- | --- | --- | --- |
-| HIGH | `App.tsx` server and project controls | The server target measures 164 × 21 px. The project target measures 360 × 40 px. | Give each target at least 44 px of height. Preserve a distinct target for each control. | Frequent navigation needs reliable touch targets. |
-| HIGH | `App.tsx` chat navigation and `ChatScreen.tsx` header | A realistic long title wraps across four lines. Headers consume 294 px at 360 × 640. | Merge Back into the title row. Clamp the title to two lines. Retain the full title in session actions. | The transcript receives only about 113 px before the keyboard appears. |
-| MEDIUM | `SessionsScreen.tsx` header | The screen repeats the full remote directory below the global directory control. | Keep the directory in the global control. Place Live or Reconnecting beside the session heading. | The repeated path consumes 42 px on a small phone and three lines in the tablet sidebar. |
-| MEDIUM | `SettingsScreen.tsx` section navigation | Nine sections sit in one horizontal strip without an overflow cue. A phone shows only the first five. | Use a labeled section picker on phones. Show all sections in a vertical sheet with short descriptions. | Appearance, Permissions, and Advanced require an undisclosed sideways gesture. |
-| MEDIUM | `ChatScreen.tsx` model picker | Each model occupies about 165–200 px. Every variant appears beside a repeated Use model action. | Use compact selectable rows. Offer variants after model selection through a separate control. | A phone displays only two models at once. Repeated actions slow comparison. |
-| MEDIUM | `ChatScreen.tsx` model search | A search without matches leaves a blank sheet below the field, although models exist. | Show No matching models and a Clear search action. | The user needs a distinct empty result and a direct recovery action. |
-| MEDIUM | `App.tsx` bottom navigation | All three rendered tabs have no `aria-selected` value. | Add an explicit selected accessibility state that survives the web adapter. | A screen reader cannot identify the current section from the rendered tab state. |
-| MEDIUM | `App.tsx` connection errors | A wrong password displays Authentication required in the sheet and above the healthy prior connection. | Separate connection-form errors from active-workspace errors. Explain that the password was rejected. | The error gives no clear repair action and appears to condemn the working server. |
-| MEDIUM | `SessionsScreen.tsx` New session flow | New session opens a full sheet, although every input is optional. A second tap creates the session. | Create a blank session directly. Keep manual naming as an optional action. | The primary start-and-send flow contains an avoidable gate. |
+| HIGH | `app.tsx` server and project controls | The server target measures 164 × 21 px. The project target measures 360 × 40 px. | Give each target at least 44 px of height. Preserve a distinct target for each control. | Frequent navigation needs reliable touch targets. |
+| HIGH | `app.tsx` chat navigation and `chat-screen.tsx` header | A realistic long title wraps across four lines. Headers consume 294 px at 360 × 640. | Merge Back into the title row. Clamp the title to two lines. Retain the full title in session actions. | The transcript receives only about 113 px before the keyboard appears. |
+| MEDIUM | `sessions-screen.tsx` header | The screen repeats the full remote directory below the global directory control. | Keep the directory in the global control. Place Live or Reconnecting beside the session heading. | The repeated path consumes 42 px on a small phone and three lines in the tablet sidebar. |
+| MEDIUM | `settings-screen.tsx` section navigation | Nine sections sit in one horizontal strip without an overflow cue. A phone shows only the first five. | Use a labeled section picker on phones. Show all sections in a vertical sheet with short descriptions. | Appearance, Permissions, and Advanced require an undisclosed sideways gesture. |
+| MEDIUM | `chat-screen.tsx` model picker | Each model occupies about 165–200 px. Every variant appears beside a repeated Use model action. | Use compact selectable rows. Offer variants after model selection through a separate control. | A phone displays only two models at once. Repeated actions slow comparison. |
+| MEDIUM | `chat-screen.tsx` model search | A search without matches leaves a blank sheet below the field, although models exist. | Show No matching models and a Clear search action. | The user needs a distinct empty result and a direct recovery action. |
+| MEDIUM | `app.tsx` bottom navigation | All three rendered tabs have no `aria-selected` value. | Add an explicit selected accessibility state that survives the web adapter. | A screen reader cannot identify the current section from the rendered tab state. |
+| MEDIUM | `app.tsx` connection errors | A wrong password displays Authentication required in the sheet and above the healthy prior connection. | Separate connection-form errors from active-workspace errors. Explain that the password was rejected. | The error gives no clear repair action and appears to condemn the working server. |
+| MEDIUM | `sessions-screen.tsx` New session flow | New session opens a full sheet, although every input is optional. A second tap creates the session. | Create a blank session directly. Keep manual naming as an optional action. | The primary start-and-send flow contains an avoidable gate. |
 
-The small chat screenshot appears at [ux-chat-small-before.png](screenshots/ux-chat-small-before.png).
-The measurements above describe the original review state.
-Later improvements require a separate verification entry below.
+The small chat screenshot appears at [ux-chat-small-before.png](screenshots/ux-chat-small-before.png). The measurements above describe the original review state. Later improvements require a separate verification entry below.
 
 ## What held up
 
@@ -65,24 +56,13 @@ Later improvements require a separate verification entry below.
 
 ## Verification boundary
 
-I used Computer Use to connect, edit a profile, open sessions, open model selection, and traverse Settings.
-I inspected screenshots at all three sizes.
-I measured visible controls through their rendered DOM rectangles.
-I read the rendered tab accessibility attributes.
-I tested an invalid local server password and restored the valid audit connection afterward.
+I used Computer Use to connect, edit a profile, open sessions, open model selection, and traverse Settings. I inspected screenshots at all three sizes. I measured visible controls through their rendered DOM rectangles. I read the rendered tab accessibility attributes. I tested an invalid local server password and restored the valid audit connection afterward.
 
-I did not run an automated appearance test.
-I did not test a native soft keyboard, dynamic text at 200%, VoiceOver, or TalkBack during this browser pass.
-The native terminal input defect remains with the separate terminal owner.
+I did not run an automated appearance test. I did not test a native soft keyboard, dynamic text at 200%, VoiceOver, or TalkBack during this browser pass. The native terminal input defect remains with the separate terminal owner.
 
 ## Iteration record
 
-The parent agent accepted the findings and assigned implementation across the existing screen owners.
-The design lead supplied the current OpenCode Console material and navigation brief.
-I replaced the phone Settings strip with a grouped index and detail pages.
-I retained every section and the guard for unsaved configuration.
-I added a 220 px section column for tablets.
-I coordinated the native Back state with the root navigation handler.
+The parent agent accepted the findings and assigned implementation across the existing screen owners. The design lead supplied the current OpenCode Console material and navigation brief. I replaced the phone Settings strip with a grouped index and detail pages. I retained every section and the guard for unsaved configuration. I added a 220 px section column for tablets. I coordinated the native Back state with the root navigation handler.
 
 | Original check | Observed result after improvement | Result |
 | --- | --- | --- |
@@ -96,16 +76,9 @@ I coordinated the native Back state with the root navigation handler.
 | Misplaced connection error | I repeated the invalid password check. The repair message stayed in the server sheet and disappeared after dismissal. | Pass in browser |
 | Gated session creation | I selected New session once. The app opened a blank conversation without the optional naming sheet. | Pass in browser |
 
-I verified Settings at 360 × 640, 390 × 844, and 1024 × 768.
-I changed light appearance to dark and returned to the index.
-I opened Advanced and observed the explicit older-server notice.
-I resized an Appearance detail from tablet to phone and returned to the index with Back to Settings.
-The selected tablet section exposed `aria-current=page`.
+I verified Settings at 360 × 640, 390 × 844, and 1024 × 768. I changed light appearance to dark and returned to the index. I opened Advanced and observed the explicit older-server notice. I resized an Appearance detail from tablet to phone and returned to the index with Back to Settings. The selected tablet section exposed `aria-current=page`.
 
-I ran `npm run typecheck` after the Settings changes. It passed.
-I did not add appearance tests or source-shape tests.
-I removed all four audit sessions after verification and closed the separate preview tab.
-I left the parent and native test sessions intact.
+I ran `npm run typecheck` after the Settings changes. It passed. I did not add appearance tests or source-shape tests. I removed all four audit sessions after verification and closed the separate preview tab. I left the parent and native test sessions intact.
 
 The screenshots record these results:
 
@@ -114,16 +87,11 @@ The screenshots record these results:
 - [Tablet Settings after improvement](screenshots/ux-settings-tablet-after.png)
 - [Model picker after improvement](screenshots/ux-model-picker-after.png)
 
-Verdict before improvement: **Block** for the small global targets and the restricted chat reading area.
-Verdict after improvement: **Approve** for the inspected browser flows and sizes.
-Native Back, native keyboard behavior, text scaling, VoiceOver, and TalkBack remain outside this browser verification.
-
+Verdict before improvement: **Block** for the small global targets and the restricted chat reading area. Verdict after improvement: **Approve** for the inspected browser flows and sizes. Native Back, native keyboard behavior, text scaling, VoiceOver, and TalkBack remain outside this browser verification.
 
 ## Final browser refinement
 
-The design lead completed this browser pass at 390 × 844 and 320 × 640.
-Both cold reloads placed the transcript at its end, with a measured zero-pixel gap.
-The earlier long-response reload left a 2,176-pixel gap before the final transcript repair.
+The design lead completed this browser pass at 390 × 844 and 320 × 640. Both cold reloads placed the transcript at its end, with a measured zero-pixel gap. The earlier long-response reload left a 2,176-pixel gap before the final transcript repair.
 
 | Action | Final observed result |
 | --- | --- |
@@ -139,26 +107,17 @@ I copied the final browser evidence into the repository:
 - [Final response at the transcript end](screenshots/final-stream-phone.png)
 - [Selection on a 320-pixel phone](screenshots/final-selection-small-phone.png)
 
-Native gestures, assistant code long press, VoiceOver, and TalkBack remain unverified in this final pass.
-The following recovery record covers a separate browser observation.
-No additional automated tests, type checks, builds, or release workflows ran after the user's prohibition.
+Native gestures, assistant code long press, VoiceOver, and TalkBack remain unverified in this final pass. The following recovery record covers a separate browser observation. No additional automated tests, type checks, builds, or release workflows ran after the user's prohibition.
 
 ## Recovery and compact menus
 
-I observed the automatic wizard after I paused the isolated OpenCode server.
-I reached Retry, QR scan, pairing, and manual setup without a disconnect or removal step.
-I restored the server after each observation.
+I observed the automatic wizard after I paused the isolated OpenCode server. I reached Retry, QR scan, pairing, and manual setup without a disconnect or removal step. I restored the server after each observation.
 
-I kept an unsent side question open during another outage.
-I observed its unchanged text and a notice to close the panel before connection setup.
-I restored the server before I closed the panel.
-I observed that the notice disappeared and the text remained unchanged, without an unnecessary wizard.
+I kept an unsent side question open during another outage. I observed its unchanged text and a notice to close the panel before connection setup. I restored the server before I closed the panel. I observed that the notice disappeared and the text remained unchanged, without an unnecessary wizard.
 
-I verified the compact message menu and its handoff to the text-selection panel at 390 × 844.
-I retained conversation context behind the three visible actions.
+I verified the compact message menu and its handoff to the text-selection panel at 390 × 844. I retained conversation context behind the three visible actions.
 
 - [Automatic connection wizard](screenshots/connection-recovery-phone.png)
 - [Compact message menu](screenshots/message-menu-phone.png)
 
-I did not verify these changes on a native device.
-Native picker and share registration follows each SDK promise. Native dismissal animation completion remains unverified.
+I did not verify these changes on a native device. Native picker and share registration follows each SDK promise. Native dismissal animation completion remains unverified.

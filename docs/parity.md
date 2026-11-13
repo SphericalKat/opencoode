@@ -2,27 +2,19 @@
 
 Research date: October 29, 2026. Research baseline: OpenCode `v2.2.1`.
 
-This document describes practical parity for an iOS and Android client of a remote OpenCode 2 server.
-The server owns tools, files, sessions, providers, and model execution.
-The phone owns its interface, drafts, credentials for the server, and attachment selection.
+This document describes practical parity for an iOS and Android client of a remote OpenCode 2 server. The server owns tools, files, sessions, providers, and model execution. The phone owns its interface, drafts, credentials for the server, and attachment selection.
 
-The checkboxes record full verification contracts. An unchecked item means that the complete contract lacks recorded end-to-end evidence.
-The code availability table records implementation separately.
-Source research alone does not establish implementation, device support, or feature parity.
+The checkboxes record full verification contracts. An unchecked item means that the complete contract lacks recorded end-to-end evidence. The code availability table records implementation separately. Source research alone does not establish implementation, device support, or feature parity.
 
 ## Version boundary
 
-OpenCode 2 uses the `@opencode` packages and the `/api` protocol.
-The legacy `@opencode-ai/sdk/v2` namespace does not establish OpenCode 2 compatibility.
-The GitHub latest-release endpoint still reports the 1.x maintenance line. The `v2.2.1` source tag and V2 changelog establish this baseline.
-The installed server can precede this baseline. Capability checks and honest unavailable states are necessary.
+OpenCode 2 uses the `@opencode` packages and the `/api` protocol. The legacy `@opencode-ai/sdk/v2` namespace does not establish OpenCode 2 compatibility. The GitHub latest-release endpoint still reports the 1.x maintenance line. The `v2.2.1` source tag and V2 changelog establish this baseline. The installed server can precede this baseline. Capability checks and honest unavailable states are necessary.
 
 Sources: [V2 documentation](https://opencode.ai/v2/docs/), [V2 changelog](https://github.com/anomalyco/opencode/blob/v2.2.1/CHANGELOG.md), [protocol groups](https://github.com/anomalyco/opencode/tree/v2.2.1/packages/protocol/src/groups).
 
 ## Implementation and evidence
 
-Source inspection establishes implemented controls. The linked records establish narrower API, browser, or native results.
-Neither establishes every compound contract in the checklists below.
+Source inspection establishes implemented controls. The linked records establish narrower API, browser, or native results. Neither establishes every compound contract in the checklists below.
 
 | Area | Implementation | Evidence and boundary |
 | --- | --- | --- |
@@ -42,8 +34,7 @@ Neither establishes every compound contract in the checklists below.
 | Desktop extensions | Server plugin tools remain accessible through sessions. | Desktop panels, browser control, Office, WSL, and host editor actions lack mobile adapters. |
 | Background alerts | No push service. | The app cannot promise alerts after the operating system suspends its connection. |
 
-Evidence: [API record](verification.md), [native record](native-verification.md), [mobile UX record](mobile-ux.md), and [motion record](motion-audit.md).
-The final practical additions have source evidence only unless a linked record explicitly names their runtime result.
+Evidence: [API record](verification.md), [native record](native-verification.md), [mobile UX record](mobile-ux.md), and [motion record](motion-audit.md). The final practical additions have source evidence only unless a linked record explicitly names their runtime result.
 
 ## Core parity
 
@@ -127,8 +118,7 @@ Sources: [integration protocol](https://github.com/anomalyco/opencode/blob/v2.2.
 
 ## Experimental and extension parity
 
-These features require explicit server support, configuration, credentials, or a plugin.
-An absent capability needs an unavailable state. A control with a fabricated result does not satisfy parity.
+These features require explicit server support, configuration, credentials, or a plugin. An absent capability needs an unavailable state. A control with a fabricated result does not satisfy parity.
 
 | Verification | Feature | Boundary |
 | --- | --- | --- |
@@ -148,35 +138,25 @@ Sources: [V2 changelog](https://github.com/anomalyco/opencode/blob/v2.2.1/CHANGE
 
 ## Mobile limits
 
-The phone cannot start or upgrade a remote OpenCode installation without a separate host-management contract.
-Host tools and shell commands execute on the server. A phone attachment path does not identify a server file.
+The phone cannot start or upgrade a remote OpenCode installation without a separate host-management contract. Host tools and shell commands execute on the server. A phone attachment path does not identify a server file.
 
-Desktop GUI plugins supply desktop bundles. Native React Native cannot execute their desktop interface without a compatible runtime.
-Server plugin tools remain usable through the session. Custom plugin panels need an explicit mobile adapter.
+Desktop GUI plugins supply desktop bundles. Native React Native cannot execute their desktop interface without a compatible runtime. Server plugin tools remain usable through the session. Custom plugin panels need an explicit mobile adapter.
 
-Desktop browser control, Microsoft Office panels, WSL management, host editor launch, and Finder actions depend on desktop capabilities.
-Remote file preview and native sharing cover some of these outcomes. They do not establish full desktop plugin parity.
+Desktop browser control, Microsoft Office panels, WSL management, host editor launch, and Finder actions depend on desktop capabilities. Remote file preview and native sharing cover some of these outcomes. They do not establish full desktop plugin parity.
 
-Mobile operating systems suspend background connections. Server execution can continue while the app sleeps.
-Reliable remote push needs a push service or server integration. A local notification alone does not provide it.
+Mobile operating systems suspend background connections. Server execution can continue while the app sleeps. Reliable remote push needs a push service or server integration. A local notification alone does not provide it.
 
-OAuth flows that depend on a server-local callback need a reachable callback or a supported alternate method.
-Opening an authorization page on the phone does not prove that its callback reaches the host.
+OAuth flows that depend on a server-local callback need a reachable callback or a supported alternate method. Opening an authorization page on the phone does not prove that its callback reaches the host.
 
-The app supplies a terminal renderer, WebSocket transport, resize support, and keyboard controls.
-Android full-screen terminals use buffered native text input to avoid keyboard composition errors.
-Physical phone behavior and literal Unicode input on Android remain outside the recorded native evidence.
+The app supplies a terminal renderer, WebSocket transport, resize support, and keyboard controls. Android full-screen terminals use buffered native text input to avoid keyboard composition errors. Physical phone behavior and literal Unicode input on Android remain outside the recorded native evidence.
 
 Sources: [server pairing and capabilities](https://github.com/anomalyco/opencode/blob/v2.2.1/packages/protocol/src/groups/server.ts), [desktop plugin bundle contract](https://github.com/anomalyco/opencode/blob/v2.2.1/packages/protocol/src/groups/plugin.ts), [desktop built-in plugins](https://github.com/anomalyco/opencode/tree/v2.2.1/packages/gui-plugins/src).
 
 ## Evidence boundary
 
-The unchecked rows preserve the complete contracts, including identity changes, cross-client request settlement, interrupted execution, and platform-specific attachments.
-Earlier API and device results prove subsets of those contracts. They do not justify a blanket full-parity claim.
-This ledger records gaps. It does not request further tests after the instruction to stop them.
+The unchecked rows preserve the complete contracts, including identity changes, cross-client request settlement, interrupted execution, and platform-specific attachments. Earlier API and device results prove subsets of those contracts. They do not justify a blanket full-parity claim. This ledger records gaps. It does not request further tests after the instruction to stop them.
 
-The global SSE stream is volatile. A disconnect loses events, and a slow consumer can overflow its stream.
-The experimental session log provides durable events after an aggregate sequence. It does not replace state refresh for location-wide requests.
+The global SSE stream is volatile. A disconnect loses events, and a slow consumer can overflow its stream. The experimental session log provides durable events after an aggregate sequence. It does not replace state refresh for location-wide requests.
 
 An endpoint response alone does not verify its mobile interface. A typecheck alone does not verify a device build or live server flow.
 

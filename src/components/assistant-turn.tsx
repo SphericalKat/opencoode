@@ -1,0 +1,629 @@
+import type {
+  SessionMessageAssistant,
+  SessionMessageInfo,
+  SessionMessageAssistantTool,
+  ToolContent,
+} from "@opencode/client";
+import React, {
+  memo,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import Svg, { Path } from "react-native-svg";
+
+import type { AgentActivity } from "../lib/activity";
+import { useBetaLayout } from "../lib/beta-layout";
+import type { Client } from "../lib/client";
+import {
+  MessageActionsContext,
+  MessageDisclosureContext,
+} from "../lib/message-actions";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import { ArtifactContent, isImageArtifact } from "./artifact-content";
+import { Markdown } from "./markdown";
+import {
+  MotionDisclosureBody,
+  MotionDisclosureChevron,
+  WorkingIndicator,
+} from "./motion";
+import { ResponseFooter } from "./response-footer";
+import {
+  ToolCallDetails,
+  toolDetail,
+  toolDisplayName,
+} from "./tool-call-details";
+import { ErrorNotice, BodyText, mono } from "./ui";
+
+export type TranscriptItem =
+  | { type: "message"; id: string; message: SessionMessageInfo }
+  | { type: "assistant-turn"; id: string; messages: SessionMessageAssistant[] };
+type Turn = Extract<TranscriptItem, { type: "assistant-turn" }>;
+type Part = SessionMessageAssistant["content"][number];
+interface Entry {
+  key: string;
+  message: SessionMessageAssistant;
+  index: number;
+  part?: Part;
+  error?: string;
+}
+type SourceRenderer = (
+  message: SessionMessageAssistant,
+  key: string,
+  content: React.ReactNode
+) => React.ReactNode;
+
+export const groupTranscriptMessages = (
+  messages: SessionMessageInfo[],
+  previous: TranscriptItem[]
+): TranscriptItem[] => {
+  const previousItems = new Map(previous.map((item) => [item.id, item]));
+  const previousTurns = new Map<string, Turn>();
+  for (const item of previous) {
+    if (item.type === "assistant-turn") {
+      for (const message of item.messages) {
+        previousTurns.set(message.id, item);
+      }
+    }
+  }
+  const items: TranscriptItem[] = [];
+  const usedIDs = new Set<string>();
+  let assistants: SessionMessageAssistant[] = [];
+  const flush = () => {
+    if (!assistants.length) {
+      return;
+    }
+    const existing = assistants
+      .map((message) => previousTurns.get(message.id))
+      .find((item) => item !== undefined && !usedIDs.has(item.id));
+    const unchanged =
+      existing &&
+      existing.messages.length === assistants.length &&
+      existing.messages.every(
+        (message, index) => message === assistants[index]
+      );
+    const item: Turn = unchanged
+      ? existing
+      : {
+          id: existing?.id ?? assistants[0].id,
+          messages: assistants,
+          type: "assistant-turn",
+        };
+    usedIDs.add(item.id);
+    items.push(item);
+    assistants = [];
+  };
+  for (const message of messages) {
+    if (message.type === "idle" && !message.error) {
+      continue;
+    }
+    if (message.type === "assistant") {
+      assistants.push(message);
+      continue;
+    }
+    flush();
+    const existing = previousItems.get(message.id);
+    items.push(
+      existing?.type === "message" && existing.message === message
+        ? existing
+        : { id: message.id, message, type: "message" }
+    );
+  }
+  flush();
+  return items;
+};
+
+const createStyles = () =>
+  StyleSheet.create({
+    activity: { minWidth: 0 },
+    activityHeader: {
+      alignItems: "center",
+      borderRadius: 6,
+      flexDirection: "row",
+      gap: 6,
+      minHeight: Platform.OS === "android" ? 48 : 44,
+    },
+    activityTitle: { flexShrink: 0, fontSize: 14, lineHeight: 21 },
+    duration: { fontSize: 13, lineHeight: 19 },
+    groupBody: { paddingLeft: 12 },
+    groupHeader: {
+      alignItems: "center",
+      borderRadius: 6,
+      flexDirection: "row",
+      gap: 6,
+      minHeight: Platform.OS === "android" ? 48 : 44,
+    },
+    groupTitle: { flexShrink: 1, fontSize: 14, lineHeight: 21 },
+    imageLabel: { fontSize: 13, lineHeight: 19, paddingTop: 8 },
+    images: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      minWidth: 0,
+      paddingVertical: 8,
+    },
+    preview: {
+      flex: 1,
+      fontFamily: mono,
+      fontSize: 13,
+      lineHeight: 19,
+      minWidth: 0,
+    },
+    thoughtBody: { paddingBottom: 8, paddingLeft: 12 },
+    toolBody: { paddingBottom: 8 },
+    turn: { gap: 6 },
+  });
+
+const useDisclosure = (key: string, revealChild = false) => {
+  const disclosures = useContext(MessageDisclosureContext);
+  const collapsedKey = `${key}:collapsed`;
+  const [open, setOpen] = useState(
+    () =>
+      disclosures?.isOpen(key) ||
+      (revealChild && !disclosures?.isOpen(collapsedKey))
+  );
+  const reveals = revealChild && !disclosures?.isOpen(collapsedKey);
+  if (reveals && !open) {
+    setOpen(true);
+  }
+  useLayoutEffect(() => {
+    if (reveals) {
+      disclosures?.setOpen(key, true);
+    }
+  }, [reveals, disclosures, key]);
+  const toggle = () => {
+    const next = disclosures ? disclosures.toggle(key) : !open;
+    disclosures?.setOpen(collapsedKey, !next);
+    setOpen(next);
+  };
+  return { open: !!open, toggle };
+};
+
+const Chevron = ({ open }: { open: boolean }) => {
+  const { colors } = useTheme();
+  return (
+    <MotionDisclosureChevron open={open}>
+      <Svg width={12} height={12} viewBox="0 0 16 16" fill="none" aria-hidden>
+        <Path
+          d="m6 4 4 4-4 4"
+          stroke={colors.faint}
+          strokeWidth={1.3}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    </MotionDisclosureChevron>
+  );
+};
+
+const ToolResultImages = ({
+  tool,
+  client,
+  directory,
+  label,
+}: {
+  tool: SessionMessageAssistantTool;
+  client?: Client;
+  directory: string;
+  label?: string;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const content: ToolContent[] =
+    "content" in tool.state ? (tool.state.content ?? []) : [];
+  const images = content
+    .filter((item) => item.type === "file")
+    .filter(isImageArtifact);
+  if (!images.length) {
+    return null;
+  }
+  return (
+    <View>
+      {label && (
+        <BodyText muted numberOfLines={2} style={styles.imageLabel}>
+          {label}
+        </BodyText>
+      )}
+      <View style={styles.images}>
+        {images.map((image, index) => (
+          <ArtifactContent
+            key={`${index}:${image.uri}`}
+            content={image}
+            client={client}
+            directory={directory}
+            thumbnail
+          />
+        ))}
+      </View>
+    </View>
+  );
+};
+
+const ActivityGroupHeader = ({
+  labels,
+  open,
+  onToggle,
+}: {
+  labels: string;
+  open: boolean;
+  onToggle: () => void;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const actions = useContext(MessageActionsContext);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Used ${labels}`}
+      accessibilityState={{ expanded: open }}
+      aria-expanded={open}
+      onPress={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      onLongPress={Platform.OS === "web" ? undefined : actions}
+      style={({ pressed }) => [
+        styles.groupHeader,
+        pressed && { backgroundColor: colors.raised },
+      ]}
+    >
+      <BodyText muted style={styles.groupTitle}>
+        Used <Text style={{ color: colors.text }}>{labels}</Text>
+      </BodyText>
+      <Chevron open={open} />
+    </Pressable>
+  );
+};
+
+const entryKey = (
+  message: SessionMessageAssistant,
+  part: Part,
+  index: number
+) => `${message.id}:${part.type === "tool" ? part.id : index}`;
+
+type ActivityPart = Exclude<Part, { type: "text" }>;
+
+const isPartBusy = (part: ActivityPart, live: boolean, waiting: boolean) => {
+  if (!live || waiting) {
+    return false;
+  }
+  if (part.type === "reasoning") {
+    return part.time?.completed === undefined;
+  }
+  return part.state.status === "streaming" || part.state.status === "running";
+};
+
+const partTitle = (part: ActivityPart, busy: boolean) => {
+  if (part.type !== "reasoning") {
+    return toolDisplayName(part.name);
+  }
+  return busy ? "Thinking" : "Thought";
+};
+
+const partDuration = (part: ActivityPart) =>
+  part.type === "reasoning" && part.time?.completed !== undefined
+    ? `${Math.max(1, Math.round((part.time.completed - part.time.created) / 1000))}s`
+    : undefined;
+
+const AssistantActivityPartView = ({
+  part,
+  detailsKey,
+  live,
+  activityKind,
+  animate,
+  client,
+  directory,
+  selectable,
+}: {
+  part: Part;
+  detailsKey: string;
+  live: boolean;
+  activityKind?: AgentActivity["kind"];
+  animate?: boolean;
+  client?: Client;
+  directory: string;
+  selectable: boolean;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const actions = useContext(MessageActionsContext);
+  const { open, toggle } = useDisclosure(detailsKey);
+  if (part.type === "text") {
+    return <Markdown text={part.text} selectable={selectable} />;
+  }
+  const waiting =
+    activityKind === "approval" ||
+    activityKind === "question" ||
+    activityKind === "retry";
+  const busy = isPartBusy(part, live, waiting);
+  const title = partTitle(part, busy);
+  const duration = partDuration(part);
+  const detail = part.type === "tool" ? toolDetail(part) : undefined;
+  return (
+    <View style={styles.activity}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${title}${duration ? ` ${duration}` : ""}${detail && !open ? `, ${detail}` : ""}`}
+        accessibilityState={{ busy, expanded: open }}
+        aria-expanded={open}
+        onPress={(event) => {
+          event.stopPropagation();
+          toggle();
+        }}
+        onLongPress={Platform.OS === "web" ? undefined : actions}
+        style={({ pressed }) => [
+          styles.activityHeader,
+          pressed && { backgroundColor: colors.raised },
+        ]}
+      >
+        <BodyText style={styles.activityTitle}>{title}</BodyText>
+        {duration && (
+          <BodyText muted style={styles.duration}>
+            {duration}
+          </BodyText>
+        )}
+        <Chevron open={open} />
+        {busy && (
+          <WorkingIndicator active={!!animate} color={colors.muted} size={12} />
+        )}
+        {!open && detail && (
+          <BodyText muted numberOfLines={1} style={styles.preview}>
+            {detail}
+          </BodyText>
+        )}
+      </Pressable>
+      <MotionDisclosureBody
+        open={open}
+        style={part.type === "reasoning" ? styles.thoughtBody : styles.toolBody}
+      >
+        {part.type === "reasoning" ? (
+          <Markdown text={part.text} muted selectable={selectable} />
+        ) : (
+          <ToolCallDetails
+            tool={part}
+            client={client}
+            directory={directory}
+            selectable={selectable}
+          />
+        )}
+      </MotionDisclosureBody>
+      {part.type === "tool" && (
+        <ToolResultImages tool={part} client={client} directory={directory} />
+      )}
+      {!open && part.type === "tool" && part.state.status === "error" && (
+        <ErrorNotice error={part.state.error.message || "The tool failed"} />
+      )}
+    </View>
+  );
+};
+
+export const AssistantActivityPart = memo(AssistantActivityPartView);
+
+const TurnActivities = ({
+  turnID,
+  entries,
+  activities,
+  renderEntry,
+  renderSource,
+  client,
+  directory,
+}: {
+  client?: Client;
+  directory: string;
+  turnID: string;
+  entries: Entry[];
+  activities: Entry[];
+  renderEntry: (entry: Entry) => React.ReactNode;
+  renderSource: SourceRenderer;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const disclosures = useContext(MessageDisclosureContext);
+  const childOpen = activities.some((entry) => disclosures?.isOpen(entry.key));
+  const { open, toggle } = useDisclosure(
+    `turn:${turnID}:activities`,
+    childOpen
+  );
+  const counts = new Map<string, number>();
+  for (const entry of activities) {
+    if (entry.part?.type === "tool") {
+      const name = toolDisplayName(entry.part.name);
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+  }
+  if (!counts.size) {
+    counts.set(
+      "Thought",
+      activities.filter((entry) => entry.part?.type === "reasoning").length
+    );
+  }
+  const labels = [...counts]
+    .map(([name, count]) => `${count} ${name}`)
+    .join(", ");
+  return (
+    <View>
+      {renderSource(
+        activities[0].message,
+        `turn:${turnID}:summary`,
+        <ActivityGroupHeader labels={labels} open={open} onToggle={toggle} />
+      )}
+      <MotionDisclosureBody open={open} style={styles.groupBody}>
+        {entries.map((entry) => (
+          <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>
+        ))}
+      </MotionDisclosureBody>
+      {!open &&
+        entries.map((entry) => (
+          <React.Fragment key={entry.key}>
+            {entry.error !== undefined && renderEntry(entry)}
+            {entry.part?.type === "tool" &&
+              renderSource(
+                entry.message,
+                `${entry.key}:images`,
+                <ToolResultImages
+                  tool={entry.part}
+                  client={client}
+                  directory={directory}
+                  label={
+                    activities.length > 1
+                      ? `${toolDisplayName(entry.part.name)}${toolDetail(entry.part) ? ` · ${toolDetail(entry.part)}` : ""}`
+                      : undefined
+                  }
+                />
+              )}
+            {entry.part?.type === "tool" &&
+              entry.part.state.status === "error" &&
+              renderSource(
+                entry.message,
+                `${entry.key}:error`,
+                <ErrorNotice
+                  error={entry.part.state.error.message || "The tool failed"}
+                />
+              )}
+          </React.Fragment>
+        ))}
+    </View>
+  );
+};
+
+const AssistantTurnView = ({
+  turn,
+  liveMessageID,
+  activityKind,
+  animate,
+  client,
+  directory,
+  renderSource,
+}: {
+  turn: Turn;
+  liveMessageID?: string;
+  activityKind?: AgentActivity["kind"];
+  animate: boolean;
+  client?: Client;
+  directory: string;
+  renderSource: SourceRenderer;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const betaLayout = useBetaLayout();
+  const entries = useMemo<Entry[]>(
+    () =>
+      turn.messages.flatMap((message) => [
+        ...message.content.map((part, index) => ({
+          index,
+          key: entryKey(message, part, index),
+          message,
+          part,
+        })),
+        ...(message.error
+          ? [
+              {
+                error: message.error.message,
+                index: message.content.length,
+                key: `${message.id}:error`,
+                message,
+              },
+            ]
+          : []),
+      ]),
+    [turn.messages]
+  );
+  const active = turn.messages.some((message) => message.id === liveMessageID);
+  const isLive = (entry: Entry) => {
+    const { part } = entry;
+    return (
+      active &&
+      !!part &&
+      (part.type === "tool"
+        ? part.state.status === "running" || part.state.status === "streaming"
+        : part.type === "reasoning" &&
+          entry.message.id === liveMessageID &&
+          entry.index === entry.message.content.length - 1 &&
+          part.time?.completed === undefined)
+    );
+  };
+  const firstLive = entries.findIndex(isLive);
+  const completedActivities = entries.filter(
+    (entry, index) =>
+      entry.part &&
+      entry.part.type !== "text" &&
+      (firstLive === -1 || index < firstLive)
+  );
+  const [first] = completedActivities;
+  const last = completedActivities.at(-1);
+  const start = first ? entries.indexOf(first) : -1;
+  const end = last ? entries.indexOf(last) : -1;
+  const renderEntry = (entry: Entry) =>
+    renderSource(
+      entry.message,
+      entry.key,
+      entry.part ? (
+        <AssistantActivityPart
+          part={entry.part}
+          detailsKey={entry.key}
+          live={isLive(entry)}
+          activityKind={activityKind}
+          animate={animate}
+          client={client}
+          directory={directory}
+          selectable={false}
+        />
+      ) : (
+        <ErrorNotice error={entry.error || "The assistant reported an error"} />
+      )
+    );
+  const finalText = entries.findLast(
+    (entry) => entry.part?.type === "text" && !!entry.part.text.trim()
+  );
+  return (
+    <View style={styles.turn}>
+      {entries.slice(0, start < 0 ? entries.length : start).map((entry) => (
+        <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>
+      ))}
+      {first && (
+        <TurnActivities
+          key={turn.id}
+          turnID={turn.id}
+          entries={entries.slice(start, end + 1)}
+          activities={completedActivities}
+          renderEntry={renderEntry}
+          renderSource={renderSource}
+          client={client}
+          directory={directory}
+        />
+      )}
+      {start >= 0 &&
+        entries
+          .slice(end + 1)
+          .map((entry) => (
+            <React.Fragment key={entry.key}>
+              {renderEntry(entry)}
+            </React.Fragment>
+          ))}
+      {betaLayout && !active && finalText && (
+        <ResponseFooter
+          text={turn.messages
+            .flatMap((message) =>
+              message.content.flatMap((part) =>
+                part.type === "text" ? [part.text] : []
+              )
+            )
+            .join("\n\n")}
+          elapsedSeconds={
+            finalText.message.time.completed === undefined
+              ? undefined
+              : Math.max(
+                  0,
+                  Math.round(
+                    (finalText.message.time.completed -
+                      turn.messages[0].time.created) /
+                      1000
+                  )
+                )
+          }
+        />
+      )}
+    </View>
+  );
+};
+
+export const AssistantTurn = memo(AssistantTurnView);

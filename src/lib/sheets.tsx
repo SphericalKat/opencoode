@@ -1,31 +1,49 @@
-import React, { createContext, useCallback, useContext, useId, useMemo, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Platform } from "react-native";
 
-type SheetCoordinator = {
+interface SheetCoordinator {
   suspended: boolean;
   recoveryPending: boolean;
   presentSheet: (id: string) => void;
   dismissSheet: (id: string) => boolean;
   suspendSheets: () => Promise<void>;
   resumeSheets: () => void;
-};
+}
 
 const Context = createContext<SheetCoordinator>({
-  suspended: false,
-  recoveryPending: false,
-  presentSheet: () => {},
   dismissSheet: () => false,
-  suspendSheets: async () => {},
-  resumeSheets: () => {},
+  presentSheet: () => {
+    // No-op without a provider.
+  },
+  recoveryPending: false,
+  resumeSheets: () => {
+    // No-op without a provider.
+  },
+  suspendSheets: () => Promise.resolve(),
+  suspended: false,
 });
 
-export function SheetCoordinatorProvider({ children }: { children: React.ReactNode }) {
+export const SheetCoordinatorProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const [suspended, setSuspended] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(false);
   const suspensionRequested = useRef(false);
   const presented = useRef(new Set<string>());
   const waiting = useRef(new Set<() => void>());
-  const presentSheet = useCallback((id: string) => { presented.current.add(id); }, []);
+  const presentSheet = useCallback((id: string) => {
+    presented.current.add(id);
+  }, []);
   const dismissSheet = useCallback((id: string) => {
     const deferActions = suspensionRequested.current;
     presented.current.delete(id);
@@ -34,22 +52,23 @@ export function SheetCoordinatorProvider({ children }: { children: React.ReactNo
       setSuspended(true);
       const ready = [...waiting.current];
       waiting.current.clear();
-      ready.forEach(resolve => resolve());
+      for (const resolve of ready) {
+        resolve();
+      }
     }
     return deferActions;
   }, []);
   const suspendSheets = useCallback(() => {
     suspensionRequested.current = true;
-    return new Promise<void>(resolve => {
-      if (presented.current.size) {
-        setRecoveryPending(true);
-        waiting.current.add(resolve);
-      } else {
-        setRecoveryPending(false);
-        setSuspended(true);
-        resolve();
-      }
-    });
+    if (presented.current.size) {
+      setRecoveryPending(true);
+      const { promise, resolve } = Promise.withResolvers<undefined>();
+      waiting.current.add(() => resolve(undefined));
+      return promise;
+    }
+    setRecoveryPending(false);
+    setSuspended(true);
+    return Promise.resolve();
   }, []);
   const resumeSheets = useCallback(() => {
     suspensionRequested.current = false;
@@ -57,23 +76,55 @@ export function SheetCoordinatorProvider({ children }: { children: React.ReactNo
     setSuspended(false);
     const ready = [...waiting.current];
     waiting.current.clear();
-    ready.forEach(resolve => resolve());
+    for (const resolve of ready) {
+      resolve();
+    }
   }, []);
-  const value = useMemo(() => ({ suspended, recoveryPending, presentSheet, dismissSheet, suspendSheets, resumeSheets }), [suspended, recoveryPending, presentSheet, dismissSheet, suspendSheets, resumeSheets]);
+  const value = useMemo(
+    () => ({
+      dismissSheet,
+      presentSheet,
+      recoveryPending,
+      resumeSheets,
+      suspendSheets,
+      suspended,
+    }),
+    [
+      suspended,
+      recoveryPending,
+      presentSheet,
+      dismissSheet,
+      suspendSheets,
+      resumeSheets,
+    ]
+  );
   return <Context.Provider value={value}>{children}</Context.Provider>;
-}
+};
 
-export function useSheetCoordinator() { return useContext(Context); }
+export const useSheetCoordinator = () => useContext(Context);
 
-export function useNativePresentation() {
+export const useNativePresentation = () => {
   const { presentSheet, dismissSheet } = useSheetCoordinator();
   const id = useId();
   const sequence = useRef(0);
-  return useCallback(async function withNativePresentation<T>(operation: () => Promise<T>): Promise<T> {
-    if (Platform.OS === 'web') return operation();
-    const presentation = `${id}:native:${++sequence.current}`;
-    presentSheet(presentation);
-    try { return await operation(); }
-    finally { dismissSheet(presentation); }
-  }, [id, presentSheet, dismissSheet]);
-}
+  return useCallback(
+    async <T,>(operation: () => Promise<T>): Promise<T> => {
+      if (Platform.OS === "web") {
+        return operation();
+      }
+      sequence.current += 1;
+      const presentation = `${id}:native:${sequence.current}`;
+      presentSheet(presentation);
+      let result: T;
+      try {
+        result = await operation();
+      } catch (error) {
+        dismissSheet(presentation);
+        throw error;
+      }
+      dismissSheet(presentation);
+      return result;
+    },
+    [id, presentSheet, dismissSheet]
+  );
+};

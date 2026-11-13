@@ -32,16 +32,9 @@ The renderer also accepts common aliases for these languages. Unknown and absent
 
 ## Verification
 
-The Android fixture captures use production components with sample model data. They do not show a connected server.
-The app frame captures show the actual app before a server connection.
-The native shell includes the Material 3 module from a fresh debug build.
-The fixture uses an embedded JavaScript bundle to avoid the local Metro transport issue.
+The Android fixture captures use production components with sample model data. They do not show a connected server. The app frame captures show the actual app before a server connection. The native shell includes the Material 3 module from a fresh debug build. The fixture uses an embedded JavaScript bundle to avoid the local Metro transport issue.
 
-The emulator used 420 dpi. The variant options retained 48 dp touch targets with gaps near 4 dp.
-The large-text capture uses a 1.5 font scale and a 1080 × 1600 viewport.
-The fixture navigation controls use 8 dp gaps and wrap when space is limited.
-The actual app retained frame colors `#080808` in dark mode and `#fafafa` in light mode.
-The Material You background matched Android's system palette value, `#1a1b20`.
+The emulator used 420 dpi. The variant options retained 48 dp touch targets with gaps near 4 dp. The large-text capture uses a 1.5 font scale and a 1080 × 1600 viewport. The fixture navigation controls use 8 dp gaps and wrap when space is limited. The actual app retained frame colors `#080808` in dark mode and `#fafafa` in light mode. The Material You background matched Android's system palette value, `#1a1b20`.
 
 | Capture | Evidence |
 | --- | --- |
@@ -57,8 +50,4 @@ The Material You background matched Android's system palette value, `#1a1b20`.
 | [Dark code and diff](screenshots/issue-42/code-diff-dark.png) | Visible syntax and diff colors |
 | [Dracula code and diff](screenshots/issue-42/code-diff-dracula.png) | Syntax and diff colors from the upstream preset |
 
-The browser checks cover code text, copy output, selection, and visible syntax colors.
-They also cover diff text and visible addition and deletion colors.
-The web export and typecheck passed.
-The existing unit suite retained its baseline result: 31 passes and four unrelated failures.
-I did not verify native iOS behavior on this Linux host.
+The browser checks cover code text, copy output, selection, and visible syntax colors. They also cover diff text and visible addition and deletion colors. The web export and typecheck passed. The existing unit suite retained its baseline result: 31 passes and four unrelated failures. I did not verify native iOS behavior on this Linux host.

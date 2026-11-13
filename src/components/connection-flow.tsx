@@ -1,0 +1,1158 @@
+import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Clipboard from "expo-clipboard";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AppState,
+  BackHandler,
+  Keyboard,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
+import Svg, { Path, Rect } from "react-native-svg";
+
+import { useBetaLayout } from "../lib/beta-layout";
+import { errorMessage, normalizeConnection } from "../lib/client";
+import type { Connection } from "../lib/client";
+import { parsePairingPayload } from "../lib/pairing";
+import { useTheme, useThemedStyles } from "../lib/theme";
+import type { ThemeColors } from "../lib/theme";
+import { MotionContent } from "./motion";
+import { OpenCodeLogo } from "./open-code-logo";
+import { ShellIcon } from "./shell-icon";
+import {
+  Button,
+  Busy,
+  Card,
+  Disclosure,
+  ErrorNotice,
+  Field,
+  Heading,
+  BodyText,
+  mono,
+  Row,
+  touchTarget,
+} from "./ui";
+
+export interface ConnectionForm {
+  id: string;
+  name: string;
+  url: string;
+  token: string;
+  username?: string;
+}
+type Step = "servers" | "home" | "pair" | "address" | "password" | "scan";
+interface Props {
+  form: ConnectionForm;
+  connections: Connection[];
+  activeID?: string;
+  unavailableID?: string;
+  connecting: boolean;
+  error: string | null;
+  pairingLink?: string | null;
+  onPairingLinkConsumed: () => void;
+  onChangeForm: (form: ConnectionForm) => void;
+  onClearError: () => void;
+  onConnect: (
+    connection: Connection,
+    alternatives?: Connection[]
+  ) => Promise<void>;
+  onRemove: (connection: Connection) => Promise<void>;
+}
+
+const blankForm: ConnectionForm = { id: "", name: "", token: "", url: "" };
+
+const guarded = async (
+  run: () => Promise<void>,
+  handleError: (error: unknown) => void,
+  cleanup: () => void
+) => {
+  try {
+    await run();
+  } catch (error_) {
+    handleError(error_);
+  } finally {
+    cleanup();
+  }
+};
+
+const pairingPathPattern = /\/auth\/connect\/[^/]+\/?$/u;
+
+const serverName = (value: string) => {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return "server";
+  }
+};
+
+const PairingIcon = ({ color }: { color: string }) => (
+  <Svg width={52} height={52} viewBox="0 0 32 32" fill="none" aria-hidden>
+    <Rect
+      x={4}
+      y={4}
+      width={8}
+      height={8}
+      rx={1}
+      stroke={color}
+      strokeWidth={1.5}
+    />
+    <Rect
+      x={20}
+      y={4}
+      width={8}
+      height={8}
+      rx={1}
+      stroke={color}
+      strokeWidth={1.5}
+    />
+    <Rect
+      x={4}
+      y={20}
+      width={8}
+      height={8}
+      rx={1}
+      stroke={color}
+      strokeWidth={1.5}
+    />
+    <Path
+      d="M20 20h4v4h4v4h-8v-4M28 20v-4M16 4v4M4 16h4M12 16h8M16 20v8"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="square"
+    />
+  </Svg>
+);
+
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    actions: { gap: 4 },
+    back: { alignSelf: "flex-start", marginLeft: -10 },
+    betaActions: { gap: 8 },
+    betaCommand: {
+      backgroundColor: colors.input,
+      borderColor: colors.border,
+      borderRadius: 6,
+      borderWidth: 1,
+      paddingHorizontal: 16,
+      paddingVertical: 6,
+    },
+    betaContainer: { alignSelf: "center", maxWidth: 360, width: "100%" },
+    betaHint: { fontSize: 14, lineHeight: 21, textAlign: "center" },
+    betaInput: {
+      borderRadius: 6,
+      fontSize: 15,
+      minHeight: 48,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    betaInstructions: {
+      alignItems: "center",
+      gap: 12,
+      marginTop: 4,
+      paddingTop: 16,
+    },
+    betaIntro: { alignItems: "center", gap: 8, marginBottom: 12 },
+    betaLogo: { marginBottom: 28 },
+    betaPassword: { gap: 4, justifyContent: "center" },
+    betaTitle: {
+      fontSize: 19,
+      fontWeight: "500",
+      lineHeight: 25,
+      textAlign: "center",
+    },
+    camera: {
+      aspectRatio: 1,
+      backgroundColor: "#000000",
+      borderRadius: 12,
+      maxHeight: 360,
+      overflow: "hidden",
+      width: "100%",
+    },
+    center: { textAlign: "center" },
+    command: {
+      color: colors.text,
+      fontFamily: mono,
+      fontSize: 13,
+      paddingVertical: 4,
+    },
+    container: { gap: 16 },
+    frame: {
+      aspectRatio: 1,
+      borderColor: "#ffffffbb",
+      borderRadius: 12,
+      borderWidth: 1.5,
+      position: "absolute",
+      width: "70%",
+    },
+    instruction: { fontSize: 14, fontWeight: "500" },
+    intro: { alignItems: "center", gap: 12, paddingBottom: 8, paddingTop: 8 },
+    manage: { paddingBottom: 10, paddingLeft: 32 },
+    privacy: {
+      fontSize: 12,
+      lineHeight: 18,
+      paddingTop: 4,
+      textAlign: "center",
+    },
+    saved: { gap: 4 },
+    savedItem: { borderBottomWidth: 1, borderColor: colors.border },
+    server: {
+      alignItems: "center",
+      borderRadius: 6,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: touchTarget + 16,
+      paddingHorizontal: 4,
+      paddingVertical: 12,
+    },
+    serverName: { fontWeight: "500" },
+    serverText: { flex: 1, gap: 2, minWidth: 0 },
+    small: { fontSize: 13, lineHeight: 19 },
+    viewfinder: {
+      ...StyleSheet.absoluteFill,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+  });
+
+type Styles = ReturnType<typeof createStyles>;
+
+const getInitialStep = (
+  form: ConnectionForm,
+  connections: Connection[],
+  unavailableID?: string
+): Step => {
+  if (form.id) {
+    return "password";
+  }
+  if (form.url) {
+    return pairingPathPattern.test(form.url) ? "pair" : "address";
+  }
+  if (connections.length && !unavailableID) {
+    return "servers";
+  }
+  return "home";
+};
+
+const getBackStep = (step: Step, betaStart: boolean): Step => {
+  if (step === "home" || betaStart) {
+    return "servers";
+  }
+  if (step === "password") {
+    return "address";
+  }
+  return "home";
+};
+
+const shouldShowBack = (
+  step: Step,
+  submitted: boolean,
+  canReturnToServers: boolean,
+  betaStart: boolean
+) =>
+  step !== "servers" &&
+  !submitted &&
+  (canReturnToServers || (step !== "home" && !betaStart));
+
+const ConnectionNotice = ({
+  error,
+  localError,
+  showUnavailable,
+}: {
+  error: string | null;
+  localError: string | null;
+  showUnavailable: boolean;
+}) => {
+  if (showUnavailable && error && !localError) {
+    return (
+      <Card>
+        <BodyText accessibilityRole="alert">{error}</BodyText>
+      </Card>
+    );
+  }
+  return <ErrorNotice error={localError || error} />;
+};
+
+const ServerStatus = ({
+  unavailable,
+  active,
+  colors,
+  styles,
+}: {
+  unavailable: boolean;
+  active: boolean;
+  colors: ThemeColors;
+  styles: Styles;
+}) => {
+  if (unavailable) {
+    return (
+      <BodyText style={[styles.small, { color: colors.danger }]}>
+        Retry
+      </BodyText>
+    );
+  }
+  if (active) {
+    return (
+      <BodyText muted style={styles.small}>
+        Current
+      </BodyText>
+    );
+  }
+  return <ShellIcon name="chevron" color={colors.faint} size={16} />;
+};
+
+const PrivacyNote = ({ styles }: { styles: Styles }) => (
+  <BodyText muted style={styles.privacy}>
+    {Platform.OS === "web"
+      ? "Connections stay in this tab. Your server must allow this browser origin with --cors."
+      : "Your server credentials stay in secure storage on this device."}
+  </BodyText>
+);
+
+const homeTitle = (unavailableID?: string, activeID?: string) => {
+  if (unavailableID) {
+    return "Reconnect to a server";
+  }
+  return activeID ? "Add a server" : "Connect to a server";
+};
+
+const useServersGuard = (
+  step: Step,
+  connectionCount: number,
+  unavailableID: string | undefined,
+  setStep: (next: Step) => void
+) => {
+  if (step === "servers" && (!connectionCount || unavailableID)) {
+    setStep("home");
+  }
+};
+
+const usePairingLinkText = (
+  pairingLink: string | null | undefined,
+  setPairingText: (text: string) => void,
+  setStep: (next: Step) => void
+) => {
+  const [handled, setHandled] = useState<string | null | undefined>();
+  if (handled !== pairingLink) {
+    setHandled(pairingLink);
+    if (pairingLink) {
+      setPairingText(pairingLink);
+      setStep("pair");
+    }
+  }
+};
+
+export const ConnectionFlow = ({
+  form,
+  connections,
+  activeID,
+  unavailableID,
+  connecting,
+  error,
+  pairingLink,
+  onPairingLinkConsumed,
+  onChangeForm,
+  onClearError,
+  onConnect,
+  onRemove,
+}: Props) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const beta = useBetaLayout();
+  const [navigation, setNavigation] = useState(() => ({
+    direction: 0 as -1 | 0 | 1,
+    revision: 0,
+    step: getInitialStep(form, connections, unavailableID),
+  }));
+  const { step } = navigation;
+  const [pairingText, setPairingText] = useState(form.id ? "" : form.url);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
+  const [removingID, setRemovingID] = useState<string | null>(null);
+  const [managing, setManaging] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraBlocked, setCameraBlocked] = useState(false);
+  const [submission, setSubmission] = useState<Connection[] | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const mounted = useRef(true);
+  const acceptedScan = useRef(false);
+  const requesting = useRef(false);
+  const submitting = useRef(false);
+  const removing = useRef<string | null>(null);
+  const connectRef = useRef(onConnect);
+  const busy = connecting || !!submission || reading || !!removingID;
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const clearError = () => {
+    setLocalError(null);
+    onClearError();
+  };
+
+  const setStep = useCallback((next: Step, direction: -1 | 0 | 1 = 0) => {
+    setNavigation((current) => {
+      if (current.step !== next) {
+        return { direction, revision: current.revision + 1, step: next };
+      }
+      if (current.direction === direction) {
+        return current;
+      }
+      return { ...current, direction };
+    });
+  }, []);
+
+  const go = (next: Step, direction: -1 | 1 = 1) => {
+    if (busy) {
+      return;
+    }
+    Keyboard.dismiss();
+    clearError();
+    setCameraBlocked(false);
+    setStep(next, direction);
+  };
+
+  const submit = (candidates: Connection[], returnStep: Step = "home") => {
+    if (
+      connecting ||
+      submitting.current ||
+      removing.current ||
+      !candidates.length
+    ) {
+      return;
+    }
+    submitting.current = true;
+    acceptedScan.current = true;
+    Keyboard.dismiss();
+    clearError();
+    setStep(returnStep);
+    setSubmission(candidates);
+  };
+
+  const acceptPairing = (text: string) => {
+    try {
+      const candidates = parsePairingPayload(text);
+      onChangeForm(blankForm);
+      submit(candidates);
+    } catch (error_) {
+      setLocalError(errorMessage(error_));
+      return false;
+    }
+    return true;
+  };
+
+  const pastePairing = async () => {
+    if (busy || requesting.current || removing.current) {
+      return;
+    }
+    requesting.current = true;
+    clearError();
+    setReading(true);
+    setStep("pair");
+    await guarded(
+      async () => {
+        const text = await Clipboard.getStringAsync();
+        if (!mounted.current) {
+          return;
+        }
+        setPairingText(text);
+        setStep("pair");
+        if (text.trim()) {
+          acceptPairing(text);
+        }
+      },
+      () => {
+        if (mounted.current) {
+          setStep("pair");
+          setLocalError("Paste the pairing link into the field below.");
+        }
+      },
+      () => {
+        requesting.current = false;
+        if (mounted.current) {
+          setReading(false);
+        }
+      }
+    );
+  };
+
+  const scan = async () => {
+    if (busy || requesting.current || removing.current) {
+      return;
+    }
+    requesting.current = true;
+    Keyboard.dismiss();
+    clearError();
+    setReading(true);
+    setCameraBlocked(false);
+    await guarded(
+      async () => {
+        if (Platform.OS === "web" && !(await CameraView.isAvailableAsync())) {
+          throw new Error("unavailable");
+        }
+        const nextPermission = permission?.granted
+          ? permission
+          : await requestPermission();
+        if (!mounted.current) {
+          return;
+        }
+        if (!nextPermission.granted) {
+          setCameraBlocked(!nextPermission.canAskAgain);
+          setLocalError(
+            "Camera access is off. You can paste a pairing link or enable the camera to scan."
+          );
+          return;
+        }
+        acceptedScan.current = false;
+        setCameraReady(false);
+        setStep("scan");
+      },
+      () => {
+        if (mounted.current) {
+          setStep("pair");
+          setLocalError(
+            "The camera is unavailable. Paste a pairing link instead."
+          );
+        }
+      },
+      () => {
+        requesting.current = false;
+        if (mounted.current) {
+          setReading(false);
+        }
+      }
+    );
+  };
+
+  const nextAddress = (animate = false) => {
+    if (busy) {
+      return;
+    }
+    try {
+      const url = form.url.trim();
+      if (url.startsWith("{") || pairingPathPattern.test(url)) {
+        acceptPairing(url);
+        return;
+      }
+      const normalized = normalizeConnection({
+        ...form,
+        id: form.id || undefined,
+        url,
+      });
+      onChangeForm({ ...form, url: normalized.url });
+      clearError();
+      setStep("password", animate ? 1 : 0);
+    } catch (error_) {
+      setLocalError(errorMessage(error_));
+    }
+  };
+
+  const connectManual = () => {
+    try {
+      submit(
+        [normalizeConnection({ ...form, id: form.id || undefined })],
+        "password"
+      );
+    } catch (error_) {
+      setLocalError(errorMessage(error_));
+    }
+  };
+
+  const remove = async (connection: Connection) => {
+    if (busy || submitting.current || requesting.current || removing.current) {
+      return;
+    }
+    removing.current = connection.id;
+    setRemovingID(connection.id);
+    clearError();
+    await guarded(
+      async () => {
+        await onRemove(connection);
+      },
+      (error_) => {
+        if (mounted.current) {
+          setLocalError(errorMessage(error_));
+        }
+      },
+      () => {
+        removing.current = null;
+        if (mounted.current) {
+          setRemovingID(null);
+        }
+      }
+    );
+  };
+  const acceptPairingRef = useRef(acceptPairing);
+  const pairingConsumedRef = useRef(onPairingLinkConsumed);
+
+  useEffect(() => {
+    connectRef.current = onConnect;
+    acceptPairingRef.current = acceptPairing;
+    pairingConsumedRef.current = onPairingLinkConsumed;
+  });
+
+  useServersGuard(step, connections.length, unavailableID, setStep);
+  usePairingLinkText(pairingLink, setPairingText, setStep);
+
+  useEffect(() => {
+    if (!pairingLink) {
+      return;
+    }
+    acceptPairingRef.current(pairingLink);
+    pairingConsumedRef.current();
+  }, [pairingLink]);
+
+  useEffect(() => {
+    if (!submission) {
+      return;
+    }
+    let live = true;
+    void connectRef
+      .current(submission[0], submission.slice(1))
+      .catch((error_) => {
+        if (live) {
+          setLocalError(errorMessage(error_));
+        }
+      })
+      .finally(() => {
+        submitting.current = false;
+        if (live) {
+          setSubmission(null);
+        }
+      });
+    return () => {
+      live = false;
+    };
+  }, [submission]);
+
+  useEffect(() => {
+    if (step !== "scan") {
+      return;
+    }
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      setStep("home");
+      return true;
+    });
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state !== "active") {
+        setStep("home");
+      }
+    });
+    const timeout = cameraReady
+      ? null
+      : setTimeout(() => {
+          acceptedScan.current = true;
+          setStep("pair");
+          setLocalError(
+            "The camera is unavailable. Paste a pairing link instead."
+          );
+        }, 7000);
+    return () => {
+      back.remove();
+      appState.remove();
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [step, cameraReady, setStep]);
+
+  const betaStart = beta && (step === "home" || step === "pair");
+  const canReturnToServers = connections.length > 0 && !unavailableID;
+  const backStep = getBackStep(step, betaStart);
+  const back = shouldShowBack(
+    step,
+    !!submission,
+    canReturnToServers,
+    betaStart
+  ) ? (
+    <Button
+      title="‹ Back"
+      compact
+      variant="ghost"
+      disabled={busy}
+      onPress={() => go(backStep, -1)}
+    />
+  ) : null;
+  const manageServers = (
+    <Button
+      title={managing ? "Done" : "Manage"}
+      compact
+      variant="ghost"
+      disabled={busy}
+      onPress={() => setManaging((value) => !value)}
+    />
+  );
+
+  const renderServerRow = (connection: Connection) => (
+    <View key={connection.id} style={styles.savedItem}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${unavailableID === connection.id ? "Retry" : "Connect to"} ${connection.name}${activeID === connection.id ? ", current server" : ""}`}
+        disabled={busy}
+        onPress={() => submit([connection])}
+        style={({ pressed }) => [
+          styles.server,
+          pressed && { backgroundColor: colors.raised },
+        ]}
+      >
+        <ShellIcon name="server" color={colors.muted} size={20} />
+        <View style={styles.serverText}>
+          <BodyText numberOfLines={1} style={styles.serverName}>
+            {connection.name}
+          </BodyText>
+          <BodyText
+            muted
+            numberOfLines={1}
+            ellipsizeMode="middle"
+            style={styles.small}
+          >
+            {connection.url}
+          </BodyText>
+        </View>
+        <ServerStatus
+          unavailable={unavailableID === connection.id}
+          active={activeID === connection.id}
+          colors={colors}
+          styles={styles}
+        />
+      </Pressable>
+      {managing && (
+        <Row style={styles.manage}>
+          <Button
+            title="Edit"
+            compact
+            disabled={busy}
+            onPress={() => {
+              clearError();
+              onChangeForm({
+                ...connection,
+                token: connection.token || "",
+              });
+              setStep("password");
+            }}
+          />
+          <Button
+            title={removingID === connection.id ? "Removing server" : "Remove"}
+            compact
+            variant="ghost"
+            busy={removingID === connection.id}
+            disabled={busy}
+            onPress={() => {
+              void remove(connection);
+            }}
+          />
+        </Row>
+      )}
+    </View>
+  );
+
+  const renderSavedServers = () =>
+    !!connections.length && (
+      <View style={styles.saved}>
+        <Row style={{ justifyContent: "space-between" }}>
+          <BodyText muted style={styles.instruction}>
+            Your servers
+          </BodyText>
+          {step === "servers" ? (
+            <Button
+              title="Add server"
+              compact
+              variant="ghost"
+              disabled={busy}
+              onPress={() => {
+                onChangeForm(blankForm);
+                setPairingText("");
+                setManaging(false);
+                go("home");
+              }}
+            />
+          ) : (
+            manageServers
+          )}
+        </Row>
+        {connections.map(renderServerRow)}
+        {step === "servers" && (
+          <Row style={{ justifyContent: "flex-end" }}>{manageServers}</Row>
+        )}
+      </View>
+    );
+
+  const savedServers = renderSavedServers();
+
+  const renderConnecting = () => (
+    <Card>
+      <Busy />
+      <BodyText style={styles.center}>
+        Connecting to {serverName(submission?.[0]?.url || form.url)}
+      </BodyText>
+      <BodyText muted style={styles.center}>
+        Opening your workspace
+      </BodyText>
+    </Card>
+  );
+
+  const renderBetaHome = () => (
+    <>
+      <View style={styles.betaIntro}>
+        <View style={styles.betaLogo}>
+          <OpenCodeLogo width={160} />
+        </View>
+        <BodyText accessibilityRole="header" style={styles.betaTitle}>
+          Connect to a server
+        </BodyText>
+        <BodyText muted style={styles.betaHint}>
+          Paste a pairing link from your computer, or scan its QR code.
+        </BodyText>
+      </View>
+      <Field
+        label="Pairing link"
+        placeholder="http://192.168.1.2:4096/auth/connect/…"
+        value={pairingText}
+        editable={!busy}
+        onChangeText={(value) => {
+          clearError();
+          setPairingText(value);
+        }}
+        keyboardType="url"
+        autoComplete="off"
+        returnKeyType="go"
+        onSubmitEditing={() => acceptPairing(pairingText)}
+        style={styles.betaInput}
+      />
+      <View style={styles.betaActions}>
+        <Button
+          title="Connect"
+          variant="primary"
+          disabled={!pairingText.trim() || busy}
+          onPress={() => acceptPairing(pairingText)}
+        />
+        <Button
+          title="Scan QR code"
+          busy={reading}
+          disabled={busy}
+          onPress={() => {
+            void scan();
+          }}
+        />
+      </View>
+      <Row style={styles.betaPassword}>
+        <BodyText muted style={styles.betaHint}>
+          No pairing link?
+        </BodyText>
+        <Button
+          title="Use password"
+          variant="ghost"
+          compact
+          disabled={busy}
+          onPress={() => {
+            onChangeForm(blankForm);
+            go("address");
+          }}
+        />
+      </Row>
+      <View style={styles.betaInstructions}>
+        <BodyText muted style={styles.betaHint}>
+          OpenCode: run this on the server computer. Pi: use /mobile in an
+          active session with the companion extension installed.
+        </BodyText>
+        <View style={styles.betaCommand}>
+          <BodyText selectable style={styles.command}>
+            opencode pair
+          </BodyText>
+        </View>
+      </View>
+      {unavailableID && savedServers}
+    </>
+  );
+
+  const renderScan = () => (
+    <>
+      <Heading>Scan a pairing QR code</Heading>
+      <BodyText muted>Point your camera at the code on your computer.</BodyText>
+      <View style={styles.camera}>
+        <CameraView
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+          onCameraReady={() => setCameraReady(true)}
+          onMountError={() => {
+            acceptedScan.current = true;
+            setStep("pair");
+            setLocalError(
+              "The camera is unavailable. Paste a pairing link instead."
+            );
+          }}
+          onBarcodeScanned={({ data }) => {
+            if (acceptedScan.current) {
+              return;
+            }
+            acceptedScan.current = true;
+            if (!acceptPairing(data)) {
+              setLocalError(
+                "This QR code is not a server pairing code. Scan a pairing code from your computer."
+              );
+            }
+          }}
+        />
+        <View pointerEvents="none" style={styles.viewfinder}>
+          <View style={styles.frame} />
+          {!cameraReady && <Busy />}
+        </View>
+      </View>
+      {localError && (
+        <Button
+          title="Scan another code"
+          onPress={() => {
+            clearError();
+            acceptedScan.current = false;
+          }}
+        />
+      )}
+      <Button
+        title="Paste a pairing link instead"
+        variant="ghost"
+        onPress={() => {
+          void pastePairing();
+        }}
+      />
+    </>
+  );
+
+  const renderPair = () => (
+    <>
+      <Heading>Paste a pairing link</Heading>
+      <BodyText muted>
+        Copy the pairing link from the server on your computer.
+      </BodyText>
+      <Field
+        label="Pairing link"
+        placeholder="http://your-computer:4096/auth/connect/…"
+        value={pairingText}
+        onChangeText={(value) => {
+          clearError();
+          setPairingText(value);
+        }}
+        keyboardType="url"
+        autoComplete="off"
+        autoFocus
+        returnKeyType="go"
+        onSubmitEditing={() => acceptPairing(pairingText)}
+      />
+      <Button
+        title="Connect"
+        variant="primary"
+        disabled={!pairingText.trim() || busy}
+        onPress={() => acceptPairing(pairingText)}
+      />
+      <Button
+        title="Scan QR code instead"
+        variant="ghost"
+        onPress={() => {
+          void scan();
+        }}
+      />
+    </>
+  );
+
+  const renderAddress = () => (
+    <>
+      <Heading>Enter the server address</Heading>
+      <BodyText muted>Use your computer’s LAN or private VPN address.</BodyText>
+      <Field
+        label="Server address"
+        placeholder="http://192.168.1.20:4096"
+        value={form.url}
+        editable={!busy}
+        onChangeText={(url) => {
+          clearError();
+          onChangeForm({ ...form, token: "", url });
+        }}
+        keyboardType="url"
+        autoComplete="off"
+        autoFocus
+        returnKeyType="next"
+        onSubmitEditing={() => nextAddress()}
+      />
+      <Button
+        title="Continue"
+        variant="primary"
+        disabled={!form.url.trim() || busy}
+        onPress={() => nextAddress(true)}
+      />
+      <BodyText muted style={styles.small}>
+        On a phone, localhost refers to the phone. Use HTTPS outside a trusted
+        network.
+      </BodyText>
+      <Disclosure title="Start a server">
+        <BodyText selectable style={styles.command}>
+          opencode serve --hostname 0.0.0.0 --port 4096
+        </BodyText>
+      </Disclosure>
+    </>
+  );
+
+  const renderPassword = () => (
+    <>
+      <Heading>
+        {form.id ? "Update your server" : "Enter the server password"}
+      </Heading>
+      <BodyText muted numberOfLines={2}>
+        {form.url}
+      </BodyText>
+      <Field
+        label="Server password"
+        placeholder="Server password"
+        secureTextEntry
+        value={form.token}
+        editable={!busy}
+        onChangeText={(token) => {
+          clearError();
+          onChangeForm({ ...form, token });
+        }}
+        autoComplete="off"
+        autoFocus
+        returnKeyType="go"
+        onSubmitEditing={connectManual}
+      />
+      <Button
+        title="Connect"
+        variant="primary"
+        disabled={busy}
+        onPress={connectManual}
+      />
+      <BodyText muted style={styles.small}>
+        Leave this blank if your server does not require a password.
+      </BodyText>
+      <Disclosure title="Connection details">
+        <Field
+          label="Name"
+          value={form.name}
+          onChangeText={(name) => onChangeForm({ ...form, name })}
+        />
+        <Field
+          label="Username"
+          placeholder="Username"
+          value={form.username ?? "opencode"}
+          onChangeText={(username) => onChangeForm({ ...form, username })}
+        />
+      </Disclosure>
+    </>
+  );
+
+  const renderHome = () => (
+    <>
+      {unavailableID && activeID && savedServers}
+      <View style={styles.intro}>
+        <PairingIcon color={colors.muted} />
+        <Heading>{homeTitle(unavailableID, activeID)}</Heading>
+        <BodyText muted style={styles.center}>
+          {unavailableID
+            ? "Retry a saved server or pair with a server again."
+            : "Your computer does the work. Pick up the conversation here."}
+        </BodyText>
+      </View>
+      <View style={styles.actions}>
+        <Button
+          title="Scan QR code"
+          variant="primary"
+          busy={reading}
+          disabled={busy}
+          onPress={() => {
+            void scan();
+          }}
+        />
+        <Button
+          title="Paste pairing link"
+          disabled={busy}
+          onPress={() => {
+            void pastePairing();
+          }}
+        />
+      </View>
+      <Card>
+        <BodyText style={styles.instruction}>On your computer</BodyText>
+        <BodyText muted>
+          OpenCode: run the command below. Pi: use /mobile in an active session
+          with the companion extension installed. Then scan the QR code or paste
+          the pairing link.
+        </BodyText>
+        <BodyText selectable style={styles.command}>
+          opencode pair
+        </BodyText>
+      </Card>
+      <Button
+        title="Connect with a server address"
+        variant="ghost"
+        disabled={busy}
+        onPress={() => {
+          onChangeForm(blankForm);
+          go("address");
+        }}
+      />
+      {unavailableID && !activeID && savedServers}
+    </>
+  );
+
+  const renderStep = () => {
+    if (submission || connecting) {
+      return renderConnecting();
+    }
+    if (step === "servers") {
+      return savedServers;
+    }
+    if (betaStart) {
+      return renderBetaHome();
+    }
+    if (step === "scan") {
+      return renderScan();
+    }
+    if (step === "pair") {
+      return renderPair();
+    }
+    if (step === "address") {
+      return renderAddress();
+    }
+    if (step === "password") {
+      return renderPassword();
+    }
+    return renderHome();
+  };
+
+  return (
+    <MotionContent
+      variant="connection"
+      transitionKey={navigation.revision}
+      direction={navigation.direction}
+      enabled={!busy && step !== "scan"}
+      style={[styles.container, beta && styles.betaContainer]}
+    >
+      {back && <View style={styles.back}>{back}</View>}
+      <ConnectionNotice
+        error={error}
+        localError={localError}
+        showUnavailable={!!unavailableID && step === "home"}
+      />
+      {cameraBlocked && (
+        <Button
+          title="Open camera settings"
+          disabled={busy}
+          onPress={() => {
+            void Linking.openSettings().catch(() =>
+              setLocalError(
+                "Open your device settings and enable camera access for Opencoode."
+              )
+            );
+          }}
+        />
+      )}
+      {renderStep()}
+      {step !== "scan" && step !== "servers" && <PrivacyNote styles={styles} />}
+    </MotionContent>
+  );
+};
