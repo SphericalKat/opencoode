@@ -1,6 +1,8 @@
 import { isFileNotFoundError } from "@opencode/client";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { ActivityIndicator, Pressable, View } from "react-native";
 
+import { ShellIcon } from "../../components/shell-icon";
 import {
   Button,
   Card,
@@ -15,9 +17,59 @@ import {
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
 import { saveConfigFile, withSettingsRequest } from "../../lib/settings";
-import { useTheme } from "../../lib/theme";
+import { useTheme, useThemedStyles } from "../../lib/theme";
 import { useUnsavedChanges } from "../../lib/unsaved";
 import { Page, runBusy, useResource } from "./shared";
+import { createStyles } from "./styles";
+
+const ConfigActionRow = ({
+  action,
+  activeAction,
+  busy,
+  onPress,
+  showDivider,
+  title,
+}: {
+  action: string;
+  activeAction: string | null;
+  busy: boolean;
+  onPress: () => void;
+  showDivider: boolean;
+  title: string;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const isActive = activeAction === action;
+  const dimmed = busy && !isActive;
+  return (
+    <View>
+      {showDivider && (
+        <View pointerEvents="none" style={styles.sectionDivider} />
+      )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ busy: isActive, disabled: busy }}
+        disabled={busy}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.sectionRow,
+          pressed && { backgroundColor: colors.raised },
+          dimmed && { opacity: 0.55 },
+        ]}
+      >
+        <View style={styles.detail}>
+          <BodyText style={styles.sectionName}>{title}</BodyText>
+        </View>
+        {isActive ? (
+          <ActivityIndicator size="small" color={colors.muted} />
+        ) : (
+          <ShellIcon name="chevron" size={16} color={colors.muted} />
+        )}
+      </Pressable>
+    </View>
+  );
+};
 
 export const Configuration = ({
   client,
@@ -27,6 +79,7 @@ export const Configuration = ({
   directory: string;
 }) => {
   const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { data, error, loading, refresh } = useResource(
     client,
     directory,
@@ -50,13 +103,29 @@ export const Configuration = ({
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const run = async (action: (signal: AbortSignal) => Promise<void>) => {
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+  const busy = activeAction !== null;
+  const busyLock = useRef(false);
+  const run = async (
+    action: string,
+    task: (signal: AbortSignal) => Promise<void>
+  ) => {
+    if (busyLock.current) {
+      return;
+    }
+    busyLock.current = true;
     setErrorAction(null);
     setNotice(null);
-    await runBusy(setBusy, setErrorAction, async () => {
-      await withSettingsRequest(action);
-    });
+    await runBusy(
+      (next) => {
+        setActiveAction(next ? action : null);
+      },
+      setErrorAction,
+      async () => {
+        await withSettingsRequest(task);
+      }
+    );
+    busyLock.current = false;
   };
   return (
     <Page error={error} loading={loading} refresh={refresh}>
@@ -68,45 +137,55 @@ export const Configuration = ({
       {notice && (
         <BodyText style={{ color: colors.success }}>{notice}</BodyText>
       )}
-      <Button
-        title="Reload server configuration"
-        busy={busy}
-        onPress={() => {
-          void run(async (signal) => {
-            await client.location.reload({ signal });
-            await refresh(signal);
-            signal.throwIfAborted();
-            setNotice("I reloaded the server configuration.");
-          });
-        }}
-      />
-      <Button
-        title="Open project configuration"
-        busy={busy}
-        onPress={() => {
-          void run(async (signal) => {
-            const path = `${directory.replace(/[\\/]+$/u, "")}/opencode.jsonc`;
-            try {
-              const source = new TextDecoder().decode(
-                await client.file.read(
-                  { location: { directory }, path },
-                  { signal }
-                )
-              );
+      <View style={styles.groupPanel}>
+        <ConfigActionRow
+          action="reload"
+          activeAction={activeAction}
+          busy={busy}
+          showDivider={false}
+          title="Reload server configuration"
+          onPress={() => {
+            void run("reload", async (signal) => {
+              await client.location.reload({ signal });
+              await refresh(signal);
               signal.throwIfAborted();
-              setEditing({ original: source, path });
-              setText(source);
-            } catch (error_) {
-              if (!isFileNotFoundError(error_)) {
-                throw error_;
+              setNotice("I reloaded the server configuration.");
+            });
+          }}
+        />
+        <ConfigActionRow
+          action="open-project"
+          activeAction={activeAction}
+          busy={busy}
+          showDivider
+          title="Open project configuration"
+          onPress={() => {
+            void run("open-project", async (signal) => {
+              const path = `${directory.replace(/[\\/]+$/u, "")}/opencode.jsonc`;
+              try {
+                const source = new TextDecoder().decode(
+                  await client.file.read(
+                    { location: { directory }, path },
+                    { signal }
+                  )
+                );
+                signal.throwIfAborted();
+                setEditing({ original: source, path });
+                setText(source);
+              } catch (error_) {
+                if (!isFileNotFoundError(error_)) {
+                  throw error_;
+                }
+                signal.throwIfAborted();
+                setEditing({ original: null, path });
+                setText(
+                  '{\n  "$schema": "https://opencode.ai/config.json"\n}\n'
+                );
               }
-              signal.throwIfAborted();
-              setEditing({ original: null, path });
-              setText('{\n  "$schema": "https://opencode.ai/config.json"\n}\n');
-            }
-          });
-        }}
-      />
+            });
+          }}
+        />
+      </View>
       {data?.entries.map((entry, index) => (
         <Card key={index}>
           <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
@@ -119,16 +198,16 @@ export const Configuration = ({
           </BodyText>
           {entry.type === "document" && (
             <>
-              <Disclosure title="Read effective values">
+              <Disclosure title="Read effective values" variant="embedded">
                 <JsonView value={entry.info} />
               </Disclosure>
               {entry.path && (
                 <Button
                   title="Edit source file"
-                  compact
-                  busy={busy}
+                  busy={activeAction === `edit:${entry.path}`}
+                  disabled={busy}
                   onPress={() => {
-                    void run(async (signal) => {
+                    void run(`edit:${entry.path}`, async (signal) => {
                       if (!entry.path) {
                         return;
                       }
@@ -155,9 +234,10 @@ export const Configuration = ({
         </BodyText>
         <Button
           title="Use system default"
-          busy={busy}
+          busy={activeAction === "shell:default"}
+          disabled={busy}
           onPress={() => {
-            void run(async (signal) => {
+            void run("shell:default", async (signal) => {
               await client.experimental.config.update(
                 { shell: null },
                 { signal }
@@ -172,10 +252,10 @@ export const Configuration = ({
           <Button
             key={shell.path}
             title={`${shell.name} · ${shell.path}`}
-            disabled={!shell.acceptable}
-            busy={busy}
+            disabled={busy || !shell.acceptable}
+            busy={activeAction === `shell:${shell.path}`}
             onPress={() => {
-              void run(async (signal) => {
+              void run(`shell:${shell.path}`, async (signal) => {
                 await client.experimental.config.update(
                   { shell: shell.path },
                   { signal }
@@ -229,11 +309,11 @@ export const Configuration = ({
         />
         <Button
           title="Save and reload"
-          busy={busy}
+          busy={activeAction === "save"}
           variant="primary"
-          disabled={text === editing?.original}
+          disabled={busy || text === editing?.original}
           onPress={() => {
-            void run(async (signal) => {
+            void run("save", async (signal) => {
               if (!editing) {
                 return;
               }
