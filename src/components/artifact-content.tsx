@@ -361,7 +361,7 @@ const Artifact = ({ content, client, directory, thumbnail }: Props) => {
           </Pressable>
         ) : (
           <View style={styles.placeholder}>
-            <BodyText muted accessibilityRole="status">
+            <BodyText muted accessibilityLiveRegion="polite">
               {busy ? "Loading image…" : "Image unavailable"}
             </BodyText>
           </View>
