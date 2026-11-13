@@ -201,8 +201,7 @@ const TerminalSession = ({
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
-  const connectedRevision = useRef(revision);
+  const stopConnection = useRef<(() => void) | null>(null);
   const [size, setSize] = useState({ cols: 80, rows: 24 });
   const [controller, setController] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -348,11 +347,7 @@ const TerminalSession = ({
     return () => clearTimeout(timer);
   }, [ready, rendererBroken, suspended]);
 
-  useEffect(() => {
-    if (!ready || !active || suspended) {
-      return;
-    }
-    connectedRevision.current = revision;
+  const startConnection = useCallback(() => {
     let disposed = false;
     let retries = 0;
     let exited = false;
@@ -668,18 +663,18 @@ const TerminalSession = ({
         ws.close();
       }
     };
-  }, [
-    client,
-    connection.url,
-    directory,
-    terminal.id,
-    mode,
-    attachmentID,
-    ready,
-    active,
-    revision,
-    suspended,
-  ]);
+  }, [client, connection.url, directory, terminal.id, mode, attachmentID]);
+
+  useEffect(() => {
+    if (!ready || !active || suspended) {
+      return;
+    }
+    stopConnection.current = startConnection();
+    return () => {
+      stopConnection.current?.();
+      stopConnection.current = null;
+    };
+  }, [startConnection, ready, active, suspended]);
 
   useEffect(() => {
     if (status !== "connected" || suspended) {
@@ -801,8 +796,9 @@ const TerminalSession = ({
       rendererGeneration.current += 1;
       setRendererEpoch((value) => value + 1);
       setRendererBroken(false);
-    } else {
-      setRevision((value) => value + 1);
+    } else if (stopConnection.current) {
+      stopConnection.current();
+      stopConnection.current = startConnection();
     }
     setError(null);
   };
