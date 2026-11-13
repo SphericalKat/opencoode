@@ -22,6 +22,8 @@ import {
 import type { TextStyle } from "react-native";
 
 import { copyText } from "../lib/clipboard";
+import { MessageActionsContext } from "../lib/message-actions";
+import { splitReveal, withAlpha } from "../lib/stream-reveal";
 import "prismjs/components/prism-clike";
 import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-typescript";
@@ -42,10 +44,11 @@ import "prismjs/components/prism-yaml";
 import "prismjs/components/prism-css";
 import "prismjs/components/prism-markup";
 
-import { MessageActionsContext } from "../lib/message-actions";
+import type { RevealChunk } from "../lib/stream-reveal";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { Button, mono, sans } from "./ui";
+import { useStreamReveal } from "./use-stream-reveal";
 
 const parser = new MarkdownIt({
   breaks: true,
@@ -231,6 +234,85 @@ const tree = (tokens: Token[]): Node[] => {
   return root;
 };
 
+interface Span {
+  start: number;
+  end: number;
+}
+
+// Offsets count rendered characters, not markdown source, so a reveal chunk
+// lines up with the text the user sees.
+const measure = (
+  nodes: Node[],
+  spans: Map<Token, Span>,
+  start: number
+): number => {
+  let offset = start;
+  for (const { token, children } of nodes) {
+    const nodeStart = offset;
+    if (children.length) {
+      offset = measure(children, spans, offset);
+    } else if (token.type === "softbreak" || token.type === "hardbreak") {
+      offset += 1;
+    } else if (token.type !== "inline") {
+      offset += token.content.length;
+    }
+    spans.set(token, { end: offset, start: nodeStart });
+  }
+  return offset;
+};
+
+const measureNodes = (nodes: Node[]) => {
+  const spans = new Map<Token, Span>();
+  return { length: measure(nodes, spans, 0), spans };
+};
+
+interface Reveal {
+  chunks: RevealChunk[];
+  color: string;
+  from: number;
+  now: number;
+  spans: Map<Token, Span>;
+}
+
+const unrevealedTypes = new Set(["code_block", "fence", "table_open"]);
+
+const revealFor = (node: Node, reveal?: Reveal): Reveal | undefined =>
+  reveal &&
+  !unrevealedTypes.has(node.token.type) &&
+  (reveal.spans.get(node.token)?.end ?? 0) > reveal.from
+    ? reveal
+    : undefined;
+
+// Nested Text has no reliable per-span opacity on native, so a fading piece
+// takes its inherited color with alpha instead.
+const revealText = (
+  text: string,
+  token: Token,
+  selectable: boolean,
+  reveal?: Reveal
+): React.ReactNode => {
+  const start = reveal?.spans.get(token)?.start;
+  if (!(reveal && text) || start === undefined) {
+    return text;
+  }
+  if (start + text.length <= reveal.from) {
+    return text;
+  }
+  return splitReveal(text, start, reveal.chunks, reveal.now).map(
+    (piece, index) => {
+      const color =
+        piece.opacity < 1 ? withAlpha(reveal.color, piece.opacity) : undefined;
+      return color ? (
+        <Text key={index} selectable={selectable} style={{ color }}>
+          {piece.text}
+        </Text>
+      ) : (
+        piece.text
+      );
+    }
+  );
+};
+
 const MAX_CONTROL_CODE = 0x20;
 const DELETE_CODE = 0x7f;
 
@@ -290,26 +372,32 @@ const inlineStyleName = (
 };
 
 const Inline = memo(
-  function Inline({ nodes }: { nodes: Node[] }) {
+  function Inline({ nodes, reveal }: { nodes: Node[]; reveal?: Reveal }) {
     const styles = useMarkdownStyles();
+    const { colors } = useTheme();
     const selectable = useContext(SelectionContext);
     const selectMessage = useContext(MessageActionsContext);
-    return nodes.map(({ token, children }, index) => {
+    return nodes.map((node, index) => {
+      const { token, children } = node;
       if (token.type === "text") {
-        return token.content;
+        return revealText(token.content, token, selectable, reveal);
       }
       if (token.type === "softbreak" || token.type === "hardbreak") {
         return "\n";
       }
+      const isLink = token.type === "link_open" || token.type === "image";
+      const uri = isLink
+        ? safeUrl(token.attrGet(token.type === "image" ? "src" : "href"))
+        : undefined;
+      const nodeReveal = revealFor(node, reveal);
+      const contentReveal =
+        uri && nodeReveal ? { ...nodeReveal, color: colors.blue } : nodeReveal;
       const content = children.length ? (
-        <Inline nodes={children} />
+        <Inline nodes={children} reveal={contentReveal} />
       ) : (
-        token.content
+        revealText(token.content, token, selectable, contentReveal)
       );
-      if (token.type === "link_open" || token.type === "image") {
-        const uri = safeUrl(
-          token.attrGet(token.type === "image" ? "src" : "href")
-        );
+      if (isLink) {
         const label =
           token.type === "image" ? (
             <>Image: {content || "Open image"}</>
@@ -347,7 +435,8 @@ const Inline = memo(
       );
     });
   },
-  (previous, next) => sameNodes(previous.nodes, next.nodes)
+  (previous, next) =>
+    previous.reveal === next.reveal && sameNodes(previous.nodes, next.nodes)
 );
 
 const supportedLanguages: Record<string, string> = {
@@ -636,6 +725,7 @@ const ListItemView = ({
   marker: string;
   markerWidth: number;
   muted?: boolean;
+  reveal?: Reveal;
   children: React.ReactNode;
 }) => {
   const styles = useMarkdownStyles();
@@ -664,17 +754,20 @@ const ListItem = memo(
     previous.marker === next.marker &&
     previous.markerWidth === next.markerWidth &&
     previous.muted === next.muted &&
+    previous.reveal === next.reveal &&
     sameNode(previous.node, next.node)
 );
 
 interface BlockProps {
   node: Node;
   muted?: boolean;
+  reveal?: Reveal;
 }
 
 const BlockView = ({
   node,
   muted,
+  reveal,
   Child,
 }: BlockProps & { Child: ComponentType<BlockProps> }) => {
   const styles = useMarkdownStyles();
@@ -682,12 +775,19 @@ const BlockView = ({
   const { token, children } = node;
   const prose = [styles.text, muted && styles.muted];
   const renderBlocks = (items: Node[]) =>
-    items.map((item, index) => <Child key={index} node={item} muted={muted} />);
+    items.map((item, index) => (
+      <Child
+        key={index}
+        node={item}
+        muted={muted}
+        reveal={revealFor(item, reveal)}
+      />
+    ));
   switch (token.type) {
     case "inline": {
       return (
         <Text selectable={selectable} style={prose}>
-          <Inline nodes={children} />
+          <Inline nodes={children} reveal={reveal} />
         </Text>
       );
     }
@@ -712,7 +812,10 @@ const BlockView = ({
             },
           ]}
         >
-          <Inline nodes={children.flatMap((child) => child.children)} />
+          <Inline
+            nodes={children.flatMap((child) => child.children)}
+            reveal={reveal}
+          />
         </Text>
       );
     }
@@ -748,6 +851,7 @@ const BlockView = ({
               }
               markerWidth={markerWidth}
               muted={muted}
+              reveal={revealFor(item, reveal)}
             >
               {renderBlocks(item.children)}
             </ListItem>
@@ -778,26 +882,48 @@ const BlockView = ({
 };
 
 const Block: NamedExoticComponent<BlockProps> = memo(
-  function Block({ node, muted }: BlockProps) {
-    return <BlockView node={node} muted={muted} Child={Block} />;
+  function Block({ node, muted, reveal }: BlockProps) {
+    return (
+      <BlockView node={node} muted={muted} reveal={reveal} Child={Block} />
+    );
   },
   (previous, next) =>
-    previous.muted === next.muted && sameNode(previous.node, next.node)
+    previous.muted === next.muted &&
+    previous.reveal === next.reveal &&
+    sameNode(previous.node, next.node)
 );
 
-const Blocks = ({ nodes, muted }: { nodes: Node[]; muted?: boolean }) =>
-  nodes.map((node, index) => <Block key={index} node={node} muted={muted} />);
+const Blocks = ({
+  nodes,
+  muted,
+  reveal,
+}: {
+  nodes: Node[];
+  muted?: boolean;
+  reveal?: Reveal;
+}) =>
+  nodes.map((node, index) => (
+    <Block
+      key={index}
+      node={node}
+      muted={muted}
+      reveal={revealFor(node, reveal)}
+    />
+  ));
 
 const MarkdownView = ({
   text,
   muted,
   selectable = true,
+  streaming = false,
 }: {
   text: string;
   muted?: boolean;
   selectable?: boolean;
+  streaming?: boolean;
 }) => {
   const styles = useMarkdownStyles();
+  const { colors } = useTheme();
   const nodes = useMemo(() => {
     try {
       return tree(parser.parse(text, {}));
@@ -805,11 +931,24 @@ const MarkdownView = ({
       return null;
     }
   }, [text]);
+  const measured = useMemo(() => nodes && measureNodes(nodes), [nodes]);
+  const { chunks, now } = useStreamReveal(
+    measured?.length ?? text.length,
+    streaming
+  );
+  const color = muted ? colors.muted : colors.text;
+  const reveal = useMemo<Reveal | undefined>(
+    () =>
+      measured && chunks.length
+        ? { chunks, color, from: chunks[0].start, now, spans: measured.spans }
+        : undefined,
+    [measured, chunks, color, now]
+  );
   return (
     <SelectionContext.Provider value={selectable}>
       <View style={styles.root}>
         {nodes ? (
-          <Blocks nodes={nodes} muted={muted} />
+          <Blocks nodes={nodes} muted={muted} reveal={reveal} />
         ) : (
           <Text
             selectable={selectable}
