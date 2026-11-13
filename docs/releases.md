@@ -93,6 +93,8 @@ The runner follows the [GitHub procedure to add a self-hosted runner](https://do
 
 The systemd unit starts at boot. The runner `.env` and `.path` files contain only `LANG` and the system `PATH`. The setup actions install Java, the Android SDK, and Node.js for each job.
 
+On a self-hosted runner, Gradle uses one worker for each CPU thread. On GitHub runners, Gradle keeps the limit of two workers.
+
 ### Manage the runner
 
 Run these commands in `~/actions-runner`:
