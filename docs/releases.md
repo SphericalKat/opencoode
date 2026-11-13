@@ -6,7 +6,7 @@ The release configuration follows [Rush Hour](https://github.com/SphericalKat/ru
 
 After the release PR merges, the workflow creates a version tag and a GitHub release. The same workflow then calls the artifact workflow directly. This avoids the GitHub restriction on new workflow events from `GITHUB_TOKEN`. Native builds run on GitHub runners. They do not use this computer or EAS credits. The workflows contain no test jobs and do not submit apps to stores.
 
-Both native jobs use `pnpm/setup@v3.1.2` to install Node.js 26 and the pnpm version from `package.json`. The action caches the pnpm store through `pnpm-lock.yaml`. The jobs use `pnpm install --frozen-lockfile` and `pnpm exec expo prebuild`. Dependency changes require an updated lockfile before the release.
+The Android job uses `pnpm/setup@v3.1.2` to install Node.js 26 and the pnpm version from `package.json`. The action caches the pnpm store through `pnpm-lock.yaml`. The job uses `pnpm install --frozen-lockfile` and `pnpm exec expo prebuild`. Dependency changes require an updated lockfile before the release.
 
 | Asset | Purpose | Requirement |
 | --- | --- | --- |
@@ -15,10 +15,7 @@ Both native jobs use `pnpm/setup@v3.1.2` to install Node.js 26 and the pnpm vers
 | `opencoode-vX.Y.Z-x86_64.apk` | Install on 64-bit Intel devices or emulators | All four Android signing secrets |
 | `opencoode-vX.Y.Z-x86.apk` | Install on 32-bit Intel devices or emulators | All four Android signing secrets |
 | `opencoode-vX.Y.Z.aab` | Upload through Google Play Console | All four Android signing secrets |
-| `opencoode-vX.Y.Z-ios-simulator.tar.gz` | Install in iOS Simulator or SimSlim | No Apple credentials |
 | `SHA256SUMS-*.txt` | Verify downloaded files | The related build succeeds |
-
-The iOS archive cannot run on a physical iPhone. Physical iOS distribution requires an Apple Developer account and a signed device build. The existing EAS `production` profile supports that separate path after account setup.
 
 Android artifacts use the supplied release key. The workflow never publishes the Expo debug key. The CI Gradle script creates one APK per ABI and disables the universal APK. The APKs store compressed native libraries for a smaller download. The AAB stores uncompressed native libraries, because Google Play compresses its downloads. The workflow checks the signing certificate of each APK before upload. All four APKs retain the same app version and signing key for normal updates. The AAB retains all four ABIs. Google Play selects the libraries for each device. The Expo configuration enables R8 and resource shrinking for release builds. The workflow records artifact sizes in its summary. See the [APK size analysis](android-size.md) for the baseline. If a signing secret is absent, the workflow skips Android and records the reason in its summary. I configured all four Android signing secrets during the initial release setup. I created a separate RSA 2048-bit key for Opencoode with 30-year validity. I did not reuse another app's key or configure an Expo account.
 
@@ -63,21 +60,9 @@ Native versions use `major * 10000 + minor * 100 + patch` for Android and `X.Y.Z
 1. Open **Actions → Release artifacts**.
 2. Select **Run workflow**.
 3. Enter the existing release tag.
-4. Select `android`, `ios`, or `all`.
-5. Start the workflow.
+4. Start the workflow.
 
 The workflow replaces assets with the same filename after a successful rebuild. The workflow does not create another release or change its notes.
-
-## Install the iOS simulator archive
-
-1. Extract the `.tar.gz` archive.
-2. Start one simulator through SimSlim.
-3. Install the app.
-
-```sh
-xcrun simctl install booted Opencoode.app
-xcrun simctl launch booted dev.opencoode.mobile
-```
 
 ## Setup evidence
 

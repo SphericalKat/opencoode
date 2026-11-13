@@ -87,7 +87,7 @@ Use `pnpm terminal:bundle` after an xterm dependency update. The committed termi
 
 ## Native builds
 
-GitHub release workflows create version PRs and build artifacts after release merges into `develop`. Android releases include signed APK and AAB files. iOS releases include a Simulator archive. The builds use GitHub runners and do not consume local resources or EAS credits. Read the [release procedure](docs/releases.md) for signing backups, release steps, and artifact retries.
+GitHub release workflows create version PRs and build artifacts after release merges into `develop`. Android releases include signed APK and AAB files. The builds use GitHub runners and do not consume local resources or EAS credits. Read the [release procedure](docs/releases.md) for signing backups, release steps, and artifact retries.
 
 EAS profiles support an internal Android APK, an iOS simulator build, and production builds. EAS requires your Expo account. Device distribution requires platform credentials.
 
