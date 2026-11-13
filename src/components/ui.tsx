@@ -343,8 +343,13 @@ export const Button = ({
       }}
       aria-pressed={selected}
       disabled={disabled || busy}
+      hitSlop={compact ? (touchTarget - 32) / 2 : undefined}
       onPress={onPress}
-      style={[styles.buttonTarget, (disabled || busy) && { opacity: 0.55 }]}
+      style={[
+        styles.buttonTarget,
+        compact && { minHeight: 32, minWidth: 32 },
+        (disabled || busy) && { opacity: 0.55 },
+      ]}
     >
       {({ pressed }) => (
         <PressFeedback

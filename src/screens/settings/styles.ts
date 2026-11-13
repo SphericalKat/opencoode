@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 
-import { sans } from "../../components/ui";
+import { sans, touchTarget } from "../../components/ui";
 import { pageInset } from "../../lib/layout";
 import type { ThemeColors } from "../../lib/theme";
 
@@ -43,6 +43,20 @@ export const createStyles = (colors: ThemeColors) =>
       fontSize: 14,
       fontWeight: "500",
       lineHeight: 21,
+    },
+    card: { gap: 16, padding: 16, paddingHorizontal: 16 },
+    cardActions: { minHeight: touchTarget },
+    cardHeader: {
+      flexWrap: "nowrap",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    cardText: { flex: 1, gap: 4, minWidth: 0 },
+    cardTitle: {
+      fontFamily: sans,
+      fontSize: 17,
+      fontWeight: "600",
+      lineHeight: 24,
     },
     content: { flex: 1, flexDirection: "row", minHeight: 0 },
     currentSection: { backgroundColor: colors.selected },

@@ -92,10 +92,10 @@ export const Accounts = ({
         <BodyText style={styles.sectionLabel}>SAVED ACCOUNTS</BodyText>
       )}
       {data?.credentials.map((item) => (
-        <Card key={item.id}>
-          <Row style={{ justifyContent: "space-between" }}>
-            <View style={{ flex: 1 }}>
-              <BodyText style={styles.name}>
+        <Card key={item.id} style={styles.card}>
+          <Row style={styles.cardHeader}>
+            <View style={styles.cardText}>
+              <BodyText style={styles.cardTitle}>
                 {item.label || item.integrationID}
               </BodyText>
               <BodyText muted>
@@ -117,10 +117,10 @@ export const Accounts = ({
       ))}
       <BodyText style={styles.sectionLabel}>CONNECT AN ACCOUNT</BodyText>
       {integrations.slice(0, limit).map((item) => (
-        <Card key={item.id}>
-          <Row style={{ justifyContent: "space-between" }}>
-            <View style={{ flex: 1 }}>
-              <BodyText style={styles.name}>{item.name}</BodyText>
+        <Card key={item.id} style={styles.card}>
+          <Row style={styles.cardHeader}>
+            <View style={styles.cardText}>
+              <BodyText style={styles.cardTitle}>{item.name}</BodyText>
               <BodyText muted>
                 {item.connections.length
                   ? `${item.connections.length} connection${item.connections.length === 1 ? "" : "s"}`

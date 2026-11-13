@@ -28,10 +28,10 @@ const ModelCard = ({
 }) => {
   const styles = useThemedStyles(createStyles);
   return (
-    <Card>
-      <Row style={{ justifyContent: "space-between" }}>
-        <View style={{ flex: 1 }}>
-          <BodyText style={styles.name}>{item.name}</BodyText>
+    <Card style={styles.card}>
+      <Row style={styles.cardHeader}>
+        <View style={styles.cardText}>
+          <BodyText style={styles.cardTitle}>{item.name}</BodyText>
           <BodyText muted>
             {item.providerID} · {item.enabled ? "Available" : "Not connected"}
           </BodyText>
