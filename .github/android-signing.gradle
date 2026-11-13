@@ -2,12 +2,14 @@ gradle.beforeProject { project ->
     project.plugins.withId('com.android.application') {
         project.extensions.getByName('androidComponents').finalizeDsl { android ->
             // AGP refuses to bundle while ABI splits are on, so only the
-            // GitHub APK build enables them.
+            // GitHub APK build enables them. GitHub downloads also get no
+            // store-side compression, unlike Google Play AAB deliveries.
             if (project.findProperty('opencoodeGithubApks') == 'true') {
                 android.splits.abi.enable = true
                 android.splits.abi.reset()
                 android.splits.abi.include('armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64')
                 android.splits.abi.universalApk = false
+                android.packaging.jniLibs.useLegacyPackaging = true
             }
 
             def signing = android.signingConfigs.maybeCreate('ciRelease')
