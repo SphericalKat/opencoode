@@ -329,7 +329,9 @@ const AssistantActivityPartView = ({
   const actions = useContext(MessageActionsContext);
   const { open, toggle } = useDisclosure(detailsKey);
   if (part.type === "text") {
-    return <Markdown text={part.text} selectable={selectable} />;
+    return (
+      <Markdown text={part.text} selectable={selectable} streaming={live} />
+    );
   }
   const waiting =
     activityKind === "approval" ||
@@ -528,15 +530,19 @@ const AssistantTurnView = ({
   const active = turn.messages.some((message) => message.id === liveMessageID);
   const isLive = (entry: Entry) => {
     const { part } = entry;
+    if (!(active && part)) {
+      return false;
+    }
+    if (part.type === "tool") {
+      return (
+        part.state.status === "running" || part.state.status === "streaming"
+      );
+    }
+    const isLastPart =
+      entry.message.id === liveMessageID &&
+      entry.index === entry.message.content.length - 1;
     return (
-      active &&
-      !!part &&
-      (part.type === "tool"
-        ? part.state.status === "running" || part.state.status === "streaming"
-        : part.type === "reasoning" &&
-          entry.message.id === liveMessageID &&
-          entry.index === entry.message.content.length - 1 &&
-          part.time?.completed === undefined)
+      isLastPart && (part.type === "text" || part.time?.completed === undefined)
     );
   };
   const firstLive = entries.findIndex(isLive);
