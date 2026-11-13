@@ -30,6 +30,13 @@ interface Section {
   diff?: boolean;
 }
 const textPageSize = 24_000;
+const inset = 14;
+const copyIconSize = 14;
+const copyHeight = 36;
+const copyHitSlop = {
+  bottom: (touchTarget - copyHeight) / 2,
+  top: (touchTarget - copyHeight) / 2,
+};
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
@@ -41,7 +48,7 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
       lineHeight: 20,
     },
-    codeContent: { gap: 8, padding: 12, paddingTop: 8 },
+    codeContent: { gap: 8, padding: inset, paddingTop: 8 },
     codeRow: { alignItems: "flex-start", flexDirection: "row" },
     copyAction: { flexShrink: 0, maxWidth: 160 },
     copyError: {
@@ -50,10 +57,13 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 17,
       padding: 8,
     },
+    // The icon sits on the target's trailing edge so it lines up with the
+    // text inset while the rest of the target stays tappable.
     copyTarget: {
-      alignItems: "center",
+      alignItems: "flex-end",
+      height: copyHeight,
       justifyContent: "center",
-      minHeight: touchTarget,
+      paddingRight: inset,
       width: touchTarget,
     },
     divider: { borderTopColor: colors.border, borderTopWidth: 1 },
@@ -67,14 +77,15 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       overflow: "hidden",
     },
-    pending: { fontSize: 13, lineHeight: 19, padding: 12 },
+    labeledContent: { paddingTop: 0 },
+    pending: { fontSize: 13, lineHeight: 19, padding: inset },
     removed: { backgroundColor: colors.dangerBackground, color: colors.danger },
     sectionHeader: {
       alignItems: "center",
       flexDirection: "row",
       justifyContent: "space-between",
-      minHeight: touchTarget,
-      paddingLeft: 12,
+      paddingLeft: inset,
+      paddingTop: 4,
     },
     sectionLabel: { fontSize: 12, lineHeight: 17 },
     viewport: { flex: 1, maxHeight: 200 },
@@ -289,12 +300,19 @@ const CopyAction = ({ value, label }: { value: string; label: string }) => {
             .catch((error_) => setError(errorMessage(error_)));
         }}
         onLongPress={(event) => event.stopPropagation()}
+        hitSlop={copyHitSlop}
         style={({ pressed }) => [
           styles.copyTarget,
           pressed && { opacity: 0.6 },
         ]}
       >
-        <Svg width={14} height={14} viewBox="0 0 16 16" fill="none" aria-hidden>
+        <Svg
+          width={copyIconSize}
+          height={copyIconSize}
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden
+        >
           {copied ? (
             <Path
               d="m3 8 3 3 7-7"
@@ -384,6 +402,7 @@ const CodeSection = ({
           style={styles.viewport}
           contentContainerStyle={[
             styles.codeContent,
+            !!section.label && styles.labeledContent,
             disclosed && styles.disclosedContent,
           ]}
           keyboardShouldPersistTaps="handled"

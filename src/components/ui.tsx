@@ -123,6 +123,7 @@ const createStyles = (colors: ThemeColors) => {
       minHeight: touchTarget,
       padding: 14,
     },
+    disclosureHeaderWithAction: { paddingRight: 0 },
     disclosureHeaderRow: {
       alignItems: "center",
       flexDirection: "row",
@@ -886,6 +887,7 @@ export const Disclosure = ({
           style={({ pressed }) => [
             styles.disclosureHeader,
             variant === "embedded" && styles.disclosureEmbeddedHeader,
+            !!headerAction && styles.disclosureHeaderWithAction,
             pressed && styles.ghostPressed,
           ]}
         >

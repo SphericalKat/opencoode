@@ -51,13 +51,21 @@ export const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       overflow: "hidden",
     },
+    codeHeader: {
+      justifyContent: "space-between",
+      paddingLeft: 12,
+      // The ghost Copy button has its own 10pt padding, so its label ends
+      // 12pt from the edge, level with the language label.
+      paddingRight: 2,
+      paddingVertical: 4,
+    },
     codeText: {
       color: colors.text,
       fontFamily: mono,
       fontSize: 13,
       lineHeight: 20,
       padding: 12,
-      paddingTop: 4,
+      paddingTop: 0,
     },
     composer: {
       backgroundColor: colors.panel,
