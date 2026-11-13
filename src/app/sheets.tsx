@@ -9,13 +9,12 @@ import type {
 import { ProjectDirectoryBrowser } from "../components/project-directory-browser";
 import { Sheet } from "../components/ui";
 import type { Connection } from "../lib/client";
+import { useSheetVisibility } from "../lib/sheet-visibility";
 import type { ServerClient } from "./types";
 
 interface BetaSheetsProps {
   active: Connection | null;
   currentTabID: string | undefined;
-  moreOpen: boolean;
-  navigationOpen: boolean;
   onCloseMore: () => void;
   onCloseNavigation: () => void;
   onCloseTab: (id: string) => void;
@@ -37,8 +36,6 @@ interface BetaSheetsProps {
 export const BetaSheets = ({
   active,
   currentTabID,
-  moreOpen,
-  navigationOpen,
   onCloseMore,
   onCloseNavigation,
   onCloseTab,
@@ -55,36 +52,40 @@ export const BetaSheets = ({
   onView,
   openTabs,
   selectedPane,
-}: BetaSheetsProps) => (
-  <>
-    {active && (
-      <BetaTabsSheet
-        visible={navigationOpen}
-        tabs={openTabs}
-        selectedID={currentTabID}
-        serverLabel={active.name}
-        onServer={onServer}
-        onClose={onCloseNavigation}
-        onDismiss={onDismissNavigation}
-        onSelect={onSelect}
-        onCloseTab={onCloseTab}
-        onNew={onNew}
-        onHome={onHome}
-        onSettings={onSettings}
-        onHelp={onHelp}
+}: BetaSheetsProps) => {
+  const navigationOpen = useSheetVisibility((state) => state.navigationOpen);
+  const moreOpen = useSheetVisibility((state) => state.moreOpen);
+  return (
+    <>
+      {active && (
+        <BetaTabsSheet
+          visible={navigationOpen}
+          tabs={openTabs}
+          selectedID={currentTabID}
+          serverLabel={active.name}
+          onServer={onServer}
+          onClose={onCloseNavigation}
+          onDismiss={onDismissNavigation}
+          onSelect={onSelect}
+          onCloseTab={onCloseTab}
+          onNew={onNew}
+          onHome={onHome}
+          onSettings={onSettings}
+          onHelp={onHelp}
+        />
+      )}
+      <BetaMoreSheet
+        visible={moreOpen}
+        pane={selectedPane}
+        onClose={onCloseMore}
+        onDismiss={onDismissMore}
+        onView={onView}
+        onUsage={onUsage}
+        onDetails={onDetails}
       />
-    )}
-    <BetaMoreSheet
-      visible={moreOpen}
-      pane={selectedPane}
-      onClose={onCloseMore}
-      onDismiss={onDismissMore}
-      onView={onView}
-      onUsage={onUsage}
-      onDetails={onDetails}
-    />
-  </>
-);
+    </>
+  );
+};
 
 interface ServersSheetProps {
   active: Connection | null;

@@ -4,6 +4,7 @@ import { BackHandler } from "react-native";
 
 import type { SessionPane } from "../components/beta-navigation";
 import { errorMessage } from "../lib/client";
+import { useSheetVisibilityActions } from "../lib/sheet-visibility";
 import { attempt } from "./connection-utils";
 import type { ConfirmNavigation, ServerClient, Tab } from "./types";
 import type { MobileState } from "./use-app-state";
@@ -40,7 +41,6 @@ export const useSessionNavigation = (
     setCreatingSession,
     setDirectory,
     setError,
-    setNavigationOpen,
     setNewDirectory,
     setOpenTabs,
     setPendingLocation,
@@ -53,6 +53,7 @@ export const useSessionNavigation = (
     setWorkspaceSection,
     tab,
   } = model;
+  const { setNavigationOpen } = useSheetVisibilityActions();
   const { client, confirmNavigation, recordSessionInfo } = deps;
   const showBetaHome = useCallback(() => {
     selectionRef.current += 1;
