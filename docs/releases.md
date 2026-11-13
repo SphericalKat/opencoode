@@ -95,6 +95,8 @@ The systemd unit starts at boot. The runner `.env` and `.path` files contain onl
 
 On a self-hosted runner, Gradle uses one worker for each CPU thread. On GitHub runners, Gradle keeps the limit of two workers.
 
+On a self-hosted runner, the Android job does not read or write the GitHub Actions cache. Gradle uses `~/.gradle` and its local build cache. pnpm uses its local store. The runner runs as `sphericalkat`, so release builds share these directories with local builds.
+
 ### Manage the runner
 
 Run these commands in `~/actions-runner`:

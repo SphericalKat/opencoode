@@ -87,7 +87,8 @@ jobs:
       - uses: pnpm/setup@v3.2.0
         with:
           runtime: node@26
-          cache: true
+          # A self-hosted runner keeps its pnpm store and ~/.gradle on disk between jobs.
+          cache: ${{ runner.environment != 'self-hosted' }}
           install: false
       - uses: actions/setup-java@v6
         with:
@@ -97,13 +98,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
+          cache-disabled: ${{ runner.environment == 'self-hosted' }}
 
-      - name: Choose Gradle worker count
+      - name: Choose Gradle options
         run: |
           workers=2
+          build_cache=--no-build-cache
           if [[ "$RUNNER_ENVIRONMENT" == self-hosted ]]; then
             workers="$(nproc)"
+            build_cache=--build-cache
           fi
+          echo "GRADLE_BUILD_CACHE=$build_cache" >> "$GITHUB_ENV"
           echo "GRADLE_MAX_WORKERS=$workers" >> "$GITHUB_ENV"
 
       - name: Restore signing key
@@ -123,11 +128,11 @@ jobs:
 
       - name: Build signed per-ABI APKs
         working-directory: android
-        run: ./gradlew --no-daemon --max-workers="$GRADLE_MAX_WORKERS" --init-script ../.github/android-signing.gradle -PopencoodeGithubApks=true assembleRelease
+        run: ./gradlew --no-daemon --max-workers="$GRADLE_MAX_WORKERS" "$GRADLE_BUILD_CACHE" --init-script ../.github/android-signing.gradle -PopencoodeGithubApks=true assembleRelease
 
       - name: Build signed app bundle
         working-directory: android
-        run: ./gradlew --no-daemon --max-workers="$GRADLE_MAX_WORKERS" --init-script ../.github/android-signing.gradle bundleRelease
+        run: ./gradlew --no-daemon --max-workers="$GRADLE_MAX_WORKERS" "$GRADLE_BUILD_CACHE" --init-script ../.github/android-signing.gradle bundleRelease
 
       - name: Publish Android artifacts
         shell: bash
