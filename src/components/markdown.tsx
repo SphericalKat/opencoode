@@ -80,7 +80,11 @@ const createStyles = (colors: ThemeColors, beta: boolean) => ({
       flexDirection: "row",
       gap: 8,
       justifyContent: "space-between",
-      paddingHorizontal: 12,
+      paddingLeft: 12,
+      // The ghost Copy button has its own 10pt padding, so its label ends
+      // 12pt from the edge, level with the language label.
+      paddingRight: 2,
+      paddingVertical: 4,
     },
     codeText: {
       color: colors.text,
@@ -527,6 +531,9 @@ const CodeView = ({ code, language }: { code: string; language: string }) => {
 };
 
 const Code = memo(CodeView);
+// markdown-it ends fenced content with a newline, which renders as an empty
+// last line.
+const fenceTrailingNewline = /\n$/u;
 
 const tableTextAlign = (
   alignment: string | number | null
@@ -716,7 +723,7 @@ const BlockView = ({
     case "code_block": {
       return (
         <Code
-          code={token.content}
+          code={token.content.replace(fenceTrailingNewline, "")}
           language={token.info.trim().split(/\s+/u)[0]}
         />
       );

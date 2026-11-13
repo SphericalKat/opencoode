@@ -175,6 +175,10 @@ export const PanelLink = ({
   );
 };
 
+// Command output usually ends with a newline, which renders as an empty last
+// line.
+const trailingNewline = /\n$/u;
+
 export const CodeBlock = ({
   code,
   language,
@@ -190,7 +194,7 @@ export const CodeBlock = ({
   const [error, setError] = useState<string | null>(null);
   return (
     <View style={styles.code}>
-      <Row style={{ justifyContent: "space-between", paddingHorizontal: 12 }}>
+      <Row style={styles.codeHeader}>
         <BodyText muted style={{ fontSize: 12 }}>
           {language || "TEXT"}
         </BodyText>
@@ -223,7 +227,7 @@ export const CodeBlock = ({
           }
           style={styles.codeText}
         >
-          {code}
+          {code.replace(trailingNewline, "")}
         </Text>
       </ScrollView>
     </View>
