@@ -12,6 +12,10 @@ Use the default triage roles. Before categorizing or changing triage state, read
 
 Use a single context. Before exploring domain concepts or proposing changes, read `docs/agents/domain.md`.
 
+## UI design
+
+Before building or changing UI, read `DESIGN.md`.
+
 ## Commits and pull requests
 
 Use Conventional Commits for every agent-authored commit title. Prefer the same format for PR titles: `<type>(<scope>): <summary>`, with the scope optional.
