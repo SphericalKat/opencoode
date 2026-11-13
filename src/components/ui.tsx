@@ -126,6 +126,23 @@ const createStyles = (colors: ThemeColors) => {
       padding: 12,
     },
     fieldLabel: { fontSize: 14, fontWeight: "500", letterSpacing: 0 },
+    fieldInputContainer: { position: "relative" },
+    fieldSecureInput: {
+      minHeight: touchTarget + 2,
+      paddingRight: touchTarget + 4,
+    },
+    fieldVisibilityButton: {
+      alignItems: "center",
+      borderRadius: 7,
+      bottom: 1,
+      justifyContent: "center",
+      minHeight: touchTarget,
+      position: "absolute",
+      right: 1,
+      top: 1,
+      width: touchTarget,
+    },
+    fieldVisibilityDisabled: { opacity: 0.55 },
     fitInner: { flex: 0, flexShrink: 1 },
     fitScroll: { flex: 0, flexShrink: 1 },
     fitSheet: {
@@ -372,6 +389,36 @@ export const Field = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [focused, setFocused] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const canToggleVisibility = props.secureTextEntry && !props.multiline;
+  const input = (
+    <TextInput
+      accessibilityLabel={label ?? props.placeholder}
+      placeholderTextColor={colors.faint}
+      selectionColor={colors.focus}
+      autoCapitalize="none"
+      autoCorrect={false}
+      {...props}
+      secureTextEntry={
+        canToggleVisibility ? !passwordVisible : props.secureTextEntry
+      }
+      onFocus={(event) => {
+        setFocused(true);
+        props.onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        setFocused(false);
+        props.onBlur?.(event);
+      }}
+      style={[
+        styles.input,
+        props.multiline && { minHeight: 100, textAlignVertical: "top" },
+        focused && { borderColor: colors.focus },
+        style,
+        canToggleVisibility && styles.fieldSecureInput,
+      ]}
+    />
+  );
   return (
     <View style={[{ gap: 8 }, containerStyle]}>
       {label && (
@@ -379,28 +426,33 @@ export const Field = ({
           {label}
         </BodyText>
       )}
-      <TextInput
-        accessibilityLabel={label ?? props.placeholder}
-        placeholderTextColor={colors.faint}
-        selectionColor={colors.focus}
-        autoCapitalize="none"
-        autoCorrect={false}
-        {...props}
-        onFocus={(event) => {
-          setFocused(true);
-          props.onFocus?.(event);
-        }}
-        onBlur={(event) => {
-          setFocused(false);
-          props.onBlur?.(event);
-        }}
-        style={[
-          styles.input,
-          props.multiline && { minHeight: 100, textAlignVertical: "top" },
-          focused && { borderColor: colors.focus },
-          style,
-        ]}
-      />
+      {canToggleVisibility ? (
+        <View style={styles.fieldInputContainer}>
+          {input}
+          <Pressable
+            accessibilityLabel={`${passwordVisible ? "Hide" : "Show"} ${label ?? "password"}`}
+            accessibilityRole="button"
+            accessibilityState={{
+              disabled: props.editable === false,
+              selected: passwordVisible,
+            }}
+            disabled={props.editable === false}
+            onPress={() => setPasswordVisible((visible) => !visible)}
+            style={({ pressed }) => [
+              styles.fieldVisibilityButton,
+              pressed && styles.ghostPressed,
+              props.editable === false && styles.fieldVisibilityDisabled,
+            ]}
+          >
+            <ShellIcon
+              name={passwordVisible ? "eye-off" : "eye"}
+              color={colors.muted}
+            />
+          </Pressable>
+        </View>
+      ) : (
+        input
+      )}
     </View>
   );
 };
