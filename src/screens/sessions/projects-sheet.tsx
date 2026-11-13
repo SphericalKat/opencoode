@@ -46,7 +46,6 @@ const ProjectRow = ({
 };
 
 interface ProjectsSheetProps {
-  betaHome: boolean;
   onChooseFolder: (() => void) | undefined;
   onClose: () => void;
   onDismiss: () => void;
@@ -61,7 +60,6 @@ interface ProjectsSheetProps {
 }
 
 export const ProjectsSheet = ({
-  betaHome,
   onChooseFolder,
   onClose,
   onDismiss,
@@ -78,8 +76,8 @@ export const ProjectsSheet = ({
   return (
     <Sheet
       visible={visible}
-      fitContent={betaHome}
-      contentStyle={betaHome ? styles.projectSheetContent : undefined}
+      fitContent
+      contentStyle={styles.projectSheetContent}
       title="Projects"
       onClose={onClose}
       onDismiss={onDismiss}

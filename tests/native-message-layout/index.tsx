@@ -6,7 +6,6 @@ import { Text, View } from "react-native";
 
 import { Markdown } from "../../src/components/markdown";
 import { UserMessageBubble } from "../../src/components/user-message-bubble";
-import { BetaLayoutContext } from "../../src/lib/beta-layout";
 import { ThemeProvider } from "../../src/lib/theme";
 
 const text = `Initial set of feedback:
@@ -26,7 +25,6 @@ const Demo = () => {
     { id: "initial", target: true },
     ...fillers,
   ]);
-  const [beta, setBeta] = useState(true);
   const [width, setWidth] = useState(393);
   const list = useRef<FlashListRef<Item>>(null);
   const next = useRef<React.ComponentRef<typeof View>>(null);
@@ -39,10 +37,10 @@ const Demo = () => {
       setTimeout(resolve, ms);
       return promise;
     };
-    const measure = async (w: number, b: boolean, phase: string) => {
+    const measure = async (w: number, phase: string) => {
       console.log(
         "REPRO45_CASE",
-        JSON.stringify({ b, offset: offset.current, phase, w })
+        JSON.stringify({ offset: offset.current, phase, w })
       );
       (globalThis as ProbeGlobal).repro45Measure?.();
       if (phase === "attachment") {
@@ -61,44 +59,40 @@ const Demo = () => {
       );
       await delay(500);
     };
-    const runLayoutCase = async ([b, w]: [boolean, number]) => {
+    const runLayoutCase = async (w: number) => {
       setWidth(w);
-      setBeta(b);
-      setItems([{ id: `initial-${w}-${b}`, target: true }, ...fillers]);
+      setItems([{ id: `initial-${w}`, target: true }, ...fillers]);
       list.current?.scrollToOffset({ animated: false, offset: 0 });
       await delay(1200);
-      await measure(w, b, "initial");
+      await measure(w, "initial");
       setItems((previous) => [
         ...previous,
-        { id: `sent-${w}-${b}`, target: true },
+        { id: `sent-${w}`, target: true },
         { id: "following" },
       ]);
       await delay(700);
       list.current?.scrollToEnd({ animated: false });
       await delay(1200);
-      await measure(w, b, "send");
+      await measure(w, "send");
       list.current?.scrollToOffset({ animated: false, offset: 0 });
       await delay(1200);
       console.log(
         "REPRO45_AWAY",
-        JSON.stringify({ b, offset: offset.current, w })
+        JSON.stringify({ offset: offset.current, w })
       );
       list.current?.scrollToEnd({ animated: false });
       await delay(1200);
-      await measure(w, b, "scroll");
+      await measure(w, "scroll");
     };
     const runVariantCase = async (variant: "short" | "attachment") => {
       setWidth(393);
-      setBeta(true);
       setItems([{ id: variant, target: true, variant }, ...fillers]);
       list.current?.scrollToOffset({ animated: false, offset: 0 });
       await delay(1200);
-      await measure(393, true, variant);
+      await measure(393, variant);
     };
     // Each case must finish before the next one starts, so run them in order.
-    const runLayoutCases = async (
-      cases: [boolean, number][]
-    ): Promise<boolean> => {
+    const runLayoutCases = async (cases: number[]): Promise<boolean> => {
       const [current, ...rest] = cases;
       if (!current) {
         return true;
@@ -119,11 +113,8 @@ const Demo = () => {
       await runVariantCase(current);
       await runVariantCases(rest);
     };
-    const layoutCases = [true, false].flatMap((b) =>
-      [393, 360, 320].map((w): [boolean, number] => [b, w])
-    );
     (async () => {
-      if (!(await runLayoutCases(layoutCases))) {
+      if (!(await runLayoutCases([393, 360, 320]))) {
         return;
       }
       await runVariantCases(["short", "attachment"]);
@@ -133,62 +124,60 @@ const Demo = () => {
     };
   }, []);
   return (
-    <BetaLayoutContext.Provider value={beta}>
-      <ThemeProvider>
-        <View
-          style={{
-            backgroundColor: "#171717",
-            height: 700,
-            padding: 16,
-            width,
+    <ThemeProvider>
+      <View
+        style={{
+          backgroundColor: "#171717",
+          height: 700,
+          padding: 16,
+          width,
+        }}
+      >
+        <FlashList
+          ref={list}
+          onScroll={(event) => {
+            offset.current = event.nativeEvent.contentOffset.y;
           }}
-        >
-          <FlashList
-            ref={list}
-            onScroll={(event) => {
-              offset.current = event.nativeEvent.contentOffset.y;
-            }}
-            scrollEventThrottle={16}
-            data={items}
-            keyExtractor={(item) => item.id}
-            getItemType={(item) => (item.target ? "message" : "filler")}
-            renderItem={({ item, index }) =>
-              item.target ? (
-                <UserMessageBubble
-                  withAttachments={item.variant === "attachment"}
-                >
-                  <Markdown text={item.variant ? "A short message" : text} />
-                  {item.variant === "attachment" && (
-                    <View
-                      ref={attachment}
-                      style={{
-                        backgroundColor: "#555",
-                        height: 80,
-                        width: "100%",
-                      }}
-                    >
-                      <Text>Attached image</Text>
-                    </View>
-                  )}
-                </UserMessageBubble>
-              ) : (
-                <View
-                  ref={
-                    item.id === "following" ||
-                    (index === 1 && items.length === 36)
-                      ? next
-                      : undefined
-                  }
-                  style={{ height: 64, marginTop: 16 }}
-                >
-                  <Text>Following transcript item</Text>
-                </View>
-              )
-            }
-          />
-        </View>
-      </ThemeProvider>
-    </BetaLayoutContext.Provider>
+          scrollEventThrottle={16}
+          data={items}
+          keyExtractor={(item) => item.id}
+          getItemType={(item) => (item.target ? "message" : "filler")}
+          renderItem={({ item, index }) =>
+            item.target ? (
+              <UserMessageBubble
+                withAttachments={item.variant === "attachment"}
+              >
+                <Markdown text={item.variant ? "A short message" : text} />
+                {item.variant === "attachment" && (
+                  <View
+                    ref={attachment}
+                    style={{
+                      backgroundColor: "#555",
+                      height: 80,
+                      width: "100%",
+                    }}
+                  >
+                    <Text>Attached image</Text>
+                  </View>
+                )}
+              </UserMessageBubble>
+            ) : (
+              <View
+                ref={
+                  item.id === "following" ||
+                  (index === 1 && items.length === 36)
+                    ? next
+                    : undefined
+                }
+                style={{ height: 64, marginTop: 16 }}
+              >
+                <Text>Following transcript item</Text>
+              </View>
+            )
+          }
+        />
+      </View>
+    </ThemeProvider>
   );
 };
 registerRootComponent(Demo);

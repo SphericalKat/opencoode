@@ -10,7 +10,7 @@ import { Platform, Pressable, ScrollView, View } from "react-native";
 
 import { useMotionPreference } from "../../components/motion";
 import { ShellIcon } from "../../components/shell-icon";
-import { Heading, BodyText } from "../../components/ui";
+import { BodyText } from "../../components/ui";
 import type { Client } from "../../lib/client";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { NativeSettingsSection } from "./section-views";
@@ -49,30 +49,19 @@ export const SettingsIndex = ({
   onSelect,
   sections,
   selected,
-  wide,
   onManageServers,
   serverLabel,
 }: {
   onSelect: (section: Section) => void;
   sections: Section[];
   selected: Section | null;
-  wide: boolean;
   onManageServers?: () => void;
   serverLabel?: string;
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
-    <ScrollView
-      style={wide ? styles.sidebar : undefined}
-      contentContainerStyle={styles.index}
-    >
-      {wide && (
-        <View style={styles.indexHeader}>
-          <Heading>Settings</Heading>
-          <BodyText muted>Preferences, connections, and tools</BodyText>
-        </View>
-      )}
+    <ScrollView contentContainerStyle={styles.index}>
       {sectionGroups.map((group) => {
         const items = group.items.filter((item) => sections.includes(item));
         const manageServers = group.title === "Connections" && onManageServers;
@@ -118,7 +107,6 @@ export const SettingsIndex = ({
                   onPress={() => onSelect(item)}
                   style={({ pressed }) => [
                     styles.sectionRow,
-                    wide && selected === item && styles.currentSection,
                     pressed && { backgroundColor: colors.raised },
                   ]}
                 >
@@ -157,43 +145,16 @@ const renderBackButton = (label: string, onPress: () => void) => (
   <SettingsBackButton label={label} onPress={onPress} />
 );
 
-const renderMenuButton = (color: string, onPress: () => void) => (
-  <Pressable
-    accessibilityRole="button"
-    accessibilityLabel="Open navigation"
-    onPress={onPress}
-    style={{
-      alignItems: "center",
-      height: 44,
-      justifyContent: "center",
-      marginEnd: Platform.OS === "android" ? -16 : 0,
-      width: 44,
-    }}
-  >
-    <ShellIcon name="menu" color={color} />
-  </Pressable>
-);
-
 const indexScreenOptions = ({
   backLabel,
-  betaLayout,
-  color,
   onBack,
-  onOpenNavigation,
 }: {
   backLabel?: string;
-  betaLayout: boolean;
-  color: string;
   onBack?: () => void;
-  onOpenNavigation?: () => void;
 }) => ({
   headerLeft: onBack
     ? () => renderBackButton(backLabel || "Sessions", onBack)
     : undefined,
-  headerRight:
-    !betaLayout && onOpenNavigation
-      ? () => renderMenuButton(color, onOpenNavigation)
-      : undefined,
   title: "Settings",
 });
 
@@ -215,25 +176,21 @@ const sectionScreenOptions = ({
 export const SettingsNativeStack = ({
   availableSections,
   backLabel,
-  betaLayout,
   client,
   directory,
   modelCatalog,
   navigationRef,
   onBack,
-  onOpenNavigation,
   onReady,
   renderIndex,
 }: {
   availableSections: Section[];
   backLabel?: string;
-  betaLayout: boolean;
   client?: Client;
   directory: string;
   modelCatalog?: ModelCatalog;
   navigationRef: SettingsNavigationRef;
   onBack?: () => void;
-  onOpenNavigation?: () => void;
   onReady: () => void;
   renderIndex: () => React.ReactElement;
 }) => {
@@ -279,13 +236,7 @@ export const SettingsNativeStack = ({
       >
         <SettingsStack.Screen
           name="Index"
-          options={indexScreenOptions({
-            backLabel,
-            betaLayout,
-            color: colors.text,
-            onBack,
-            onOpenNavigation,
-          })}
+          options={indexScreenOptions({ backLabel, onBack })}
         >
           {renderIndex}
         </SettingsStack.Screen>

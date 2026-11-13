@@ -15,7 +15,6 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 import type { AgentActivity } from "../lib/activity";
-import { useBetaLayout } from "../lib/beta-layout";
 import type { Client } from "../lib/client";
 import {
   MessageActionsContext,
@@ -504,7 +503,6 @@ const AssistantTurnView = ({
   renderSource: SourceRenderer;
 }) => {
   const styles = useThemedStyles(createStyles);
-  const betaLayout = useBetaLayout();
   const entries = useMemo<Entry[]>(
     () =>
       turn.messages.flatMap((message) => [
@@ -599,7 +597,7 @@ const AssistantTurnView = ({
               {renderEntry(entry)}
             </React.Fragment>
           ))}
-      {betaLayout && !active && finalText && (
+      {!active && finalText && (
         <ResponseFooter
           text={turn.messages
             .flatMap((message) =>

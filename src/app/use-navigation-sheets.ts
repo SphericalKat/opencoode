@@ -9,7 +9,6 @@ interface UseNavigationSheetsDeps {
   client: ServerClient | null;
   resumeSheets: SheetCoordinator["resumeSheets"];
   suspendSheets: SheetCoordinator["suspendSheets"];
-  wide: boolean;
 }
 
 export const useNavigationSheets = (
@@ -32,7 +31,7 @@ export const useNavigationSheets = (
     setProjectsOpen,
     setServersOpen,
   } = model;
-  const { client, resumeSheets, suspendSheets, wide } = deps;
+  const { client, resumeSheets, suspendSheets } = deps;
   const showNavigationSheet = async (
     kind: "servers" | "projects",
     automatic = false
@@ -65,7 +64,7 @@ export const useNavigationSheets = (
         return;
       }
     }
-    if ((navigationOpen || navigationPresentedRef.current) && !wide) {
+    if (navigationOpen || navigationPresentedRef.current) {
       pendingNavigationSheetRef.current = {
         epoch: epochRef.current,
         kind,
@@ -120,7 +119,7 @@ export const useNavigationSheets = (
       resumeSheets();
     }
     pendingNavigationSheetRef.current = null;
-    navigationPresentedRef.current = !wide;
+    navigationPresentedRef.current = true;
     setNavigationOpen(true);
   };
 

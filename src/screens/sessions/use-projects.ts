@@ -22,40 +22,34 @@ const settleProjects = async (
 };
 
 interface ProjectsOptions {
-  betaHome: boolean;
   client: Client;
   projectScope: ProjectScope | undefined;
 }
 
-export const useProjects = ({
-  betaHome,
-  client,
-  projectScope,
-}: ProjectsOptions) => {
+export const useProjects = ({ client, projectScope }: ProjectsOptions) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectDirectory, setProjectDirectory] = useState<string | undefined>(
-    betaHome && projectScope ? projectScope.directory : undefined
+    projectScope?.directory
   );
   const [projectsOpen, setProjectsOpen] = useState(false);
-  const [projectsLoading, setProjectsLoading] = useState(betaHome);
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsError, setProjectsError] = useState<string>();
   const mounted = useMounted();
   const latestClient = useRef(client);
 
-  const [synced, setSynced] = useState({ betaHome, client, projectScope });
+  const [synced, setSynced] = useState({ client, projectScope });
   const clientChanged = synced.client !== client;
-  const modeChanged = synced.betaHome !== betaHome;
-  const scopeChanged = modeChanged || synced.projectScope !== projectScope;
+  const scopeChanged = synced.projectScope !== projectScope;
   if (clientChanged || scopeChanged) {
-    setSynced({ betaHome, client, projectScope });
-    if (clientChanged || modeChanged) {
+    setSynced({ client, projectScope });
+    if (clientChanged) {
       setProjectDirectory(undefined);
       setProjects([]);
       setProjectsOpen(false);
-      setProjectsLoading(betaHome);
+      setProjectsLoading(true);
       setProjectsError(undefined);
     }
-    if (scopeChanged && betaHome && projectScope) {
+    if (scopeChanged && projectScope) {
       setProjectDirectory(projectScope.directory);
     }
   }
@@ -93,15 +87,12 @@ export const useProjects = ({
   };
 
   useEffect(() => {
-    if (!betaHome) {
-      return;
-    }
     const controller = new AbortController();
     void settleProjects(client, controller.signal).then((result) =>
       applyProjects(result, controller.signal)
     );
     return () => controller.abort();
-  }, [betaHome, client, applyProjects]);
+  }, [client, applyProjects]);
 
   return {
     loadProjects,

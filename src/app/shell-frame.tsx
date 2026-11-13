@@ -50,13 +50,11 @@ const StatusBanners = ({
 
 interface ShellFrameProps {
   betaHome: boolean;
-  betaLayout: boolean;
   children: ReactNode;
   creatingSession: boolean;
   currentOpenTab: OpenSessionTab | undefined;
   directory: string;
   error: string | null;
-  navigation: ReactNode;
   onMore: () => void;
   onOpenNavigation: () => void;
   onProject: () => void;
@@ -68,18 +66,15 @@ interface ShellFrameProps {
   sessionID: string | null;
   showMessageSelection: boolean;
   tab: Tab;
-  wide: boolean;
 }
 
 export const ShellFrame = ({
   betaHome,
-  betaLayout,
   children,
   creatingSession,
   currentOpenTab,
   directory,
   error,
-  navigation,
   onMore,
   onOpenNavigation,
   onProject,
@@ -91,14 +86,12 @@ export const ShellFrame = ({
   sessionID,
   showMessageSelection,
   tab,
-  wide,
 }: ShellFrameProps) => {
   const styles = useThemedStyles(createStyles);
-  const framed = betaLayout && tab !== "settings" && !showMessageSelection;
+  const framed = tab !== "settings" && !showMessageSelection;
   const showSessionNavigation = framed && !betaHome && !!sessionID;
   return (
     <View style={styles.shell}>
-      {wide && <View style={styles.sidebar}>{navigation}</View>}
       <View style={styles.main}>
         {framed && (
           <BetaTabStrip

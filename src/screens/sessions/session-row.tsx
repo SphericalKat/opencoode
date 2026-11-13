@@ -1,12 +1,10 @@
 import type { SessionInfo } from "@opencode/client";
 import { Pressable, View } from "react-native";
 
-import { ShellIcon } from "../../components/shell-icon";
 import { BodyText } from "../../components/ui";
-import { useTheme, useThemedStyles } from "../../lib/theme";
+import { useThemedStyles } from "../../lib/theme";
 import {
   isUnread,
-  metadataLine,
   sessionDateGroup,
   sessionStatus,
   startsDateGroup,
@@ -16,7 +14,6 @@ import { createStyles } from "./styles";
 
 interface SessionMainProps {
   active: boolean;
-  betaHome: boolean;
   item: SessionInfo;
   name: string;
   onManage: (item: SessionInfo) => void;
@@ -57,7 +54,6 @@ const BetaMetadata = ({
 
 const SessionMain = ({
   active,
-  betaHome,
   item,
   name,
   onManage,
@@ -74,10 +70,8 @@ const SessionMain = ({
       accessibilityLabel={`Open ${item.title || "Untitled session"}`}
       accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`}
       onPress={() => onOpen(item.id)}
-      onLongPress={betaHome ? manage : undefined}
-      accessibilityActions={
-        betaHome ? [{ label: "Manage session", name: "manage" }] : undefined
-      }
+      onLongPress={manage}
+      accessibilityActions={[{ label: "Manage session", name: "manage" }]}
       onAccessibilityAction={(event) => {
         if (event.nativeEvent.actionName === "manage") {
           manage();
@@ -85,35 +79,27 @@ const SessionMain = ({
       }}
       style={({ pressed }) => [
         styles.sessionMain,
-        betaHome && styles.betaSessionMain,
+        styles.betaSessionMain,
         pressed && styles.sessionPressed,
       ]}
     >
-      {betaHome && (
-        <View style={styles.projectBadge}>
-          <BodyText style={styles.projectBadgeLabel}>
-            {name.charAt(0).toUpperCase()}
-          </BodyText>
-        </View>
-      )}
-      <View style={[styles.sessionText, betaHome && styles.betaSessionText]}>
+      <View style={styles.projectBadge}>
+        <BodyText style={styles.projectBadgeLabel}>
+          {name.charAt(0).toUpperCase()}
+        </BodyText>
+      </View>
+      <View style={[styles.sessionText, styles.betaSessionText]}>
         <BodyText
           numberOfLines={1}
-          style={[styles.sessionTitle, betaHome && styles.betaSessionTitle]}
+          style={[styles.sessionTitle, styles.betaSessionTitle]}
         >
           {item.title || "Untitled session"}
         </BodyText>
-        {betaHome ? (
-          <BetaMetadata
-            name={name}
-            unread={unread}
-            visibleStatus={visibleStatus}
-          />
-        ) : (
-          <BodyText muted numberOfLines={1} style={styles.metadata}>
-            {metadataLine(item, visibleStatus, unread)}
-          </BodyText>
-        )}
+        <BetaMetadata
+          name={name}
+          unread={unread}
+          visibleStatus={visibleStatus}
+        />
       </View>
     </Pressable>
   );
@@ -134,11 +120,9 @@ export const SessionRow = ({
   ...mainProps
 }: SessionRowProps) => {
   const styles = useThemedStyles(createStyles);
-  const { colors } = useTheme();
-  const { betaHome, item, onManage } = mainProps;
+  const { item } = mainProps;
   const group = sessionDateGroup(item.time.updated);
   const startsGroup = startsDateGroup({
-    betaHome,
     group,
     index,
     search,
@@ -153,7 +137,7 @@ export const SessionRow = ({
           style={[
             styles.dateGroup,
             index > 0 && styles.laterDateGroup,
-            betaHome && styles.betaDateGroup,
+            styles.betaDateGroup,
           ]}
         >
           {group}
@@ -162,24 +146,11 @@ export const SessionRow = ({
       <View
         style={[
           styles.session,
-          betaHome && styles.betaSession,
+          styles.betaSession,
           selected && styles.selected,
         ]}
       >
         <SessionMain {...mainProps} />
-        {!betaHome && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Manage ${item.title || "session"}`}
-            onPress={() => onManage(item)}
-            style={({ pressed }) => [
-              styles.rowAction,
-              pressed && styles.pressed,
-            ]}
-          >
-            <ShellIcon name="more" color={colors.faint} size={18} />
-          </Pressable>
-        )}
       </View>
     </View>
   );

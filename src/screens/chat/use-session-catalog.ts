@@ -5,7 +5,6 @@ import type { CoreClient, OpenCodeClient, Capabilities } from "./session-sync";
 import type { SessionState } from "./use-session-state";
 
 interface UseSessionCatalogOptions {
-  betaLayout: boolean;
   capabilities: Capabilities;
   client: CoreClient;
   foreground: boolean;
@@ -15,7 +14,6 @@ interface UseSessionCatalogOptions {
 }
 
 export const useSessionCatalog = ({
-  betaLayout,
   capabilities,
   client,
   foreground,
@@ -45,7 +43,7 @@ export const useSessionCatalog = ({
     const controller = new AbortController();
     const location = { directory: catalogRequest.directory };
     void Promise.allSettled([
-      betaLayout && opencodeClient
+      opencodeClient
         ? opencodeClient.provider
             .list({ location }, { signal: controller.signal })
             .then((value) => {
@@ -110,7 +108,6 @@ export const useSessionCatalog = ({
     catalogRequest,
     foreground,
     visible,
-    betaLayout,
     setModels,
     setProviders,
     setCatalogError,

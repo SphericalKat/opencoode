@@ -5,13 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  AccessibilityInfo,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-} from "react-native";
+import { AccessibilityInfo, Platform, StyleSheet } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 import Animated, {
   cancelAnimation,
@@ -24,16 +18,13 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import { SafeAreaProvider } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { scheduleOnRN } from "react-native-worklets";
 
 const easePress = cubicBezier(0.23, 1, 0.32, 1);
-const easeDrawer = Easing.bezier(0.32, 0.72, 0, 1);
 const easeContent = Easing.bezier(0.23, 1, 0.32, 1);
 
 const styles = StyleSheet.create({
-  drawerRoot: { flex: 1, flexDirection: "row" },
   indicator: { alignItems: "center", flexShrink: 0, justifyContent: "center" },
   pressContent: { alignItems: "center", justifyContent: "center" },
   screen: { flex: 1, minHeight: 0, minWidth: 0 },
@@ -54,13 +45,6 @@ const contentDuration = (
     return reduced ? 80 : 120;
   }
   return reduced ? 100 : 180;
-};
-
-const drawerDuration = (reduced: boolean, open: boolean): number => {
-  if (reduced) {
-    return 100;
-  }
-  return open ? 220 : 180;
 };
 
 export const useMotionPreference = () => {
@@ -412,149 +396,5 @@ export const WorkingIndicator = ({
         />
       </Svg>
     </Animated.View>
-  );
-};
-
-export const MotionDrawer = ({
-  visible,
-  width,
-  onClose,
-  onDismiss,
-  children,
-  panelStyle,
-  scrimColor = "#00000070",
-}: {
-  visible: boolean;
-  width: number;
-  onClose: () => void;
-  onDismiss?: () => void;
-  children: React.ReactNode;
-  panelStyle?: StyleProp<ViewStyle>;
-  scrimColor?: string;
-}) => {
-  const reduced = useMotionPreference();
-  const progress = useSharedValue(0);
-  const [presented, setPresented] = useState(visible);
-  const showing = useRef(false);
-  const requested = useRef(visible);
-  const revision = useRef(0);
-  const pendingDismiss = useRef(false);
-  const dismissRef = useRef(onDismiss);
-  if (visible && !presented) {
-    setPresented(true);
-  }
-  useLayoutEffect(() => {
-    requested.current = visible;
-    dismissRef.current = onDismiss;
-  });
-
-  const notifyDismissed = useCallback(() => {
-    if (!pendingDismiss.current || requested.current) {
-      return;
-    }
-    pendingDismiss.current = false;
-    dismissRef.current?.();
-  }, []);
-  const finishClose = useCallback((request: number) => {
-    if (request !== revision.current || requested.current) {
-      return;
-    }
-    showing.current = false;
-    pendingDismiss.current = true;
-    setPresented(false);
-  }, []);
-  const animate = useCallback(
-    (open: boolean) => {
-      revision.current += 1;
-      const request = revision.current;
-      progress.set(
-        withTiming(
-          open ? 1 : 0,
-          {
-            duration: drawerDuration(reduced, open),
-            easing: easeDrawer,
-            reduceMotion: ReduceMotion.Never,
-          },
-          (finished) => {
-            if (finished && !open) {
-              scheduleOnRN(finishClose, request);
-            }
-          }
-        )
-      );
-    },
-    [progress, reduced, finishClose]
-  );
-
-  useEffect(() => {
-    if (visible) {
-      pendingDismiss.current = false;
-      if (showing.current) {
-        animate(true);
-      }
-    } else if (presented) {
-      animate(false);
-    }
-  }, [visible, presented, animate]);
-  useEffect(() => {
-    if (presented || Platform.OS === "ios" || !pendingDismiss.current) {
-      return;
-    }
-    const frame = requestAnimationFrame(notifyDismissed);
-    return () => cancelAnimationFrame(frame);
-  }, [presented, notifyDismissed]);
-  useEffect(() => () => cancelAnimation(progress), [progress]);
-
-  const backdrop = useAnimatedStyle(() => ({ opacity: progress.get() }));
-  const panel = useAnimatedStyle(
-    () => ({
-      opacity: reduced ? progress.get() : 1,
-      transform: [{ translateX: reduced ? 0 : -width * (1 - progress.get()) }],
-    }),
-    Platform.OS === "web" ? [reduced, width] : undefined
-  );
-  return (
-    <Modal
-      visible={presented}
-      transparent
-      animationType="none"
-      supportedOrientations={[
-        "portrait",
-        "portrait-upside-down",
-        "landscape-left",
-        "landscape-right",
-      ]}
-      onRequestClose={onClose}
-      onDismiss={notifyDismissed}
-      onShow={() => {
-        showing.current = true;
-        animate(requested.current);
-      }}
-    >
-      <SafeAreaProvider>
-        <Animated.View style={styles.drawerRoot}>
-          <Animated.View
-            style={[
-              StyleSheet.absoluteFill,
-              { backgroundColor: scrimColor },
-              backdrop,
-            ]}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close navigation"
-              onPress={onClose}
-              style={StyleSheet.absoluteFill}
-            />
-          </Animated.View>
-          <Animated.View
-            accessibilityViewIsModal
-            style={[{ height: "100%", width }, panelStyle, panel]}
-          >
-            {children}
-          </Animated.View>
-        </Animated.View>
-      </SafeAreaProvider>
-    </Modal>
   );
 };

@@ -87,11 +87,6 @@ export const useTranscriptView = ({
     streamStatus !== "Live" ||
     stopping ||
     ["retry", "approval", "question", "error"].includes(activity.kind);
-  const showHeaderActivity =
-    active &&
-    !showActivityBar &&
-    (awayFromLatest ||
-      !["thinking", "tool", "writing"].includes(activity.kind));
   const showLatestControl =
     !followingLatest &&
     awayFromLatest &&
@@ -183,7 +178,6 @@ export const useTranscriptView = ({
     activity,
     renderMessage,
     showActivityBar,
-    showHeaderActivity,
     showLatestControl,
     transcriptMessages,
   };

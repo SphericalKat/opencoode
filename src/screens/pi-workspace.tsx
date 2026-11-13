@@ -19,7 +19,6 @@ import {
 } from "../components/beta-navigation";
 import type { OpenSessionTab } from "../components/beta-navigation";
 import { Busy, ErrorNotice } from "../components/ui";
-import { useBetaLayout } from "../lib/beta-layout";
 import { errorMessage } from "../lib/client";
 import type { Connection } from "../lib/client";
 import { makePiChatBackend } from "../lib/pi-chat-backend";
@@ -43,7 +42,6 @@ const PiWorkspaceSession = ({
   onManageServers,
   onConnectionLost,
 }: Props) => {
-  const betaLayout = useBetaLayout();
   const client = useMemo(() => createPiClient(connection), [connection]);
   const backend = useMemo(
     () => makePiChatBackend(connection, client),
@@ -308,8 +306,8 @@ const PiWorkspaceSession = ({
           />
         </View>
       )}
-      <SessionSurface framed={betaLayout && !settingsOpen && !selected}>
-        {!settingsOpen && !selected && session && betaLayout && (
+      <SessionSurface framed={!settingsOpen && !selected}>
+        {!settingsOpen && !selected && session && (
           <BetaSessionNavigation
             pane="Session"
             directory={session.location.directory}
@@ -329,11 +327,7 @@ const PiWorkspaceSession = ({
                 sessionID={session.id}
                 draftKey={`pi:${connection.id}:${session.id}`}
                 serverID={connection.id}
-                betaLayout={betaLayout}
                 visible={foreground && !settingsOpen}
-                projectLabel={session.location.directory
-                  .split(/[\\/]/u)
-                  .findLast(Boolean)}
                 onOpenNavigation={() => setNavigationOpen(true)}
                 onSelectionChange={setSelected}
                 onSessionInfo={recordSession}
@@ -354,7 +348,6 @@ const PiWorkspaceSession = ({
                 modelCatalog={backend.core.model}
                 directory={session.location.directory}
                 sections={settingsSections}
-                betaLayout={betaLayout}
                 visible
                 onBack={() => setSettingsOpen(false)}
                 backLabel="Chat"

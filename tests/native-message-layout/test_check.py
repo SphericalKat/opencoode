@@ -12,18 +12,17 @@ def valid_log():
     lines = []
     def emit(kind, data):
         lines.append('REPRO45_' + kind + ' ' + json.dumps(data))
-    for b in (True, False):
-        for w in (393, 360, 320):
-            for phase in ('initial', 'send', 'scroll'):
-                if phase == 'scroll':
-                    emit('AWAY', {'w': w, 'b': b, 'offset': 0})
-                emit('CASE', {'w': w, 'b': b, 'phase': phase, 'offset': 1000})
-                emit('BUBBLE', {'x': w - 116, 'y': 0, 'w': 100, 'h': 100})
-                for _ in range(7):
-                    emit('TEXT', {'x': w - 104, 'y': 12, 'w': 76, 'h': 76})
-                emit('NEXT', {'x': 0, 'y': 116, 'w': 100, 'h': 20})
+    for w in (393, 360, 320):
+        for phase in ('initial', 'send', 'scroll'):
+            if phase == 'scroll':
+                emit('AWAY', {'w': w, 'offset': 0})
+            emit('CASE', {'w': w, 'phase': phase, 'offset': 1000})
+            emit('BUBBLE', {'x': w - 116, 'y': 0, 'w': 100, 'h': 100})
+            for _ in range(7):
+                emit('TEXT', {'x': w - 104, 'y': 12, 'w': 76, 'h': 76})
+            emit('NEXT', {'x': 0, 'y': 116, 'w': 100, 'h': 20})
     for phase in ('short', 'attachment'):
-        emit('CASE', {'w': 393, 'b': True, 'phase': phase, 'offset': 0})
+        emit('CASE', {'w': 393, 'phase': phase, 'offset': 0})
         emit('BUBBLE', {'x': 277, 'y': 0, 'w': 100, 'h': 100})
         emit('TEXT', {'x': 289, 'y': 12, 'w': 76, 'h': 20})
         if phase == 'attachment':

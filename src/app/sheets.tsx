@@ -1,60 +1,18 @@
 import type { Project } from "@opencode/client";
 import type { ReactNode } from "react";
-import { useWindowDimensions } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BetaMoreSheet, BetaTabsSheet } from "../components/beta-navigation";
 import type {
   OpenSessionTab,
   SessionPane,
 } from "../components/beta-navigation";
-import { MotionDrawer } from "../components/motion";
 import { ProjectDirectoryBrowser } from "../components/project-directory-browser";
 import { Sheet } from "../components/ui";
 import type { Connection } from "../lib/client";
-import { useThemedStyles } from "../lib/theme";
-import { createStyles } from "./styles";
 import type { ServerClient } from "./types";
-
-interface NavigationDrawerProps {
-  active: Connection | null;
-  betaLayout: boolean;
-  children: ReactNode;
-  onClose: () => void;
-  onDismiss: () => void;
-  open: boolean;
-  wide: boolean;
-}
-
-export const NavigationDrawer = ({
-  active,
-  betaLayout,
-  children,
-  onClose,
-  onDismiss,
-  open,
-  wide,
-}: NavigationDrawerProps) => {
-  const styles = useThemedStyles(createStyles);
-  const { width } = useWindowDimensions();
-  return (
-    <MotionDrawer
-      visible={open && !wide && !!active && !betaLayout}
-      width={Math.min(width - 32, 352)}
-      onClose={onClose}
-      onDismiss={onDismiss}
-      panelStyle={styles.drawer}
-    >
-      <SafeAreaView style={styles.full} edges={["top", "bottom", "left"]}>
-        {children}
-      </SafeAreaView>
-    </MotionDrawer>
-  );
-};
 
 interface BetaSheetsProps {
   active: Connection | null;
-  betaLayout: boolean;
   currentTabID: string | undefined;
   moreOpen: boolean;
   navigationOpen: boolean;
@@ -78,7 +36,6 @@ interface BetaSheetsProps {
 
 export const BetaSheets = ({
   active,
-  betaLayout,
   currentTabID,
   moreOpen,
   navigationOpen,
@@ -98,41 +55,36 @@ export const BetaSheets = ({
   onView,
   openTabs,
   selectedPane,
-}: BetaSheetsProps) => {
-  if (!betaLayout) {
-    return null;
-  }
-  return (
-    <>
-      {active && (
-        <BetaTabsSheet
-          visible={navigationOpen}
-          tabs={openTabs}
-          selectedID={currentTabID}
-          serverLabel={active.name}
-          onServer={onServer}
-          onClose={onCloseNavigation}
-          onDismiss={onDismissNavigation}
-          onSelect={onSelect}
-          onCloseTab={onCloseTab}
-          onNew={onNew}
-          onHome={onHome}
-          onSettings={onSettings}
-          onHelp={onHelp}
-        />
-      )}
-      <BetaMoreSheet
-        visible={moreOpen}
-        pane={selectedPane}
-        onClose={onCloseMore}
-        onDismiss={onDismissMore}
-        onView={onView}
-        onUsage={onUsage}
-        onDetails={onDetails}
+}: BetaSheetsProps) => (
+  <>
+    {active && (
+      <BetaTabsSheet
+        visible={navigationOpen}
+        tabs={openTabs}
+        selectedID={currentTabID}
+        serverLabel={active.name}
+        onServer={onServer}
+        onClose={onCloseNavigation}
+        onDismiss={onDismissNavigation}
+        onSelect={onSelect}
+        onCloseTab={onCloseTab}
+        onNew={onNew}
+        onHome={onHome}
+        onSettings={onSettings}
+        onHelp={onHelp}
       />
-    </>
-  );
-};
+    )}
+    <BetaMoreSheet
+      visible={moreOpen}
+      pane={selectedPane}
+      onClose={onCloseMore}
+      onDismiss={onDismissMore}
+      onView={onView}
+      onUsage={onUsage}
+      onDetails={onDetails}
+    />
+  </>
+);
 
 interface ServersSheetProps {
   active: Connection | null;

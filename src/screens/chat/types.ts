@@ -15,9 +15,7 @@ export interface Props {
   draftKey?: string;
   visible?: boolean;
   onOpenNavigation?: () => void;
-  projectLabel?: string;
   serverID?: string;
-  betaLayout?: boolean;
   onSelectionChange?: (selected: boolean) => void;
   onSessionInfo?: (session: SessionInfo) => void;
   sessionPanelRequest?: {

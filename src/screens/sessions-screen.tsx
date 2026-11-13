@@ -43,12 +43,9 @@ interface Props {
   onOpenSession: (id: string) => void;
   revision?: number;
   selectedSessionID?: string;
-  compact?: boolean;
-  onOpenNavigation?: () => void;
-  betaLayout?: boolean;
   projectScope?: ProjectScope;
   onChooseDirectory?: () => void;
-  onNewSession?: (directory: string) => void;
+  onNewSession: (directory: string) => void;
 }
 
 export const SessionsScreen = ({
@@ -57,9 +54,6 @@ export const SessionsScreen = ({
   onOpenSession,
   revision,
   selectedSessionID,
-  compact = false,
-  onOpenNavigation,
-  betaLayout = false,
   projectScope,
   onChooseDirectory,
   onNewSession,
@@ -67,7 +61,6 @@ export const SessionsScreen = ({
   const withNativePresentation = useNativePresentation();
   const { scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const betaHome = betaLayout && Platform.OS === "android";
   const {
     loadProjects,
     projectDirectory,
@@ -77,13 +70,11 @@ export const SessionsScreen = ({
     projectsOpen,
     setProjectDirectory,
     setProjectsOpen,
-  } = useProjects({ betaHome, client, projectScope });
+  } = useProjects({ client, projectScope });
   const pendingDirectoryPicker = useRef(false);
   const pendingListActions = useRef(false);
-  const listDirectory = betaHome ? projectDirectory : directory;
-  const creationDirectory = betaHome
-    ? (projectDirectory ?? directory)
-    : directory;
+  const listDirectory = projectDirectory;
+  const creationDirectory = projectDirectory ?? directory;
   const [width, setWidth] = useState(360);
   const [search, setSearch] = useState("");
   const [archived, setArchived] = useState(false);
@@ -109,7 +100,7 @@ export const SessionsScreen = ({
   });
   const operationPending = useRef(false);
   const pendingImport = useRef<(() => void) | null>(null);
-  const compactHeader = compact || width < 340;
+  const compactHeader = width < 340;
   const {
     active,
     listError,
@@ -178,7 +169,7 @@ export const SessionsScreen = ({
     }
   };
 
-  const createSession = (named = false) =>
+  const createSession = () =>
     run(async () => {
       const owner = scope.current;
       setCreating(true);
@@ -186,7 +177,7 @@ export const SessionsScreen = ({
         async () => {
           const created = await client.session.create({
             location: { directory: creationDirectory },
-            title: named ? title.trim() || undefined : undefined,
+            title: title.trim() || undefined,
           });
           if (
             scope.current.client !== owner.client ||
@@ -211,15 +202,11 @@ export const SessionsScreen = ({
           }
         }
       );
-    }, named);
+    }, true);
 
   const startSession = () => {
     Keyboard.dismiss();
-    if (onNewSession) {
-      onNewSession(creationDirectory);
-    } else {
-      void createSession();
-    }
+    onNewSession(creationDirectory);
   };
 
   const manageSession = (item: SessionInfo) => {
@@ -424,11 +411,6 @@ export const SessionsScreen = ({
     setProjectsOpen(false);
   };
 
-  const openActionsMenu = () => {
-    setSheetError(undefined);
-    setActions("menu");
-  };
-
   const openCreateForm = () => {
     setTitle("");
     setSheetError(undefined);
@@ -455,27 +437,20 @@ export const SessionsScreen = ({
 
   return (
     <View
-      style={[styles.screen, betaHome && styles.betaScreen]}
+      style={[styles.screen, styles.betaScreen]}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
     >
       <SessionsHeader
         archived={archived}
-        betaHome={betaHome}
-        busy={busy}
-        compact={compact}
         compactHeader={compactHeader}
-        creating={creating}
         error={error}
         listError={listError}
         onChangeSearch={setSearch}
         onChooseHistory={chooseHistory}
-        onOpenActions={openActionsMenu}
-        onOpenNavigation={onOpenNavigation}
         onOpenProjects={openProjects}
         onRefresh={() => {
           void refresh();
         }}
-        onStartSession={startSession}
         projectLabel={projectSelectorLabel(projects, projectDirectory)}
         projectsOpen={projectsOpen}
         search={search}
@@ -485,7 +460,7 @@ export const SessionsScreen = ({
       <FlatList
         data={sessions}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.list, betaHome && styles.betaList]}
+        contentContainerStyle={[styles.list, styles.betaList]}
         keyboardShouldPersistTaps="handled"
         refreshing={loading && sessions.length > 0}
         onRefresh={() => {
@@ -497,14 +472,12 @@ export const SessionsScreen = ({
         maxToRenderPerBatch={12}
         windowSize={7}
         ListHeaderComponent={
-          betaHome ? (
-            <BetaGroupHeader
-              busy={busy}
-              creating={creating}
-              label={betaGroupLabel(archived, search, sessions)}
-              onStartSession={startSession}
-            />
-          ) : undefined
+          <BetaGroupHeader
+            busy={busy}
+            creating={creating}
+            label={betaGroupLabel(archived, search, sessions)}
+            onStartSession={startSession}
+          />
         }
         ListEmptyComponent={
           <SessionsEmpty
@@ -522,7 +495,6 @@ export const SessionsScreen = ({
         renderItem={({ item, index }) => (
           <SessionRow
             active={active.has(item.id)}
-            betaHome={betaHome}
             index={index}
             item={item}
             name={projectName(projects, item)}
@@ -535,7 +507,6 @@ export const SessionsScreen = ({
         )}
       />
       <ProjectsSheet
-        betaHome={betaHome}
         onChooseFolder={
           onChooseDirectory ? chooseFolderAfterProjects : undefined
         }
@@ -561,7 +532,7 @@ export const SessionsScreen = ({
         loading={loading}
         onClose={closeActions}
         onCreate={() => {
-          void createSession(true);
+          void createSession();
         }}
         onDismiss={finishActionsDismissal}
         onImport={queueImport}

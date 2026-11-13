@@ -15,7 +15,6 @@ import React, {
 } from "react";
 import { Platform, useColorScheme } from "react-native";
 
-import { useBetaLayout } from "./beta-layout";
 import upstreamThemes from "./upstreamThemes.json";
 
 export type Appearance = "system" | "light" | "dark";
@@ -238,18 +237,7 @@ const resolveScheme = (
   return system === "light" ? "light" : "dark";
 };
 
-const fallbackColors = (
-  betaLayout: boolean,
-  scheme: "light" | "dark"
-): ThemeColors => {
-  if (betaLayout) {
-    return scheme === "light" ? betaLightColors : betaDarkColors;
-  }
-  return scheme === "light" ? lightColors : darkColors;
-};
-
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-  const betaLayout = useBetaLayout();
   const system = useColorScheme();
   const { theme: materialTheme } = useMaterial3Theme();
   const [appearanceState, setAppearanceState] = useState<Appearance>("system");
@@ -333,7 +321,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
       document.documentElement.style.colorScheme = scheme;
     }
   }, [scheme]);
-  const fallback = fallbackColors(betaLayout, scheme);
+  const fallback = scheme === "light" ? betaLightColors : betaDarkColors;
   const colors = useMemo(() => {
     const preset = upstreamThemes.find((item) => item.id === paletteState);
     if (preset) {

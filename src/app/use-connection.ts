@@ -58,7 +58,6 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
     setFlowRevision,
     setForeground,
     setForm,
-    setInfo,
     setNewDirectory,
     setOpenTabs,
     setPairingLink,
@@ -81,7 +80,6 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
       if (!preserveWorkspace || connected.backend === "pi") {
         setConnectionRevision((value) => value + 1);
       }
-      setInfo(applied.info);
       if (!preserveWorkspace) {
         setOpenTabs([]);
         setBetaHomeProject(undefined);
@@ -108,7 +106,6 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
       selectedSessionRef,
       setNewDirectory,
       setSessionID,
-      setInfo,
       setConnectionRevision,
       setServersOpen,
       setUnavailableID,
@@ -190,7 +187,6 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
             connected,
             connections: next,
             directory: location.directory,
-            info: result.backend === "opencode" ? result.info : null,
             preserveWorkspace,
             sessionID: restoredSessionID,
           });

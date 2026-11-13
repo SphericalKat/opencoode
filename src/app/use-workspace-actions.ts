@@ -36,7 +36,6 @@ export const useWorkspaceActions = (
     setConnections,
     setDirectory,
     setError,
-    setInfo,
     setPendingLocation,
     setProjectBusy,
     setProjectError,
@@ -113,7 +112,6 @@ export const useWorkspaceActions = (
         selectedSessionRef.current = null;
         directoryRef.current = "";
         setActive(null);
-        setInfo(null);
         setSessionID(null);
         setDirectory("");
         setAttachmentPath(undefined);

@@ -43,9 +43,7 @@ export const useChatController = ({
   draftKey = sessionID,
   visible = true,
   onOpenNavigation,
-  projectLabel,
   serverID,
-  betaLayout = false,
   onSelectionChange,
   onSessionInfo,
   sessionPanelRequest,
@@ -57,7 +55,7 @@ export const useChatController = ({
   const styles = useThemedStyles(createStyles);
   const modelPreferences = useModelPreferences(serverID || "");
   const withNativePresentation = useNativePresentation();
-  const metrics = useComposerMetrics(betaLayout);
+  const metrics = useComposerMetrics();
   const sync = useSessionState(backend);
   const sheets = useSheetState();
   const { panel, setPanel, setSideQuestion, setTitle } = sheets;
@@ -144,7 +142,6 @@ export const useChatController = ({
     visible,
   });
   useSessionCatalog({
-    betaLayout,
     capabilities,
     client,
     foreground,
@@ -259,7 +256,6 @@ export const useChatController = ({
     backgroundDirectory: sheets.backgroundDirectory,
     backgroundShellID: sheets.backgroundShellID,
     beginUserScroll: scroll.beginUserScroll,
-    betaLayout,
     canCopySelected: selection.canCopySelected,
     capabilities,
     catalogError: sync.catalogError,
@@ -319,7 +315,6 @@ export const useChatController = ({
     panelLoading: tools.panelLoading,
     pending,
     permissions: sync.permissions,
-    projectLabel,
     providerLabel: modelChoice.providerLabel,
     queueDevicePicker: device.queueDevicePicker,
     queuedMessagePanelRef: sheets.queuedMessagePanelRef,
@@ -358,7 +353,6 @@ export const useChatController = ({
     setTitle: sheets.setTitle,
     showActivityBar: view.showActivityBar,
     showError: errors.showError,
-    showHeaderActivity: view.showHeaderActivity,
     showLatestControl: view.showLatestControl,
     sideQuestion: sheets.sideQuestion,
     skills: sync.skills,

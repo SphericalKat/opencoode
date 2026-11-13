@@ -26,7 +26,6 @@ import { useTheme, useThemedStyles } from "../../lib/theme";
 import { createStyles } from "./styles";
 
 export type ChatIconName =
-  | "menu"
   | "more"
   | "plus"
   | "up"
@@ -48,9 +47,6 @@ export const ChatGlyph = ({
   size?: number;
   selected?: boolean;
 }) => {
-  if (name === "menu") {
-    return <ShellIcon name="menu" size={size} color={color} />;
-  }
   const path = {
     check: "m5 12 4 4L19 6",
     close: "M6 6l12 12M18 6 6 18",
