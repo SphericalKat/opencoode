@@ -103,9 +103,13 @@ jobs:
           node .github/scripts/prepare-release.mjs
           pnpm exec expo prebuild --platform android --no-install
 
-      - name: Build signed APK and app bundle
+      - name: Build signed per-ABI APKs
         working-directory: android
-        run: ./gradlew --no-daemon --max-workers=2 --init-script ../.github/android-signing.gradle assembleRelease bundleRelease
+        run: ./gradlew --no-daemon --max-workers=2 --init-script ../.github/android-signing.gradle -PopencoodeGithubApks=true assembleRelease
+
+      - name: Build signed app bundle
+        working-directory: android
+        run: ./gradlew --no-daemon --max-workers=2 --init-script ../.github/android-signing.gradle bundleRelease
 
       - name: Publish Android artifacts
         shell: bash

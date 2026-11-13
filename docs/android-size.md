@@ -33,10 +33,21 @@ The two fonts occupy 526,319 compressed bytes under Android resources. The barco
 
 ## Release changes
 
-I enabled four ABI-specific APKs in the CI Gradle script and disabled the universal APK. I added certificate verification for each APK and artifact sizes to the workflow summary. I enabled R8 code optimization and resource shrinking through `expo-build-properties`.
+I enabled four ABI-specific APKs in the CI Gradle script and disabled the universal APK. The workflow builds the APKs and the AAB in separate Gradle runs. The `opencoodeGithubApks` property enables ABI splits and compressed native libraries only for the APK run. AGP rejects an AAB build while ABI splits and resource shrinking are both enabled. I added certificate verification for each APK and artifact sizes to the workflow summary. I enabled R8 code optimization and resource shrinking through `expo-build-properties`.
 
-I retained uncompressed native libraries and Hermes bytecode to preserve direct loading and startup performance. I retained GIF and WebP decoders because chat attachments and workspace previews support those formats. The AAB contains all supported ABIs for Google Play delivery.
+The GitHub APKs store compressed native libraries. GitHub serves the APK file without additional compression, so uncompressed libraries enlarge each download. Android extracts compressed libraries at install time, which enlarges the installed footprint. The AAB retains uncompressed native libraries, because Google Play compresses its downloads. I retained uncompressed Hermes bytecode. I retained GIF and WebP decoders because chat attachments and workspace previews support those formats. The AAB contains all supported ABIs for Google Play delivery.
 
-I did not run automated tests or a native build for this analysis. The next release build supplies the measured size after these changes.
+## Measured split APKs
+
+I built signed release APKs locally with the CI Gradle script.
+
+| ABI           | Uncompressed native libraries | Compressed native libraries |
+| ------------- | ----------------------------: | --------------------------: |
+| `arm64-v8a`   |                    40,915,144 |                  21,765,312 |
+| `armeabi-v7a` |                    31,902,962 |                  20,477,694 |
+| `x86_64`      |                    42,539,855 |                  22,384,775 |
+| `x86`         |                    43,236,346 |                  22,902,638 |
+
+The values are APK sizes in bytes. The installed ARM64 app with compressed native libraries occupied 56 MB on a test device, because Android extracts the libraries. R8 reduced the compressed DEX from 3,710,212 bytes to 3,509,243 bytes.
 
 References: [Android ABI splits](https://developer.android.com/build/configure-apk-splits), [Expo app size](https://docs.expo.dev/distribution/app-size/), [Android app optimization](https://developer.android.com/topic/performance/app-optimization/enable-app-optimization).
