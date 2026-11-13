@@ -30,6 +30,8 @@ Use Conventional Commits for every agent-authored commit title. Prefer the same 
 
 Example: `fix(markdown): keep user messages inside their bubbles`.
 
+If the user asks for a related change while a PR is open, commit the change to the branch of that PR. Do not open a separate branch or PR for it unless the user asks. A related change can be a documentation update, a rule, or a follow-up fix.
+
 ### Screenshots in pull requests
 
 If a PR changes what the app shows, include before and after screenshots in its description when possible.
@@ -37,6 +39,8 @@ If a PR changes what the app shows, include before and after screenshots in its 
 - Capture the "before" screenshot from the base branch and the "after" screenshot from the PR branch.
 - Use the same device, screen, and data for both screenshots.
 - Attach each image with `gh pr create --attach '<file>#<alt text>'`, and reference it in the body as `![alt text](./<file>)`.
+- If a PR changes motion, attach a side-by-side MP4 video. Put the base branch on the left and the PR branch on the right, and label each side. Frame strips do not replace the video.
+- After each commit that changes the visuals of a PR, capture every screenshot and video in the PR description again from the new head. Replace the old media.
 
 ## Linting and formatting
 
