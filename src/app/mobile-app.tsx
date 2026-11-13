@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ConnectionFlow } from "../components/connection-flow";
 import { OpenCodeLogo } from "../components/open-code-logo";
 import { Busy, BodyText } from "../components/ui";
+import { useSheetVisibilityActions } from "../lib/sheet-visibility";
 import { useSheetCoordinator } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import { useUnsavedGuard } from "../lib/unsaved";
@@ -38,7 +39,6 @@ export const MobileApp = () => {
 
     betaHome,
     betaHomeProject,
-    betaMoreOpen,
     booting,
     connecting,
     connectionError,
@@ -51,7 +51,6 @@ export const MobileApp = () => {
     flowRevision,
     foreground,
     form,
-    navigationOpen,
     newDirectory,
     openTabs,
     panelRequestIDRef,
@@ -69,12 +68,10 @@ export const MobileApp = () => {
     sessionPanelRequest,
     setAttachmentContext,
     setAttachmentPath,
-    setBetaMoreOpen,
     setConnectionError,
     setFlowRevision,
     setForm,
     setMessageSelected,
-    setNavigationOpen,
     setNewDirectory,
     setPairingLink,
     setProjectError,
@@ -90,6 +87,7 @@ export const MobileApp = () => {
     visited,
     workspaceSection,
   } = state;
+  const { setMoreOpen, setNavigationOpen } = useSheetVisibilityActions();
   const { chatBackend, client, onPiConnectionLost, recordSessionInfo } =
     useClientBindings(state);
   const { selectServer } = useConnection(state, { confirmNavigation });
@@ -173,7 +171,7 @@ export const MobileApp = () => {
         action();
       }
     };
-    setBetaMoreOpen(false);
+    setMoreOpen(false);
   };
   const requestSessionPanel = (panel: "stats" | "actions") => {
     if (!sessionID) {
@@ -248,7 +246,7 @@ export const MobileApp = () => {
           error={error}
           onMore={() => {
             Keyboard.dismiss();
-            setBetaMoreOpen(true);
+            setMoreOpen(true);
           }}
           onOpenNavigation={openNavigation}
           onProject={() => {
@@ -331,9 +329,7 @@ export const MobileApp = () => {
       <BetaSheets
         active={active}
         currentTabID={currentOpenTab?.id}
-        moreOpen={betaMoreOpen}
-        navigationOpen={navigationOpen}
-        onCloseMore={() => setBetaMoreOpen(false)}
+        onCloseMore={() => setMoreOpen(false)}
         onCloseNavigation={closeNavigation}
         onCloseTab={(id) => {
           void closeBetaTab(id);

@@ -23,6 +23,12 @@ import { errorMessage } from "../lib/client";
 import type { Connection } from "../lib/client";
 import { makePiChatBackend } from "../lib/pi-chat-backend";
 import { createPiClient } from "../lib/pi-client";
+import type { PiClient } from "../lib/pi-client";
+import {
+  SheetVisibilityProvider,
+  useSheetVisibility,
+  useSheetVisibilityActions,
+} from "../lib/sheet-visibility";
 import { useUnsavedGuard } from "../lib/unsaved";
 import { ChatScreen } from "./chat-screen";
 import { SettingsScreen } from "./settings-screen";
@@ -35,6 +41,95 @@ interface Props {
   foreground: boolean;
 }
 const settingsSections: Section[] = ["Look and feel", "Models"];
+
+interface PiSheetsProps {
+  client: PiClient;
+  foreground: boolean;
+  onDetails: () => void;
+  onDismiss: () => void;
+  onError: (error: string) => void;
+  onHelp: () => void;
+  onNew: () => void;
+  onSelect: (id: string) => void;
+  onServer: () => void;
+  onSettings: () => void;
+  selectedID: string | undefined;
+  serverLabel: string;
+  tabs: OpenSessionTab[];
+}
+
+const PiSheets = ({
+  client,
+  foreground,
+  onDetails,
+  onDismiss,
+  onError,
+  onHelp,
+  onNew,
+  onSelect,
+  onServer,
+  onSettings,
+  selectedID,
+  serverLabel,
+  tabs,
+}: PiSheetsProps) => {
+  const navigationOpen = useSheetVisibility((state) => state.navigationOpen);
+  const moreOpen = useSheetVisibility((state) => state.moreOpen);
+  const { setMoreOpen, setNavigationOpen } = useSheetVisibilityActions();
+  const [recent, setRecent] = useState<OpenSessionTab[]>([]);
+
+  useEffect(() => {
+    if (!foreground || !navigationOpen) {
+      return;
+    }
+    const controller = new AbortController();
+    void client
+      .sessions(controller.signal)
+      .then((value) => {
+        if (!controller.signal.aborted) {
+          setRecent(
+            value.map((item) => ({
+              directory: item.cwd,
+              id: item.id,
+              title: item.name || "New session",
+            }))
+          );
+        }
+        return null;
+      })
+      .catch((error_) => {
+        if (!controller.signal.aborted) {
+          onError(errorMessage(error_));
+        }
+      });
+    return () => controller.abort();
+  }, [client, foreground, navigationOpen, onError]);
+
+  return (
+    <>
+      <BetaMoreSheet
+        visible={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onDismiss={onDismiss}
+        onDetails={onDetails}
+      />
+      <BetaTabsSheet
+        visible={navigationOpen}
+        tabs={tabs}
+        recent={recent}
+        selectedID={selectedID}
+        serverLabel={serverLabel}
+        onServer={onServer}
+        onClose={() => setNavigationOpen(false)}
+        onDismiss={onDismiss}
+        onSelect={onSelect}
+        onNew={onNew}
+        onSettings={onSettings}
+        onHelp={onHelp}
+      />
+    </>
+  );
+};
 
 const PiWorkspaceSession = ({
   connection,
@@ -49,9 +144,7 @@ const PiWorkspaceSession = ({
   );
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [tabs, setTabs] = useState<OpenSessionTab[]>([]);
-  const [recent, setRecent] = useState<OpenSessionTab[]>([]);
-  const [navigationOpen, setNavigationOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
+  const { setMoreOpen, setNavigationOpen } = useSheetVisibilityActions();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selected, setSelected] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -140,33 +233,6 @@ const PiWorkspaceSession = ({
     });
     return () => controller.abort();
   }, [foreground, session, refreshSession]);
-
-  useEffect(() => {
-    if (!foreground || !navigationOpen) {
-      return;
-    }
-    const controller = new AbortController();
-    void client
-      .sessions(controller.signal)
-      .then((value) => {
-        if (!controller.signal.aborted) {
-          setRecent(
-            value.map((item) => ({
-              directory: item.cwd,
-              id: item.id,
-              title: item.name || "New session",
-            }))
-          );
-        }
-        return null;
-      })
-      .catch((error_) => {
-        if (!controller.signal.aborted) {
-          setError(errorMessage(error_));
-        }
-      });
-    return () => controller.abort();
-  }, [client, foreground, navigationOpen]);
 
   useEffect(() => {
     if (!settingsOpen) {
@@ -360,41 +426,37 @@ const PiWorkspaceSession = ({
           <Busy />
         )}
       </SessionSurface>
-      <BetaMoreSheet
-        visible={moreOpen}
-        onClose={() => setMoreOpen(false)}
-        onDismiss={onNavigationDismissed}
+      <PiSheets
+        client={client}
+        foreground={foreground}
         onDetails={() => afterMenu(showDetails)}
-      />
-      <BetaTabsSheet
-        visible={navigationOpen}
-        tabs={tabs}
-        recent={recent}
-        selectedID={session?.id}
-        serverLabel={connection.name}
-        onServer={() => afterNavigation(onManageServers)}
-        onClose={() => setNavigationOpen(false)}
         onDismiss={onNavigationDismissed}
-        onSelect={(id) => afterNavigation(() => openSession(id))}
-        onNew={() =>
-          afterNavigation(() => {
-            void changeSession({ type: "new" });
-          })
-        }
-        onSettings={() => afterNavigation(() => setSettingsOpen(true))}
+        onError={setError}
         onHelp={() =>
           afterNavigation(() => {
             void Linking.openURL("https://pi.dev/docs/latest/");
           })
         }
+        onNew={() =>
+          afterNavigation(() => {
+            void changeSession({ type: "new" });
+          })
+        }
+        onSelect={(id) => afterNavigation(() => openSession(id))}
+        onServer={() => afterNavigation(onManageServers)}
+        onSettings={() => afterNavigation(() => setSettingsOpen(true))}
+        selectedID={session?.id}
+        serverLabel={connection.name}
+        tabs={tabs}
       />
     </View>
   );
 };
 
 export const PiWorkspace = (props: Props) => (
-  <PiWorkspaceSession
+  <SheetVisibilityProvider
     key={`${props.connection.id}:${props.connection.url}`}
-    {...props}
-  />
+  >
+    <PiWorkspaceSession {...props} />
+  </SheetVisibilityProvider>
 );

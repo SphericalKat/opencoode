@@ -1,6 +1,7 @@
 import { Keyboard } from "react-native";
 
 import { errorMessage } from "../lib/client";
+import { useSheetVisibilityActions } from "../lib/sheet-visibility";
 import { attempt } from "./connection-utils";
 import type { ServerClient, SheetCoordinator } from "./types";
 import type { MobileState } from "./use-app-state";
@@ -19,18 +20,18 @@ export const useNavigationSheets = (
     activeRef,
     automaticServerRequestRef,
     epochRef,
-    navigationOpen,
     navigationPresentedRef,
     pendingBetaActionRef,
     pendingNavigationSheetRef,
     serverSheetRequestRef,
-    setNavigationOpen,
     setProjectBusy,
     setProjectError,
     setProjects,
     setProjectsOpen,
     setServersOpen,
   } = model;
+  const { getState: getSheets, setNavigationOpen } =
+    useSheetVisibilityActions();
   const { client, resumeSheets, suspendSheets } = deps;
   const showNavigationSheet = async (
     kind: "servers" | "projects",
@@ -64,7 +65,7 @@ export const useNavigationSheets = (
         return;
       }
     }
-    if (navigationOpen || navigationPresentedRef.current) {
+    if (getSheets().navigationOpen || navigationPresentedRef.current) {
       pendingNavigationSheetRef.current = {
         epoch: epochRef.current,
         kind,

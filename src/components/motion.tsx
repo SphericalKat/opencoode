@@ -5,13 +5,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  AccessibilityInfo,
-  Platform,
-  StyleSheet,
-  useWindowDimensions,
-} from "react-native";
-import type { LayoutChangeEvent, StyleProp, ViewStyle } from "react-native";
+import { AccessibilityInfo, Platform, StyleSheet } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 import Animated, {
   cancelAnimation,
   cubicBezier,
@@ -28,7 +23,6 @@ import { scheduleOnRN } from "react-native-worklets";
 
 const easePress = cubicBezier(0.23, 1, 0.32, 1);
 const easeContent = Easing.bezier(0.23, 1, 0.32, 1);
-const easeSheet = Easing.bezier(0.32, 0.72, 0, 1);
 
 const styles = StyleSheet.create({
   indicator: { alignItems: "center", flexShrink: 0, justifyContent: "center" },
@@ -76,69 +70,6 @@ export const useMotionPreference = () => {
     };
   }, []);
   return reduced;
-};
-
-const sheetDuration = (reduced: boolean, open: boolean): number => {
-  if (reduced) {
-    return open ? 120 : 100;
-  }
-  return open ? 300 : 200;
-};
-
-export const useSheetTransition = (visible: boolean) => {
-  const reduced = useMotionPreference();
-  const { height: windowHeight } = useWindowDimensions();
-  const [exited, setExited] = useState(!visible);
-  if (visible && exited) {
-    setExited(false);
-  }
-  const progress = useSharedValue(0);
-  const panelHeight = useSharedValue(windowHeight);
-
-  useLayoutEffect(() => {
-    progress.set(
-      withTiming(
-        visible ? 1 : 0,
-        {
-          duration: sheetDuration(reduced, visible),
-          easing: easeSheet,
-          reduceMotion: ReduceMotion.Never,
-        },
-        (finished) => {
-          if (finished && !visible) {
-            scheduleOnRN(setExited, true);
-          }
-        }
-      )
-    );
-  }, [visible, reduced, progress]);
-  useEffect(() => () => cancelAnimation(progress), [progress]);
-
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: progress.get() }));
-  const panelStyle = useAnimatedStyle(
-    () => ({
-      opacity: reduced ? progress.get() : 1,
-      transform: [
-        {
-          translateY: reduced ? 0 : (1 - progress.get()) * panelHeight.get(),
-        },
-      ],
-    }),
-    Platform.OS === "web" ? [reduced] : undefined
-  );
-  const handlePanelLayout = useCallback(
-    (event: LayoutChangeEvent) => {
-      panelHeight.set(event.nativeEvent.layout.height);
-    },
-    [panelHeight]
-  );
-
-  return {
-    handlePanelLayout,
-    panelStyle,
-    presented: visible || !exited,
-    scrimStyle,
-  };
 };
 
 export const PressFeedback = ({

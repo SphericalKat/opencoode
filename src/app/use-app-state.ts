@@ -30,7 +30,6 @@ export const useAppState = () => {
   const [openTabs, setOpenTabs] = useState<OpenSessionTab[]>([]);
   const [workspaceSection, setWorkspaceSection] =
     useState<WorkspaceSection>("Changes");
-  const [betaMoreOpen, setBetaMoreOpen] = useState(false);
   const [messageSelected, setMessageSelected] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const creatingSessionRef = useRef(false);
@@ -42,7 +41,6 @@ export const useAppState = () => {
     sessions: true,
   });
   const [serversOpen, setServersOpen] = useState(false);
-  const [navigationOpen, setNavigationOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectError, setProjectError] = useState<string | null>(null);
@@ -106,7 +104,6 @@ export const useAppState = () => {
     automaticServerRequestRef,
     betaHome,
     betaHomeProject,
-    betaMoreOpen,
     booting,
     connecting,
     connectingRef,
@@ -124,7 +121,6 @@ export const useAppState = () => {
     form,
     locationSyncRef,
     messageSelected,
-    navigationOpen,
     navigationPresentedRef,
     newDirectory,
     openTabs,
@@ -152,7 +148,6 @@ export const useAppState = () => {
     setAttachmentPath,
     setBetaHome,
     setBetaHomeProject,
-    setBetaMoreOpen,
     setBooting,
     setConnecting,
     setConnectionError,
@@ -165,7 +160,6 @@ export const useAppState = () => {
     setForeground,
     setForm,
     setMessageSelected,
-    setNavigationOpen,
     setNewDirectory,
     setOpenTabs,
     setPairingLink,
