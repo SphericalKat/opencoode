@@ -15,117 +15,142 @@ import { ChatIconButton } from "./controls";
 import { emptyModelsTitle, emptyModelsDetail } from "./labels";
 import type { ChatController } from "./use-chat-controller";
 
-export const VariantsSheet = ({
-  chat,
-  session,
-}: {
-  chat: ChatController;
+interface VariantsSheetProps extends Pick<
+  ChatController,
+  | "capabilities"
+  | "chooseModel"
+  | "currentModel"
+  | "error"
+  | "panel"
+  | "pending"
+  | "setPanel"
+> {
   session: SessionInfo;
-}) => {
-  const {
-    capabilities,
-    chooseModel,
-    currentModel,
-    error,
-    panel,
-    pending,
-    setPanel,
-  } = chat;
-  return (
-    <Sheet
-      visible={panel === "variants"}
-      title="Choose variant"
-      fitContent
-      contentStyle={{ gap: 4 }}
-      onClose={() => setPanel(null)}
-    >
-      <ErrorNotice error={error} />
-      {currentModel && (
-        <>
-          {capabilities.defaultVariant && (
-            <Button
-              title="Model default"
-              selected={!session.model?.variant}
-              disabled={pending}
-              onPress={() => {
-                void chooseModel(currentModel, undefined, true);
-              }}
-            />
-          )}
-          {currentModel.variants.map((variant) => (
-            <Button
-              key={variant.id}
-              title={variant.id}
-              selected={session.model?.variant === variant.id}
-              disabled={pending}
-              onPress={() => {
-                void chooseModel(currentModel, variant.id, true);
-              }}
-            />
-          ))}
-        </>
-      )}
-    </Sheet>
-  );
-};
+}
 
-export const ModelSearchBar = ({ chat }: { chat: ChatController }) => {
-  const {
-    catalogError,
-    error,
-    modelFilter,
-    modelPreferences,
-    modelSearch,
-    setCatalogRevision,
-    setModelFilter,
-    setModelSearch,
-    styles,
-  } = chat;
-  return (
-    <View style={styles.modelSearch}>
-      <Field
-        label="Search models"
-        value={modelSearch}
-        onChangeText={setModelSearch}
-        placeholder="Model or provider"
-      />
-      <Row>
-        <Button
-          title="All"
-          compact
-          selected={modelFilter === "all"}
-          onPress={() => setModelFilter("all")}
-        />
-        <Button
-          title="Favorites"
-          compact
-          selected={modelFilter === "favorites"}
-          onPress={() => setModelFilter("favorites")}
-        />
-        <Button
-          title="Recent"
-          compact
-          selected={modelFilter === "recent"}
-          onPress={() => setModelFilter("recent")}
-        />
-      </Row>
-      <ErrorNotice
-        error={error || catalogError || modelPreferences.error}
-        onRetry={() => {
-          modelPreferences.reload();
-          setCatalogRevision((value) => value + 1);
-        }}
-      />
-    </View>
-  );
-};
+export const VariantsSheet = ({
+  capabilities,
+  chooseModel,
+  currentModel,
+  error,
+  panel,
+  pending,
+  session,
+  setPanel,
+}: VariantsSheetProps) => (
+  <Sheet
+    visible={panel === "variants"}
+    title="Choose variant"
+    fitContent
+    contentStyle={{ gap: 4 }}
+    onClose={() => setPanel(null)}
+  >
+    <ErrorNotice error={error} />
+    {currentModel && (
+      <>
+        {capabilities.defaultVariant && (
+          <Button
+            title="Model default"
+            selected={!session.model?.variant}
+            disabled={pending}
+            onPress={() => {
+              void chooseModel(currentModel, undefined, true);
+            }}
+          />
+        )}
+        {currentModel.variants.map((variant) => (
+          <Button
+            key={variant.id}
+            title={variant.id}
+            selected={session.model?.variant === variant.id}
+            disabled={pending}
+            onPress={() => {
+              void chooseModel(currentModel, variant.id, true);
+            }}
+          />
+        ))}
+      </>
+    )}
+  </Sheet>
+);
 
-export const renderModelVariants = (
-  chat: ChatController,
-  session: SessionInfo
-) => {
-  const { capabilities, chooseModel, currentModel, pending, styles } = chat;
-  return currentModel?.variants.length ? (
+type ModelSearchBarProps = Pick<
+  ChatController,
+  | "catalogError"
+  | "error"
+  | "modelFilter"
+  | "modelPreferences"
+  | "modelSearch"
+  | "setCatalogRevision"
+  | "setModelFilter"
+  | "setModelSearch"
+  | "styles"
+>;
+
+export const ModelSearchBar = ({
+  catalogError,
+  error,
+  modelFilter,
+  modelPreferences,
+  modelSearch,
+  setCatalogRevision,
+  setModelFilter,
+  setModelSearch,
+  styles,
+}: ModelSearchBarProps) => (
+  <View style={styles.modelSearch}>
+    <Field
+      label="Search models"
+      value={modelSearch}
+      onChangeText={setModelSearch}
+      placeholder="Model or provider"
+    />
+    <Row>
+      <Button
+        title="All"
+        compact
+        selected={modelFilter === "all"}
+        onPress={() => setModelFilter("all")}
+      />
+      <Button
+        title="Favorites"
+        compact
+        selected={modelFilter === "favorites"}
+        onPress={() => setModelFilter("favorites")}
+      />
+      <Button
+        title="Recent"
+        compact
+        selected={modelFilter === "recent"}
+        onPress={() => setModelFilter("recent")}
+      />
+    </Row>
+    <ErrorNotice
+      error={error || catalogError || modelPreferences.error}
+      onRetry={() => {
+        modelPreferences.reload();
+        setCatalogRevision((value) => value + 1);
+      }}
+    />
+  </View>
+);
+
+interface RenderModelVariantsProps extends Pick<
+  ChatController,
+  "capabilities" | "chooseModel" | "currentModel" | "pending" | "styles"
+> {
+  session: SessionInfo;
+}
+
+export const renderModelVariants = ({
+  capabilities,
+  chooseModel,
+  currentModel,
+  pending,
+  session,
+  styles,
+}: RenderModelVariantsProps) =>
+  currentModel?.variants.length ? (
     <View style={styles.variants}>
       <BodyText muted>Variant · {currentModel.name}</BodyText>
       <ScrollView
@@ -159,15 +184,30 @@ export const renderModelVariants = (
       </ScrollView>
     </View>
   ) : undefined;
-};
 
-export const renderModelRow = (
-  chat: ChatController,
-  session: SessionInfo,
-  model: ModelInfo
-) => {
-  const { chooseModel, colors, modelPreferences, pending, serverID, styles } =
-    chat;
+interface RenderModelRowProps extends Pick<
+  ChatController,
+  | "chooseModel"
+  | "colors"
+  | "modelPreferences"
+  | "pending"
+  | "serverID"
+  | "styles"
+> {
+  session: SessionInfo;
+  model: ModelInfo;
+}
+
+export const renderModelRow = ({
+  chooseModel,
+  colors,
+  model,
+  modelPreferences,
+  pending,
+  serverID,
+  session,
+  styles,
+}: RenderModelRowProps) => {
   const selected =
     session.model?.id === model.id &&
     session.model.providerID === model.providerID;
@@ -219,120 +259,330 @@ export const renderModelRow = (
   );
 };
 
-export const renderModelsEmpty = (chat: ChatController) => {
-  const {
-    enabledModels,
-    modelFilter,
-    modelSearch,
-    onOpenNavigation,
-    scopedModels,
-    setCatalogRevision,
-    setModelFilter,
-    setModelSearch,
-    setPanel,
-  } = chat;
-  return (
-    <View style={{ gap: 12, padding: 20 }}>
-      <Empty
-        title={emptyModelsTitle(
-          Boolean(enabledModels.length),
-          modelFilter,
-          Boolean(scopedModels.length)
-        )}
-        detail={emptyModelsDetail(
-          Boolean(enabledModels.length),
-          modelFilter,
-          Boolean(scopedModels.length)
-        )}
-      />
-      {enabledModels.length ? (
-        <Row>
-          {modelSearch && (
-            <Button title="Clear search" onPress={() => setModelSearch("")} />
-          )}
-          {modelFilter !== "all" && (
-            <Button
-              title="Show all models"
-              onPress={() => setModelFilter("all")}
-            />
-          )}
-        </Row>
-      ) : (
-        <>
-          <Button
-            title="Refresh models"
-            onPress={() => setCatalogRevision((value) => value + 1)}
-          />
-          {onOpenNavigation && (
-            <Button
-              title="Open navigation"
-              onPress={() => {
-                setPanel(null);
-                onOpenNavigation();
-              }}
-            />
-          )}
-        </>
+type RenderModelsEmptyProps = Pick<
+  ChatController,
+  | "enabledModels"
+  | "modelFilter"
+  | "modelSearch"
+  | "onOpenNavigation"
+  | "scopedModels"
+  | "setCatalogRevision"
+  | "setModelFilter"
+  | "setModelSearch"
+  | "setPanel"
+>;
+
+export const renderModelsEmpty = ({
+  enabledModels,
+  modelFilter,
+  modelSearch,
+  onOpenNavigation,
+  scopedModels,
+  setCatalogRevision,
+  setModelFilter,
+  setModelSearch,
+  setPanel,
+}: RenderModelsEmptyProps) => (
+  <View style={{ gap: 12, padding: 20 }}>
+    <Empty
+      title={emptyModelsTitle(
+        Boolean(enabledModels.length),
+        modelFilter,
+        Boolean(scopedModels.length)
       )}
-    </View>
-  );
-};
-
-export const ModelList = ({
-  chat,
-  session,
-}: {
-  chat: ChatController;
-  session: SessionInfo;
-}) => {
-  const { filteredModels, styles } = chat;
-  return (
-    <FlatList
-      data={filteredModels}
-      keyExtractor={(model) => `${model.providerID}/${model.id}`}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      automaticallyAdjustKeyboardInsets
-      initialNumToRender={12}
-      maxToRenderPerBatch={12}
-      windowSize={5}
-      contentContainerStyle={styles.modelList}
-      ListHeaderComponent={renderModelVariants(chat, session)}
-      renderItem={({ item: model }) => renderModelRow(chat, session, model)}
-      ListEmptyComponent={renderModelsEmpty(chat)}
+      detail={emptyModelsDetail(
+        Boolean(enabledModels.length),
+        modelFilter,
+        Boolean(scopedModels.length)
+      )}
     />
-  );
-};
-
-export const ModelPicker = ({
-  chat,
-  session,
-}: {
-  chat: ChatController;
-  session: SessionInfo;
-}) => (
-  <View style={{ flex: 1, minHeight: 0 }}>
-    <ModelSearchBar chat={chat} />
-    <ModelList chat={chat} session={session} />
+    {enabledModels.length ? (
+      <Row>
+        {modelSearch && (
+          <Button title="Clear search" onPress={() => setModelSearch("")} />
+        )}
+        {modelFilter !== "all" && (
+          <Button
+            title="Show all models"
+            onPress={() => setModelFilter("all")}
+          />
+        )}
+      </Row>
+    ) : (
+      <>
+        <Button
+          title="Refresh models"
+          onPress={() => setCatalogRevision((value) => value + 1)}
+        />
+        {onOpenNavigation && (
+          <Button
+            title="Open navigation"
+            onPress={() => {
+              setPanel(null);
+              onOpenNavigation();
+            }}
+          />
+        )}
+      </>
+    )}
   </View>
 );
 
-export const ModelsSheet = ({
-  chat,
-  session,
-}: {
-  chat: ChatController;
+interface ModelListProps extends Pick<
+  ChatController,
+  | "capabilities"
+  | "chooseModel"
+  | "colors"
+  | "currentModel"
+  | "enabledModels"
+  | "filteredModels"
+  | "modelFilter"
+  | "modelPreferences"
+  | "modelSearch"
+  | "onOpenNavigation"
+  | "pending"
+  | "scopedModels"
+  | "serverID"
+  | "setCatalogRevision"
+  | "setModelFilter"
+  | "setModelSearch"
+  | "setPanel"
+  | "styles"
+> {
   session: SessionInfo;
-}) => {
-  const { panel, setPanel } = chat;
-  return (
-    <Sheet
-      visible={panel === "models"}
-      title="Choose model"
-      scroll={false}
-      onClose={() => setPanel(null)}
-    >
-      {panel === "models" && <ModelPicker chat={chat} session={session} />}
-    </Sheet>
-  );
-};
+}
+
+export const ModelList = ({
+  capabilities,
+  chooseModel,
+  colors,
+  currentModel,
+  enabledModels,
+  filteredModels,
+  modelFilter,
+  modelPreferences,
+  modelSearch,
+  onOpenNavigation,
+  pending,
+  scopedModels,
+  serverID,
+  session,
+  setCatalogRevision,
+  setModelFilter,
+  setModelSearch,
+  setPanel,
+  styles,
+}: ModelListProps) => (
+  <FlatList
+    data={filteredModels}
+    keyExtractor={(model) => `${model.providerID}/${model.id}`}
+    keyboardShouldPersistTaps="handled"
+    keyboardDismissMode="on-drag"
+    automaticallyAdjustKeyboardInsets
+    initialNumToRender={12}
+    maxToRenderPerBatch={12}
+    windowSize={5}
+    contentContainerStyle={styles.modelList}
+    ListHeaderComponent={renderModelVariants({
+      capabilities,
+      chooseModel,
+      currentModel,
+      pending,
+      session,
+      styles,
+    })}
+    renderItem={({ item: model }) =>
+      renderModelRow({
+        chooseModel,
+        colors,
+        model,
+        modelPreferences,
+        pending,
+        serverID,
+        session,
+        styles,
+      })
+    }
+    ListEmptyComponent={renderModelsEmpty({
+      enabledModels,
+      modelFilter,
+      modelSearch,
+      onOpenNavigation,
+      scopedModels,
+      setCatalogRevision,
+      setModelFilter,
+      setModelSearch,
+      setPanel,
+    })}
+  />
+);
+
+interface ModelPickerProps extends Pick<
+  ChatController,
+  | "capabilities"
+  | "catalogError"
+  | "chooseModel"
+  | "colors"
+  | "currentModel"
+  | "enabledModels"
+  | "error"
+  | "filteredModels"
+  | "modelFilter"
+  | "modelPreferences"
+  | "modelSearch"
+  | "onOpenNavigation"
+  | "pending"
+  | "scopedModels"
+  | "serverID"
+  | "setCatalogRevision"
+  | "setModelFilter"
+  | "setModelSearch"
+  | "setPanel"
+  | "styles"
+> {
+  session: SessionInfo;
+}
+
+export const ModelPicker = ({
+  capabilities,
+  catalogError,
+  chooseModel,
+  colors,
+  currentModel,
+  enabledModels,
+  error,
+  filteredModels,
+  modelFilter,
+  modelPreferences,
+  modelSearch,
+  onOpenNavigation,
+  pending,
+  scopedModels,
+  serverID,
+  session,
+  setCatalogRevision,
+  setModelFilter,
+  setModelSearch,
+  setPanel,
+  styles,
+}: ModelPickerProps) => (
+  <View style={{ flex: 1, minHeight: 0 }}>
+    <ModelSearchBar
+      catalogError={catalogError}
+      error={error}
+      modelFilter={modelFilter}
+      modelPreferences={modelPreferences}
+      modelSearch={modelSearch}
+      setCatalogRevision={setCatalogRevision}
+      setModelFilter={setModelFilter}
+      setModelSearch={setModelSearch}
+      styles={styles}
+    />
+    <ModelList
+      capabilities={capabilities}
+      chooseModel={chooseModel}
+      colors={colors}
+      currentModel={currentModel}
+      enabledModels={enabledModels}
+      filteredModels={filteredModels}
+      modelFilter={modelFilter}
+      modelPreferences={modelPreferences}
+      modelSearch={modelSearch}
+      onOpenNavigation={onOpenNavigation}
+      pending={pending}
+      scopedModels={scopedModels}
+      serverID={serverID}
+      setCatalogRevision={setCatalogRevision}
+      setModelFilter={setModelFilter}
+      setModelSearch={setModelSearch}
+      setPanel={setPanel}
+      styles={styles}
+      session={session}
+    />
+  </View>
+);
+
+interface ModelsSheetProps extends Pick<
+  ChatController,
+  | "capabilities"
+  | "catalogError"
+  | "chooseModel"
+  | "colors"
+  | "currentModel"
+  | "enabledModels"
+  | "error"
+  | "filteredModels"
+  | "modelFilter"
+  | "modelPreferences"
+  | "modelSearch"
+  | "onOpenNavigation"
+  | "panel"
+  | "pending"
+  | "scopedModels"
+  | "serverID"
+  | "setCatalogRevision"
+  | "setModelFilter"
+  | "setModelSearch"
+  | "setPanel"
+  | "styles"
+> {
+  session: SessionInfo;
+}
+
+export const ModelsSheet = ({
+  capabilities,
+  catalogError,
+  chooseModel,
+  colors,
+  currentModel,
+  enabledModels,
+  error,
+  filteredModels,
+  modelFilter,
+  modelPreferences,
+  modelSearch,
+  onOpenNavigation,
+  panel,
+  pending,
+  scopedModels,
+  serverID,
+  session,
+  setCatalogRevision,
+  setModelFilter,
+  setModelSearch,
+  setPanel,
+  styles,
+}: ModelsSheetProps) => (
+  <Sheet
+    visible={panel === "models"}
+    title="Choose model"
+    scroll={false}
+    onClose={() => setPanel(null)}
+  >
+    {panel === "models" && (
+      <ModelPicker
+        capabilities={capabilities}
+        catalogError={catalogError}
+        chooseModel={chooseModel}
+        colors={colors}
+        currentModel={currentModel}
+        enabledModels={enabledModels}
+        error={error}
+        filteredModels={filteredModels}
+        modelFilter={modelFilter}
+        modelPreferences={modelPreferences}
+        modelSearch={modelSearch}
+        onOpenNavigation={onOpenNavigation}
+        pending={pending}
+        scopedModels={scopedModels}
+        serverID={serverID}
+        setCatalogRevision={setCatalogRevision}
+        setModelFilter={setModelFilter}
+        setModelSearch={setModelSearch}
+        setPanel={setPanel}
+        styles={styles}
+        session={session}
+      />
+    )}
+  </Sheet>
+);

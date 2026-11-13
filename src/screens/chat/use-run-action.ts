@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
 
+import { settle } from "../../lib/async";
 import type { Alive, SetPanel } from "./types";
-import { settle } from "./util";
 
 export type RunAction = (
   action: () => Promise<unknown>,

@@ -14,9 +14,9 @@ import type {
 } from "@opencode/client";
 import { useRef, useState } from "react";
 
+import { noop } from "../../lib/async";
 import type { ChatBackend } from "../../lib/chat-backend";
 import type { SyncScope } from "./types";
-import { noop } from "./util";
 
 export const useSessionState = (backend: ChatBackend) => {
   const [session, setSession] = useState<SessionInfo | null>(null);

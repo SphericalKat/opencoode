@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Platform } from "react-native";
 
-import { noop } from "./util";
+import { noop } from "../../lib/async";
 
 export const useScreenReader = () => {
   const [screenReader, setScreenReader] = useState(false);

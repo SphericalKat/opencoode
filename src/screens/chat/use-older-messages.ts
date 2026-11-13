@@ -1,11 +1,11 @@
 import { useState } from "react";
 
+import { settle } from "../../lib/async";
 import { mergeMessages } from "../../lib/chat";
 import { PAGE_SIZE, nextCursor } from "./session-sync";
 import type { CoreClient } from "./session-sync";
 import type { Alive } from "./types";
 import type { SessionState } from "./use-session-state";
-import { settle } from "./util";
 
 interface UseOlderMessagesOptions {
   alive: Alive;

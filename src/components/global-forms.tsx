@@ -2,14 +2,11 @@ import type { FormInfo } from "@opencode/client";
 import React, { useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 
+import { noop } from "../lib/async";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { SessionForms } from "./session-forms";
 import { Button, Busy, ErrorNotice, Heading, BodyText, Row } from "./ui";
-
-const noop = () => {
-  // Refresh is unavailable while the request list is not connected.
-};
 
 const createFormsSync = ({
   client,

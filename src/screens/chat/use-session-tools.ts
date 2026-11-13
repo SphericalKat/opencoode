@@ -8,11 +8,11 @@ import * as Sharing from "expo-sharing";
 import { useState } from "react";
 import { Platform, Share } from "react-native";
 
+import { settle } from "../../lib/async";
 import type { useNativePresentation } from "../../lib/sheets";
 import type { OpenCodeClient, Capabilities } from "./session-sync";
 import type { Alive, SetPanel } from "./types";
 import type { RunAction } from "./use-run-action";
-import { settle } from "./util";
 
 interface UseSessionToolsOptions {
   alive: Alive;

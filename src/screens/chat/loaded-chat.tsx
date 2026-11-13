@@ -28,6 +28,556 @@ import {
 import { TranscriptList } from "./transcript";
 import type { ChatController } from "./use-chat-controller";
 
+const renderConversation = (chat: ChatController, session: SessionInfo) => {
+  const {
+    actionMessage,
+    active,
+    activity,
+    activityNotice,
+    agents,
+    attachments,
+    backend,
+    beginUserScroll,
+    betaLayout,
+    canCopySelected,
+    capabilities,
+    catalogError,
+    client,
+    colors,
+    composerHeight,
+    contentSizeChanged,
+    copySelected,
+    currentModel,
+    cursor,
+    delivery,
+    disclosures,
+    draft,
+    draftLoaded,
+    editInbox,
+    editMessage,
+    error,
+    fetchError,
+    finishUserScroll,
+    foreground,
+    forms,
+    handleChanged,
+    hasPrompt,
+    historyEpochRef,
+    inbox,
+    interrupt,
+    jumpToLatest,
+    list,
+    listLoaded,
+    liveMessagesRef,
+    loadOlder,
+    loadingOlder,
+    maintainPosition,
+    maximumComposerHeight,
+    minimumComposerHeight,
+    onOpenNavigation,
+    onOpenSession,
+    opencodeClient,
+    pending,
+    permissions,
+    projectLabel,
+    providerLabel,
+    refresh,
+    renderMessage,
+    restoredSkillIDs,
+    run,
+    selectedAgentIDs,
+    selectedSkills,
+    send,
+    sending,
+    sessionID,
+    setAttachments,
+    setCatalogRevision,
+    setDelivery,
+    setDraft,
+    setError,
+    setFollowing,
+    setPanel,
+    setRestoredSkillIDs,
+    setSelectedAgentIDs,
+    setSelectedMessageID,
+    setSelectedSkills,
+    showActivityBar,
+    showError,
+    showHeaderActivity,
+    showLatestControl,
+    stopReady,
+    stopping,
+    streamStatus,
+    styles,
+    syncErrors,
+    transcriptLayoutChanged,
+    transcriptMessages,
+    updateComposerHeight,
+    updateScrollPosition,
+    visible,
+  } = chat;
+  return (
+    <>
+      <ChatHeader
+        actionMessage={actionMessage}
+        activity={activity}
+        backend={backend}
+        betaLayout={betaLayout}
+        canCopySelected={canCopySelected}
+        capabilities={capabilities}
+        client={client}
+        colors={colors}
+        copySelected={copySelected}
+        draftLoaded={draftLoaded}
+        editMessage={editMessage}
+        foreground={foreground}
+        onOpenNavigation={onOpenNavigation}
+        onOpenSession={onOpenSession}
+        pending={pending}
+        projectLabel={projectLabel}
+        run={run}
+        sessionID={sessionID}
+        setPanel={setPanel}
+        setSelectedMessageID={setSelectedMessageID}
+        showHeaderActivity={showHeaderActivity}
+        styles={styles}
+        visible={visible}
+        session={session}
+      />
+      <ErrorBanners
+        catalogError={catalogError}
+        error={error}
+        fetchError={fetchError}
+        refresh={refresh}
+        setCatalogRevision={setCatalogRevision}
+        setError={setError}
+        styles={styles}
+        syncErrors={syncErrors}
+      />
+      <RevertBanner
+        historyEpochRef={historyEpochRef}
+        liveMessagesRef={liveMessagesRef}
+        opencodeClient={opencodeClient}
+        pending={pending}
+        run={run}
+        sessionID={sessionID}
+        styles={styles}
+        session={session}
+      />
+      <TranscriptList
+        activityNotice={activityNotice}
+        beginUserScroll={beginUserScroll}
+        betaLayout={betaLayout}
+        capabilities={capabilities}
+        contentSizeChanged={contentSizeChanged}
+        cursor={cursor}
+        disclosures={disclosures}
+        draftLoaded={draftLoaded}
+        editInbox={editInbox}
+        finishUserScroll={finishUserScroll}
+        forms={forms}
+        handleChanged={handleChanged}
+        inbox={inbox}
+        jumpToLatest={jumpToLatest}
+        list={list}
+        listLoaded={listLoaded}
+        loadOlder={loadOlder}
+        loadingOlder={loadingOlder}
+        maintainPosition={maintainPosition}
+        opencodeClient={opencodeClient}
+        pending={pending}
+        permissions={permissions}
+        renderMessage={renderMessage}
+        run={run}
+        sessionID={sessionID}
+        setFollowing={setFollowing}
+        showError={showError}
+        showLatestControl={showLatestControl}
+        styles={styles}
+        transcriptLayoutChanged={transcriptLayoutChanged}
+        transcriptMessages={transcriptMessages}
+        updateScrollPosition={updateScrollPosition}
+        session={session}
+      />
+      <Composer
+        active={active}
+        activity={activity}
+        agents={agents}
+        attachments={attachments}
+        betaLayout={betaLayout}
+        capabilities={capabilities}
+        colors={colors}
+        composerHeight={composerHeight}
+        currentModel={currentModel}
+        delivery={delivery}
+        draft={draft}
+        draftLoaded={draftLoaded}
+        foreground={foreground}
+        hasPrompt={hasPrompt}
+        interrupt={interrupt}
+        jumpToLatest={jumpToLatest}
+        maximumComposerHeight={maximumComposerHeight}
+        minimumComposerHeight={minimumComposerHeight}
+        pending={pending}
+        providerLabel={providerLabel}
+        restoredSkillIDs={restoredSkillIDs}
+        selectedAgentIDs={selectedAgentIDs}
+        selectedSkills={selectedSkills}
+        send={send}
+        sending={sending}
+        setAttachments={setAttachments}
+        setDelivery={setDelivery}
+        setDraft={setDraft}
+        setPanel={setPanel}
+        setRestoredSkillIDs={setRestoredSkillIDs}
+        setSelectedAgentIDs={setSelectedAgentIDs}
+        setSelectedMessageID={setSelectedMessageID}
+        setSelectedSkills={setSelectedSkills}
+        showActivityBar={showActivityBar}
+        showLatestControl={showLatestControl}
+        stopReady={stopReady}
+        stopping={stopping}
+        streamStatus={streamStatus}
+        styles={styles}
+        updateComposerHeight={updateComposerHeight}
+        visible={visible}
+        session={session}
+      />
+    </>
+  );
+};
+
+const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
+  const {
+    active,
+    agents,
+    capabilities,
+    catalogError,
+    chooseModel,
+    client,
+    colors,
+    currentModel,
+    delivery,
+    draftLoaded,
+    enabledModels,
+    error,
+    exportSession,
+    filteredModels,
+    inspect,
+    modelFilter,
+    modelPreferences,
+    modelSearch,
+    moveDirectory,
+    onOpenNavigation,
+    onOpenSession,
+    opencodeClient,
+    panel,
+    pending,
+    queueDevicePicker,
+    run,
+    scopedModels,
+    serverID,
+    sessionID,
+    setBackgroundDirectory,
+    setBackgroundShellID,
+    setCatalogRevision,
+    setDelivery,
+    setModelFilter,
+    setModelSearch,
+    setMoveDirectory,
+    setPanel,
+    setSideQuestion,
+    setTitle,
+    styles,
+    title,
+    toolsDismissed,
+  } = chat;
+  return (
+    <>
+      <ActionsSheet
+        active={active}
+        agents={agents}
+        capabilities={capabilities}
+        client={client}
+        delivery={delivery}
+        error={error}
+        exportSession={exportSession}
+        inspect={inspect}
+        moveDirectory={moveDirectory}
+        onOpenSession={onOpenSession}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        pending={pending}
+        run={run}
+        sessionID={sessionID}
+        setBackgroundDirectory={setBackgroundDirectory}
+        setBackgroundShellID={setBackgroundShellID}
+        setMoveDirectory={setMoveDirectory}
+        setPanel={setPanel}
+        setSideQuestion={setSideQuestion}
+        setTitle={setTitle}
+        title={title}
+        session={session}
+      />
+      <VariantsSheet
+        capabilities={capabilities}
+        chooseModel={chooseModel}
+        currentModel={currentModel}
+        error={error}
+        panel={panel}
+        pending={pending}
+        setPanel={setPanel}
+        session={session}
+      />
+      <ModelsSheet
+        capabilities={capabilities}
+        catalogError={catalogError}
+        chooseModel={chooseModel}
+        colors={colors}
+        currentModel={currentModel}
+        enabledModels={enabledModels}
+        error={error}
+        filteredModels={filteredModels}
+        modelFilter={modelFilter}
+        modelPreferences={modelPreferences}
+        modelSearch={modelSearch}
+        onOpenNavigation={onOpenNavigation}
+        panel={panel}
+        pending={pending}
+        scopedModels={scopedModels}
+        serverID={serverID}
+        setCatalogRevision={setCatalogRevision}
+        setModelFilter={setModelFilter}
+        setModelSearch={setModelSearch}
+        setPanel={setPanel}
+        styles={styles}
+        session={session}
+      />
+      <AgentsSheet
+        agents={agents}
+        capabilities={capabilities}
+        error={error}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        pending={pending}
+        run={run}
+        sessionID={sessionID}
+        setPanel={setPanel}
+        session={session}
+      />
+      <ToolsSheet
+        agents={agents}
+        capabilities={capabilities}
+        delivery={delivery}
+        draftLoaded={draftLoaded}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        queueDevicePicker={queueDevicePicker}
+        setDelivery={setDelivery}
+        setPanel={setPanel}
+        setSideQuestion={setSideQuestion}
+        toolsDismissed={toolsDismissed}
+        session={session}
+      />
+    </>
+  );
+};
+
+const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
+  const {
+    actionMessage,
+    active,
+    agents,
+    alive,
+    backend,
+    capabilities,
+    client,
+    commands,
+    draftLoaded,
+    editMessage,
+    error,
+    fileQuery,
+    fileResults,
+    fileSearchBusy,
+    messages,
+    onOpenSession,
+    opencodeClient,
+    panel,
+    pending,
+    queuedMessagePanelRef,
+    run,
+    selectedMessageID,
+    sessionID,
+    setAttachments,
+    setBackgroundDirectory,
+    setBackgroundShellID,
+    setDraft,
+    setFileQuery,
+    setPanel,
+    setSelectedAgentIDs,
+    setSelectedSkills,
+    setTextSelectionMessage,
+    showError,
+    skills,
+    textSelectionMessage,
+  } = chat;
+  return (
+    <>
+      <MessageSheet
+        actionMessage={actionMessage}
+        active={active}
+        alive={alive}
+        backend={backend}
+        capabilities={capabilities}
+        client={client}
+        draftLoaded={draftLoaded}
+        editMessage={editMessage}
+        error={error}
+        messages={messages}
+        onOpenSession={onOpenSession}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        pending={pending}
+        queuedMessagePanelRef={queuedMessagePanelRef}
+        run={run}
+        selectedMessageID={selectedMessageID}
+        sessionID={sessionID}
+        setBackgroundDirectory={setBackgroundDirectory}
+        setBackgroundShellID={setBackgroundShellID}
+        setPanel={setPanel}
+        setTextSelectionMessage={setTextSelectionMessage}
+        showError={showError}
+        session={session}
+      />
+      <SelectTextSheet
+        opencodeClient={opencodeClient}
+        panel={panel}
+        setPanel={setPanel}
+        setTextSelectionMessage={setTextSelectionMessage}
+        textSelectionMessage={textSelectionMessage}
+        session={session}
+      />
+      <CommandsSheet
+        commands={commands}
+        draftLoaded={draftLoaded}
+        panel={panel}
+        setDraft={setDraft}
+        setPanel={setPanel}
+        setSelectedSkills={setSelectedSkills}
+        skills={skills}
+      />
+      <MentionsSheet
+        agents={agents}
+        fileQuery={fileQuery}
+        fileResults={fileResults}
+        fileSearchBusy={fileSearchBusy}
+        panel={panel}
+        setAttachments={setAttachments}
+        setFileQuery={setFileQuery}
+        setPanel={setPanel}
+        setSelectedAgentIDs={setSelectedAgentIDs}
+        session={session}
+      />
+    </>
+  );
+};
+
+const renderPanelSheets = (chat: ChatController, session: SessionInfo) => {
+  const {
+    active,
+    backgroundDirectory,
+    backgroundShellID,
+    capabilities,
+    colors,
+    context,
+    diffs,
+    onOpenSession,
+    opencodeClient,
+    panel,
+    panelLoading,
+    sessionID,
+    setDraft,
+    setPanel,
+    setSideQuestion,
+    sideQuestion,
+  } = chat;
+  return (
+    <>
+      <DiffSheet
+        colors={colors}
+        diffs={diffs}
+        panel={panel}
+        panelLoading={panelLoading}
+        setPanel={setPanel}
+      />
+      <ContextSheet
+        context={context}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        panelLoading={panelLoading}
+        setPanel={setPanel}
+        session={session}
+      />
+      <InstructionsSheet
+        capabilities={capabilities}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        sessionID={sessionID}
+        setPanel={setPanel}
+      />
+      <SchedulesSheet
+        capabilities={capabilities}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        sessionID={sessionID}
+        setPanel={setPanel}
+      />
+      <BackgroundSheet
+        backgroundDirectory={backgroundDirectory}
+        backgroundShellID={backgroundShellID}
+        capabilities={capabilities}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        sessionID={sessionID}
+        setPanel={setPanel}
+        session={session}
+      />
+      <ChildrenSheet
+        capabilities={capabilities}
+        onOpenSession={onOpenSession}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        sessionID={sessionID}
+        setPanel={setPanel}
+      />
+      <StatsSheet
+        active={active}
+        capabilities={capabilities}
+        panel={panel}
+        setPanel={setPanel}
+        session={session}
+      />
+      <SideQuestionSheet
+        capabilities={capabilities}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        sessionID={sessionID}
+        setPanel={setPanel}
+        setSideQuestion={setSideQuestion}
+        sideQuestion={sideQuestion}
+      />
+      <ResourcesSheet
+        capabilities={capabilities}
+        opencodeClient={opencodeClient}
+        panel={panel}
+        setDraft={setDraft}
+        setPanel={setPanel}
+        session={session}
+      />
+    </>
+  );
+};
+
 export const LoadedChat = ({
   chat,
   session,
@@ -39,29 +589,10 @@ export const LoadedChat = ({
   return (
     <View style={styles.frame}>
       <ChatKeyboardView enabled={visible && !panel}>
-        <ChatHeader chat={chat} session={session} />
-        <ErrorBanners chat={chat} />
-        <RevertBanner chat={chat} session={session} />
-        <TranscriptList chat={chat} session={session} />
-        <Composer chat={chat} session={session} />
-        <ActionsSheet chat={chat} session={session} />
-        <VariantsSheet chat={chat} session={session} />
-        <ModelsSheet chat={chat} session={session} />
-        <AgentsSheet chat={chat} session={session} />
-        <ToolsSheet chat={chat} session={session} />
-        <MessageSheet chat={chat} session={session} />
-        <SelectTextSheet chat={chat} session={session} />
-        <CommandsSheet chat={chat} />
-        <MentionsSheet chat={chat} session={session} />
-        <DiffSheet chat={chat} />
-        <ContextSheet chat={chat} session={session} />
-        <InstructionsSheet chat={chat} />
-        <SchedulesSheet chat={chat} />
-        <BackgroundSheet chat={chat} session={session} />
-        <ChildrenSheet chat={chat} />
-        <StatsSheet chat={chat} session={session} />
-        <SideQuestionSheet chat={chat} />
-        <ResourcesSheet chat={chat} session={session} />
+        {renderConversation(chat, session)}
+        {renderSessionSheets(chat, session)}
+        {renderMessageSheets(chat, session)}
+        {renderPanelSheets(chat, session)}
       </ChatKeyboardView>
     </View>
   );

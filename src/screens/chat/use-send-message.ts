@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 
+import { withCleanup } from "../../lib/async";
 import { parseComposer } from "../../lib/chat";
 import { errorMessage } from "../../lib/client";
 import { saveDraft } from "../../lib/drafts";
@@ -8,7 +9,6 @@ import type { Alive, SetPanel } from "./types";
 import type { ComposerDraft } from "./use-composer-draft";
 import type { RunAction } from "./use-run-action";
 import type { SessionState } from "./use-session-state";
-import { withCleanup } from "./util";
 
 interface UseSendMessageOptions {
   alive: Alive;

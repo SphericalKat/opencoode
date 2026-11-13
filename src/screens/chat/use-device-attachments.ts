@@ -2,13 +2,13 @@ import * as DocumentPicker from "expo-document-picker";
 import { useRef } from "react";
 import { Keyboard } from "react-native";
 
+import { settle } from "../../lib/async";
 import type { ChatBackend } from "../../lib/chat-backend";
 import type { useNativePresentation } from "../../lib/sheets";
 import { readAttachments } from "./attachments";
 import type { Capabilities } from "./session-sync";
 import type { Alive, SetPanel } from "./types";
 import type { ComposerDraft } from "./use-composer-draft";
-import { settle } from "./util";
 
 interface UseDeviceAttachmentsOptions {
   alive: Alive;

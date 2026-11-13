@@ -16,8 +16,8 @@ import type {
 import { KeyboardEvents } from "react-native-keyboard-controller";
 
 import type { TranscriptItem } from "../../components/assistant-turn";
+import { noop } from "../../lib/async";
 import type { Panel, Alive, SetPanel } from "./types";
-import { noop } from "./util";
 
 interface UseTranscriptScrollOptions {
   alive: Alive;

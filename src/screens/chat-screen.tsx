@@ -5,9 +5,30 @@ import { useChatController } from "./chat/use-chat-controller";
 
 const ChatSession = (props: Props) => {
   const chat = useChatController(props);
-  const { session } = chat;
+  const {
+    betaLayout,
+    error,
+    fetchError,
+    loading,
+    onOpenNavigation,
+    projectLabel,
+    refresh,
+    session,
+    styles,
+  } = chat;
   if (!session) {
-    return <SessionUnavailable chat={chat} />;
+    return (
+      <SessionUnavailable
+        betaLayout={betaLayout}
+        error={error}
+        fetchError={fetchError}
+        loading={loading}
+        onOpenNavigation={onOpenNavigation}
+        projectLabel={projectLabel}
+        refresh={refresh}
+        styles={styles}
+      />
+    );
   }
   return <LoadedChat chat={chat} session={session} />;
 };

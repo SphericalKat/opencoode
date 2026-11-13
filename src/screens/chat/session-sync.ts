@@ -9,12 +9,12 @@ import type {
 } from "@opencode/client";
 import React from "react";
 
+import { settle } from "../../lib/async";
 import { isAssistantProgress } from "../../lib/chat";
 import type { ChatBackend, ChatBackendSnapshot } from "../../lib/chat-backend";
 import { errorMessage } from "../../lib/client";
 import type { createStreamBatch } from "../../lib/stream-batch";
 import type { SyncScope } from "./types";
-import { settle } from "./util";
 
 export type CoreClient = ChatBackend["core"];
 export type OpenCodeClient = ChatBackend["opencodeClient"];

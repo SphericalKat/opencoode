@@ -1,6 +1,7 @@
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client";
 import React, { useEffect } from "react";
 
+import { noop, settle } from "../../lib/async";
 import { projectLiveEvents } from "../../lib/chat";
 import type { ChatBackend, ChatBackendSnapshot } from "../../lib/chat-backend";
 import { errorMessage } from "../../lib/client";
@@ -14,7 +15,6 @@ import type {
 } from "./session-sync";
 import type { SyncScope, Alive } from "./types";
 import type { SessionState } from "./use-session-state";
-import { noop, settle } from "./util";
 
 interface UseLiveSessionOptions {
   alive: Alive;

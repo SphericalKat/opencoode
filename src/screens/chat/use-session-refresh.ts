@@ -1,6 +1,7 @@
 import type { SessionMessageInfo } from "@opencode/client";
 import React, { useCallback, useLayoutEffect } from "react";
 
+import { withCleanup } from "../../lib/async";
 import { mergeMessages } from "../../lib/chat";
 import {
   mergeForms,
@@ -11,7 +12,6 @@ import {
 import type { CoreClient, OpenCodeClient, Capabilities } from "./session-sync";
 import type { Alive } from "./types";
 import type { SessionState } from "./use-session-state";
-import { withCleanup } from "./util";
 
 interface UseSessionRefreshOptions {
   alive: Alive;
