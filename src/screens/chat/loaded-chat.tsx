@@ -466,11 +466,13 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
 const renderPanelSheets = (chat: ChatController, session: SessionInfo) => {
   const {
     active,
+    agents,
     backgroundDirectory,
     backgroundShellID,
     capabilities,
     colors,
     context,
+    currentModel,
     diffs,
     onOpenSession,
     opencodeClient,
@@ -533,7 +535,9 @@ const renderPanelSheets = (chat: ChatController, session: SessionInfo) => {
       />
       <StatsSheet
         active={active}
+        agents={agents}
         capabilities={capabilities}
+        currentModel={currentModel}
         panel={panel}
         setPanel={setPanel}
         session={session}

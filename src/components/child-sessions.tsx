@@ -4,6 +4,7 @@ import { AppState, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { sessionStatus } from "../lib/session-status";
 import { useTheme } from "../lib/theme";
 import { confirmAction } from "./dialog";
 import { SegmentedControl } from "./segmented-control";
@@ -68,22 +69,6 @@ type ChildSessionEvent =
 
 const retryDelay = (attempts: number) =>
   Math.min(1000 * 2 ** Math.min(attempts, 4), 15_000);
-
-const childStatus = (isActive: boolean, outcome: SessionInfo["outcome"]) => {
-  if (isActive) {
-    return "Running";
-  }
-  if (outcome === "succeeded") {
-    return "Completed";
-  }
-  if (outcome === "failed") {
-    return "Failed";
-  }
-  if (outcome === "interrupted") {
-    return "Stopped";
-  }
-  return "Idle";
-};
 
 const childStatusColor = (
   isActive: boolean,
@@ -454,7 +439,7 @@ export const ChildSessions = ({
       )}
       {items.map((item) => {
         const isActive = activeIDs.has(item.id);
-        const status = childStatus(isActive, item.outcome);
+        const status = sessionStatus(isActive, item.outcome);
         return (
           <Card key={item.id}>
             <Row style={{ justifyContent: "space-between" }}>
