@@ -13,6 +13,7 @@ const defaultSize = 32;
 const defaultIconSize = 16;
 const borderlessRippleExtra = 4;
 const disabledOpacity = 0.5;
+const submitDisabledOpacity = 0.4;
 
 const faceRadius = (size: IconButtonSize) => {
   if (size === 24) {
@@ -53,7 +54,7 @@ export const IconButton = ({
   iconSize?: number;
   color?: string;
   pressedColor?: string;
-  variant?: "ghost" | "secondary";
+  variant?: "ghost" | "secondary" | "submit";
   borderless?: boolean;
   busy?: boolean;
   disabled?: boolean;
@@ -68,7 +69,8 @@ export const IconButton = ({
     borderless,
     radius: borderless ? size / 2 + borderlessRippleExtra : undefined,
   });
-  const iconColor = color ?? colors.muted;
+  const submit = variant === "submit";
+  const iconColor = color ?? (submit ? colors.onEmphasis : colors.muted);
   const slop = Math.max(0, (touchTarget - size) / 2);
   const face: ViewStyle = {
     borderRadius: faceRadius(size),
@@ -79,8 +81,11 @@ export const IconButton = ({
       borderColor: colors.border,
       borderWidth: 1,
     }),
+    ...(submit && { backgroundColor: colors.emphasis }),
     ...(selected && { backgroundColor: colors.selected }),
-    ...(inactive && { opacity: disabledOpacity }),
+    ...(inactive && {
+      opacity: submit ? submitDisabledOpacity : disabledOpacity,
+    }),
   };
   return (
     <Pressable

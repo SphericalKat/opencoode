@@ -48,10 +48,21 @@ export const createStyles = (colors: ThemeColors) =>
     },
     composerControlsRow: {
       alignItems: "center",
-      flex: 1,
-      flexDirection: "row",
+      flexGrow: 1,
       gap: 2,
-      minWidth: 0,
+    },
+    composerControlsScroll: { flex: 1, marginEnd: 12, marginStart: 4 },
+    composerActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+    },
+    addMenuShortcut: {
+      color: colors.faint,
+      fontSize: 13,
+      lineHeight: 20,
+      textAlign: "center",
+      width: 20,
     },
     composerCardArea: {
       alignItems: "center",
@@ -60,17 +71,6 @@ export const createStyles = (colors: ThemeColors) =>
       paddingTop: 4,
     },
     composerDock: { alignItems: "stretch" },
-    touchBar: {
-      alignItems: "center",
-      backgroundColor: colors.bg,
-      borderTopColor: colors.border,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      flexDirection: "row",
-      gap: 4,
-      height: 56,
-      paddingHorizontal: 6,
-    },
-    touchBarSpacer: { flex: 1 },
     composerInputShell: { fontFamily: mono, letterSpacing: -0.04 },
     composerInput: {
       backgroundColor: "transparent",
