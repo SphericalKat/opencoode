@@ -4,6 +4,7 @@ import React, {
   createContext,
   memo,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -31,7 +32,8 @@ import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { inlineCodeKind } from "../lib/transcript";
 import { FadeSpan } from "./fade-span";
-import { Button, mono, monoMedium, sans } from "./ui";
+import { IconButton } from "./icon-button";
+import { mono, monoMedium, sans } from "./ui";
 import { useStreamReveal } from "./use-stream-reveal";
 
 const parser = new MarkdownIt({
@@ -54,25 +56,17 @@ const createStyles = (colors: ThemeColors) => ({
       padding: 10,
     },
     code: {
-      backgroundColor: colors.bg,
+      backgroundColor: colors.codeBackground,
       borderColor: colors.border,
-      borderRadius: 10,
-      borderWidth: 1,
+      borderRadius: 6,
+      borderWidth: StyleSheet.hairlineWidth,
       minWidth: 0,
       overflow: "hidden",
+      position: "relative",
     },
-    codeContent: { paddingBottom: 12, paddingHorizontal: 12 },
-    codeHeader: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 8,
-      justifyContent: "space-between",
-      paddingLeft: 12,
-      // The ghost Copy button has its own 10pt padding, so its label ends
-      // 12pt from the edge, level with the language label.
-      paddingRight: 2,
-      paddingVertical: 4,
-    },
+    codeContent: { padding: 12 },
+    copyButton: { position: "absolute", right: 4, top: 4 },
+    copyFace: { backgroundColor: withAlpha(colors.codeBackground, 0.92) },
     codeText: {
       color: colors.text,
       fontFamily: mono,
@@ -96,12 +90,6 @@ const createStyles = (colors: ThemeColors) => ({
     },
     inlineCodePath: { backgroundColor: "transparent", color: colors.codePath },
     italic: { fontStyle: "italic" },
-    language: {
-      color: colors.muted,
-      flexShrink: 1,
-      fontFamily: mono,
-      fontSize: 12,
-    },
     link: { color: colors.blue, textDecorationLine: "underline" },
     list: { gap: 6, minWidth: 0 },
     // Keep an auto flex basis so native layout measures wrapped list text at its final width.
@@ -525,58 +513,38 @@ const segmentStyle = (segment: SyntaxSegment): TextStyle | undefined => {
   };
 };
 
-const copyLabel = (feedback?: { failed: boolean }): string => {
-  if (feedback?.failed) {
-    return "Retry copy";
-  }
-  return feedback ? "Copied" : "Copy";
-};
+type CopyStatus = "idle" | "copied" | "failed";
 
-const CodeView = ({ code, language }: { code: string; language: string }) => {
+const copiedDurationMs = 2000;
+
+export const CodeCard = ({
+  code,
+  highlighted,
+  selectable,
+}: {
+  code: string;
+  highlighted?: React.ReactNode[] | null;
+  selectable: boolean;
+}) => {
   const styles = useMarkdownStyles();
   const { colors } = useTheme();
-  const selectable = useContext(SelectionContext);
   const selectMessage = useContext(MessageActionsContext);
-  const highlighted = useMemo(
-    () => highlightCode(code, language, colors),
-    [code, language, colors]
-  );
-  const [feedback, setFeedback] = useState<{ code: string; failed: boolean }>();
-  const currentFeedback = feedback?.code === code ? feedback : undefined;
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  useEffect(() => {
+    if (copyStatus !== "copied") {
+      return;
+    }
+    const timer = setTimeout(() => setCopyStatus("idle"), copiedDurationMs);
+    return () => clearTimeout(timer);
+  }, [copyStatus]);
+  const copied = copyStatus === "copied";
   return (
     <View style={styles.code}>
-      <View style={styles.codeHeader}>
-        <Text selectable={selectable} style={styles.language}>
-          {language || "TEXT"}
-        </Text>
-        <Button
-          title={copyLabel(currentFeedback)}
-          size="compact"
-          variant="ghost"
-          accessibilityLabel="Copy code"
-          onPress={() => {
-            void copyText(code)
-              .then(() => setFeedback({ code, failed: false }))
-              .catch(() => setFeedback({ code, failed: true }));
-          }}
-        />
-      </View>
-      {currentFeedback?.failed && (
-        <Text
-          selectable={selectable}
-          accessibilityRole="alert"
-          style={styles.copyError}
-        >
-          Copy failed.{" "}
-          {selectable ? "Select the text or try again." : "Try again."}
-        </Text>
-      )}
       <ScrollView
         horizontal
         nestedScrollEnabled
         directionalLockEnabled
-        persistentScrollbar
-        showsHorizontalScrollIndicator
+        showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.codeContent}
       >
         {/* A long-press handler makes this Text the JS responder instead of
@@ -592,7 +560,43 @@ const CodeView = ({ code, language }: { code: string; language: string }) => {
           {highlighted ?? code}
         </Text>
       </ScrollView>
+      <View style={styles.copyButton}>
+        <IconButton
+          icon={copied ? "check" : "copy"}
+          size={24}
+          color={colors.muted}
+          accessibilityLabel={copied ? "Copied" : "Copy code"}
+          onPress={() => {
+            void copyText(code)
+              .then(() => setCopyStatus("copied"))
+              .catch(() => setCopyStatus("failed"));
+          }}
+          style={styles.copyFace}
+        />
+      </View>
+      {copyStatus === "failed" && (
+        <Text
+          selectable={selectable}
+          accessibilityRole="alert"
+          style={styles.copyError}
+        >
+          Copy failed.{" "}
+          {selectable ? "Select the text or try again." : "Try again."}
+        </Text>
+      )}
     </View>
+  );
+};
+
+const CodeView = ({ code, language }: { code: string; language: string }) => {
+  const { colors } = useTheme();
+  const selectable = useContext(SelectionContext);
+  const highlighted = useMemo(
+    () => highlightCode(code, language, colors),
+    [code, language, colors]
+  );
+  return (
+    <CodeCard code={code} highlighted={highlighted} selectable={selectable} />
   );
 };
 
