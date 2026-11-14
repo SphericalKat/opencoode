@@ -1,8 +1,14 @@
-import { useId } from "react";
+import { useCallback, useId, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import type {
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+} from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 const DEFAULT_WIDTH = 16;
+const SCROLL_SLACK = 1;
 
 const styles = StyleSheet.create({
   fade: { bottom: 0, position: "absolute", top: 0 },
@@ -41,4 +47,36 @@ export const EdgeFade = ({
       </Svg>
     </View>
   );
+};
+
+// Tracks which ends of a horizontal scroller hide content. Spread `handlers`
+// onto the ScrollView and render an EdgeFade for each true edge.
+export const useHorizontalEdges = () => {
+  const [viewport, setViewport] = useState(0);
+  const [content, setContent] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const onLayout = useCallback(
+    (event: LayoutChangeEvent) => setViewport(event.nativeEvent.layout.width),
+    []
+  );
+  const onContentSizeChange = useCallback(
+    (width: number) => setContent(width),
+    []
+  );
+  const onScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) =>
+      setOffset(event.nativeEvent.contentOffset.x),
+    []
+  );
+  const overflows = content > viewport + SCROLL_SLACK;
+  return {
+    left: overflows && offset > SCROLL_SLACK,
+    right: overflows && offset + viewport < content - SCROLL_SLACK,
+    handlers: {
+      onContentSizeChange,
+      onLayout,
+      onScroll,
+      scrollEventThrottle: 16,
+    },
+  };
 };

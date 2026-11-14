@@ -32,6 +32,7 @@ import type { SyntaxSegment } from "../lib/syntax";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { inlineCodeKind, tableColumnWidths } from "../lib/transcript";
+import { EdgeFade, useHorizontalEdges } from "./edge-fade";
 import { FadeSpan } from "./fade-span";
 import { IconButton } from "./icon-button";
 import { elevation } from "./surface";
@@ -553,6 +554,7 @@ export const CodeCard = ({
     return () => clearTimeout(timer);
   }, [copyStatus]);
   const copied = copyStatus === "copied";
+  const edges = useHorizontalEdges();
   return (
     <View style={styles.code}>
       <ScrollView
@@ -561,6 +563,7 @@ export const CodeCard = ({
         directionalLockEnabled
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.codeContent}
+        {...edges.handlers}
       >
         {/* A long-press handler makes this Text the JS responder instead of
             the message row. On Android the row would otherwise intercept
@@ -575,6 +578,8 @@ export const CodeCard = ({
           {highlighted ?? code}
         </Text>
       </ScrollView>
+      {edges.left && <EdgeFade side="left" color={colors.codeBackground} />}
+      {edges.right && <EdgeFade side="right" color={colors.codeBackground} />}
       <View style={styles.copyButton}>
         <IconButton
           icon={copied ? "check" : "copy"}
@@ -724,7 +729,7 @@ const TableCellView = ({
 
 const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
   const styles = useMarkdownStyles();
-  const { scheme } = useTheme();
+  const { colors, scheme } = useTheme();
   const selectable = useContext(SelectionContext);
   const selectMessage = useContext(MessageActionsContext);
   const [frameWidth, setFrameWidth] = useState(0);
@@ -736,6 +741,7 @@ const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
     frameWidth - FRAME_INSET - StyleSheet.hairlineWidth * 2
   );
 
+  const tableEdges = useHorizontalEdges();
   const recordWidth = useCallback((key: string, layoutWidth: number) => {
     // Layout widths are fractional. Rounding down leaves a cell a fraction
     // narrower than its text, which wraps the last character.
@@ -819,6 +825,7 @@ const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ width: contentWidth }}
           style={styles.tableScroll}
+          {...tableEdges.handlers}
         >
           {/* The table claims the JS responder so the message row does not.
             On Android the row would otherwise intercept every move, and this
@@ -846,6 +853,8 @@ const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
             </View>
           </Pressable>
         </ScrollView>
+        {tableEdges.left && <EdgeFade side="left" color={colors.bg} />}
+        {tableEdges.right && <EdgeFade side="right" color={colors.bg} />}
       </View>
     </View>
   );

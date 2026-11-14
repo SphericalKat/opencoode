@@ -12,7 +12,7 @@ import {
   useMenuAnchor,
 } from "../../components/anchored-menu";
 import type { Rect } from "../../components/anchored-menu";
-import { EdgeFade } from "../../components/edge-fade";
+import { EdgeFade, useHorizontalEdges } from "../../components/edge-fade";
 import { IconButton } from "../../components/icon-button";
 import { SelectMenu, SelectTrigger } from "../../components/select";
 import { elevation } from "../../components/surface";
@@ -483,29 +483,21 @@ const ChipScroller = ({
   styles,
 }: Pick<ChatController, "styles"> & { children: React.ReactNode }) => {
   const { colors, scheme } = useTheme();
-  const [viewport, setViewport] = useState(0);
-  const [content, setContent] = useState(0);
-  const [offset, setOffset] = useState(0);
+  const { left, right, handlers } = useHorizontalEdges();
   const fade = scheme === "dark" ? colors.panel : colors.bg;
-  const overflows = content > viewport + 1;
   return (
     <View style={styles.composerControlsViewport}>
       <ScrollView
         horizontal
         keyboardShouldPersistTaps="handled"
         showsHorizontalScrollIndicator={false}
-        scrollEventThrottle={16}
         contentContainerStyle={styles.composerControlsRow}
-        onLayout={(event) => setViewport(event.nativeEvent.layout.width)}
-        onContentSizeChange={(width) => setContent(width)}
-        onScroll={(event) => setOffset(event.nativeEvent.contentOffset.x)}
+        {...handlers}
       >
         {children}
       </ScrollView>
-      {overflows && offset > 1 && <EdgeFade side="left" color={fade} />}
-      {overflows && offset + viewport < content - 1 && (
-        <EdgeFade side="right" color={fade} />
-      )}
+      {left && <EdgeFade side="left" color={fade} />}
+      {right && <EdgeFade side="right" color={fade} />}
     </View>
   );
 };
