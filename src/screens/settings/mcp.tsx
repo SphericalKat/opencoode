@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { View } from "react-native";
 
 import { GlobalForms } from "../../components/global-forms";
+import { SheetGroup, SheetRow } from "../../components/list-sheet";
 import { SegmentedControl } from "../../components/segmented-control";
 import { useUndoableRemoval } from "../../components/snackbar";
 import {
   Button,
-  Card,
   Empty,
   ErrorNotice,
   Field,
@@ -16,14 +17,102 @@ import {
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
 import { externalURL, withSettingsRequest } from "../../lib/settings";
-import { useTheme, useThemedStyles } from "../../lib/theme";
-import { Page, SettingsCardHeader, runBusy, useResource } from "./shared";
-import { createStyles } from "./styles";
+import { useTheme } from "../../lib/theme";
+import { Page, runBusy, useResource } from "./shared";
 
 const serverKindOptions = [
   { label: "Remote", value: "remote" },
   { label: "Local", value: "local" },
 ] as const;
+
+type McpServer = Awaited<ReturnType<Client["mcp"]["list"]>>["data"][number];
+
+const SHEET_CONTENT_STYLE = { gap: 12, paddingTop: 4 } as const;
+
+const statusLabel = (item: McpServer) => {
+  const text = item.status.status.replace("_", " ");
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+};
+
+const ServerRow = ({
+  item,
+  onPress,
+}: {
+  item: McpServer;
+  onPress: () => void;
+}) => {
+  const { colors } = useTheme();
+  const status = statusLabel(item);
+  return (
+    <View>
+      <SheetRow
+        label={item.title || item.name}
+        description={item.title ? `${item.name} · ${status}` : status}
+        trailing="chevron"
+        onPress={onPress}
+      />
+      {"error" in item.status && (
+        <BodyText
+          style={{
+            color: colors.danger,
+            paddingBottom: 12,
+            paddingHorizontal: 12,
+          }}
+        >
+          {item.status.error}
+        </BodyText>
+      )}
+    </View>
+  );
+};
+
+const ServerSheet = ({
+  busy,
+  error,
+  item,
+  onClose,
+  onRemove,
+  onToggle,
+}: {
+  busy: boolean;
+  error: string | null;
+  item: McpServer | undefined;
+  onClose: () => void;
+  onRemove: (item: McpServer) => void;
+  onToggle: (item: McpServer) => void;
+}) => (
+  <Sheet
+    visible={item !== undefined}
+    title={item ? item.title || item.name : "MCP server"}
+    fitContent
+    contentStyle={SHEET_CONTENT_STYLE}
+    onClose={onClose}
+  >
+    <ErrorNotice error={error} />
+    {item?.status.status === "needs_auth" && (
+      <BodyText muted>
+        Connect its account in the Accounts tab. The integration name is{" "}
+        {item.integrationID || item.name}.
+      </BodyText>
+    )}
+    {item && (
+      <SheetGroup title={item.name}>
+        <SheetRow
+          label={item.status.status === "connected" ? "Disconnect" : "Connect"}
+          description={statusLabel(item)}
+          disabled={busy}
+          onPress={() => onToggle(item)}
+        />
+        <SheetRow
+          label="Remove"
+          destructive
+          disabled={busy}
+          onPress={() => onRemove(item)}
+        />
+      </SheetGroup>
+    )}
+  </Sheet>
+);
 
 export const Mcp = ({
   client,
@@ -32,8 +121,6 @@ export const Mcp = ({
   client: Client;
   directory: string;
 }) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
   const { data, error, loading, refresh } = useResource(
     client,
     directory,
@@ -53,8 +140,10 @@ export const Mcp = ({
   const [url, setUrl] = useState("");
   const [command, setCommand] = useState("");
   const [resources, setResources] = useState<unknown>();
+  const [selected, setSelected] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const selectedItem = visible?.find((item) => item.name === selected);
   const run = async (action: (signal: AbortSignal) => Promise<void>) => {
     setErrorAction(null);
     await runBusy(setBusy, setErrorAction, async () => {
@@ -67,18 +156,32 @@ export const Mcp = ({
   return (
     <Page error={error} loading={loading} refresh={refresh}>
       <GlobalForms client={client} directory={directory} />
-      <Row>
-        <Button
-          title="Add MCP server"
-          variant="primary"
-          disabled={busy}
-          onPress={() => {
-            setAdding(true);
-            setErrorAction(null);
-          }}
+      <ErrorNotice error={selected ? null : errorAction} />
+      {visible && visible.length > 0 && (
+        <SheetGroup title="MCP servers">
+          {visible.map((item) => (
+            <ServerRow
+              key={item.name}
+              item={item}
+              onPress={() => {
+                setErrorAction(null);
+                setSelected(item.name);
+              }}
+            />
+          ))}
+        </SheetGroup>
+      )}
+      {visible && !visible.length && (
+        <Empty
+          title="No MCP servers"
+          detail="Connect tools and resources from your own servers."
         />
-        <Button
-          title="Resources"
+      )}
+      <SheetGroup title="Resources">
+        <SheetRow
+          label="MCP resources"
+          description="Browse resources from connected servers."
+          trailing="chevron"
           disabled={busy}
           onPress={() => {
             void run(async (signal) => {
@@ -91,72 +194,47 @@ export const Mcp = ({
             });
           }}
         />
-      </Row>
-      <ErrorNotice error={errorAction} />
-      {visible?.map((item) => (
-        <Card key={item.name} style={styles.card}>
-          <SettingsCardHeader
-            action={
-              <Button
-                title={
-                  item.status.status === "connected" ? "Disconnect" : "Connect"
-                }
-                busy={busy}
-                size="compact"
-                onPress={() => {
-                  void run(async (signal) => {
-                    const input = {
-                      location: { directory },
-                      server: item.name,
-                    };
-                    await (item.status.status === "connected"
-                      ? client.experimental.mcp.disconnect(input, { signal })
-                      : client.experimental.mcp.connect(input, { signal }));
-                  });
-                }}
-              />
-            }
-            subtitle={`${item.name} · ${item.status.status.replace("_", " ")}`}
-            title={item.title || item.name}
-          />
-          {"error" in item.status && (
-            <BodyText style={{ color: colors.danger }}>
-              {item.status.error}
-            </BodyText>
-          )}
-          {item.status.status === "needs_auth" && (
-            <BodyText muted>
-              Connect its account in the Accounts tab. The integration name is{" "}
-              {item.integrationID || item.name}.
-            </BodyText>
-          )}
-          <Button
-            title="Remove"
-            variant="danger"
-            size="compact"
-            busy={busy}
-            onPress={() => {
-              removeServer(item.name, {
-                commit: () =>
-                  withSettingsRequest(async (signal) => {
-                    await client.experimental.mcp.remove(
-                      { location: { directory }, server: item.name },
-                      { signal }
-                    );
-                    await refresh(signal);
-                  }),
-                message: "MCP server removed",
-              });
-            }}
-          />
-        </Card>
-      ))}
-      {visible && !visible.length && (
-        <Empty
-          title="No MCP servers"
-          detail="Connect tools and resources from your own servers."
-        />
-      )}
+      </SheetGroup>
+      <Button
+        title="Add MCP server"
+        variant="primary"
+        fullWidth
+        disabled={busy}
+        onPress={() => {
+          setAdding(true);
+          setErrorAction(null);
+        }}
+      />
+      <ServerSheet
+        busy={busy}
+        error={errorAction}
+        item={selectedItem}
+        onClose={() => setSelected(null)}
+        onToggle={(item) => {
+          void run(async (signal) => {
+            const input = { location: { directory }, server: item.name };
+            await (item.status.status === "connected"
+              ? client.experimental.mcp.disconnect(input, { signal })
+              : client.experimental.mcp.connect(input, { signal }));
+            signal.throwIfAborted();
+            setSelected(null);
+          });
+        }}
+        onRemove={(item) => {
+          setSelected(null);
+          removeServer(item.name, {
+            commit: () =>
+              withSettingsRequest(async (signal) => {
+                await client.experimental.mcp.remove(
+                  { location: { directory }, server: item.name },
+                  { signal }
+                );
+                await refresh(signal);
+              }),
+            message: "MCP server removed",
+          });
+        }}
+      />
       <Sheet
         visible={resources !== undefined}
         title="MCP resources"

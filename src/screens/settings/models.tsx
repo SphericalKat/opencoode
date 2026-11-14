@@ -2,6 +2,7 @@ import type { ModelInfo } from "@opencode/client";
 import { useState } from "react";
 import { View } from "react-native";
 
+import { SheetGroup, SheetRow } from "../../components/list-sheet";
 import {
   Button,
   Card,
@@ -13,35 +14,53 @@ import {
   Sheet,
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
-import { useThemedStyles } from "../../lib/theme";
 import type { ModelCatalog } from "./sections";
-import { Page, SettingsCardHeader, useResource } from "./shared";
-import { createStyles } from "./styles";
+import { Page, useResource } from "./shared";
 
-const ModelCard = ({
-  item,
+const modelKey = (item: ModelInfo) => `${item.providerID}/${item.id}`;
+
+const groupByProvider = (items: readonly ModelInfo[]) => {
+  const groups = new Map<string, ModelInfo[]>();
+  for (const item of items) {
+    const group = groups.get(item.providerID);
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(item.providerID, [item]);
+    }
+  }
+  return [...groups.entries()];
+};
+
+const ModelGroups = ({
+  items,
+  providerNames,
   onSelect,
 }: {
-  item: ModelInfo;
+  items: readonly ModelInfo[];
+  providerNames: ReadonlyMap<string, string>;
   onSelect: (item: ModelInfo) => void;
-}) => {
-  const styles = useThemedStyles(createStyles);
-  return (
-    <Card style={styles.card}>
-      <SettingsCardHeader
-        action={
-          <Button
-            title="Details"
-            size="compact"
+}) => (
+  <>
+    {groupByProvider(items).map(([providerID, group]) => (
+      <SheetGroup
+        key={providerID}
+        title={providerNames.get(providerID) ?? providerID}
+      >
+        {group.map((item) => (
+          <SheetRow
+            key={modelKey(item)}
+            label={item.name}
+            description={item.enabled ? "Available" : "Not connected"}
+            trailing="chevron"
+            accessibilityLabel={`${item.name}, ${item.providerID}, details`}
             onPress={() => onSelect(item)}
           />
-        }
-        subtitle={`${item.providerID} · ${item.enabled ? "Available" : "Not connected"}`}
-        title={item.name}
-      />
-    </Card>
-  );
-};
+        ))}
+      </SheetGroup>
+    ))}
+  </>
+);
 
 const ModelsStatus = ({
   hasModels,
@@ -160,7 +179,6 @@ export const Models = ({
   client?: Client;
   directory: string;
 }) => {
-  const styles = useThemedStyles(createStyles);
   const { data, error, loading, refresh } = useResource(
     client ?? catalog,
     directory,
@@ -191,6 +209,9 @@ export const Models = ({
         .toLowerCase()
         .includes(search)
     ) ?? [];
+  const providerNames = new Map(
+    data?.providers?.map((item) => [item.id, item.name] as const)
+  );
   return (
     <Page error={error} loading={loading} refresh={refresh}>
       <Field
@@ -216,14 +237,11 @@ export const Models = ({
           ? " Edit configuration to change server defaults or custom providers."
           : ""}
       </BodyText>
-      <BodyText style={styles.sectionLabel}>{models.length} MODELS</BodyText>
-      {models.slice(0, limit).map((item) => (
-        <ModelCard
-          key={`${item.providerID}/${item.id}`}
-          item={item}
-          onSelect={setSelected}
-        />
-      ))}
+      <ModelGroups
+        items={models.slice(0, limit)}
+        providerNames={providerNames}
+        onSelect={setSelected}
+      />
       {models.length > limit && (
         <>
           <BodyText muted>

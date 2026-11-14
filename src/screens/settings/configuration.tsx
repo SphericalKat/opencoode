@@ -1,23 +1,25 @@
 import { isFileNotFoundError } from "@opencode/client";
 import { useRef, useState } from "react";
-import { ActivityIndicator } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
 import { confirmAction } from "../../components/dialog";
 import { SheetGroup, SheetRow } from "../../components/list-sheet";
+import { ShellIcon } from "../../components/shell-icon";
 import {
   Button,
-  Card,
-  Disclosure,
   ErrorNotice,
   Field,
   JsonView,
   BodyText,
   mono,
   Sheet,
+  touchTarget,
+  usePressFeedback,
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
 import { saveConfigFile, withSettingsRequest } from "../../lib/settings";
-import { useTheme } from "../../lib/theme";
+import { useTheme, useThemedStyles } from "../../lib/theme";
+import type { ThemeColors } from "../../lib/theme";
 import { useUnsavedChanges } from "../../lib/unsaved";
 import { Page, runBusy, useResource } from "./shared";
 
@@ -54,6 +56,95 @@ const rowStatus = (
   return sameConfigAction(activeAction, expected) ? "busy" : "disabled";
 };
 
+const createRowStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    copy: { flexShrink: 1, minWidth: 0 },
+    disabled: { opacity: 0.5 },
+    label: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "400",
+      lineHeight: 20,
+    },
+    row: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: touchTarget,
+      paddingEnd: 12,
+      paddingStart: 12,
+      paddingVertical: 8,
+    },
+    subtitle: {
+      color: colors.muted,
+      fontFamily: mono,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    trailing: { marginLeft: "auto" },
+  });
+
+export const MonoRow = ({
+  disabled,
+  label,
+  onPress,
+  status = "idle",
+  subtitle,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress?: () => void;
+  status?: "busy" | "idle";
+  subtitle?: string | null;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createRowStyles);
+  const { android_ripple, pressedStyle } = usePressFeedback();
+  const content = (
+    <>
+      <View style={styles.copy}>
+        <BodyText style={styles.label}>{label}</BodyText>
+        {subtitle ? (
+          <BodyText style={styles.subtitle}>{subtitle}</BodyText>
+        ) : null}
+      </View>
+      {onPress && (
+        <View style={styles.trailing}>
+          {status === "busy" ? (
+            <ActivityIndicator size="small" color={colors.muted} />
+          ) : (
+            <ShellIcon name="chevron" size={16} color={colors.faint} />
+          )}
+        </View>
+      )}
+    </>
+  );
+  if (!onPress) {
+    return (
+      <View accessible style={styles.row}>
+        {content}
+      </View>
+    );
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={subtitle ? `${label}, ${subtitle}` : label}
+      accessibilityState={{ disabled: !!disabled }}
+      android_ripple={android_ripple}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        pressed && pressedStyle,
+        disabled && styles.disabled,
+      ]}
+    >
+      {content}
+    </Pressable>
+  );
+};
+
 const ConfigActionRow = ({
   onPress,
   status,
@@ -80,7 +171,7 @@ const ConfigActionRow = ({
   );
 };
 
-const DefaultShellDisclosure = ({
+const DefaultShellGroup = ({
   activeAction,
   busy,
   onSelectDefault,
@@ -93,29 +184,32 @@ const DefaultShellDisclosure = ({
   onSelectShell: (path: string, name: string) => void;
   shells?: { acceptable: boolean; name: string; path: string }[];
 }) => (
-  <Disclosure title="Default shell">
+  <>
     <BodyText muted>
       This sets the shell for commands on your OpenCode server.
     </BodyText>
-    <Button
-      title="Use system default"
-      busy={sameConfigAction(activeAction, { kind: "shell", path: null })}
-      disabled={busy}
-      onPress={onSelectDefault}
-    />
-    {shells?.map((shell) => (
-      <Button
-        key={shell.path}
-        title={`${shell.name} · ${shell.path}`}
-        disabled={busy || !shell.acceptable}
-        busy={sameConfigAction(activeAction, {
-          kind: "shell",
-          path: shell.path,
-        })}
-        onPress={() => onSelectShell(shell.path, shell.name)}
+    <SheetGroup variant="grouped" title="Default shell">
+      <ConfigActionRow
+        title="Use system default"
+        status={rowStatus(activeAction, { kind: "shell", path: null })}
+        onPress={onSelectDefault}
       />
-    ))}
-  </Disclosure>
+      {shells?.map((shell) => (
+        <MonoRow
+          key={shell.path}
+          label={shell.name}
+          subtitle={shell.path}
+          disabled={busy || !shell.acceptable}
+          status={
+            sameConfigAction(activeAction, { kind: "shell", path: shell.path })
+              ? "busy"
+              : "idle"
+          }
+          onPress={() => onSelectShell(shell.path, shell.name)}
+        />
+      ))}
+    </SheetGroup>
+  </>
 );
 
 const ConfigEditorSheet = ({
@@ -194,6 +288,10 @@ export const Configuration = ({
     "Configuration editor",
     Boolean(editing && text !== editing.original)
   );
+  const [viewing, setViewing] = useState<{
+    info: unknown;
+    path?: string | null;
+  }>();
   const [notice, setNotice] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<ConfigAction | null>(null);
@@ -220,6 +318,29 @@ export const Configuration = ({
     );
     busyLock.current = false;
   };
+  const editSource = (editPath: string) => {
+    if (!editPath) {
+      return;
+    }
+    void run({ kind: "edit", path: editPath }, async (signal) => {
+      const source = new TextDecoder().decode(
+        await client.file.read(
+          { location: { directory }, path: editPath },
+          { signal }
+        )
+      );
+      signal.throwIfAborted();
+      setEditing({ original: source, path: editPath });
+      setText(source);
+    });
+  };
+  const entries = data?.entries ?? [];
+  const directories = entries.flatMap((entry, index) =>
+    entry.type === "directory" ? [{ entry, index }] : []
+  );
+  const documents = entries.flatMap((entry, index) =>
+    entry.type === "document" ? [{ entry, index }] : []
+  );
   return (
     <Page error={error} loading={loading} refresh={refresh}>
       <BodyText muted>
@@ -273,60 +394,51 @@ export const Configuration = ({
           }}
         />
       </SheetGroup>
-      {data?.entries.map((entry, index) => (
-        <Card key={index}>
-          <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
-            {entry.path || "Runtime configuration"}
-          </BodyText>
-          <BodyText muted>
-            {entry.type === "directory"
-              ? "Configuration directory"
-              : "Configuration document"}
-          </BodyText>
-          {entry.type === "document" && (
-            <>
-              <Disclosure title="Read effective values" variant="embedded">
-                <JsonView value={entry.info} />
-              </Disclosure>
-              {entry.path && (
-                <Button
-                  title="Edit source file"
-                  busy={
-                    entry.path
-                      ? sameConfigAction(activeAction, {
-                          kind: "edit",
-                          path: entry.path,
-                        })
-                      : false
-                  }
-                  disabled={busy}
-                  onPress={() => {
-                    const editPath = entry.path;
-                    if (!editPath) {
-                      return;
-                    }
-                    void run(
-                      { kind: "edit", path: editPath },
-                      async (signal) => {
-                        const source = new TextDecoder().decode(
-                          await client.file.read(
-                            { location: { directory }, path: editPath },
-                            { signal }
-                          )
-                        );
-                        signal.throwIfAborted();
-                        setEditing({ original: source, path: editPath });
-                        setText(source);
-                      }
-                    );
-                  }}
-                />
-              )}
-            </>
+      {directories.length > 0 && (
+        <SheetGroup variant="grouped" title="Locations">
+          {directories.map(({ entry, index }) => (
+            <MonoRow
+              key={`${index}:${entry.path}`}
+              label="Configuration directory"
+              subtitle={entry.path}
+            />
+          ))}
+        </SheetGroup>
+      )}
+      {documents.length > 0 && (
+        <SheetGroup variant="grouped" title="Configuration documents">
+          {documents.map(({ entry, index }) => (
+            <MonoRow
+              key={`view:${index}:${entry.path}`}
+              label={
+                entry.path ? "Read effective values" : "Read runtime values"
+              }
+              subtitle={entry.path}
+              onPress={() => setViewing({ info: entry.info, path: entry.path })}
+            />
+          ))}
+          {documents.map(({ entry, index }) =>
+            entry.path ? (
+              <MonoRow
+                key={`edit:${index}:${entry.path}`}
+                label="Edit source file"
+                subtitle={entry.path}
+                disabled={busy}
+                status={
+                  sameConfigAction(activeAction, {
+                    kind: "edit",
+                    path: entry.path,
+                  })
+                    ? "busy"
+                    : "idle"
+                }
+                onPress={() => editSource(entry.path ?? "")}
+              />
+            ) : null
           )}
-        </Card>
-      ))}
-      <DefaultShellDisclosure
+        </SheetGroup>
+      )}
+      <DefaultShellGroup
         activeAction={activeAction}
         busy={busy}
         shells={data?.shells}
@@ -353,6 +465,18 @@ export const Configuration = ({
           });
         }}
       />
+      <Sheet
+        visible={!!viewing}
+        title="Effective values"
+        onClose={() => setViewing(undefined)}
+      >
+        {viewing?.path ? (
+          <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
+            {viewing.path}
+          </BodyText>
+        ) : null}
+        <JsonView value={viewing?.info} />
+      </Sheet>
       <ConfigEditorSheet
         activeAction={activeAction}
         busy={busy}

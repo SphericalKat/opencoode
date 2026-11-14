@@ -1,19 +1,18 @@
 import { useState } from "react";
 import { Text } from "react-native";
 
+import { SheetGroup, SheetRow } from "../../components/list-sheet";
 import {
   Button,
-  Card,
-  Disclosure,
   Empty,
   Field,
   BodyText,
+  Sheet,
   mono,
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
-import { useTheme, useThemedStyles } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
 import { Page, useResource } from "./shared";
-import { createStyles } from "./styles";
 
 export const Skills = ({
   client,
@@ -23,7 +22,6 @@ export const Skills = ({
   directory: string;
 }) => {
   const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
   const { data, error, loading, refresh } = useResource(
     client,
     directory,
@@ -36,6 +34,8 @@ export const Skills = ({
     }
   );
   const [query, setQuery] = useState("");
+  const [selected, setSelected] =
+    useState<NonNullable<typeof data>["skills"][number]>();
   const search = query.trim().toLowerCase();
   const skills =
     data?.skills.filter((item) =>
@@ -48,6 +48,7 @@ export const Skills = ({
     <Page error={error} loading={loading} refresh={refresh}>
       <Field
         label="Find a skill or command"
+        placeholder="Name or description"
         value={query}
         onChangeText={setQuery}
         trailing={
@@ -65,30 +66,30 @@ export const Skills = ({
       <BodyText muted>
         Use slash commands and skills from the chat composer.
       </BodyText>
-      <BodyText style={styles.sectionLabel}>SKILLS · {skills.length}</BodyText>
-      {skills.map((item) => (
-        <Disclosure key={item.id} title={item.name}>
-          <BodyText muted>{item.description}</BodyText>
-          <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
-            {item.path}
-          </BodyText>
-          <Text
-            selectable
-            style={{ color: colors.text, fontSize: 15, lineHeight: 22 }}
-          >
-            {item.content}
-          </Text>
-        </Disclosure>
-      ))}
-      <BodyText style={styles.sectionLabel}>
-        COMMANDS · {commands.length}
-      </BodyText>
-      {commands.map((item) => (
-        <Card key={item.name}>
-          <BodyText style={styles.name}>/{item.name}</BodyText>
-          <BodyText muted>{item.description}</BodyText>
-        </Card>
-      ))}
+      {skills.length > 0 && (
+        <SheetGroup title={`Skills (${skills.length})`}>
+          {skills.map((item) => (
+            <SheetRow
+              key={item.id}
+              label={item.name}
+              description={item.description}
+              trailing="chevron"
+              onPress={() => setSelected(item)}
+            />
+          ))}
+        </SheetGroup>
+      )}
+      {commands.length > 0 && (
+        <SheetGroup title={`Commands (${commands.length})`}>
+          {commands.map((item) => (
+            <SheetRow
+              key={item.name}
+              label={`/${item.name}`}
+              description={item.description}
+            />
+          ))}
+        </SheetGroup>
+      )}
       {data &&
         !loading &&
         !!(data.skills.length || data.commands.length) &&
@@ -102,6 +103,26 @@ export const Skills = ({
       {data && !data.skills.length && !data.commands.length && (
         <Empty title="No custom skills or commands" />
       )}
+      <Sheet
+        visible={!!selected}
+        title={selected?.name ?? "Skill"}
+        onClose={() => setSelected(undefined)}
+      >
+        {selected && (
+          <>
+            <BodyText muted>{selected.description}</BodyText>
+            <BodyText style={{ fontFamily: mono, fontSize: 13 }}>
+              {selected.path}
+            </BodyText>
+            <Text
+              selectable
+              style={{ color: colors.text, fontSize: 15, lineHeight: 22 }}
+            >
+              {selected.content}
+            </Text>
+          </>
+        )}
+      </Sheet>
     </Page>
   );
 };
