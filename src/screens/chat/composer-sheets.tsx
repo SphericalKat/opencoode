@@ -232,7 +232,7 @@ export const CommandsSheet = ({
       </BodyText>
       <Button
         title="Use side question"
-        compact
+        size="compact"
         disabled={!draftLoaded}
         onPress={() => {
           setDraft("/btw ");
@@ -248,7 +248,7 @@ export const CommandsSheet = ({
         )}
         <Button
           title="Use command"
-          compact
+          size="compact"
           onPress={() => {
             setDraft(`/${command.name} `);
             setPanel(null);
@@ -262,7 +262,7 @@ export const CommandsSheet = ({
         {skill.description && <BodyText muted>{skill.description}</BodyText>}
         <Button
           title="Attach skill"
-          compact
+          size="compact"
           onPress={() => {
             setSelectedSkills((current) =>
               current.some((item) => item.id === skill.id)
@@ -350,7 +350,7 @@ export const MentionsSheet = ({
           {agent.description && <BodyText muted>{agent.description}</BodyText>}
           <Button
             title="Mention agent"
-            compact
+            size="compact"
             onPress={() => {
               setSelectedAgentIDs((current) =>
                 current.includes(agent.id) ? current : [...current, agent.id]

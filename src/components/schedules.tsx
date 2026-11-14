@@ -205,13 +205,13 @@ export const Schedules = ({
       <Row>
         <Button
           title={adding ? "Cancel new schedule" : "+ Schedule prompt"}
-          compact
+          size="compact"
           disabled={busy}
           onPress={() => setAdding(!adding)}
         />
         <Button
           title="Refresh"
-          compact
+          size="compact"
           disabled={busy || loading}
           onPress={() => {
             void refresh();
@@ -247,7 +247,7 @@ export const Schedules = ({
               <Button
                 key={mode.id}
                 title={mode.title}
-                compact
+                size="compact"
                 variant={draft.mode === mode.id ? "primary" : "secondary"}
                 onPress={() =>
                   setDraft((previous) => ({
@@ -341,7 +341,7 @@ export const Schedules = ({
           <Row>
             <Button
               title="Details"
-              compact
+              size="compact"
               disabled={busy}
               onPress={() => {
                 void run(async () => {
@@ -358,7 +358,7 @@ export const Schedules = ({
             {item.status !== "done" && (
               <Button
                 title={item.status === "paused" ? "Resume" : "Pause"}
-                compact
+                size="compact"
                 disabled={busy}
                 onPress={() => {
                   void run(() =>
@@ -377,7 +377,7 @@ export const Schedules = ({
             )}
             <Button
               title="Delete"
-              compact
+              size="compact"
               variant="danger"
               disabled={busy}
               onPress={() => {
@@ -421,7 +421,7 @@ export const Schedules = ({
               </BodyText>
               <Button
                 title="Hide details"
-                compact
+                size="compact"
                 variant="ghost"
                 onPress={() => setDetail(undefined)}
               />

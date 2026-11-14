@@ -69,7 +69,7 @@ export const Permissions = ({
           <Row>
             <Button
               title="Edit"
-              compact
+              size="compact"
               disabled={busy}
               onPress={() => {
                 setSelected(item);
@@ -81,7 +81,7 @@ export const Permissions = ({
             <Button
               title="Revoke"
               variant="danger"
-              compact
+              size="compact"
               busy={busy}
               onPress={() => {
                 void confirmAction(

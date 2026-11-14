@@ -35,6 +35,7 @@ import {
   View,
 } from "react-native";
 import type {
+  PressableAndroidRippleConfig,
   StyleProp,
   TextInputProps,
   ViewStyle,
@@ -62,12 +63,12 @@ import {
   useMotionPreference,
 } from "./motion";
 import { ShellIcon } from "./shell-icon";
+import type { ShellIconName } from "./shell-icon";
 
 export { darkColors as colors } from "../lib/theme";
 export const sans = "Inter";
 export const mono = "IBMPlexMono";
 export const touchTarget = Platform.OS === "android" ? 48 : 44;
-export const compactButtonSize = 32;
 export const disabledOpacity = 0.55;
 const createStyles = (colors: ThemeColors) => {
   const inset = Platform.OS !== "android" || Number(Platform.Version) >= 29;
@@ -82,33 +83,30 @@ const createStyles = (colors: ThemeColors) => {
     },
     button: {
       alignItems: "center",
-      backgroundColor: colors.raised,
+      alignSelf: "flex-start",
+      flexDirection: "row",
+      gap: 6,
+      justifyContent: "center",
+      overflow: "hidden",
+    },
+    buttonFill: { alignSelf: "stretch" },
+    buttonGhost: { backgroundColor: "transparent" },
+    buttonOutlined: {
+      backgroundColor: colors.buttonNeutral,
       borderColor: colors.border,
-      borderRadius: 6,
-      borderTopColor: colors.controlTopEdge,
       borderWidth: 1,
-      boxShadow: [
-        { blurRadius: 1, color: "#00000035", offsetX: 0, offsetY: 1 },
-      ],
-      justifyContent: "center",
-      minHeight: 36,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
     },
-    buttonTarget: {
-      alignItems: "stretch",
-      justifyContent: "center",
-      minHeight: touchTarget,
-      minWidth: touchTarget,
-    },
+    buttonPrimary: { backgroundColor: colors.primary },
+    buttonSubmit: { backgroundColor: colors.emphasis },
+    pressOverlay: StyleSheet.absoluteFill,
     buttonText: {
       color: colors.text,
       fontFamily: sans,
-      fontSize: 14,
+      fontSize: 13,
       fontVariant: ["tabular-nums"],
       fontWeight: "500",
       letterSpacing: -0.04,
-      lineHeight: 21,
+      lineHeight: 20,
     },
     card: {
       backgroundColor: colors.panel,
@@ -119,12 +117,6 @@ const createStyles = (colors: ThemeColors) => {
       padding: 14,
       paddingHorizontal: 15,
     },
-    compact: {
-      minHeight: compactButtonSize,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-    },
-    danger: { backgroundColor: colors.raised },
     disclosure: { gap: 0, paddingHorizontal: 0, paddingVertical: 0 },
     disclosureBody: { gap: 10, padding: 14, paddingTop: 0 },
     disclosureEmbedded: {
@@ -140,6 +132,7 @@ const createStyles = (colors: ThemeColors) => {
       flex: 1,
       gap: 8,
       minHeight: touchTarget,
+      overflow: "hidden",
       padding: 14,
     },
     disclosureHeaderWithAction: { paddingRight: 0 },
@@ -192,12 +185,6 @@ const createStyles = (colors: ThemeColors) => {
       opacity: 0.5,
       width: 32,
     },
-    ghost: {
-      backgroundColor: "transparent",
-      borderColor: "transparent",
-      borderTopColor: "transparent",
-      boxShadow: [],
-    },
     ghostPressed: { backgroundColor: colors.raised },
     heading: {
       color: colors.text,
@@ -237,21 +224,6 @@ const createStyles = (colors: ThemeColors) => {
       padding: 12,
       paddingHorizontal: 15,
     },
-    pressed: {
-      borderTopColor: colors.border,
-      boxShadow: inset
-        ? [
-            {
-              blurRadius: 1,
-              color: "#00000030",
-              inset: true,
-              offsetX: 0,
-              offsetY: 1,
-            },
-          ]
-        : [],
-    },
-    primary: { backgroundColor: colors.primary },
     recoveryNotice: {
       backgroundColor: colors.raised,
       color: colors.muted,
@@ -269,7 +241,6 @@ const createStyles = (colors: ThemeColors) => {
     selectedButton: {
       backgroundColor: colors.selected,
       borderColor: colors.faint,
-      borderTopColor: colors.faint,
     },
     sheet: { backgroundColor: colors.panel, flex: 1 },
     sheetBody: { flex: 1, minHeight: 0 },
@@ -305,13 +276,16 @@ const createStyles = (colors: ThemeColors) => {
 
 const busyIndicatorColor = (
   themeColors: ThemeColors,
-  variant: "primary" | "secondary" | "danger" | "ghost",
+  variant: ButtonVariant,
   selected: boolean | undefined
 ) => {
   if (selected) {
     return themeColors.text;
   }
-  return variant === "primary" ? themeColors.primaryText : themeColors.muted;
+  if (variant === "primary") {
+    return themeColors.primaryText;
+  }
+  return variant === "submit" ? themeColors.onEmphasis : themeColors.muted;
 };
 
 export const BodyText = ({
@@ -339,83 +313,207 @@ export const Heading = ({ children }: { children: React.ReactNode }) => {
     </Text>
   );
 };
+export const usePressFeedback = (opts?: {
+  borderless?: boolean;
+  radius?: number;
+}): {
+  android_ripple?: PressableAndroidRippleConfig;
+  pressedStyle: ViewStyle;
+} => {
+  const { colors } = useTheme();
+  if (Platform.OS === "android") {
+    return {
+      android_ripple: {
+        alpha: 0.12,
+        borderless: !!opts?.borderless,
+        color: colors.text,
+        foreground: true,
+        radius: opts?.radius,
+      },
+      pressedStyle: {},
+    };
+  }
+  return { pressedStyle: { backgroundColor: colors.pressedOverlay } };
+};
+
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "danger"
+  | "ghost"
+  | "submit";
+export type ButtonSize = "small" | "compact" | "default" | "large";
+
+const buttonSizes = {
+  compact: { height: 28, paddingHorizontal: 11, radius: 6 },
+  default: { height: 32, paddingHorizontal: 15, radius: 6 },
+  large: { height: 44, paddingHorizontal: 16, radius: 6 },
+  small: { height: 24, paddingHorizontal: 9, radius: 4 },
+} as const;
+const roundedButtonRadius = 12;
+const buttonIconSize = 16;
+const dimmedVariants = new Set<ButtonVariant>(["primary", "submit"]);
+
+const buttonLabelColor = (colors: ThemeColors, variant: ButtonVariant) => {
+  if (variant === "primary") {
+    return colors.primaryText;
+  }
+  if (variant === "submit") {
+    return colors.onEmphasis;
+  }
+  return variant === "danger" ? colors.danger : colors.text;
+};
+
+const ButtonContent = ({
+  title,
+  variant,
+  icon,
+  iconPosition,
+  busy,
+  selected,
+}: {
+  title: string;
+  variant: ButtonVariant;
+  icon?: ShellIconName;
+  iconPosition: "start" | "end";
+  busy?: boolean;
+  selected?: boolean;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const labelColor = selected ? colors.text : buttonLabelColor(colors, variant);
+  const glyph = icon && !busy && (
+    <ShellIcon name={icon} color={labelColor} size={buttonIconSize} />
+  );
+  return (
+    <>
+      {iconPosition === "start" && glyph}
+      {busy && (
+        <ActivityIndicator
+          size="small"
+          color={busyIndicatorColor(colors, variant, selected)}
+        />
+      )}
+      <Text style={[styles.buttonText, { color: labelColor }]}>
+        {selected ? `✓ ${title}` : title}
+      </Text>
+      {iconPosition === "end" && glyph}
+    </>
+  );
+};
+
+const useButtonStyle = ({
+  variant,
+  size,
+  shape,
+  fullWidth,
+  inactive,
+  selected,
+}: {
+  variant: ButtonVariant;
+  size: ButtonSize;
+  shape: "default" | "rounded";
+  fullWidth?: boolean;
+  inactive: boolean;
+  selected?: boolean;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const { height, paddingHorizontal, radius } = buttonSizes[size];
+  return [
+    styles.button,
+    { borderRadius: shape === "rounded" ? roundedButtonRadius : radius },
+    { height, paddingHorizontal },
+    (variant === "secondary" || variant === "danger") && styles.buttonOutlined,
+    variant === "primary" && styles.buttonPrimary,
+    variant === "submit" && styles.buttonSubmit,
+    variant === "ghost" && styles.buttonGhost,
+    selected && styles.selectedButton,
+    fullWidth && styles.buttonFill,
+    inactive && { opacity: dimmedVariants.has(variant) ? 0.4 : 0.5 },
+  ];
+};
+
 export const Button = ({
   title,
   onPress,
   variant = "secondary",
+  size = "default",
+  shape = "default",
+  icon,
+  iconPosition = "start",
+  fullWidth,
   disabled,
   busy,
-  compact,
   selected,
   accessibilityLabel,
 }: {
   title: string;
   onPress: () => void;
-  variant?: "primary" | "secondary" | "danger" | "ghost";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  shape?: "default" | "rounded";
+  icon?: ShellIconName;
+  iconPosition?: "start" | "end";
+  fullWidth?: boolean;
   disabled?: boolean;
   busy?: boolean;
-  compact?: boolean;
   selected?: boolean;
   accessibilityLabel?: string;
 }) => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { android_ripple, pressedStyle } = usePressFeedback();
+  const isAndroid = Platform.OS === "android";
+  const inactive = !!disabled || !!busy;
+  const visual = useButtonStyle({
+    fullWidth,
+    inactive,
+    selected,
+    shape,
+    size,
+    variant,
+  });
+  const slop = Math.max(0, (touchTarget - buttonSizes[size].height) / 2);
+  const content = (
+    <ButtonContent
+      title={title}
+      variant={variant}
+      icon={icon}
+      iconPosition={iconPosition}
+      busy={busy}
+      selected={selected}
+    />
+  );
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={{
         busy: !!busy,
-        disabled: !!disabled || !!busy,
+        disabled: inactive,
         selected,
       }}
       aria-pressed={selected}
-      disabled={disabled || busy}
-      hitSlop={compact ? (touchTarget - compactButtonSize) / 2 : undefined}
+      android_ripple={android_ripple}
+      disabled={inactive}
+      hitSlop={{ bottom: slop, top: slop }}
       onPress={onPress}
-      style={[
-        styles.buttonTarget,
-        compact && {
-          minHeight: compactButtonSize,
-          minWidth: compactButtonSize,
-        },
-        (disabled || busy) && { opacity: disabledOpacity },
-      ]}
+      style={isAndroid ? visual : [fullWidth && styles.buttonFill]}
     >
-      {({ pressed }) => (
-        <PressFeedback
-          pressed={pressed}
-          disabled={disabled || busy}
-          style={[
-            styles.button,
-            compact && styles.compact,
-            variant === "primary" && styles.primary,
-            variant === "ghost" && styles.ghost,
-            variant === "danger" && styles.danger,
-            selected && styles.selectedButton,
-            pressed &&
-              (variant === "ghost" ? styles.ghostPressed : styles.pressed),
-          ]}
-        >
-          {busy ? (
-            <ActivityIndicator
-              size="small"
-              color={busyIndicatorColor(colors, variant, selected)}
-            />
-          ) : (
-            <Text
-              style={[
-                styles.buttonText,
-                variant === "primary" && { color: colors.primaryText },
-                variant === "danger" && { color: colors.danger },
-                selected && { color: colors.text },
-              ]}
-            >
-              {selected ? `✓ ${title}` : title}
-            </Text>
-          )}
-        </PressFeedback>
-      )}
+      {({ pressed }) =>
+        isAndroid ? (
+          content
+        ) : (
+          <PressFeedback pressed={pressed} disabled={inactive} style={visual}>
+            {pressed && !inactive && (
+              <View
+                pointerEvents="none"
+                style={[styles.pressOverlay, pressedStyle]}
+              />
+            )}
+            {content}
+          </PressFeedback>
+        )
+      }
     </Pressable>
   );
 };
@@ -453,10 +551,12 @@ export const Field = ({
   label,
   style,
   containerStyle,
+  ref,
   ...props
 }: TextInputProps & {
   label?: string;
   containerStyle?: StyleProp<ViewStyle>;
+  ref?: React.Ref<TextInput>;
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -464,7 +564,15 @@ export const Field = ({
   const [passwordVisible, setPasswordVisible] = useState(false);
   const canToggleVisibility = props.secureTextEntry && !props.multiline;
   // gorhom only moves a sheet for the keyboard when its own input has focus.
-  const Input = useBottomSheetInternal(true) ? BottomSheetTextInput : TextInput;
+  const Input: React.ComponentType<
+    TextInputProps & { ref?: React.Ref<TextInput> }
+  > = useBottomSheetInternal(true)
+    ? (BottomSheetTextInput as unknown as React.ComponentType<
+        TextInputProps & { ref?: React.Ref<TextInput> }
+      >)
+    : (TextInput as unknown as React.ComponentType<
+        TextInputProps & { ref?: React.Ref<TextInput> }
+      >);
   const input = (
     <Input
       accessibilityLabel={label ?? props.placeholder}
@@ -473,6 +581,7 @@ export const Field = ({
       autoCapitalize="none"
       autoCorrect={false}
       {...props}
+      ref={ref}
       secureTextEntry={
         canToggleVisibility ? !passwordVisible : props.secureTextEntry
       }
@@ -574,7 +683,7 @@ export const ErrorNotice = ({
   return (
     <View accessibilityRole="alert" style={styles.error}>
       <BodyText style={{ color: colors.danger, flex: 1 }}>{error}</BodyText>
-      {onRetry && <Button title="Retry" compact onPress={onRetry} />}
+      {onRetry && <Button title="Retry" size="compact" onPress={onRetry} />}
     </View>
   );
 };
@@ -600,7 +709,7 @@ const renderSheetHeader = ({
       <BodyText accessibilityRole="header" style={styles.betaSheetTitle}>
         {title}
       </BodyText>
-      <Button title="Done" compact onPress={onClose} />
+      <Button title="Done" size="compact" onPress={onClose} />
     </View>
   ) : (
     <BodyText accessibilityRole="header" style={styles.hiddenHeading}>
@@ -987,6 +1096,7 @@ export const Disclosure = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { android_ripple, pressedStyle } = usePressFeedback();
   const openMessageActions = useContext(MessageActionsContext);
   const disclosures = useContext(MessageDisclosureContext);
   const initialOpen = disclosureKey
@@ -1023,11 +1133,12 @@ export const Disclosure = ({
             )
           }
           onLongPress={Platform.OS === "web" ? undefined : openMessageActions}
+          android_ripple={android_ripple}
           style={({ pressed }) => [
             styles.disclosureHeader,
             variant === "embedded" && styles.disclosureEmbeddedHeader,
             !!headerAction && styles.disclosureHeaderWithAction,
-            pressed && styles.ghostPressed,
+            pressed && pressedStyle,
           ]}
         >
           <BodyText style={{ flex: 1, fontWeight: "500" }}>{title}</BodyText>

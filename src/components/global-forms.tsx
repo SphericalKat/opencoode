@@ -184,7 +184,7 @@ export const GlobalForms = ({
         <Heading>Pending requests</Heading>
         <Button
           title="Refresh requests"
-          compact
+          size="compact"
           variant="ghost"
           disabled={loading || !foreground}
           onPress={() => refreshRef.current()}

@@ -58,7 +58,7 @@ export const Skills = ({
           <Button
             title="Clear"
             accessibilityLabel="Clear skill and command search"
-            compact
+            size="compact"
             variant="ghost"
             onPress={() => setQuery("")}
           />

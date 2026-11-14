@@ -11,7 +11,7 @@ import { pageInset } from "../lib/layout";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { ShellIcon } from "./shell-icon";
-import { BodyText } from "./ui";
+import { BodyText, usePressFeedback } from "./ui";
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
@@ -41,7 +41,6 @@ const createStyles = (colors: ThemeColors) =>
       marginEnd: -16,
       width: Platform.OS === "android" ? 48 : 44,
     },
-    pressed: { backgroundColor: colors.selected },
     title: { flex: 1, fontSize: 18, fontWeight: "600", lineHeight: 24 },
   });
 
@@ -62,6 +61,10 @@ export const ScreenHeader = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { android_ripple, pressedStyle } = usePressFeedback({
+    borderless: true,
+    radius: 20,
+  });
   return (
     <View style={styles.header}>
       {onBack && (
@@ -69,7 +72,8 @@ export const ScreenHeader = ({
           accessibilityRole="button"
           accessibilityLabel={`Back to ${backLabel || "Sessions"}`}
           onPress={onBack}
-          style={({ pressed }) => [styles.back, pressed && styles.pressed]}
+          android_ripple={android_ripple}
+          style={({ pressed }) => [styles.back, pressed && pressedStyle]}
         >
           <ShellIcon name="back" color={colors.text} size={22} />
         </Pressable>
@@ -88,7 +92,8 @@ export const ScreenHeader = ({
           accessibilityState={{ busy: refreshing, disabled: refreshing }}
           disabled={refreshing}
           onPress={() => onRefresh()}
-          style={({ pressed }) => [styles.menu, pressed && styles.pressed]}
+          android_ripple={android_ripple}
+          style={({ pressed }) => [styles.menu, pressed && pressedStyle]}
         >
           {refreshing ? (
             <ActivityIndicator size="small" color={colors.muted} />
@@ -102,7 +107,8 @@ export const ScreenHeader = ({
           accessibilityRole="button"
           accessibilityLabel="Open navigation"
           onPress={onOpenNavigation}
-          style={({ pressed }) => [styles.menu, pressed && styles.pressed]}
+          android_ripple={android_ripple}
+          style={({ pressed }) => [styles.menu, pressed && pressedStyle]}
         >
           <ShellIcon name="menu" color={colors.text} />
         </Pressable>

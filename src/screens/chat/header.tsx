@@ -58,7 +58,7 @@ export const renderSelectionHeader = ({
     </BodyText>
     <Button
       title="Copy"
-      compact
+      size="compact"
       variant="ghost"
       disabled={!canCopySelected}
       onPress={copySelected}
@@ -66,7 +66,7 @@ export const renderSelectionHeader = ({
     {actionMessage.type === "user" && (
       <Button
         title="Edit"
-        compact
+        size="compact"
         variant="ghost"
         disabled={!draftLoaded || pending || active}
         onPress={() => {
@@ -79,7 +79,7 @@ export const renderSelectionHeader = ({
       (!backend.canForkMessage || backend.canForkMessage(actionMessage)) && (
         <Button
           title="Fork"
-          compact
+          size="compact"
           variant="ghost"
           disabled={pending}
           onPress={() => {

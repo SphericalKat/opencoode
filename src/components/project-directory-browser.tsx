@@ -479,7 +479,7 @@ const ProjectDirectoryBrowser = ({
           {recent ? (
             <Button
               title="‹ Folders"
-              compact
+              size="compact"
               variant="ghost"
               disabled={pending}
               onPress={() => setRecent(false)}
@@ -487,7 +487,7 @@ const ProjectDirectoryBrowser = ({
           ) : (
             <Button
               title="↑ Parent"
-              compact
+              size="compact"
               variant="ghost"
               disabled={parent === path || pending}
               onPress={() => browse(parent)}
@@ -495,7 +495,7 @@ const ProjectDirectoryBrowser = ({
           )}
           <Button
             title={manual ? "Hide path" : "Enter a path"}
-            compact
+            size="compact"
             variant="ghost"
             disabled={pending}
             onPress={() => setManual((open) => !open)}
@@ -503,7 +503,7 @@ const ProjectDirectoryBrowser = ({
           {!recent && (
             <Button
               title="Recent"
-              compact
+              size="compact"
               variant="ghost"
               disabled={pending}
               onPress={() => setRecent(true)}
@@ -522,7 +522,7 @@ const ProjectDirectoryBrowser = ({
             />
             <Button
               title="Browse this path"
-              compact
+              size="compact"
               onPress={() => browse(value)}
               disabled={!value.trim() || pending}
             />

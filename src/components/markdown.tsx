@@ -506,7 +506,7 @@ const CodeView = ({ code, language }: { code: string; language: string }) => {
         </Text>
         <Button
           title={copyLabel(currentFeedback)}
-          compact
+          size="compact"
           variant="ghost"
           accessibilityLabel="Copy code"
           onPress={() => {

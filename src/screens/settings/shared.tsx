@@ -136,7 +136,7 @@ export const Page = ({
         <Row style={{ justifyContent: "flex-end" }}>
           <Button
             title="Refresh"
-            compact
+            size="compact"
             variant="ghost"
             onPress={() => refresh()}
           />

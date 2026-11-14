@@ -309,7 +309,7 @@ export const ConnectIntegration = ({
           )}
           <Button
             title="Check status"
-            compact
+            size="compact"
             onPress={() => {
               void check();
             }}

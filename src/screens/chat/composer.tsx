@@ -40,7 +40,7 @@ export const ComposerChips = ({
         <Button
           key={`${file.name}-${index}`}
           title={`${file.name || "File"} ×`}
-          compact
+          size="compact"
           onPress={() =>
             setAttachments((current) => current.filter((_, i) => i !== index))
           }
@@ -50,7 +50,7 @@ export const ComposerChips = ({
         <Button
           key={skill.id}
           title={`${skill.name} ×`}
-          compact
+          size="compact"
           onPress={() =>
             setSelectedSkills((current) =>
               current.filter((item) => item.id !== skill.id)
@@ -62,7 +62,7 @@ export const ComposerChips = ({
         <Button
           key={id}
           title={`${id} ×`}
-          compact
+          size="compact"
           onPress={() =>
             setRestoredSkillIDs((current) =>
               current.filter((value) => value !== id)
@@ -74,7 +74,7 @@ export const ComposerChips = ({
         <Button
           key={id}
           title={`@${agents.find((agent) => agent.id === id)?.name || id} ×`}
-          compact
+          size="compact"
           onPress={() =>
             setSelectedAgentIDs((current) =>
               current.filter((value) => value !== id)

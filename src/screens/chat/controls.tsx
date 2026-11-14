@@ -196,7 +196,7 @@ export const CodeBlock = ({
         </BodyText>
         <Button
           title={copied ? "Copied" : "Copy"}
-          compact
+          size="compact"
           variant="ghost"
           onPress={() => {
             void copyText(code)

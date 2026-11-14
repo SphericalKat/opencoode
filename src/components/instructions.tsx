@@ -152,7 +152,7 @@ export const Instructions = ({
       </BodyText>
       <Button
         title="Refresh instructions"
-        compact
+        size="compact"
         disabled={busy || loading}
         onPress={() => {
           void refresh();
@@ -179,7 +179,7 @@ export const Instructions = ({
           <Row>
             <Button
               title="Edit"
-              compact
+              size="compact"
               disabled={busy}
               onPress={() => {
                 setKey(entry.key);
@@ -193,7 +193,7 @@ export const Instructions = ({
             />
             <Button
               title="Delete"
-              compact
+              size="compact"
               variant="danger"
               disabled={busy}
               onPress={() => {
@@ -231,7 +231,7 @@ export const Instructions = ({
         />
         <Button
           title={json ? "Value format: JSON" : "Value format: text"}
-          compact
+          size="compact"
           onPress={() => setJson(!json)}
         />
         <Field

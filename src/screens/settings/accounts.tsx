@@ -80,7 +80,7 @@ export const Accounts = ({
           <Button
             title="Clear"
             accessibilityLabel="Clear provider search"
-            compact
+            size="compact"
             variant="ghost"
             onPress={() => changeQuery("")}
           />
@@ -96,7 +96,7 @@ export const Accounts = ({
             action={
               <Button
                 title="Manage"
-                compact
+                size="compact"
                 onPress={() => {
                   setCredential(item);
                   setLabel(item.label);
@@ -116,7 +116,7 @@ export const Accounts = ({
             action={
               <Button
                 title="Connect"
-                compact
+                size="compact"
                 onPress={() => setSelected(item)}
               />
             }

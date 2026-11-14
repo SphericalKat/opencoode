@@ -118,7 +118,7 @@ const NativeSearchRow = ({
         <Button
           title="Clear"
           accessibilityLabel="Clear session search"
-          compact
+          size="compact"
           variant="ghost"
           onPress={() => onChangeSearch("")}
         />

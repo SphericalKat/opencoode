@@ -38,7 +38,7 @@ export const ErrorBanners = ({
         <ErrorNotice error={error} />
         <Button
           title="Dismiss"
-          compact
+          size="compact"
           variant="ghost"
           onPress={() => setError(null)}
         />
@@ -91,14 +91,14 @@ export const RevertBanner = ({
       <Row>
         <Button
           title="Restore"
-          compact
+          size="compact"
           onPress={() => {
             void run(() => opencodeClient.session.revert.clear({ sessionID }));
           }}
         />
         <Button
           title="Commit revert"
-          compact
+          size="compact"
           variant="danger"
           disabled={pending}
           onPress={() => {

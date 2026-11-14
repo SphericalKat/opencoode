@@ -429,19 +429,19 @@ export const ChildSessions = ({
       <Row>
         <Button
           title="Current"
-          compact
+          size="compact"
           selected={!archived}
           onPress={() => setArchived(false)}
         />
         <Button
           title="Archived"
-          compact
+          size="compact"
           selected={archived}
           onPress={() => setArchived(true)}
         />
         <Button
           title="Refresh"
-          compact
+          size="compact"
           disabled={!foreground || loading}
           onPress={() => refreshRef.current()}
         />
@@ -489,13 +489,13 @@ export const ChildSessions = ({
             <Row>
               <Button
                 title="Open session"
-                compact
+                size="compact"
                 onPress={() => onOpenSession(item.id)}
               />
               {isActive && (
                 <Button
                   title="Stop"
-                  compact
+                  size="compact"
                   variant="danger"
                   busy={stoppingID === item.id}
                   disabled={!!stoppingID}

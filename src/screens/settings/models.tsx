@@ -31,7 +31,11 @@ const ModelCard = ({
     <Card style={styles.card}>
       <SettingsCardHeader
         action={
-          <Button title="Details" compact onPress={() => onSelect(item)} />
+          <Button
+            title="Details"
+            size="compact"
+            onPress={() => onSelect(item)}
+          />
         }
         subtitle={`${item.providerID} · ${item.enabled ? "Available" : "Not connected"}`}
         title={item.name}
@@ -202,7 +206,7 @@ export const Models = ({
           <Button
             title="Clear"
             accessibilityLabel="Clear model search"
-            compact
+            size="compact"
             variant="ghost"
             onPress={() => changeQuery("")}
           />

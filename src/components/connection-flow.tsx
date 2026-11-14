@@ -621,7 +621,7 @@ export const ConnectionFlow = ({
   ) ? (
     <Button
       title="‹ Back"
-      compact
+      size="compact"
       variant="ghost"
       disabled={busy}
       onPress={() => go(backStep, -1)}
@@ -630,7 +630,7 @@ export const ConnectionFlow = ({
   const manageServers = (
     <Button
       title={managing ? "Done" : "Manage"}
-      compact
+      size="compact"
       variant="ghost"
       disabled={busy}
       onPress={() => setManaging((value) => !value)}
@@ -674,7 +674,7 @@ export const ConnectionFlow = ({
         <Row style={styles.manage}>
           <Button
             title="Edit"
-            compact
+            size="compact"
             disabled={busy}
             onPress={() => {
               clearError();
@@ -687,7 +687,7 @@ export const ConnectionFlow = ({
           />
           <Button
             title={removingID === connection.id ? "Removing server" : "Remove"}
-            compact
+            size="compact"
             variant="ghost"
             busy={removingID === connection.id}
             disabled={busy}
@@ -710,7 +710,7 @@ export const ConnectionFlow = ({
           {step === "servers" ? (
             <Button
               title="Add server"
-              compact
+              size="compact"
               variant="ghost"
               disabled={busy}
               onPress={() => {
@@ -796,7 +796,7 @@ export const ConnectionFlow = ({
         <Button
           title="Use password"
           variant="ghost"
-          compact
+          size="compact"
           disabled={busy}
           onPress={() => {
             onChangeForm(blankForm);

@@ -354,7 +354,7 @@ const renderPage = (
     <Row>
       <Button
         title="Start over"
-        compact
+        size="compact"
         disabled={outputBusy || page.start === 0}
         onPress={() => {
           void loadOutput(selectedID);
@@ -362,7 +362,7 @@ const renderPage = (
       />
       <Button
         title="Next output"
-        compact
+        size="compact"
         disabled={outputBusy || page.cursor >= page.size}
         onPress={() => {
           void loadOutput(selectedID, page.cursor);
@@ -370,7 +370,7 @@ const renderPage = (
       />
       <Button
         title="Refresh output"
-        compact
+        size="compact"
         busy={outputBusy}
         onPress={() => {
           void loadOutput(selectedID, page.start);
@@ -643,7 +643,7 @@ const Commands = ({
         </BodyText>
         <Button
           title="Refresh"
-          compact
+          size="compact"
           busy={showLoading}
           onPress={() => {
             void refresh();
@@ -680,7 +680,7 @@ const Commands = ({
           </BodyText>
           <Button
             title={selectedID === command.id ? "Selected" : "View output"}
-            compact
+            size="compact"
             selected={selectedID === command.id}
             disabled={stopping}
             onPress={() => setSelectedID(command.id)}
@@ -690,7 +690,7 @@ const Commands = ({
       {commands.length > limit && (
         <Button
           title="Load more commands"
-          compact
+          size="compact"
           onPress={() => setLimit((value) => value + 20)}
         />
       )}

@@ -193,7 +193,7 @@ const Usage = ({
         </BodyText>
         <Button
           title="Refresh"
-          compact
+          size="compact"
           busy={loading}
           onPress={() => {
             void load();
@@ -343,7 +343,7 @@ const WebSearch = ({
       <Row>
         <Button
           title="Default provider"
-          compact
+          size="compact"
           variant={provider ? "secondary" : "primary"}
           onPress={() => setProvider(undefined)}
         />
@@ -351,7 +351,7 @@ const WebSearch = ({
           <Button
             key={item.id}
             title={item.name}
-            compact
+            size="compact"
             variant={provider === item.id ? "primary" : "secondary"}
             onPress={() => setProvider(item.id)}
           />
@@ -388,7 +388,7 @@ const WebSearch = ({
           )}
           <Button
             title="Open source"
-            compact
+            size="compact"
             onPress={() => {
               void openLink(result.url).catch((error_) =>
                 setError(errorMessage(error_))
@@ -548,7 +548,7 @@ const Generate = ({
       <Row>
         <Button
           title="Text"
-          compact
+          size="compact"
           variant={kind === "text" ? "primary" : "secondary"}
           disabled={busy}
           onPress={() => {
@@ -558,7 +558,7 @@ const Generate = ({
         />
         <Button
           title="Image"
-          compact
+          size="compact"
           variant={kind === "image" ? "primary" : "secondary"}
           disabled={busy}
           onPress={() => {
@@ -573,7 +573,7 @@ const Generate = ({
         {kind === "text" && (
           <Button
             title="Server default"
-            compact
+            size="compact"
             variant={model ? "secondary" : "primary"}
             onPress={() => setModel(undefined)}
           />
@@ -582,7 +582,7 @@ const Generate = ({
           <Button
             key={`${item.providerID}/${item.id}`}
             title={`${item.name} · ${item.providerID}`}
-            compact
+            size="compact"
             variant={model === item ? "primary" : "secondary"}
             onPress={() => setModel(item)}
           />
@@ -623,7 +623,7 @@ const Generate = ({
       {busy && (
         <Button
           title="Stop waiting"
-          compact
+          size="compact"
           onPress={() => {
             request.current?.abort();
             setBusy(false);
@@ -646,7 +646,7 @@ const Generate = ({
           </Text>
           <Button
             title="Copy text"
-            compact
+            size="compact"
             onPress={() => {
               void copyText(text).catch((error_) =>
                 setError(errorMessage(error_))
@@ -695,7 +695,7 @@ export const AdvancedSettings = ({
           <Button
             key={item}
             title={item}
-            compact
+            size="compact"
             variant={tool === item ? "primary" : "secondary"}
             onPress={() => setTool(item)}
           />

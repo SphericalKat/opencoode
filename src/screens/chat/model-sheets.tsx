@@ -109,19 +109,19 @@ export const ModelSearchBar = ({
     <Row>
       <Button
         title="All"
-        compact
+        size="compact"
         selected={modelFilter === "all"}
         onPress={() => setModelFilter("all")}
       />
       <Button
         title="Favorites"
-        compact
+        size="compact"
         selected={modelFilter === "favorites"}
         onPress={() => setModelFilter("favorites")}
       />
       <Button
         title="Recent"
-        compact
+        size="compact"
         selected={modelFilter === "recent"}
         onPress={() => setModelFilter("recent")}
       />
@@ -162,7 +162,7 @@ export const renderModelVariants = ({
         {capabilities.defaultVariant && (
           <Button
             title="Model default"
-            compact
+            size="compact"
             selected={!session.model?.variant}
             disabled={pending}
             onPress={() => {
@@ -175,7 +175,7 @@ export const renderModelVariants = ({
             key={variant.id}
             title={variant.id}
             selected={session.model?.variant === variant.id}
-            compact
+            size="compact"
             disabled={pending}
             onPress={() => {
               void chooseModel(currentModel, variant.id);

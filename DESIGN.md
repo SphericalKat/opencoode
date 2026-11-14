@@ -17,7 +17,7 @@
 
 - **A trigger icon must match the surface that it opens. Use a down chevron only for a menu that drops below the trigger. A control that opens a selection bottom sheet uses the `chevron-up-down` icon.** Why: a down chevron tells the user that a menu will appear below the trigger, but a bottom sheet appears at the bottom of the screen.
   <!-- 2026-11-13: "I'm wondering if like a downward pointing chevron is the best representation for this since what appears is actually a bottom sheet?" -->
-- **Full-width pressable rows and bars use the native press feedback of the platform. On Android, use `android_ripple` with `{ alpha: 0.12, color: colors.text, foreground: true }`. On iOS and web, dim the content. Never scale a full-width row or bar on press.** Buttons keep the scale feedback of `PressFeedback`. Why: native feedback makes a control feel native and good to tap. A full-width bar that scales looks wrong.
+- **Full-width pressable rows and bars use the native press feedback of the platform. On Android, use `android_ripple` with `{ alpha: 0.12, color: colors.text, foreground: true }`. On iOS and web, dim the content. Never scale a full-width row or bar on press.** On Android, buttons use `android_ripple` through `usePressFeedback` and do not scale. On iOS and web, buttons keep the scale feedback of `PressFeedback`. Why: native feedback makes a control feel native and good to tap. A full-width bar that scales looks wrong.
   <!-- 2026-11-13: "Try and use like native elements. Like it should feel really native and good to type all of that stuff" -->
 
 ## Copy

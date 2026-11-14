@@ -91,7 +91,7 @@ export const Plugins = ({
                     ? "Update package"
                     : "Reinstall latest package"
                 }
-                compact
+                size="compact"
                 busy={busy}
                 onPress={() => {
                   void run(async () => {

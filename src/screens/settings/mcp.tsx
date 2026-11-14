@@ -94,7 +94,7 @@ export const Mcp = ({
                   item.status.status === "connected" ? "Disconnect" : "Connect"
                 }
                 busy={busy}
-                compact
+                size="compact"
                 onPress={() => {
                   void run(async (signal) => {
                     const input = {
@@ -125,7 +125,7 @@ export const Mcp = ({
           <Button
             title="Remove"
             variant="danger"
-            compact
+            size="compact"
             busy={busy}
             onPress={() => {
               void confirmAction(

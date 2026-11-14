@@ -875,7 +875,7 @@ const TerminalSession = ({
         />
         <Button
           title="Send line"
-          compact
+          size="compact"
           variant="primary"
           disabled={!canSend}
           onPress={() => submitNative(true)}
@@ -885,7 +885,7 @@ const TerminalSession = ({
       <View style={styles.notice}>
         <Button
           title="Open full screen to type"
-          compact
+          size="compact"
           onPress={() => changeFullscreen(true)}
         />
       </View>
@@ -896,13 +896,13 @@ const TerminalSession = ({
       <>
         <Button
           title="Send text"
-          compact
+          size="compact"
           disabled={!canSend || !nativeText}
           onPress={() => submitNative(false)}
         />
         <Button
           title={privateInput ? "Show text" : "Hide text"}
-          compact
+          size="compact"
           onPress={() => setPrivateInput((value) => !value)}
         />
       </>
@@ -914,11 +914,11 @@ const TerminalSession = ({
           {connectionLabel(status, active, mode, controller, size)}
         </BodyText>
         {mode === "desktop" && status === "connected" && !controller && (
-          <Button title="Take control" compact onPress={takeControl} />
+          <Button title="Take control" size="compact" onPress={takeControl} />
         )}
         <Button
           title={fullscreen ? "Close" : "Full screen"}
-          compact
+          size="compact"
           onPress={() => changeFullscreen(!fullscreen)}
         />
       </Row>
@@ -927,7 +927,7 @@ const TerminalSession = ({
           <BodyText muted style={{ flex: 1 }} numberOfLines={1}>
             {terminal.title || terminal.command}
           </BodyText>
-          <Button title="Reconnect" compact onPress={reconnect} />
+          <Button title="Reconnect" size="compact" onPress={reconnect} />
         </Row>
       )}
       {renderNotice()}
@@ -981,7 +981,7 @@ const TerminalSession = ({
             key={title}
             title={title}
             accessibilityLabel={`Send ${title} to terminal`}
-            compact
+            size="compact"
             disabled={!canSend}
             onPress={() => {
               send(data, false, true);
@@ -1350,7 +1350,7 @@ const TerminalList = ({
       <Row style={styles.toolbar}>
         <Button
           title="New shell"
-          compact
+          size="compact"
           variant="primary"
           onPress={() => {
             void create();
@@ -1359,7 +1359,7 @@ const TerminalList = ({
         />
         <Button
           title="Refresh"
-          compact
+          size="compact"
           onPress={() => {
             void refresh();
           }}
@@ -1368,7 +1368,7 @@ const TerminalList = ({
         {selected && (
           <Button
             title="Terminate"
-            compact
+            size="compact"
             variant="danger"
             onPress={() => {
               void terminate();
@@ -1566,7 +1566,7 @@ const Terminals = (props: Props) => {
         >
           <Button
             title="Desktop terminals"
-            compact
+            size="compact"
             variant={mode === "desktop" ? "primary" : "ghost"}
             onPress={() => {
               void selectMode("desktop");
@@ -1574,7 +1574,7 @@ const Terminals = (props: Props) => {
           />
           <Button
             title="Workspace shells"
-            compact
+            size="compact"
             variant={mode === "workspace" ? "primary" : "ghost"}
             onPress={() => {
               void selectMode("workspace");
@@ -1583,7 +1583,7 @@ const Terminals = (props: Props) => {
           {mode === "desktop" && (
             <Button
               title="Choose session"
-              compact
+              size="compact"
               onPress={() => {
                 void pickSession();
               }}

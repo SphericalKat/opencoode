@@ -369,7 +369,7 @@ export const MessageRowBody = ({
       {screenReader && (
         <Button
           title="Message actions"
-          compact
+          size="compact"
           variant="ghost"
           accessibilityLabel={`Message actions: ${messagePreview(message)}`}
           onPress={() => onSelect(message.id)}

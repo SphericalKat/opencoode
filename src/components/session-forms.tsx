@@ -99,14 +99,14 @@ export const DynamicFields = ({
           key={String(choice)}
           title={choice ? "Yes" : "No"}
           variant={value === choice ? "primary" : "secondary"}
-          compact
+          size="compact"
           onPress={() => change(field.key, choice)}
         />
       ))}
       {!field.required && value !== undefined && (
         <Button
           title="Clear"
-          compact
+          size="compact"
           variant="ghost"
           onPress={() => change(field.key, undefined)}
         />
@@ -125,7 +125,7 @@ export const DynamicFields = ({
                 ? "primary"
                 : "secondary"
             }
-            compact
+            size="compact"
             onPress={() =>
               change(
                 field.key,
@@ -148,7 +148,7 @@ export const DynamicFields = ({
                 <Button
                   key={item}
                   title={`${item} ×`}
-                  compact
+                  size="compact"
                   onPress={() =>
                     change(
                       field.key,
@@ -167,7 +167,7 @@ export const DynamicFields = ({
           />
           <Button
             title="Add custom value"
-            compact
+            size="compact"
             disabled={!custom[field.key]?.trim()}
             onPress={() => {
               change(field.key, [
@@ -195,7 +195,7 @@ export const DynamicFields = ({
             key={option.value}
             title={option.label}
             variant={value === option.value ? "primary" : "secondary"}
-            compact
+            size="compact"
             onPress={() => change(field.key, option.value)}
           />
         ))}
@@ -210,7 +210,7 @@ export const DynamicFields = ({
       {!field.required && value !== undefined && (
         <Button
           title="Clear selection"
-          compact
+          size="compact"
           variant="ghost"
           onPress={() => change(field.key, undefined)}
         />

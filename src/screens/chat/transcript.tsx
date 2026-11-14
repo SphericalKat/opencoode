@@ -74,7 +74,7 @@ export const PendingInputs = ({
             <Button
               disabled={pending}
               title={item.delivery === "steer" ? "Queue" : "Steer"}
-              compact
+              size="compact"
               onPress={() => {
                 void run(() =>
                   opencodeClient.session.inbox.update({
@@ -88,7 +88,7 @@ export const PendingInputs = ({
             {(item.type === "user" || item.type === "synthetic") && (
               <Button
                 title="Edit"
-                compact
+                size="compact"
                 disabled={!draftLoaded || pending}
                 onPress={() => {
                   void editInbox(item);
@@ -97,7 +97,7 @@ export const PendingInputs = ({
             )}
             <Button
               title="Cancel"
-              compact
+              size="compact"
               variant="ghost"
               disabled={pending}
               onPress={() => {
@@ -282,7 +282,7 @@ export const TranscriptList = ({
             <Button
               title="Load earlier messages"
               variant="ghost"
-              compact
+              size="compact"
               busy={loadingOlder}
               onPress={() => {
                 setFollowing(false);

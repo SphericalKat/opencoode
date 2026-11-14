@@ -417,7 +417,7 @@ const FileHeaderRow = ({
     {file.original && (
       <Button
         title={saved && file.text === file.initialText ? "Saved" : "Save file"}
-        compact
+        size="compact"
         variant="primary"
         disabled={file.text === file.initialText || sharing}
         busy={fileBusy}
@@ -427,7 +427,7 @@ const FileHeaderRow = ({
     {file.bytes && !file.original && showAttach && (
       <Button
         title="Attach to prompt"
-        compact
+        size="compact"
         variant="primary"
         disabled={fileBusy || sharing}
         onPress={onAttach}
@@ -435,7 +435,7 @@ const FileHeaderRow = ({
     )}
     <Button
       title={fileActionsOpen ? "Hide actions" : "More actions"}
-      compact
+      size="compact"
       variant="ghost"
       disabled={fileBusy || sharing}
       onPress={onToggleActions}
@@ -475,7 +475,7 @@ const FileActionRows = ({
       {showAttach && (
         <Button
           title="Attach to prompt"
-          compact
+          size="compact"
           disabled={fileBusy || sharing}
           onPress={onAttach}
         />
@@ -483,14 +483,14 @@ const FileActionRows = ({
       {showAttach && file.original && (
         <Button
           title="Attach selection"
-          compact
+          size="compact"
           disabled={fileBusy || sharing || selection.end <= selection.start}
           onPress={onAttachSelection}
         />
       )}
       <Button
         title="Reload"
-        compact
+        size="compact"
         disabled={fileBusy || sharing}
         onPress={() => {
           if (file.text === file.initialText) {
@@ -511,7 +511,7 @@ const FileActionRows = ({
       {file.original && (
         <Button
           title={copied ? "Copied" : "Copy text"}
-          compact
+          size="compact"
           onPress={() => {
             void copyText(file.text).then(onCopied).catch(onCopyError);
           }}
@@ -520,7 +520,7 @@ const FileActionRows = ({
       {file.bytes && (
         <Button
           title={shareTitle()}
-          compact
+          size="compact"
           busy={sharing}
           disabled={fileBusy}
           onPress={onShare}
@@ -849,7 +849,7 @@ const Files = ({
         <Row style={{ flexWrap: "nowrap" }}>
           <Button
             title="↑ Parent"
-            compact
+            size="compact"
             disabled={!path || searching}
             onPress={() => setPath(parentPath(path))}
           />
@@ -863,7 +863,7 @@ const Files = ({
           </BodyText>
           <Button
             title="Refresh"
-            compact
+            size="compact"
             variant="ghost"
             onPress={() => setRevision((value) => value + 1)}
           />
@@ -1192,7 +1192,7 @@ const Changes = ({
           </BodyText>
           <Button
             title="Branches"
-            compact
+            size="compact"
             variant="ghost"
             onPress={() => {
               void loadBranches();
@@ -1201,7 +1201,7 @@ const Changes = ({
           />
           <Button
             title="Refresh"
-            compact
+            size="compact"
             variant="ghost"
             onPress={() => setRevision((value) => value + 1)}
           />
@@ -1217,7 +1217,7 @@ const Changes = ({
                   working: "Working tree",
                 }[value]
               }
-              compact
+              size="compact"
               variant={mode === value ? "primary" : "secondary"}
               onPress={() => setMode(value)}
             />
@@ -1349,7 +1349,7 @@ const Changes = ({
                         ? "Continue review comment"
                         : "Add review comment"
                     }
-                    compact
+                    size="compact"
                     onPress={() => {
                       void openReview(file);
                     }}
@@ -1498,14 +1498,14 @@ const Worktrees = ({
         </BodyText>
         <Button
           title="Create"
-          compact
+          size="compact"
           variant="primary"
           disabled={!location}
           onPress={() => setCreateVisible(true)}
         />
         <Button
           title="Refresh"
-          compact
+          size="compact"
           onPress={() => setRevision((value) => value + 1)}
         />
       </Row>
