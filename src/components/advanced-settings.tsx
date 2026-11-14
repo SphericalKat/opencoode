@@ -186,7 +186,10 @@ const Usage = ({
     };
   }, []);
   return (
-    <ScrollView contentContainerStyle={{ gap: 14, padding: 18 }}>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ gap: 14, padding: 18 }}
+    >
       <Row>
         <BodyText style={{ flex: 1, fontSize: 19, fontWeight: "600" }}>
           Server usage
@@ -321,6 +324,7 @@ const WebSearch = ({
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
       contentContainerStyle={{ gap: 14, padding: 18 }}
     >
       <BodyText style={{ fontSize: 19, fontWeight: "600" }}>
@@ -534,6 +538,7 @@ const Generate = ({
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
       contentContainerStyle={{ gap: 14, padding: 18 }}
     >
       <BodyText style={{ fontSize: 19, fontWeight: "600" }}>Generate</BodyText>

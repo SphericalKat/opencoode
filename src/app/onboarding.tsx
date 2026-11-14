@@ -19,6 +19,7 @@ export const Onboarding = ({ children }: OnboardingProps) => {
     >
       <ScrollView
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.onboarding, styles.betaOnboarding]}
       >
         {children}
