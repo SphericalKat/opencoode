@@ -1,4 +1,4 @@
-import type { Pty, SessionInfo } from "@opencode/client";
+import type { Pty } from "@opencode/client";
 import React, {
   useCallback,
   useEffect,
@@ -35,8 +35,9 @@ import type { TerminalEvent } from "../lib/terminal";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { useUnsavedChanges, useUnsavedGuard } from "../lib/unsaved";
-import { confirmAction } from "./dialog";
+import { IconButton } from "./icon-button";
 import { useMotionPreference } from "./motion";
+import { useUndoableRemoval } from "./snackbar";
 import { TerminalRenderer } from "./terminal-renderer";
 import type { TerminalRendererHandle } from "./terminal-renderer.types";
 import {
@@ -47,7 +48,8 @@ import {
   BodyText,
   mono,
   Row,
-  Sheet,
+  sans,
+  usePressFeedback,
 } from "./ui";
 
 interface Props {
@@ -85,7 +87,6 @@ const createStyles = (colors: ThemeColors) =>
     },
     fullscreen: { backgroundColor: colors.bg, flex: 1, paddingTop: 8 },
     keys: { flexGrow: 0, flexShrink: 0, height: 54 },
-    modes: { flexGrow: 0, flexShrink: 0, height: 50 },
     nativeComposer: {
       flexShrink: 0,
       flexWrap: "nowrap",
@@ -107,31 +108,59 @@ const createStyles = (colors: ThemeColors) =>
     },
     notice: { flexShrink: 0, paddingBottom: 8, paddingHorizontal: 16 },
     panel: { flex: 1, minHeight: 0 },
-    selectedTab: {
-      backgroundColor: colors.selected,
-      borderColor: colors.focus,
+    selectedChip: {
+      backgroundColor: colors.panel,
+      borderColor: colors.borderMuted,
     },
     session: { flex: 1, minHeight: 0 },
-    tab: {
-      borderColor: colors.border,
-      borderRadius: 8,
-      borderWidth: 1,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+    chip: {
+      alignItems: "center",
+      borderColor: "transparent",
+      borderRadius: 6,
+      borderWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      gap: 8,
+      height: 28,
+      maxWidth: 240,
+      overflow: "hidden",
+      paddingEnd: 3,
+      paddingStart: 8,
     },
-    tabs: { flexGrow: 0, flexShrink: 0, height: 48 },
+    chipText: {
+      flexShrink: 1,
+      fontFamily: sans,
+      fontSize: 13,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "400",
+      letterSpacing: -0.04,
+      lineHeight: 16,
+    },
+    chipTitle: {
+      alignItems: "center",
+      alignSelf: "stretch",
+      flexShrink: 1,
+      justifyContent: "center",
+    },
+    strip: {
+      backgroundColor: colors.bg,
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+      flexShrink: 0,
+      height: 49,
+    },
+    stripContent: {
+      alignItems: "center",
+      flexGrow: 1,
+      gap: 8,
+      paddingEnd: STRIP_PADDING,
+      paddingStart: STRIP_PADDING,
+    },
     terminal: {
       borderBottomWidth: 1,
       borderColor: colors.border,
       borderTopWidth: 1,
       flex: 1,
       minHeight: 0,
-    },
-    toolbar: {
-      flexShrink: 0,
-      paddingBottom: 8,
-      paddingHorizontal: 16,
-      paddingTop: 6,
     },
   });
 
@@ -181,8 +210,16 @@ const TerminalSession = ({
   directory,
   terminal,
   mode,
+  autoFocus,
+  onAutoFocus,
   onExit,
-}: Props & { terminal: Pty; mode: Mode; onExit: () => void }) => {
+}: Props & {
+  autoFocus: boolean;
+  terminal: Pty;
+  mode: Mode;
+  onAutoFocus: () => void;
+  onExit: () => void;
+}) => {
   const reducedMotion = useMotionPreference();
   const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -200,6 +237,8 @@ const TerminalSession = ({
   const pending = useRef<string[]>([]);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onExitRef = useRef(onExit);
+  const autoFocusPending = useRef(autoFocus);
+  const afterAttachRef = useRef<() => void>(() => null);
   const [ready, setReady] = useState(false);
   const [rendererEpoch, setRendererEpoch] = useState(0);
   const [rendererBroken, setRendererBroken] = useState(false);
@@ -323,16 +362,22 @@ const TerminalSession = ({
         blue: colors.blue,
         brightBlack: colors.faint,
         brightBlue: colors.blue,
+        brightCyan: colors.syntaxProperty,
         brightGreen: colors.success,
+        brightMagenta: colors.syntaxKeyword,
         brightRed: colors.danger,
         brightWhite: colors.text,
+        brightYellow: colors.syntaxType,
+        cyan: colors.syntaxProperty,
         cursor: colors.text,
         cursorAccent: colors.bg,
         foreground: colors.text,
         green: colors.success,
+        magenta: colors.syntaxKeyword,
         red: colors.danger,
         selectionBackground: selectionColor(colors, scheme),
         white: colors.muted,
+        yellow: colors.syntaxType,
       },
       type: "theme",
     });
@@ -515,6 +560,7 @@ const TerminalSession = ({
           if ("endOffset" in message && typeof message.endOffset === "number") {
             cursor.current = message.endOffset;
           }
+          afterAttachRef.current();
         };
         const handleResized = (message: ControlMessage) => {
           if (
@@ -604,6 +650,7 @@ const TerminalSession = ({
           if (mode === "workspace") {
             clearTimeout(connectTimer);
             setConnectionStatus("connected");
+            afterAttachRef.current();
           }
         };
         const onMessage = (event: MessageEvent) => {
@@ -836,6 +883,20 @@ const TerminalSession = ({
       renderer.current?.send({ type: "focus" });
     }
   };
+  const afterAttach = () => {
+    if (!autoFocusPending.current) {
+      return;
+    }
+    autoFocusPending.current = false;
+    if (mode === "desktop") {
+      takeControl();
+    }
+    focusInput();
+    onAutoFocus();
+  };
+  useLayoutEffect(() => {
+    afterAttachRef.current = afterAttach;
+  });
   const canSend =
     !suspended &&
     ready &&
@@ -1043,8 +1104,8 @@ type ClientEvent =
 interface InventorySync {
   abortRequest: () => void;
   client: Client;
+  desktop: boolean;
   directory: string;
-  mode: Mode;
   onError: (message: string) => void;
   refresh: () => Promise<void>;
   sessionID?: string;
@@ -1056,13 +1117,13 @@ const MAX_INVENTORY_BACKOFF_STEP = 4;
 
 const shouldRefreshInventory = (
   event: ClientEvent,
-  { directory, mode, sessionID }: InventorySync
+  { desktop, directory, sessionID }: InventorySync
 ): boolean => {
   if (event.type === "server.connected") {
     return true;
   }
   if (
-    mode === "desktop" &&
+    desktop &&
     (event.type === "persistent-pty.added" ||
       event.type === "persistent-pty.removed") &&
     event.data.sessionID === sessionID
@@ -1070,7 +1131,6 @@ const shouldRefreshInventory = (
     return true;
   }
   return (
-    mode === "workspace" &&
     (event.type === "pty.created" ||
       event.type === "pty.updated" ||
       event.type === "pty.deleted" ||
@@ -1146,20 +1206,151 @@ const startInventorySync = (options: InventorySync): (() => void) => {
   };
 };
 
+interface Shell {
+  kind: Mode;
+  pty: Pty;
+}
+
+const shellKey = (shell: Shell): string => `${shell.kind}:${shell.pty.id}`;
+const shellName = (shell: Shell): string =>
+  shell.pty.title || shell.pty.command || "Terminal";
+
+const defaultShell = (shells: Shell[]): Shell | undefined =>
+  shells.find((shell) => shell.pty.status === "running") ?? shells[0];
+
+const ShellStrip = ({
+  busy,
+  onClose,
+  onCreate,
+  onSelect,
+  selectedKey,
+  shells,
+}: {
+  busy: boolean;
+  onClose: (shell: Shell) => void;
+  onCreate: () => void;
+  onSelect: (key: string) => void;
+  selectedKey: string | undefined;
+  shells: Shell[];
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { android_ripple, pressedStyle } = usePressFeedback();
+  const scroller = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const chipOffsets = useRef(new Map<string, number>());
+  const revealChip = useCallback((key: string) => {
+    const x = chipOffsets.current.get(key);
+    if (x !== undefined) {
+      scroller.current?.scrollTo({
+        animated: false,
+        x: Math.max(0, x - STRIP_PADDING),
+      });
+    }
+  }, []);
+  useEffect(() => {
+    if (selectedKey) {
+      revealChip(selectedKey);
+    }
+  }, [revealChip, selectedKey]);
+  const mixed =
+    shells.some((shell) => shell.kind === "desktop") &&
+    shells.some((shell) => shell.kind === "workspace");
+  return (
+    <View style={styles.strip}>
+      <ScrollView
+        ref={scroller}
+        horizontal
+        accessibilityRole="tablist"
+        keyboardShouldPersistTaps="handled"
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.stripContent}
+      >
+        {shells.map((shell) => {
+          const key = shellKey(shell);
+          const selected = key === selectedKey;
+          const name = shellName(shell);
+          const label = mixed ? `${name}, ${shell.kind} shell` : name;
+          return (
+            <View
+              key={key}
+              onLayout={(layout) => {
+                chipOffsets.current.set(key, layout.nativeEvent.layout.x);
+                if (selected) {
+                  revealChip(key);
+                }
+              }}
+              style={[styles.chip, selected && styles.selectedChip]}
+            >
+              <Pressable
+                accessibilityLabel={label}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                android_ripple={android_ripple}
+                onPress={() => onSelect(key)}
+                style={({ pressed }) => [
+                  styles.chipTitle,
+                  pressed && pressedStyle,
+                ]}
+              >
+                <BodyText
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={[
+                    styles.chipText,
+                    {
+                      color:
+                        shell.pty.status === "running"
+                          ? colors.text
+                          : colors.muted,
+                    },
+                  ]}
+                >
+                  {name}
+                </BodyText>
+              </Pressable>
+              <IconButton
+                icon="close"
+                size={24}
+                iconSize={14}
+                color={colors.text}
+                borderless
+                accessibilityLabel={`Close ${label}`}
+                onPress={() => onClose(shell)}
+              />
+            </View>
+          );
+        })}
+        <IconButton
+          icon="plus"
+          size={28}
+          iconSize={20}
+          color={colors.text}
+          busy={busy}
+          accessibilityLabel="New shell"
+          onPress={onCreate}
+        />
+      </ScrollView>
+    </View>
+  );
+};
+
 const TerminalList = ({
   client,
   connection,
+  desktop,
   directory,
   sessionID,
-  mode,
-}: Props & { mode: Mode }) => {
-  const { colors } = useTheme();
+}: Props & { desktop: boolean }) => {
   const styles = useThemedStyles(createStyles);
   const confirmUnsaved = useUnsavedGuard();
+  const { hidden, remove } = useUndoableRemoval<string>("terminals");
   const { suspended } = useSheetCoordinator();
-  const [terminals, setTerminals] = useState<Pty[]>([]);
-  const [selectedID, setSelectedID] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [shells, setShells] = useState<Shell[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [autoFocusKey, setAutoFocusKey] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const seeded = useRef(false);
+  const createRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [foreground, setForeground] = useState(
@@ -1173,42 +1364,44 @@ const TerminalList = ({
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
-    setLoading(true);
     setError(null);
     try {
-      let data: Pty[];
-      if (mode === "desktop" && sessionID) {
-        data = await client.experimental.persistentPty.list(
-          { sessionID },
-          { signal: controller.signal }
-        );
-      } else {
-        const response = await client.pty.list(
+      const [desktopShells, workspaceShells] = await Promise.all([
+        desktop && sessionID
+          ? client.experimental.persistentPty.list(
+              { sessionID },
+              { signal: controller.signal }
+            )
+          : [],
+        client.pty.list(
           { location: { directory } },
           { signal: controller.signal }
-        );
-        ({ data } = response);
-      }
+        ),
+      ]);
       if (controller.signal.aborted) {
         return;
       }
-      setTerminals(data);
-      setSelectedID((current) =>
-        data.some((item) => item.id === current)
-          ? current
-          : (data.find((item) => item.status === "running")?.id ??
-            data[0]?.id ??
-            null)
-      );
+      const next = [
+        ...desktopShells.map((pty): Shell => ({ kind: "desktop", pty })),
+        ...workspaceShells.data.map((pty): Shell => ({
+          kind: "workspace",
+          pty,
+        })),
+      ];
+      setShells(next);
+      setLoaded(true);
+      if (!seeded.current) {
+        seeded.current = true;
+        if (next.length === 0) {
+          void createRef.current();
+        }
+      }
     } catch (error_) {
       if (!controller.signal.aborted) {
         setError(errorMessage(error_));
       }
     }
-    if (!controller.signal.aborted) {
-      setLoading(false);
-    }
-  }, [client, directory, sessionID, mode]);
+  }, [client, desktop, directory, sessionID]);
 
   useEffect(() => {
     mounted.current = true;
@@ -1232,48 +1425,52 @@ const TerminalList = ({
     return startInventorySync({
       abortRequest: () => request.current?.abort(),
       client,
+      desktop,
       directory,
-      mode,
       onError: setError,
       refresh,
       sessionID,
     });
-  }, [client, directory, mode, sessionID, foreground, refresh, suspended]);
+  }, [client, desktop, directory, sessionID, foreground, refresh, suspended]);
 
-  const create = async () => {
+  const create = useCallback(async () => {
     if (!(await confirmUnsaved())) {
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      let terminal: Pty;
-      if (mode === "desktop" && sessionID) {
-        terminal = await client.experimental.persistentPty.create({
-          args: [],
-          cwd: directory,
-          env: {},
-          sessionID,
-          title: "Terminal",
-        });
+      let created: Shell;
+      if (desktop && sessionID) {
+        created = {
+          kind: "desktop",
+          pty: await client.experimental.persistentPty.create({
+            args: [],
+            cwd: directory,
+            env: {},
+            sessionID,
+            title: "Terminal",
+          }),
+        };
       } else {
         const response = await client.pty.create({
           cwd: directory,
           location: { directory },
         });
-        terminal = response.data;
+        created = { kind: "workspace", pty: response.data };
       }
       if (!mounted.current) {
         return;
       }
+      const key = shellKey(created);
       request.current?.abort();
-      setLoading(false);
-      setTerminals((current) =>
-        current.some((item) => item.id === terminal.id)
-          ? current.map((item) => (item.id === terminal.id ? terminal : item))
-          : [...current, terminal]
+      setShells((current) =>
+        current.some((item) => shellKey(item) === key)
+          ? current.map((item) => (shellKey(item) === key ? created : item))
+          : [...current, created]
       );
-      setSelectedID(terminal.id);
+      setSelectedKey(key);
+      setAutoFocusKey(key);
     } catch (error_) {
       if (mounted.current) {
         setError(errorMessage(error_));
@@ -1282,66 +1479,50 @@ const TerminalList = ({
     if (mounted.current) {
       setBusy(false);
     }
+  }, [client, confirmUnsaved, desktop, directory, sessionID]);
+
+  useLayoutEffect(() => {
+    createRef.current = create;
+  }, [create]);
+
+  const closeShell = (shell: Shell) => {
+    remove(shellKey(shell), {
+      commit: async () => {
+        await (shell.kind === "desktop"
+          ? client.experimental.persistentPty.remove({ ptyID: shell.pty.id })
+          : client.pty.remove({
+              location: { directory },
+              ptyID: shell.pty.id,
+            }));
+        if (mounted.current) {
+          await refresh();
+        }
+      },
+      message: "Shell closed",
+      onUndo: () => setSelectedKey(shellKey(shell)),
+    });
   };
 
-  const selectTerminal = async (next: string) => {
-    if (next === selectedID || !(await confirmUnsaved())) {
-      return;
-    }
-    setSelectedID(next);
-  };
-
-  const terminate = async () => {
-    if (
-      !selectedID ||
-      !(await confirmAction(
-        "Terminate this shell?",
-        "The server will stop this shell and its child processes.",
-        { confirmLabel: "Terminate" }
-      ))
-    ) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await (mode === "desktop"
-        ? client.experimental.persistentPty.remove({ ptyID: selectedID })
-        : client.pty.remove({ location: { directory }, ptyID: selectedID }));
-      if (mounted.current) {
-        await refresh();
-      }
-    } catch (error_) {
-      if (mounted.current) {
-        setError(errorMessage(error_));
-      }
-    }
-    if (mounted.current) {
-      setBusy(false);
-    }
-  };
-
-  const selected = terminals.find((item) => item.id === selectedID);
+  const visible = shells.filter((shell) => !hidden.has(shellKey(shell)));
+  const selected =
+    visible.find((shell) => shellKey(shell) === selectedKey) ??
+    defaultShell(visible);
+  const selectedShellKey = selected && shellKey(selected);
   const renderSelected = () => {
     if (!selected) {
-      return (
-        !loading && (
-          <Empty
-            title="A shell on your server"
-            detail="Create a terminal to run commands in this workspace. Shells continue after you leave this screen."
-          />
-        )
-      );
+      return null;
     }
-    if (selected.status === "running" || mode === "desktop") {
+    if (selected.pty.status === "running" || selected.kind === "desktop") {
       return (
         <TerminalSession
-          key={selected.id}
+          key={selectedShellKey}
+          autoFocus={autoFocusKey === selectedShellKey}
           client={client}
           connection={connection}
           directory={directory}
-          terminal={selected}
-          mode={mode}
+          terminal={selected.pty}
+          mode={selected.kind}
+          onAutoFocus={() => setAutoFocusKey(null)}
           onExit={() => {
             void refresh();
           }}
@@ -1351,90 +1532,47 @@ const TerminalList = ({
     return (
       <Empty
         title="Shell exited"
-        detail={`Exit code: ${selected.exitCode ?? "unknown"}. Create a new shell to continue.`}
+        detail={`Exit code: ${selected.pty.exitCode ?? "unknown"}. Tap + to start a new shell.`}
+      />
+    );
+  };
+  const renderEmpty = () => {
+    if (visible.length > 0) {
+      return null;
+    }
+    if (!error && (!loaded || busy)) {
+      return <Busy />;
+    }
+    return (
+      <Empty
+        title="A shell on your server"
+        detail="Tap + to start a shell in this workspace. Shells continue after you leave this screen."
       />
     );
   };
   return (
     <View style={styles.panel}>
-      <Row style={styles.toolbar}>
-        <Button
-          title="New shell"
-          size="compact"
-          variant="primary"
-          onPress={() => {
-            void create();
-          }}
-          busy={busy}
-        />
-        <Button
-          title="Refresh"
-          size="compact"
-          onPress={() => {
-            void refresh();
-          }}
-          disabled={busy || loading}
-        />
-        {selected && (
-          <Button
-            title="Terminate"
-            size="compact"
-            variant="danger"
-            onPress={() => {
-              void terminate();
+      <ShellStrip
+        busy={busy}
+        shells={visible}
+        selectedKey={selectedShellKey}
+        onClose={closeShell}
+        onCreate={() => {
+          void create();
+        }}
+        onSelect={setSelectedKey}
+      />
+      {error && (
+        <View style={styles.notice}>
+          <ErrorNotice
+            error={error}
+            onRetry={() => {
+              void refresh();
             }}
-            disabled={busy}
           />
-        )}
-      </Row>
-      <View style={styles.notice}>
-        <ErrorNotice
-          error={error}
-          onRetry={() => {
-            void refresh();
-          }}
-        />
-      </View>
-      {loading && terminals.length === 0 ? <Busy /> : null}
-      {terminals.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.tabs}
-          contentContainerStyle={{
-            gap: 8,
-            paddingBottom: 10,
-            paddingHorizontal: 16,
-          }}
-        >
-          {terminals.map((terminal) => (
-            <Pressable
-              accessibilityRole="tab"
-              accessibilityState={{ selected: selectedID === terminal.id }}
-              key={terminal.id}
-              onPress={() => {
-                void selectTerminal(terminal.id);
-              }}
-              style={[
-                styles.tab,
-                selectedID === terminal.id && styles.selectedTab,
-              ]}
-            >
-              <BodyText
-                style={{
-                  color:
-                    terminal.status === "running"
-                      ? colors.success
-                      : colors.muted,
-                }}
-              >
-                {terminal.status === "running" ? "●" : "○"}{" "}
-                {terminal.title || terminal.command}
-              </BodyText>
-            </Pressable>
-          ))}
-        </ScrollView>
+        </View>
       )}
+      {renderEmpty()}
       {renderSelected()}
     </View>
   );
@@ -1442,27 +1580,11 @@ const TerminalList = ({
 
 const Terminals = (props: Props) => {
   const styles = useThemedStyles(createStyles);
-  const confirmUnsaved = useUnsavedGuard();
   const { suspended } = useSheetCoordinator();
-  const capabilityKnown = useRef(false);
   const [persistent, setPersistent] = useState<boolean | null>(null);
-  const [mode, setMode] = useState<Mode>("workspace");
-  const [sessionID, setSessionID] = useState(props.sessionID);
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [sessionPicker, setSessionPicker] = useState(false);
-  const [sessionCursor, setSessionCursor] = useState<string | undefined>(
-    undefined
-  );
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const retryCheck = useRef<AbortController | null>(null);
-  const mounted = useRef(true);
 
-  const [previousSessionID, setPreviousSessionID] = useState(props.sessionID);
-  if (previousSessionID !== props.sessionID) {
-    setPreviousSessionID(props.sessionID);
-    setSessionID(props.sessionID);
-  }
   const checkServer = useCallback(
     (signal: AbortSignal) => {
       void props.client.server
@@ -1471,12 +1593,7 @@ const Terminals = (props: Props) => {
           if (signal.aborted) {
             return null;
           }
-          const supported = info.capabilities?.persistentPty === true;
-          setPersistent(supported);
-          if (!supported || !capabilityKnown.current) {
-            setMode(supported ? "desktop" : "workspace");
-          }
-          capabilityKnown.current = true;
+          setPersistent(info.capabilities?.persistentPty === true);
           return null;
         })
         .catch((error_) => {
@@ -1492,115 +1609,16 @@ const Terminals = (props: Props) => {
     if (suspended) {
       return;
     }
-    mounted.current = true;
     const controller = new AbortController();
     checkServer(controller.signal);
     return () => {
-      mounted.current = false;
       controller.abort();
       retryCheck.current?.abort();
     };
   }, [checkServer, suspended]);
 
-  const pickSession = async (cursor?: string) => {
-    setSessionPicker(true);
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await props.client.session.list({
-        cursor,
-        directory: props.directory,
-        limit: 50,
-      });
-      if (!mounted.current) {
-        return;
-      }
-      setSessions((current) =>
-        cursor ? [...current, ...result.data] : result.data
-      );
-      setSessionCursor(result.cursor.next ?? undefined);
-    } catch (error_) {
-      if (mounted.current) {
-        setError(errorMessage(error_));
-      }
-    }
-    if (mounted.current) {
-      setLoading(false);
-    }
-  };
-
-  const selectMode = async (next: Mode) => {
-    if (next === mode || !(await confirmUnsaved())) {
-      return;
-    }
-    setMode(next);
-  };
-
-  const selectSession = async (next: string) => {
-    if (next !== sessionID && !(await confirmUnsaved())) {
-      return;
-    }
-    setSessionID(next);
-    setSessionPicker(false);
-  };
-
-  const renderTerminals = () =>
-    persistent !== null && (mode === "workspace" || sessionID) ? (
-      <TerminalList
-        key={`${mode}:${sessionID ?? ""}`}
-        {...props}
-        sessionID={sessionID}
-        mode={mode}
-      />
-    ) : (
-      persistent !== null && (
-        <Empty
-          title="Choose a desktop session"
-          detail="Desktop terminals belong to a session. Choose its session to see the same terminals on your phone."
-        />
-      )
-    );
-
   return (
     <View style={styles.panel}>
-      {persistent && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.modes}
-          contentContainerStyle={{
-            gap: 8,
-            paddingHorizontal: 16,
-            paddingVertical: 6,
-          }}
-        >
-          <Button
-            title="Desktop terminals"
-            size="compact"
-            variant={mode === "desktop" ? "primary" : "ghost"}
-            onPress={() => {
-              void selectMode("desktop");
-            }}
-          />
-          <Button
-            title="Workspace shells"
-            size="compact"
-            variant={mode === "workspace" ? "primary" : "ghost"}
-            onPress={() => {
-              void selectMode("workspace");
-            }}
-          />
-          {mode === "desktop" && (
-            <Button
-              title="Choose session"
-              size="compact"
-              onPress={() => {
-                void pickSession();
-              }}
-            />
-          )}
-        </ScrollView>
-      )}
       {persistent === null && !error && <Busy />}
       {error && (
         <View style={styles.notice}>
@@ -1615,50 +1633,13 @@ const Terminals = (props: Props) => {
           />
         </View>
       )}
-      {renderTerminals()}
-      {persistent !== null && mode === "desktop" && !sessionID && (
-        <View style={styles.notice}>
-          <Button
-            title="Choose session"
-            variant="primary"
-            onPress={() => {
-              void pickSession();
-            }}
-          />
-        </View>
+      {persistent !== null && (
+        <TerminalList
+          key={`${persistent && props.sessionID ? "desktop" : "workspace"}:${props.sessionID ?? ""}`}
+          {...props}
+          desktop={persistent && !!props.sessionID}
+        />
       )}
-      <Sheet
-        visible={sessionPicker}
-        title="Terminal session"
-        onClose={() => setSessionPicker(false)}
-      >
-        <ErrorNotice error={error} />
-        {loading && sessions.length === 0 && <Busy />}
-        {sessions.map((session) => (
-          <Button
-            key={session.id}
-            title={session.title || session.id}
-            variant={sessionID === session.id ? "primary" : "secondary"}
-            onPress={() => {
-              void selectSession(session.id);
-            }}
-          />
-        ))}
-        {!loading && sessions.length === 0 && (
-          <BodyText muted>
-            Create a session from the Sessions tab first.
-          </BodyText>
-        )}
-        {sessionCursor && (
-          <Button
-            title="More sessions"
-            busy={loading}
-            onPress={() => {
-              void pickSession(sessionCursor);
-            }}
-          />
-        )}
-      </Sheet>
     </View>
   );
 };
