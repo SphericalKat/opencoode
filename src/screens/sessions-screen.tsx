@@ -433,7 +433,7 @@ export const SessionsScreen = ({
     }
   };
 
-  const showFooter = sessions.length > 0 && (loading || !!nextCursor);
+  const showFooter = sessions.length > 0 && loading && !!nextCursor;
 
   return (
     <View
@@ -487,11 +487,7 @@ export const SessionsScreen = ({
             search={search}
           />
         }
-        ListFooterComponent={
-          showFooter ? (
-            <SessionsFooter loadMore={loadMore} loading={loading} />
-          ) : undefined
-        }
+        ListFooterComponent={showFooter ? <SessionsFooter /> : undefined}
         renderItem={({ item, index }) => (
           <SessionRow
             active={active.has(item.id)}

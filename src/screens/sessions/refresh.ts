@@ -109,6 +109,7 @@ export interface RefreshSink {
 export interface RefreshOutcome {
   aborted: boolean;
   cursor: string | undefined;
+  limit: number;
   timedOut: boolean;
 }
 
@@ -154,7 +155,9 @@ export const applyRefreshResult = (
     sink.loadedCount.current = Math.max(SESSION_PAGE_SIZE, next.length);
     return next;
   });
-  sink.setNextCursor(page.value.cursor.next ?? undefined);
+  const { next } = page.value.cursor;
+  const hasMore = page.value.data.length >= outcome.limit && !!next;
+  sink.setNextCursor(hasMore ? (next ?? undefined) : undefined);
   if (running.status === "fulfilled") {
     sink.setActive(new Set(Object.keys(running.value)));
     sink.setStatusError(undefined);
