@@ -9,8 +9,10 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
+import type { TextInput } from "react-native";
 
 import { errorMessage, normalizeConnection } from "../lib/client";
 import type { Connection } from "../lib/client";
@@ -18,6 +20,7 @@ import { playHaptic } from "../lib/haptics";
 import { parsePairingPayload } from "../lib/pairing";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { BackButton } from "./back-button";
 import { MotionContent } from "./motion";
 import { OpenCodeLogo } from "./open-code-logo";
 import { ShellIcon } from "./shell-icon";
@@ -35,6 +38,8 @@ import {
   touchTarget,
 } from "./ui";
 
+type InputInstance = React.ComponentRef<typeof TextInput>;
+
 export interface ConnectionForm {
   id: string;
   name: string;
@@ -42,7 +47,7 @@ export interface ConnectionForm {
   token: string;
   username?: string;
 }
-type Step = "servers" | "home" | "pair" | "address" | "password" | "scan";
+type Step = "servers" | "home" | "pair" | "password" | "scan";
 interface Props {
   form: ConnectionForm;
   connections: Connection[];
@@ -77,6 +82,9 @@ const guarded = async (
   }
 };
 
+const LOGO_WIDTH = 160;
+const LOGO_HEIGHT = (LOGO_WIDTH * 115) / 641;
+
 const pairingPathPattern = /\/auth\/connect\/[^/]+\/?$/u;
 
 const serverName = (value: string) => {
@@ -89,39 +97,12 @@ const serverName = (value: string) => {
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    back: { alignSelf: "flex-start", marginLeft: -10 },
-    betaActions: { gap: 8 },
-    betaCommand: {
-      backgroundColor: colors.input,
-      borderColor: colors.border,
-      borderRadius: 6,
-      borderWidth: 1,
-      paddingHorizontal: 16,
-      paddingVertical: 6,
-    },
-    betaContainer: { alignSelf: "center", maxWidth: 360, width: "100%" },
-    betaHint: { fontSize: 14, lineHeight: 21, textAlign: "center" },
-    betaInput: {
-      borderRadius: 6,
-      fontSize: 15,
-      minHeight: 48,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-    betaInstructions: {
-      alignItems: "center",
-      gap: 12,
-      marginTop: 4,
-      paddingTop: 16,
-    },
-    betaIntro: { alignItems: "center", gap: 8, marginBottom: 12 },
-    betaLogo: { marginBottom: 28 },
-    betaPassword: { gap: 4, justifyContent: "center" },
-    betaTitle: {
-      fontSize: 19,
-      fontWeight: "500",
-      lineHeight: 25,
-      textAlign: "center",
+    actions: { gap: 8 },
+    back: {
+      left: 0,
+      position: "absolute",
+      top: -(touchTarget - LOGO_HEIGHT) / 2,
+      zIndex: 1,
     },
     camera: {
       aspectRatio: 1,
@@ -132,13 +113,36 @@ const createStyles = (colors: ThemeColors) =>
       width: "100%",
     },
     center: { textAlign: "center" },
+    chip: {
+      alignSelf: "center",
+      backgroundColor: colors.panel,
+      borderColor: colors.border,
+      borderRadius: 6,
+      borderWidth: 1,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
     command: {
       color: colors.text,
       fontFamily: mono,
       fontSize: 13,
-      paddingVertical: 4,
+      lineHeight: 20,
     },
-    container: { gap: 16 },
+    container: { alignSelf: "center", gap: 16, maxWidth: 360, width: "100%" },
+    description: {
+      fontSize: 13,
+      lineHeight: 20,
+      textAlign: "center",
+    },
+    footer: { alignItems: "center", gap: 12, marginTop: 16 },
+    footerNote: { color: colors.faint, fontSize: 12, lineHeight: 16 },
+    footerText: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 20,
+      textAlign: "center",
+    },
+    form: { gap: 20 },
     frame: {
       aspectRatio: 1,
       borderColor: "#ffffffbb",
@@ -147,12 +151,35 @@ const createStyles = (colors: ThemeColors) =>
       position: "absolute",
       width: "70%",
     },
+    hint: { fontSize: 12, lineHeight: 16 },
+    input: { fontSize: 16, height: 44, lineHeight: 24, minHeight: 44 },
     instruction: { fontSize: 14, fontWeight: "500" },
+    intro: { alignItems: "center", gap: 8, marginBottom: 16 },
+    label: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: "500",
+      lineHeight: 16,
+    },
+    logo: { alignSelf: "center", marginBottom: 16 },
     manage: { paddingBottom: 10, paddingLeft: 32 },
+    method: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 4,
+      justifyContent: "center",
+      minHeight: 28,
+    },
+    methodText: {
+      color: colors.faint,
+      fontSize: 13,
+      lineHeight: 20,
+    },
     privacy: {
+      color: colors.faint,
       fontSize: 12,
-      lineHeight: 18,
-      paddingTop: 4,
+      lineHeight: 16,
       textAlign: "center",
     },
     saved: { gap: 4 },
@@ -169,6 +196,13 @@ const createStyles = (colors: ThemeColors) =>
     serverName: { fontWeight: "500" },
     serverText: { flex: 1, gap: 2, minWidth: 0 },
     small: { fontSize: 13, lineHeight: 19 },
+    title: {
+      color: colors.text,
+      fontSize: 20,
+      fontWeight: "500",
+      lineHeight: 28,
+      textAlign: "center",
+    },
     viewfinder: {
       ...StyleSheet.absoluteFill,
       alignItems: "center",
@@ -187,7 +221,7 @@ const getInitialStep = (
     return "password";
   }
   if (form.url) {
-    return pairingPathPattern.test(form.url) ? "pair" : "address";
+    return pairingPathPattern.test(form.url) ? "pair" : "password";
   }
   if (connections.length && !unavailableID) {
     return "servers";
@@ -195,12 +229,16 @@ const getInitialStep = (
   return "home";
 };
 
-const getBackStep = (step: Step, betaStart: boolean): Step => {
+const getBackStep = (
+  step: Step,
+  betaStart: boolean,
+  hasSavedServer: boolean
+): Step => {
   if (betaStart) {
     return "servers";
   }
-  if (step === "password") {
-    return "address";
+  if (step === "password" && hasSavedServer) {
+    return "servers";
   }
   return "home";
 };
@@ -229,6 +267,108 @@ const ConnectionNotice = ({
     );
   }
   return <ErrorNotice error={localError || error} />;
+};
+
+const ConnectIntro = ({
+  title,
+  description,
+  styles,
+}: {
+  title: string;
+  description: string;
+  styles: Styles;
+}) => (
+  <>
+    <View style={styles.logo}>
+      <OpenCodeLogo width={LOGO_WIDTH} />
+    </View>
+    <View style={styles.intro}>
+      <Text accessibilityRole="header" style={styles.title}>
+        {title}
+      </Text>
+      <BodyText muted style={styles.description}>
+        {description}
+      </BodyText>
+    </View>
+  </>
+);
+
+const ConnectField = ({
+  label,
+  hint,
+  inputRef,
+  styles,
+  ...props
+}: Omit<React.ComponentProps<typeof Field>, "ref"> & {
+  hint?: string;
+  inputRef?: React.Ref<InputInstance>;
+  styles: Styles;
+}) => (
+  <View style={{ gap: 8 }}>
+    <Text style={styles.label}>{label}</Text>
+    <Field
+      accessibilityLabel={label}
+      style={styles.input}
+      {...props}
+      // Field types its ref as the TextInput constructor, not the instance.
+      ref={inputRef as React.Ref<React.ComponentRef<typeof Field>> as never}
+    />
+    {hint && (
+      <BodyText muted style={styles.hint}>
+        {hint}
+      </BodyText>
+    )}
+  </View>
+);
+
+const MethodSwitch = ({
+  prompt,
+  action,
+  disabled,
+  onPress,
+  styles,
+}: {
+  prompt: string;
+  action: string;
+  disabled: boolean;
+  onPress: () => void;
+  styles: Styles;
+}) => (
+  <View style={styles.method}>
+    <Text style={styles.methodText}>{prompt}</Text>
+    <Button
+      title={action}
+      variant="ghost"
+      size="small"
+      disabled={disabled}
+      onPress={onPress}
+    />
+  </View>
+);
+
+const ServerHelp = ({ styles }: { styles: Styles }) => {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <View style={{ alignItems: "center", gap: 8 }}>
+      <View style={{ flexDirection: "row", justifyContent: "center" }}>
+        <Button
+          title="Start a server"
+          variant="ghost"
+          size="small"
+          icon={expanded ? "chevron-up" : "chevron-down"}
+          iconPosition="end"
+          onPress={() => setExpanded((value) => !value)}
+        />
+      </View>
+      {expanded && (
+        <View style={styles.chip}>
+          <BodyText selectable style={styles.command}>
+            opencode serve --hostname 0.0.0.0 --port 4096
+          </BodyText>
+        </View>
+      )}
+    </View>
+  );
 };
 
 const ServerStatus = ({
@@ -260,7 +400,7 @@ const ServerStatus = ({
 };
 
 const PrivacyNote = ({ styles }: { styles: Styles }) => (
-  <BodyText muted style={styles.privacy}>
+  <BodyText style={styles.privacy}>
     {Platform.OS === "web"
       ? "Connections stay in this tab. Your server must allow this browser origin with --cors."
       : "Your server credentials stay in secure storage on this device."}
@@ -330,6 +470,7 @@ export const ConnectionFlow = ({
   const submitting = useRef(false);
   const removing = useRef<string | null>(null);
   const connectRef = useRef(onConnect);
+  const passwordRef = useRef<InputInstance>(null);
   const busy = connecting || !!submission || reading || !!removingID;
 
   useEffect(() => {
@@ -478,31 +619,13 @@ export const ConnectionFlow = ({
     );
   };
 
-  const nextAddress = (animate = false) => {
-    if (busy) {
-      return;
-    }
+  const connectManual = () => {
     try {
       const url = form.url.trim();
       if (url.startsWith("{") || pairingPathPattern.test(url)) {
         acceptPairing(url);
         return;
       }
-      const normalized = normalizeConnection({
-        ...form,
-        id: form.id || undefined,
-        url,
-      });
-      onChangeForm({ ...form, url: normalized.url });
-      clearError();
-      setStep("password", animate ? 1 : 0);
-    } catch (error_) {
-      setLocalError(errorMessage(error_));
-    }
-  };
-
-  const connectManual = () => {
-    try {
       submit(
         [normalizeConnection({ ...form, id: form.id || undefined })],
         "password"
@@ -610,19 +733,31 @@ export const ConnectionFlow = ({
     };
   }, [step, cameraReady, setStep]);
 
+  const passwordBackStep = form.id ? "servers" : "home";
+
+  useEffect(() => {
+    if (step !== "password") {
+      return;
+    }
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      Keyboard.dismiss();
+      setStep(passwordBackStep, -1);
+      return true;
+    });
+    return () => back.remove();
+  }, [step, passwordBackStep, setStep]);
+
   const betaStart = step === "home" || step === "pair";
   const canReturnToServers = connections.length > 0 && !unavailableID;
-  const backStep = getBackStep(step, betaStart);
+  const backStep = getBackStep(step, betaStart, !!form.id);
   const back = shouldShowBack(
     step,
     !!submission,
     canReturnToServers,
     betaStart
   ) ? (
-    <Button
-      title="‹ Back"
-      size="compact"
-      variant="ghost"
+    <BackButton
+      accessibilityLabel="Back"
       disabled={busy}
       onPress={() => go(backStep, -1)}
     />
@@ -747,18 +882,12 @@ export const ConnectionFlow = ({
 
   const renderBetaHome = () => (
     <>
-      <View style={styles.betaIntro}>
-        <View style={styles.betaLogo}>
-          <OpenCodeLogo width={160} />
-        </View>
-        <BodyText accessibilityRole="header" style={styles.betaTitle}>
-          Connect to a server
-        </BodyText>
-        <BodyText muted style={styles.betaHint}>
-          Paste a pairing link from your computer, or scan its QR code.
-        </BodyText>
-      </View>
-      <Field
+      <ConnectIntro
+        title="Connect to a server"
+        description="Paste the pairing link from the server, or scan its QR code."
+        styles={styles}
+      />
+      <ConnectField
         label="Pairing link"
         placeholder="http://192.168.1.2:4096/auth/connect/…"
         value={pairingText}
@@ -771,17 +900,21 @@ export const ConnectionFlow = ({
         autoComplete="off"
         returnKeyType="go"
         onSubmitEditing={() => acceptPairing(pairingText)}
-        style={styles.betaInput}
+        styles={styles}
       />
-      <View style={styles.betaActions}>
+      <View style={styles.actions}>
         <Button
           title="Connect"
           variant="primary"
+          size="large"
+          fullWidth
           disabled={!pairingText.trim() || busy}
           onPress={() => acceptPairing(pairingText)}
         />
         <Button
           title="Scan QR code"
+          size="large"
+          fullWidth
           busy={reading}
           disabled={busy}
           onPress={() => {
@@ -789,31 +922,29 @@ export const ConnectionFlow = ({
           }}
         />
       </View>
-      <Row style={styles.betaPassword}>
-        <BodyText muted style={styles.betaHint}>
-          No pairing link?
+      <MethodSwitch
+        prompt="No pairing link?"
+        action="Use password"
+        disabled={busy}
+        styles={styles}
+        onPress={() => {
+          onChangeForm(blankForm);
+          go("password");
+        }}
+      />
+      <View style={styles.footer}>
+        <BodyText style={styles.footerText}>
+          Run this command on the server’s computer to get a pairing link and QR
+          code.
         </BodyText>
-        <Button
-          title="Use password"
-          variant="ghost"
-          size="compact"
-          disabled={busy}
-          onPress={() => {
-            onChangeForm(blankForm);
-            go("address");
-          }}
-        />
-      </Row>
-      <View style={styles.betaInstructions}>
-        <BodyText muted style={styles.betaHint}>
-          OpenCode: run this on the server computer. Pi: use /mobile in an
-          active session with the companion extension installed.
-        </BodyText>
-        <View style={styles.betaCommand}>
+        <View style={styles.chip}>
           <BodyText selectable style={styles.command}>
             opencode pair
           </BodyText>
         </View>
+        <BodyText style={[styles.footerNote, styles.center]}>
+          For Pi, run /mobile in an active session with the companion extension.
+        </BodyText>
       </View>
       {unavailableID && savedServers}
     </>
@@ -874,76 +1005,59 @@ export const ConnectionFlow = ({
     </>
   );
 
-  const renderAddress = () => (
-    <>
-      <Heading>Enter the server address</Heading>
-      <BodyText muted>Use your computer’s LAN or private VPN address.</BodyText>
-      <Field
-        label="Server address"
-        placeholder="http://192.168.1.20:4096"
-        value={form.url}
-        editable={!busy}
-        onChangeText={(url) => {
-          clearError();
-          onChangeForm({ ...form, token: "", url });
-        }}
-        keyboardType="url"
-        autoComplete="off"
-        autoFocus
-        returnKeyType="next"
-        onSubmitEditing={() => nextAddress()}
-      />
-      <Button
-        title="Continue"
-        variant="primary"
-        disabled={!form.url.trim() || busy}
-        onPress={() => nextAddress(true)}
-      />
-      <BodyText muted style={styles.small}>
-        On a phone, localhost refers to the phone. Use HTTPS outside a trusted
-        network.
-      </BodyText>
-      <Disclosure title="Start a server">
-        <BodyText selectable style={styles.command}>
-          opencode serve --hostname 0.0.0.0 --port 4096
-        </BodyText>
-      </Disclosure>
-    </>
-  );
-
   const renderPassword = () => (
     <>
-      <Heading>
-        {form.id ? "Update your server" : "Enter the server password"}
-      </Heading>
-      <BodyText muted numberOfLines={2}>
-        {form.url}
-      </BodyText>
-      <Field
-        label="Server password"
-        placeholder="Server password"
-        secureTextEntry
-        value={form.token}
-        editable={!busy}
-        onChangeText={(token) => {
-          clearError();
-          onChangeForm({ ...form, token });
-        }}
-        autoComplete="off"
-        autoFocus
-        returnKeyType="go"
-        onSubmitEditing={connectManual}
+      <ConnectIntro
+        title={form.id ? "Update your server" : "Connect to a server"}
+        description="Enter your server address and password to get started."
+        styles={styles}
       />
-      <Button
-        title="Connect"
-        variant="primary"
-        disabled={busy}
-        onPress={connectManual}
-      />
-      <BodyText muted style={styles.small}>
-        Leave this blank if your server does not require a password.
-      </BodyText>
-      <Disclosure title="Connection details">
+      <View style={styles.form}>
+        <ConnectField
+          label="Server address"
+          hint="On a phone, localhost is the phone. Use your computer’s LAN or VPN address."
+          placeholder="http://192.168.1.20:4096"
+          value={form.url}
+          editable={!busy}
+          onChangeText={(url) => {
+            clearError();
+            onChangeForm({ ...form, url });
+          }}
+          keyboardType="url"
+          autoComplete="off"
+          autoFocus={!form.url}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          styles={styles}
+        />
+        <ConnectField
+          inputRef={passwordRef}
+          label="Password"
+          hint="To see it, run opencode service get password on the server’s computer. Leave it blank if the server has no password."
+          secureTextEntry
+          value={form.token}
+          editable={!busy}
+          onChangeText={(token) => {
+            clearError();
+            onChangeForm({ ...form, token });
+          }}
+          autoComplete="off"
+          returnKeyType="go"
+          onSubmitEditing={connectManual}
+          styles={styles}
+        />
+        {notice}
+        <Button
+          title={busy ? "Checking…" : "Connect"}
+          variant="primary"
+          size="large"
+          fullWidth
+          disabled={!form.url.trim() || busy}
+          onPress={connectManual}
+        />
+      </View>
+      <Disclosure title="Connection details" variant="embedded">
         <Field
           label="Name"
           value={form.name}
@@ -956,7 +1070,23 @@ export const ConnectionFlow = ({
           onChangeText={(username) => onChangeForm({ ...form, username })}
         />
       </Disclosure>
+      <MethodSwitch
+        prompt="Have a pairing link?"
+        action="Use pairing link"
+        disabled={busy}
+        styles={styles}
+        onPress={() => go("home", -1)}
+      />
+      <ServerHelp styles={styles} />
     </>
+  );
+
+  const notice = (
+    <ConnectionNotice
+      error={error}
+      localError={localError}
+      showUnavailable={!!unavailableID && step === "home"}
+    />
   );
 
   const renderStep = () => {
@@ -972,9 +1102,6 @@ export const ConnectionFlow = ({
     if (step === "scan") {
       return renderScan();
     }
-    if (step === "address") {
-      return renderAddress();
-    }
     return renderPassword();
   };
 
@@ -984,14 +1111,10 @@ export const ConnectionFlow = ({
       transitionKey={navigation.revision}
       direction={navigation.direction}
       enabled={!busy && step !== "scan"}
-      style={[styles.container, styles.betaContainer]}
+      style={styles.container}
     >
       {back && <View style={styles.back}>{back}</View>}
-      <ConnectionNotice
-        error={error}
-        localError={localError}
-        showUnavailable={!!unavailableID && step === "home"}
-      />
+      {step !== "password" && notice}
       {cameraBlocked && (
         <Button
           title="Open camera settings"
