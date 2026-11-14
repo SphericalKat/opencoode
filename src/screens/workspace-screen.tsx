@@ -13,11 +13,12 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 
 import { confirmAction } from "../components/dialog";
+import { FileIcon } from "../components/file-icon";
+import { ShellIcon } from "../components/shell-icon";
 import { useUndoableRemoval } from "../components/snackbar";
 import { TerminalPanel } from "../components/terminal-panel";
 import {
@@ -83,7 +84,6 @@ const createStyles = (colors: ThemeColors) =>
     },
     controls: { gap: 8, paddingBottom: 10, paddingHorizontal: pageInset },
     editor: { flex: 1, gap: 12, minHeight: 0, padding: 16 },
-    fileIcon: { color: colors.muted, fontFamily: mono, fontSize: 23 },
     fileRow: {
       alignItems: "center",
       borderBottomWidth: 1,
@@ -916,9 +916,11 @@ const Files = ({
                 }
               }}
             >
-              <Text style={styles.fileIcon}>
-                {item.type === "directory" ? "▱" : "≡"}
-              </Text>
+              {item.type === "directory" ? (
+                <ShellIcon name="folder" size={16} color={colors.muted} />
+              ) : (
+                <FileIcon path={item.path} size={16} />
+              )}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <BodyText numberOfLines={2}>{fileName(item.path)}</BodyText>
                 {searching && (
@@ -932,7 +934,9 @@ const Files = ({
                   </BodyText>
                 )}
               </View>
-              <BodyText muted>{item.type === "directory" ? "›" : ""}</BodyText>
+              {item.type === "directory" && (
+                <ShellIcon name="chevron" size={16} color={colors.faint} />
+              )}
             </Pressable>
           )}
         />
@@ -1015,6 +1019,18 @@ const Files = ({
           </View>
         )}
       </Sheet>
+    </View>
+  );
+};
+
+// Marks the checkout or worktree this session works in. It is a status, so it
+// is plain text rather than a disabled button.
+const CurrentTag = () => {
+  const { colors } = useTheme();
+  return (
+    <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
+      <ShellIcon name="check" size={16} color={colors.muted} />
+      <BodyText muted>Current</BodyText>
     </View>
   );
 };
@@ -1159,15 +1175,14 @@ const Worktrees = ({
               >
                 {location.project.directory}
               </BodyText>
-              <Button
-                title={
-                  directory === location.project.directory
-                    ? "Current checkout"
-                    : "Open checkout"
-                }
-                disabled={directory === location.project.directory}
-                onPress={() => onDirectoryChange(location.project.directory)}
-              />
+              {directory === location.project.directory ? (
+                <CurrentTag />
+              ) : (
+                <Button
+                  title="Open checkout"
+                  onPress={() => onDirectoryChange(location.project.directory)}
+                />
+              )}
             </Card>
           )}
           {!error && visibleTrees.length === 0 && (
@@ -1189,27 +1204,27 @@ const Worktrees = ({
               >
                 {tree.directory}
               </BodyText>
-              <Row>
-                <Button
-                  title={
-                    tree.directory === directory ? "Current worktree" : "Open"
-                  }
-                  disabled={tree.directory === directory || busy}
-                  onPress={() => onDirectoryChange(tree.directory)}
-                />
-                <Button
-                  title="Remove"
-                  variant="danger"
-                  disabled={
-                    tree.directory === directory ||
-                    tree.directory === location?.project.directory
-                  }
-                  busy={busy}
-                  onPress={() => {
-                    remove(tree);
-                  }}
-                />
-              </Row>
+              {tree.directory === directory ? (
+                <CurrentTag />
+              ) : (
+                <Row>
+                  <Button
+                    title="Open"
+                    disabled={busy}
+                    onPress={() => onDirectoryChange(tree.directory)}
+                  />
+                  {tree.directory !== location?.project.directory && (
+                    <Button
+                      title="Remove"
+                      variant="danger"
+                      busy={busy}
+                      onPress={() => {
+                        remove(tree);
+                      }}
+                    />
+                  )}
+                </Row>
+              )}
             </Card>
           ))}
         </>
