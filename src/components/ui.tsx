@@ -6,6 +6,7 @@ import {
   BottomSheetTextInput,
   BottomSheetView,
   useBottomSheetInternal,
+  useBottomSheetTimingConfigs,
 } from "@gorhom/bottom-sheet";
 import type {
   BottomSheetBackdropProps,
@@ -34,20 +35,20 @@ import {
   View,
 } from "react-native";
 import type {
-  PressableAndroidRippleConfig,
   StyleProp,
   TextInputProps,
   ViewStyle,
   TextProps,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { ReduceMotion } from "react-native-reanimated";
+import { Easing, ReduceMotion } from "react-native-reanimated";
 import {
   SafeAreaProvider,
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import { pageInset } from "../lib/layout";
 import {
   MessageActionsContext,
   MessageDisclosureContext,
@@ -55,32 +56,33 @@ import {
 import { useSheetCoordinator } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { BackButton } from "./back-button";
 import {
   MotionDisclosureBody,
   MotionDisclosureChevron,
   PressFeedback,
   useMotionPreference,
 } from "./motion";
+import { touchTarget, usePressFeedback } from "./press-feedback";
 import { ShellIcon } from "./shell-icon";
 import type { ShellIconName } from "./shell-icon";
+import { elevation } from "./surface";
 
 export { darkColors as colors } from "../lib/theme";
+export { touchTarget, usePressFeedback };
 export const sans = "Inter";
 export const mono = "IBMPlexMono";
 export const monoMedium = "IBMPlexMono-Medium";
-export const touchTarget = Platform.OS === "android" ? 48 : 44;
 export const disabledOpacity = 0.55;
+const fitSheetMaxHeight = 0.75;
+const fitSheetTopGap = 16;
+const fitSheetMinInset = 12;
+const fitSheetHandleHeight = 28;
+const fitSheetDuration = 240;
+const fitSheetEasing = Easing.bezier(0.2, 0.8, 0.2, 1);
 const createStyles = (colors: ThemeColors) => {
   const inset = Platform.OS !== "android" || Number(Platform.Version) >= 29;
   return StyleSheet.create({
-    betaSheetContent: { gap: 12, paddingHorizontal: 14 },
-    betaSheetHeader: { paddingHorizontal: 14, paddingVertical: 8 },
-    betaSheetTitle: {
-      flexShrink: 1,
-      fontSize: 18,
-      fontWeight: "600",
-      lineHeight: 24,
-    },
     button: {
       alignItems: "center",
       alignSelf: "flex-start",
@@ -178,11 +180,15 @@ const createStyles = (colors: ThemeColors) => {
       borderTopLeftRadius: 16,
       borderTopRightRadius: 16,
     },
+    fitSheetHandleRow: {
+      height: fitSheetHandleHeight,
+      justifyContent: "center",
+      paddingVertical: 0,
+    },
     fitSheetHandle: {
-      backgroundColor: colors.faint,
+      backgroundColor: colors.borderStrong,
       borderRadius: 2,
       height: 4,
-      opacity: 0.5,
       width: 32,
     },
     ghostPressed: { backgroundColor: colors.raised },
@@ -227,10 +233,11 @@ const createStyles = (colors: ThemeColors) => {
     recoveryNotice: {
       backgroundColor: colors.raised,
       color: colors.muted,
+      fontFamily: sans,
       fontSize: 13,
-      lineHeight: 19,
-      paddingHorizontal: 18,
-      paddingVertical: 10,
+      lineHeight: 20,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
     },
     row: {
       alignItems: "center",
@@ -245,16 +252,24 @@ const createStyles = (colors: ThemeColors) => {
     sheet: { backgroundColor: colors.panel, flex: 1 },
     sheetBody: { flex: 1, minHeight: 0 },
     sheetContent: { gap: 16, padding: 18, paddingBottom: 24 },
+    fitSheetContent: { gap: 8 },
     sheetHeader: {
       alignItems: "center",
-      borderBottomWidth: 1,
-      borderColor: colors.border,
+      borderBottomColor: colors.border,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       flexDirection: "row",
       flexShrink: 0,
-      gap: 12,
-      justifyContent: "space-between",
-      paddingHorizontal: 18,
-      paddingVertical: 12,
+      gap: 8,
+      height: 56,
+      paddingHorizontal: pageInset,
+    },
+    sheetTitle: {
+      color: colors.text,
+      flex: 1,
+      fontFamily: sans,
+      fontSize: 16,
+      fontWeight: "500",
+      lineHeight: 24,
     },
     sheetInner: {
       alignSelf: "center",
@@ -313,29 +328,6 @@ export const Heading = ({ children }: { children: React.ReactNode }) => {
     </Text>
   );
 };
-export const usePressFeedback = (opts?: {
-  borderless?: boolean;
-  radius?: number;
-}): {
-  android_ripple?: PressableAndroidRippleConfig;
-  pressedStyle: ViewStyle;
-} => {
-  const { colors } = useTheme();
-  if (Platform.OS === "android") {
-    return {
-      android_ripple: {
-        alpha: 0.12,
-        borderless: !!opts?.borderless,
-        color: colors.text,
-        foreground: true,
-        radius: opts?.radius,
-      },
-      pressedStyle: {},
-    };
-  }
-  return { pressedStyle: { backgroundColor: colors.pressedOverlay } };
-};
-
 export type ButtonVariant =
   | "primary"
   | "secondary"
@@ -694,27 +686,31 @@ export const Busy = () => {
 type UiStyles = ReturnType<typeof createStyles>;
 
 const renderSheetHeader = ({
+  fit,
   onClose,
-  showHeader,
   styles,
   title,
 }: {
+  fit: boolean;
   onClose: () => void;
-  showHeader: boolean;
   styles: UiStyles;
   title: string;
 }) =>
-  showHeader ? (
-    <View style={[styles.sheetHeader, styles.betaSheetHeader]}>
-      <BodyText accessibilityRole="header" style={styles.betaSheetTitle}>
-        {title}
-      </BodyText>
-      <Button title="Done" size="compact" onPress={onClose} />
-    </View>
-  ) : (
+  fit ? (
     <BodyText accessibilityRole="header" style={styles.hiddenHeading}>
       {title}
     </BodyText>
+  ) : (
+    <View style={styles.sheetHeader}>
+      <BackButton accessibilityLabel={`Close ${title}`} onPress={onClose} />
+      <BodyText
+        accessibilityRole="header"
+        numberOfLines={1}
+        style={styles.sheetTitle}
+      >
+        {title}
+      </BodyText>
+    </View>
   );
 
 const renderSheetBody = ({
@@ -733,11 +729,8 @@ const renderSheetBody = ({
       style={styles.sheetScroll}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-      contentContainerStyle={[
-        styles.sheetContent,
-        styles.betaSheetContent,
-        contentStyle,
-      ]}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={[styles.sheetContent, contentStyle]}
     >
       {children}
     </ScrollView>
@@ -746,8 +739,6 @@ const renderSheetBody = ({
   );
 
 const fitSheetMaxWidth = 680;
-const fitSheetMaxHeight = 0.85;
-const fitSheetBackdropOpacity = 0.44;
 
 const FitSheet = ({
   visible,
@@ -768,12 +759,17 @@ const FitSheet = ({
   onPresentedChange: (presented: boolean) => void;
   onDismiss: () => void;
 }) => {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
+  const sheetShadow = elevation(scheme).overlay;
   const styles = useThemedStyles(createStyles);
   const reduced = useMotionPreference();
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const modal = useRef<BottomSheetModal>(null);
+  const animationConfigs = useBottomSheetTimingConfigs({
+    duration: fitSheetDuration,
+    easing: fitSheetEasing,
+  });
   // gorhom leaves a never-presented or already-dismissed modal stuck in its
   // dismissing state if dismiss() is called on it, so track presentation here.
   const presented = useRef(false);
@@ -826,11 +822,12 @@ const FitSheet = ({
         accessibilityHint={null}
         appearsOnIndex={0}
         disappearsOnIndex={-1}
-        opacity={fitSheetBackdropOpacity}
+        opacity={1}
+        style={[props.style, { backgroundColor: colors.scrim }]}
         pressBehavior="close"
       />
     ),
-    [title]
+    [title, colors.scrim]
   );
   const sideInsets = { paddingLeft: insets.left, paddingRight: insets.right };
   const renderHandle = (props: BottomSheetHandleProps) => (
@@ -838,24 +835,35 @@ const FitSheet = ({
       {...props}
       accessible={false}
       indicatorStyle={styles.fitSheetHandle}
-      style={sideInsets}
+      style={[styles.fitSheetHandleRow, sideInsets]}
     >
       {header}
     </BottomSheetHandle>
   );
-  const contentInsets = { ...sideInsets, paddingBottom: insets.bottom };
+  const contentInsets = {
+    paddingBottom: Math.max(fitSheetMinInset, insets.bottom),
+    paddingLeft: Math.max(fitSheetMinInset, insets.left),
+    paddingRight: Math.max(fitSheetMinInset, insets.right),
+  };
   return (
     <BottomSheetModal
       ref={modal}
       stackBehavior="push"
       enableDynamicSizing
-      maxDynamicContentSize={height * fitSheetMaxHeight}
+      animationConfigs={animationConfigs}
+      maxDynamicContentSize={Math.min(
+        height * fitSheetMaxHeight,
+        height - insets.top - fitSheetTopGap
+      )}
       topInset={insets.top}
       overrideReduceMotion={reduced ? ReduceMotion.Always : ReduceMotion.Never}
       keyboardBlurBehavior="restore"
       backdropComponent={renderBackdrop}
       handleComponent={renderHandle}
-      backgroundStyle={[styles.fitSheet, { backgroundColor: colors.bg }]}
+      backgroundStyle={[
+        styles.fitSheet,
+        { backgroundColor: colors.frame, boxShadow: sheetShadow },
+      ]}
       style={{
         marginHorizontal: Math.max(0, (width - fitSheetMaxWidth) / 2),
       }}
@@ -864,17 +872,14 @@ const FitSheet = ({
       {scroll ? (
         <BottomSheetScrollView
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={contentInsets}
         >
-          <View
-            style={[styles.sheetContent, styles.betaSheetContent, contentStyle]}
-          >
-            {children}
-          </View>
+          <View style={[styles.fitSheetContent, contentStyle]}>{children}</View>
         </BottomSheetScrollView>
       ) : (
         <BottomSheetView style={contentInsets}>
-          <View style={contentStyle}>{children}</View>
+          <View style={[styles.fitSheetContent, contentStyle]}>{children}</View>
         </BottomSheetView>
       )}
     </BottomSheetModal>
@@ -890,7 +895,6 @@ export const Sheet = ({
   scroll = true,
   allowDuringRecovery = false,
   fitContent = false,
-  showHeader = true,
   contentStyle,
 }: {
   visible: boolean;
@@ -901,7 +905,6 @@ export const Sheet = ({
   scroll?: boolean;
   allowDuringRecovery?: boolean;
   fitContent?: boolean;
-  showHeader?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
 }) => {
   const { colors } = useTheme();
@@ -995,7 +998,7 @@ export const Sheet = ({
   }, [modalVisible, fitContent, notifyDismissed]);
   const header = (
     <>
-      {renderSheetHeader({ onClose, showHeader, styles, title })}
+      {renderSheetHeader({ fit: fitContent, onClose, styles, title })}
       {recoveryPending && !allowDuringRecovery && (
         <BodyText accessibilityRole="alert" style={styles.recoveryNotice}>
           Close this panel to open the connection wizard.

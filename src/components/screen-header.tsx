@@ -1,24 +1,15 @@
 import React from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { pageInset } from "../lib/layout";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { BackButton } from "./back-button";
 import { IconButton } from "./icon-button";
-import { ShellIcon } from "./shell-icon";
-import { BodyText, usePressFeedback } from "./ui";
+import { BodyText } from "./ui";
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    back: {
-      alignItems: "center",
-      borderRadius: 6,
-      height: Platform.OS === "android" ? 48 : 44,
-      justifyContent: "center",
-      marginEnd: 8,
-      marginStart: -16,
-      width: Platform.OS === "android" ? 48 : 44,
-    },
     header: {
       alignItems: "center",
       borderBottomColor: colors.border,
@@ -31,6 +22,8 @@ const createStyles = (colors: ThemeColors) =>
     action: { marginEnd: -16 },
     title: { flex: 1, fontSize: 18, fontWeight: "600", lineHeight: 24 },
   });
+
+export { BackButton };
 
 export const HeaderMenuButton = ({ onPress }: { onPress: () => void }) => {
   const { colors } = useTheme();
@@ -82,24 +75,14 @@ export const ScreenHeader = ({
   onRefresh?: () => void;
   refreshing?: boolean;
 }) => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { android_ripple, pressedStyle } = usePressFeedback({
-    borderless: true,
-    radius: 20,
-  });
   return (
     <View style={styles.header}>
       {onBack && (
-        <Pressable
-          accessibilityRole="button"
+        <BackButton
           accessibilityLabel={`Back to ${backLabel || "Sessions"}`}
           onPress={onBack}
-          android_ripple={android_ripple}
-          style={({ pressed }) => [styles.back, pressed && pressedStyle]}
-        >
-          <ShellIcon name="back" color={colors.text} size={22} />
-        </Pressable>
+        />
       )}
       <BodyText
         accessibilityRole="header"

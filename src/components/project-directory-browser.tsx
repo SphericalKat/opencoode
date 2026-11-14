@@ -9,6 +9,7 @@ import type { ThemeColors } from "../lib/theme";
 import { fileName } from "../lib/workspace";
 import { confirmAction } from "./dialog";
 import { NavIcon } from "./icons";
+import { BackButton } from "./screen-header";
 import {
   Button,
   Busy,
@@ -477,10 +478,9 @@ const ProjectDirectoryBrowser = ({
         </BodyText>
         <Row style={{ flexWrap: "nowrap" }}>
           {recent ? (
-            <Button
-              title="‹ Folders"
-              size="compact"
-              variant="ghost"
+            <BackButton
+              label="Folders"
+              accessibilityLabel="Back to folders"
               disabled={pending}
               onPress={() => setRecent(false)}
             />

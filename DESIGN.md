@@ -10,7 +10,7 @@
 - **Run every frame-by-frame animation on the UI thread with Reanimated shared values (`withTiming`, `useAnimatedStyle`). Never step an animation through React state on a timer.** React may render only when content changes, never for each frame of an animation. To animate part of a text block, use a nested `Animated.Text` that animates the alpha of its color, because a nested `Text` has no reliable opacity on native. `FadeSpan` in `src/components/fade-span.tsx` shows the pattern. Why: an animation that React renders about 30 times a second runs on the JavaScript thread, which can cause problems. Worklets move the animation off that thread.
   <!-- 2026-11-13: "you said we are rendering this on the main thread which can cause problems because it's 30 times a second. So we can fix that with worklets and use our own fade" -->
 
-- **Bottom sheets slide up from the bottom edge, and the scrim fades. Never fade the sheet panel.** Use `Sheet` from `src/components/ui.tsx`. Its `fitContent` mode animates the panel and the scrim through `useSheetTransition` in `src/components/motion.tsx`.
+- **Bottom sheets slide up from the bottom edge, and the scrim fades. Never fade the sheet panel.** Use `Sheet` from `src/components/ui.tsx`. Its `fitContent` mode slides the panel with a 240 ms timing curve and fades only the scrim.
   <!-- 2026-11-13: "the animation of the bottom sheet is like a fade-in instead of you know a sliding one" -->
 
 ## Interaction
@@ -20,6 +20,12 @@
 - **Full-width pressable rows and bars use the native press feedback of the platform. On Android, use `android_ripple` with `{ alpha: 0.12, color: colors.text, foreground: true }`. On iOS and web, dim the content. Never scale a full-width row or bar on press.** On Android, buttons use `android_ripple` through `usePressFeedback` and do not scale. On iOS and web, buttons keep the scale feedback of `PressFeedback`. Why: native feedback makes a control feel native and good to tap. A full-width bar that scales looks wrong.
   <!-- 2026-11-13: "Try and use like native elements. Like it should feel really native and good to type all of that stuff" -->
 - **Confirm a destructive or irreversible action with `confirmAction` from `src/components/dialog.tsx`, and label the confirm button with a verb such as `Delete` or `Discard`. Ask for text with `promptText`. Never use `Alert`.** A removal shows a snackbar with Undo through `useUndoableRemoval` instead of a confirmation. Why: a system alert ignores the theme and looks like a different app.
+
+## Sheets
+
+- **A fit sheet has no title and no Done button. Put its content in a `SheetGroup` from `src/components/list-sheet.tsx`.** The title exists only as a hidden heading for screen readers. Why: the drag handle and the scrim already show how to close the sheet.
+- **Close a sheet before the choice persists. Use `ListSheet` for a single choice.** `ListSheet` closes the sheet, then calls `onSelect`. Why: a sheet that waits for a save feels slow.
+- **The only back affordance is `BackButton` from `src/components/screen-header.tsx`.** Never draw a text arrow such as `‹` or build another back `Pressable`.
 
 ## Copy
 
