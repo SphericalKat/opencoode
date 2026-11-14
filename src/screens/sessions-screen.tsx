@@ -5,7 +5,9 @@ import * as Sharing from "expo-sharing";
 import { useEffect, useRef, useState } from "react";
 import { FlatList, Keyboard, Platform, View } from "react-native";
 
+import type { Rect } from "../components/anchored-menu";
 import { confirmAction } from "../components/dialog";
+import { useUndoableRemoval } from "../components/snackbar";
 import { settle, withCleanup } from "../lib/async";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
@@ -26,10 +28,11 @@ import {
   SessionsEmpty,
   SessionsFooter,
 } from "./sessions/list-parts";
-import { ManageSheet } from "./sessions/manage-sheet";
 import { ProjectsSheet } from "./sessions/projects-sheet";
 import { scopeKeyChanged } from "./sessions/scope";
 import type { Scope } from "./sessions/scope";
+import { SessionMenu } from "./sessions/session-menu";
+import type { SessionActions } from "./sessions/session-menu";
 import { SessionRow } from "./sessions/session-row";
 import { SessionsHeader } from "./sessions/sessions-header";
 import { createStyles } from "./sessions/styles";
@@ -87,9 +90,15 @@ export const SessionsScreen = ({
   const displayedActions = actions ?? lastActions;
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
-  const [selected, setSelected] = useState<SessionInfo>();
-  const [editTitle, setEditTitle] = useState("");
-  const [moveDirectory, setMoveDirectory] = useState("");
+  const [menu, setMenu] = useState<{
+    anchor: Rect;
+    session: SessionInfo;
+  } | null>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [renamingID, setRenamingID] = useState<string>();
+  const [renameSaving, setRenameSaving] = useState(false);
+  const afterMenuClosed = useRef<(() => void) | null>(null);
+  const { hidden, remove } = useUndoableRemoval<string>("sessions");
   const [sheetError, setSheetError] = useState<string>();
   const mounted = useMounted();
   const scope = useRef<Scope>({
@@ -120,7 +129,9 @@ export const SessionsScreen = ({
   });
   if (scopeKeyChanged(scopeKey, { client, creationDirectory, listDirectory })) {
     setScopeKey({ client, creationDirectory, listDirectory });
-    setSelected(undefined);
+    setMenu(null);
+    setMenuVisible(false);
+    setRenamingID(undefined);
     setActions(null);
     setSheetError(undefined);
   }
@@ -208,47 +219,33 @@ export const SessionsScreen = ({
     onNewSession(creationDirectory);
   };
 
-  const manageSession = (item: SessionInfo) => {
+  const openMenu = (session: SessionInfo, anchor: Rect) => {
     Keyboard.dismiss();
-    setSelected(item);
-    setEditTitle(item.title || "");
-    setMoveDirectory(item.location.directory);
-    setSheetError(undefined);
+    setMenu({ anchor, session });
+    setMenuVisible(true);
   };
 
-  const changeSession = (operation: (item: SessionInfo) => Promise<void>) =>
-    run(async () => {
-      if (!selected) {
-        return;
-      }
-      const owner = scope.current;
-      await operation(selected);
-      if (
-        scope.current.client !== owner.client ||
-        scope.current.directory !== owner.directory ||
-        !mounted.current
-      ) {
-        return;
-      }
-      setSelected(undefined);
-      await refresh();
-    }, true);
+  const closeMenu = () => setMenuVisible(false);
 
-  const exportSession = () =>
+  const finishMenuClose = () => {
+    setMenu(null);
+    const action = afterMenuClosed.current;
+    afterMenuClosed.current = null;
+    action?.();
+  };
+
+  const exportSession = (session: SessionInfo) =>
     run(async () => {
-      if (!selected) {
-        return;
-      }
       const owner = scope.current;
       const transcript = await client.experimental.session.export({
         sanitize: true,
-        sessionID: selected.id,
+        sessionID: session.id,
       });
       if (scope.current !== owner || !mounted.current) {
         return;
       }
       const text = JSON.stringify(transcript, null, 2);
-      const filename = `opencode-${selected.id.replaceAll(/[^a-zA-Z0-9_-]/gu, "")}.json`;
+      const filename = `opencode-${session.id.replaceAll(/[^a-zA-Z0-9_-]/gu, "")}.json`;
       if (Platform.OS === "web") {
         const url = URL.createObjectURL(
           new Blob([text], { type: "application/json" })
@@ -271,7 +268,7 @@ export const SessionsScreen = ({
           })
         );
       }
-    }, true);
+    });
 
   const importSession = () =>
     run(async () => {
@@ -373,6 +370,79 @@ export const SessionsScreen = ({
     });
   };
 
+  const renameSession = async (session: SessionInfo, value: string) => {
+    const nextTitle = value.trim();
+    if (!nextTitle || nextTitle === sessionLabel(session)) {
+      setRenamingID(undefined);
+      return;
+    }
+    setRenameSaving(true);
+    setError(undefined);
+    await settle(
+      async () => {
+        await client.session.update({
+          sessionID: session.id,
+          title: nextTitle,
+        });
+        await refresh(undefined, true);
+      },
+      (failure) => {
+        if (mounted.current) {
+          setError(errorMessage(failure));
+        }
+      },
+      () => {
+        if (mounted.current) {
+          setRenameSaving(false);
+          setRenamingID(undefined);
+        }
+      }
+    );
+  };
+
+  const sessionActions: SessionActions = {
+    archive: (session) => {
+      void run(async () => {
+        await client.session.update({
+          archived: !session.time.archived,
+          sessionID: session.id,
+        });
+        await refresh();
+      });
+    },
+    exportSession: (session) => {
+      void exportSession(session);
+    },
+    markRead: (session) => {
+      void run(async () => {
+        if (!session.time.idle) {
+          return;
+        }
+        await client.session.view({
+          idle: session.time.idle,
+          sessionID: session.id,
+        });
+        await refresh(undefined, true);
+      });
+    },
+    remove: (session) =>
+      remove(session.id, {
+        commit: async () => {
+          await client.session.remove({ sessionID: session.id });
+          await refresh(undefined, true);
+        },
+        message: "Session deleted",
+      }),
+    rename: (session) => setRenamingID(session.id),
+  };
+
+  const menuActions: SessionActions = {
+    ...sessionActions,
+    exportSession: (session) => {
+      afterMenuClosed.current = () => sessionActions.exportSession(session);
+    },
+  };
+
   const openProjects = () => {
     Keyboard.dismiss();
     setProjectsOpen(true);
@@ -433,6 +503,7 @@ export const SessionsScreen = ({
     }
   };
 
+  const visibleSessions = sessions.filter((item) => !hidden.has(item.id));
   const showFooter = sessions.length > 0 && loading && !!nextCursor;
 
   return (
@@ -458,7 +529,7 @@ export const SessionsScreen = ({
         streamError={streamError}
       />
       <FlatList
-        data={sessions}
+        data={visibleSessions}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.list, styles.betaList]}
         keyboardShouldPersistTaps="handled"
@@ -475,7 +546,7 @@ export const SessionsScreen = ({
           <BetaGroupHeader
             busy={busy}
             creating={creating}
-            label={betaGroupLabel(archived, search, sessions)}
+            label={betaGroupLabel(archived, search, visibleSessions)}
             onStartSession={startSession}
           />
         }
@@ -493,11 +564,18 @@ export const SessionsScreen = ({
             active={active.has(item.id)}
             index={index}
             item={item}
+            actions={sessionActions}
             name={projectName(projects, item)}
-            onManage={manageSession}
+            onCancelRename={() => setRenamingID(undefined)}
+            onMenu={openMenu}
             onOpen={openConversation}
+            onRename={(session, value) => {
+              void renameSession(session, value);
+            }}
+            renameSaving={renameSaving && renamingID === item.id}
+            renaming={renamingID === item.id}
             search={search}
-            sessions={sessions}
+            sessions={visibleSessions}
             showProjectName={!projectDirectory}
           />
         )}
@@ -540,62 +618,14 @@ export const SessionsScreen = ({
         title={title}
         visible={actions !== null}
       />
-      <ManageSheet
+      <SessionMenu
+        actions={menuActions}
+        anchor={menu?.anchor ?? null}
         busy={busy}
-        editTitle={editTitle}
-        moveDirectory={moveDirectory}
-        onArchive={() =>
-          changeSession((item) =>
-            client.session.update({
-              archived: !item.time.archived,
-              sessionID: item.id,
-            })
-          )
-        }
-        onClose={() => setSelected(undefined)}
-        onDelete={() =>
-          changeSession(async (item) => {
-            if (
-              await confirmAction(
-                "Delete session?",
-                `Delete ${sessionLabel(item)} and all child sessions from the server?`,
-                { confirmLabel: "Delete" }
-              )
-            ) {
-              await client.session.remove({ sessionID: item.id });
-            }
-          })
-        }
-        onEditTitle={setEditTitle}
-        onExport={exportSession}
-        onFork={() =>
-          changeSession(async (item) => {
-            const fork = await client.session.fork({ sessionID: item.id });
-            if (scope.current.client === client && mounted.current) {
-              openConversation(fork.id);
-            }
-          })
-        }
-        onMove={() =>
-          changeSession((item) =>
-            client.session.move({
-              delivery: "queue",
-              directory: moveDirectory.trim(),
-              sessionID: item.id,
-            })
-          )
-        }
-        onMoveDirectory={setMoveDirectory}
-        onSaveTitle={() =>
-          changeSession((item) =>
-            client.session.update({
-              sessionID: item.id,
-              title: editTitle.trim(),
-            })
-          )
-        }
-        selected={selected}
-        sheetError={sheetError}
+        onClose={closeMenu}
+        onClosed={finishMenuClose}
+        session={menu?.session}
+        visible={menuVisible}
       />
     </View>
   );
