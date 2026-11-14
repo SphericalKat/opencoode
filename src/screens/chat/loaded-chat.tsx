@@ -4,12 +4,7 @@ import { View } from "react-native";
 import { ActionsSheet } from "./actions-sheet";
 import { ErrorBanners, RevertBanner } from "./banners";
 import { Composer } from "./composer";
-import {
-  AgentsSheet,
-  ToolsSheet,
-  CommandsSheet,
-  MentionsSheet,
-} from "./composer-sheets";
+import { ToolsSheet, CommandsSheet, MentionsSheet } from "./composer-sheets";
 import { ChatKeyboardView } from "./controls";
 import { SelectionBar } from "./header";
 import { MessageMenu } from "./message-menu";
@@ -203,14 +198,17 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         jumpToLatest={jumpToLatest}
         maximumComposerHeight={maximumComposerHeight}
         minimumComposerHeight={minimumComposerHeight}
+        opencodeClient={opencodeClient}
         pending={pending}
         providerLabel={providerLabel}
         selectedVariant={selectedVariant}
         restoredSkillIDs={restoredSkillIDs}
+        run={run}
         selectedAgentIDs={selectedAgentIDs}
         selectedSkills={selectedSkills}
         send={send}
         sending={sending}
+        sessionID={sessionID}
         setAttachments={setAttachments}
         setDraft={setDraft}
         setPanel={setPanel}
@@ -331,20 +329,7 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         selectedVariant={selectedVariant}
         styles={styles}
       />
-      <AgentsSheet
-        agents={agents}
-        capabilities={capabilities}
-        error={error}
-        opencodeClient={opencodeClient}
-        panel={panel}
-        pending={pending}
-        run={run}
-        sessionID={sessionID}
-        setPanel={setPanel}
-        session={session}
-      />
       <ToolsSheet
-        agents={agents}
         capabilities={capabilities}
         delivery={delivery}
         draftLoaded={draftLoaded}
@@ -355,7 +340,6 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         setPanel={setPanel}
         setSideQuestion={setSideQuestion}
         toolsDismissed={toolsDismissed}
-        session={session}
       />
     </>
   );

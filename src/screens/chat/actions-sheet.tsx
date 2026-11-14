@@ -5,8 +5,10 @@ import { SheetGroup, SheetRow } from "../../components/list-sheet";
 import { useUndoableRemoval } from "../../components/snackbar";
 import { BodyText, ErrorNotice, Sheet } from "../../components/ui";
 import { sessionLabel } from "../../lib/session-title";
-import { modelSummary } from "./labels";
+import { agentLabel, modelSummary } from "./labels";
 import type { ChatController } from "./use-chat-controller";
+
+const SHEET_CONTENT_STYLE = { gap: 12, paddingTop: 4 } as const;
 
 const TITLE_STYLE = {
   fontSize: 15,
@@ -98,18 +100,7 @@ export const ConfigureLinks = ({
   setPanel,
 }: ConfigureLinksProps) => (
   <SheetGroup variant="menu" title="Configure">
-    {opencodeClient && capabilities.agents && (
-      <SheetRow
-        label="Agent"
-        value={
-          agents.find((agent) => agent.id === session.agent)?.name ||
-          session.agent ||
-          "Server default"
-        }
-        trailing="chevron"
-        onPress={() => setPanel("agents")}
-      />
-    )}
+    <SheetRow label="Agent" value={agentLabel(agents, session)} />
     <SheetRow
       label="Model"
       value={modelSummary(session, currentModel)}
@@ -406,7 +397,7 @@ export const ActionsSheet = ({
     visible={panel === "actions"}
     title="Session"
     fitContent
-    contentStyle={{ gap: 12 }}
+    contentStyle={SHEET_CONTENT_STYLE}
     onClose={() => setPanel(null)}
   >
     <BodyText numberOfLines={2} selectable style={TITLE_STYLE}>

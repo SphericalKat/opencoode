@@ -4,7 +4,7 @@ import { ScrollView, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
 
 import { AgentActivityBar } from "../../components/agent-activity";
-import { SelectTrigger } from "../../components/select";
+import { SelectMenu, SelectTrigger } from "../../components/select";
 import { elevation } from "../../components/surface";
 import { Button, Busy, Field, BodyText } from "../../components/ui";
 import { useTheme } from "../../lib/theme";
@@ -98,6 +98,60 @@ export const ComposerChips = ({
       ))}
     </ScrollView>
   );
+
+const AGENT_CHIP_MAX_WIDTH = 220;
+const AGENT_MENU_GUTTER = 6;
+
+type AgentChipProps = Pick<
+  ChatController,
+  "agents" | "capabilities" | "opencodeClient" | "pending" | "run" | "sessionID"
+> & {
+  session: SessionInfo;
+};
+
+export const AgentChip = ({
+  agents,
+  capabilities,
+  opencodeClient,
+  pending,
+  run,
+  session,
+  sessionID,
+}: AgentChipProps) => {
+  const primary = agents.filter(
+    (agent) => !agent.hidden && agent.mode !== "subagent"
+  );
+  if (!opencodeClient || !capabilities.agents || primary.length === 0) {
+    return null;
+  }
+  const currentID = session.agent ?? primary[0].id;
+  const name =
+    agents.find((agent) => agent.id === currentID)?.name ?? currentID;
+  return (
+    <SelectMenu
+      appearance="chip"
+      indicator="sheet"
+      placement="top-start"
+      gutter={AGENT_MENU_GUTTER}
+      maxWidth={AGENT_CHIP_MAX_WIDTH}
+      accessibilityLabel="Choose agent"
+      disabled={pending}
+      label={capitalizeFirst(name)}
+      value={currentID}
+      options={primary.map((agent) => ({
+        label: capitalizeFirst(agent.name),
+        value: agent.id,
+      }))}
+      onSelect={(id) => {
+        if (id !== currentID) {
+          void run(() =>
+            opencodeClient.session.switchAgent({ agent: id, sessionID })
+          );
+        }
+      }}
+    />
+  );
+};
 
 interface ModelTriggerProps extends Pick<
   ChatController,
@@ -247,15 +301,19 @@ export const SendButton = ({
 interface ComposerToolbarProps extends Pick<
   ChatController,
   | "active"
+  | "agents"
   | "capabilities"
   | "currentModel"
   | "delivery"
   | "hasPrompt"
   | "interrupt"
+  | "opencodeClient"
   | "pending"
   | "providerLabel"
   | "selectedVariant"
+  | "run"
   | "send"
+  | "sessionID"
   | "setPanel"
   | "stopReady"
   | "stopping"
@@ -266,16 +324,20 @@ interface ComposerToolbarProps extends Pick<
 
 export const ComposerToolbar = ({
   active,
+  agents,
   capabilities,
   currentModel,
   delivery,
   hasPrompt,
   interrupt,
+  opencodeClient,
   pending,
   providerLabel,
   selectedVariant,
+  run,
   send,
   session,
+  sessionID,
   setPanel,
   stopReady,
   stopping,
@@ -300,6 +362,15 @@ export const ComposerToolbar = ({
         showsHorizontalScrollIndicator={false}
         style={styles.composerControlsScroll}
       >
+        <AgentChip
+          agents={agents}
+          capabilities={capabilities}
+          opencodeClient={opencodeClient}
+          pending={pending}
+          run={run}
+          session={session}
+          sessionID={sessionID}
+        />
         <ModelTrigger
           currentModel={currentModel}
           maxWidth={chipsWidth}
@@ -352,13 +423,16 @@ interface ComposerBodyProps extends Pick<
   | "interrupt"
   | "maximumComposerHeight"
   | "minimumComposerHeight"
+  | "opencodeClient"
   | "pending"
   | "providerLabel"
   | "selectedVariant"
   | "restoredSkillIDs"
+  | "run"
   | "selectedAgentIDs"
   | "selectedSkills"
   | "send"
+  | "sessionID"
   | "setAttachments"
   | "setDraft"
   | "setPanel"
@@ -387,14 +461,17 @@ export const ComposerBody = ({
   interrupt,
   maximumComposerHeight,
   minimumComposerHeight,
+  opencodeClient,
   pending,
   providerLabel,
   selectedVariant,
   restoredSkillIDs,
+  run,
   selectedAgentIDs,
   selectedSkills,
   send,
   session,
+  sessionID,
   setAttachments,
   setDraft,
   setPanel,
@@ -454,15 +531,19 @@ export const ComposerBody = ({
       />
       <ComposerToolbar
         active={active}
+        agents={agents}
         capabilities={capabilities}
         currentModel={currentModel}
         delivery={delivery}
         hasPrompt={hasPrompt}
         interrupt={interrupt}
+        opencodeClient={opencodeClient}
         pending={pending}
         providerLabel={providerLabel}
         selectedVariant={selectedVariant}
+        run={run}
         send={send}
+        sessionID={sessionID}
         setPanel={setPanel}
         stopReady={stopReady}
         stopping={stopping}
@@ -492,14 +573,17 @@ interface ComposerProps extends Pick<
   | "jumpToLatest"
   | "maximumComposerHeight"
   | "minimumComposerHeight"
+  | "opencodeClient"
   | "pending"
   | "providerLabel"
   | "selectedVariant"
   | "restoredSkillIDs"
+  | "run"
   | "selectedAgentIDs"
   | "selectedSkills"
   | "send"
   | "sending"
+  | "sessionID"
   | "setAttachments"
   | "setDraft"
   | "setPanel"
@@ -536,15 +620,18 @@ export const Composer = ({
   jumpToLatest,
   maximumComposerHeight,
   minimumComposerHeight,
+  opencodeClient,
   pending,
   providerLabel,
   selectedVariant,
   restoredSkillIDs,
+  run,
   selectedAgentIDs,
   selectedSkills,
   send,
   sending,
   session,
+  sessionID,
   setAttachments,
   setDraft,
   setPanel,
@@ -591,13 +678,16 @@ export const Composer = ({
             interrupt={interrupt}
             maximumComposerHeight={maximumComposerHeight}
             minimumComposerHeight={minimumComposerHeight}
+            opencodeClient={opencodeClient}
             pending={pending}
             providerLabel={providerLabel}
             selectedVariant={selectedVariant}
             restoredSkillIDs={restoredSkillIDs}
+            run={run}
             selectedAgentIDs={selectedAgentIDs}
             selectedSkills={selectedSkills}
             send={send}
+            sessionID={sessionID}
             setAttachments={setAttachments}
             setDraft={setDraft}
             setPanel={setPanel}

@@ -5,7 +5,6 @@ import {
   Busy,
   Card,
   Empty,
-  ErrorNotice,
   Field,
   Heading,
   BodyText,
@@ -17,74 +16,8 @@ import { serverFileUri } from "../../lib/chat";
 import { playHaptic } from "../../lib/haptics";
 import type { ChatController } from "./use-chat-controller";
 
-interface AgentsSheetProps extends Pick<
+type ToolsSheetProps = Pick<
   ChatController,
-  | "agents"
-  | "capabilities"
-  | "error"
-  | "opencodeClient"
-  | "panel"
-  | "pending"
-  | "run"
-  | "sessionID"
-  | "setPanel"
-> {
-  session: SessionInfo;
-}
-
-export const AgentsSheet = ({
-  agents,
-  capabilities,
-  error,
-  opencodeClient,
-  panel,
-  pending,
-  run,
-  session,
-  sessionID,
-  setPanel,
-}: AgentsSheetProps) => (
-  <Sheet
-    visible={!!opencodeClient && capabilities.agents && panel === "agents"}
-    title="Choose agent"
-    onClose={() => setPanel(null)}
-  >
-    <ErrorNotice error={error} />
-    {opencodeClient &&
-      agents
-        .filter((agent) => !agent.hidden && agent.mode !== "subagent")
-        .map((agent) => (
-          <Card key={agent.id}>
-            <BodyText style={{ fontWeight: "600" }}>{agent.name}</BodyText>
-            {agent.description && (
-              <BodyText muted>{agent.description}</BodyText>
-            )}
-            <Button
-              title={session.agent === agent.id ? "Selected" : "Use agent"}
-              selected={session.agent === agent.id}
-              disabled={pending}
-              onPress={() => {
-                if (session.agent !== agent.id) {
-                  playHaptic("select");
-                }
-                void run(
-                  () =>
-                    opencodeClient.session.switchAgent({
-                      agent: agent.id,
-                      sessionID,
-                    }),
-                  true
-                );
-              }}
-            />
-          </Card>
-        ))}
-  </Sheet>
-);
-
-interface ToolsSheetProps extends Pick<
-  ChatController,
-  | "agents"
   | "capabilities"
   | "delivery"
   | "draftLoaded"
@@ -95,19 +28,15 @@ interface ToolsSheetProps extends Pick<
   | "setPanel"
   | "setSideQuestion"
   | "toolsDismissed"
-> {
-  session: SessionInfo;
-}
+>;
 
 export const ToolsSheet = ({
-  agents,
   capabilities,
   delivery,
   draftLoaded,
   opencodeClient,
   panel,
   queueDevicePicker,
-  session,
   setDelivery,
   setPanel,
   setSideQuestion,
@@ -154,12 +83,6 @@ export const ToolsSheet = ({
           setSideQuestion(undefined);
           setPanel("btw");
         }}
-      />
-    )}
-    {opencodeClient && capabilities.agents && (
-      <Button
-        title={`Agent: ${agents.find((agent) => agent.id === session.agent)?.name || session.agent || "Choose agent"}`}
-        onPress={() => setPanel("agents")}
       />
     )}
     {capabilities.delivery && (

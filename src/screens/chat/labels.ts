@@ -1,4 +1,5 @@
 import type {
+  AgentInfo,
   ModelInfo,
   SessionInboxInfo,
   SessionInfo,
@@ -90,3 +91,8 @@ export const modelSummary = (
   }
   return `${name} · ${capitalizeFirst(variant)}`;
 };
+
+export const agentLabel = (agents: AgentInfo[], session: SessionInfo) =>
+  agents.find((agent) => agent.id === session.agent)?.name ||
+  session.agent ||
+  "Server default";

@@ -30,7 +30,6 @@ export type Panel =
   | "actions"
   | "variants"
   | "models"
-  | "agents"
   | "commands"
   | "mentions"
   | "tools"
