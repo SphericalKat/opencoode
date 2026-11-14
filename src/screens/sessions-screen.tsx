@@ -9,6 +9,7 @@ import { confirmAction } from "../components/ui";
 import { settle, withCleanup } from "../lib/async";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { sessionLabel } from "../lib/session-title";
 import { useNativePresentation } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import { ActionsSheet } from "./sessions/actions-sheet";
@@ -558,7 +559,7 @@ export const SessionsScreen = ({
             if (
               await confirmAction(
                 "Delete session?",
-                `Delete ${item.title || item.id} and all child sessions from the server?`
+                `Delete ${sessionLabel(item)} and all child sessions from the server?`
               )
             ) {
               await client.session.remove({ sessionID: item.id });

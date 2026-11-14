@@ -3,6 +3,7 @@ import { Pressable, View } from "react-native";
 
 import { BodyText } from "../../components/ui";
 import { playHaptic } from "../../lib/haptics";
+import { sessionLabel } from "../../lib/session-title";
 import { useThemedStyles } from "../../lib/theme";
 import {
   isUnread,
@@ -65,10 +66,11 @@ const SessionMain = ({
   const unread = !!isUnread(item);
   const visibleStatus = visibleSessionStatus(status);
   const manage = () => onManage(item);
+  const label = sessionLabel(item);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open ${item.title || "Untitled session"}`}
+      accessibilityLabel={`Open ${label}`}
       accessibilityHint={`${status}. Updated ${new Date(item.time.updated).toLocaleString()}`}
       onPress={() => onOpen(item.id)}
       onLongPress={() => {
@@ -97,7 +99,7 @@ const SessionMain = ({
           numberOfLines={1}
           style={[styles.sessionTitle, styles.betaSessionTitle]}
         >
-          {item.title || "Untitled session"}
+          {label}
         </BodyText>
         <BetaMetadata
           name={name}

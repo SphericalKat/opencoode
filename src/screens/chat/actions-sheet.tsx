@@ -11,6 +11,7 @@ import {
   BodyText,
   Sheet,
 } from "../../components/ui";
+import { sessionLabel } from "../../lib/session-title";
 import { PanelLink } from "./controls";
 import type { ChatController } from "./use-chat-controller";
 
@@ -388,7 +389,7 @@ export const ActionsSheet = ({
     onClose={() => setPanel(null)}
   >
     <BodyText selectable style={{ fontSize: 19, lineHeight: 26 }}>
-      {session.title || "New session"}
+      {sessionLabel(session)}
     </BodyText>
     <ErrorNotice error={error} />
     <ToolLinks

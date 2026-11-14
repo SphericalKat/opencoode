@@ -8,6 +8,7 @@ import {
   Row,
   Sheet,
 } from "../../components/ui";
+import { sessionLabel } from "../../lib/session-title";
 
 interface ManageSheetProps {
   busy: boolean;
@@ -44,7 +45,7 @@ export const ManageSheet = ({
 }: ManageSheetProps) => (
   <Sheet visible={!!selected} title="Manage session" onClose={onClose}>
     <BodyText selectable style={{ fontSize: 17, fontWeight: "500" }}>
-      {selected?.title || "Untitled session"}
+      {selected && sessionLabel(selected)}
     </BodyText>
     {selected && (
       <BodyText muted>
