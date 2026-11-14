@@ -38,6 +38,7 @@ interface Slot {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     fill: { width: "100%" },
+    itemFill: { flex: 1, minWidth: 0 },
     fit: { alignSelf: "flex-start" },
     indicator: {
       backgroundColor: colors.bg,
@@ -51,10 +52,8 @@ const createStyles = (colors: ThemeColors) =>
     item: {
       alignItems: "center",
       borderRadius: RADIUS,
-      flex: 1,
       height: HEIGHT,
       justifyContent: "center",
-      minWidth: 0,
       overflow: "hidden",
       paddingHorizontal: ITEM_PADDING,
     },
@@ -87,6 +86,7 @@ const Segment = <T extends string>({
   checked,
   disabled,
   measured,
+  fill,
   onLayout,
   onSelect,
 }: {
@@ -94,6 +94,7 @@ const Segment = <T extends string>({
   checked: boolean;
   disabled: boolean;
   measured: boolean;
+  fill: boolean;
   onLayout: (event: LayoutChangeEvent) => void;
   onSelect: () => void;
 }) => {
@@ -111,6 +112,7 @@ const Segment = <T extends string>({
       onPress={onSelect}
       style={({ pressed }) => [
         styles.item,
+        fill && styles.itemFill,
         checked && !measured && styles.itemSelected,
         pressed && !disabled && pressedStyle,
         disabled && { opacity: DISABLED_OPACITY },
@@ -206,6 +208,7 @@ export const SegmentedControl = <T extends string>({
           checked={option.value === value}
           disabled={!!disabled || !!option.disabled}
           measured={measured}
+          fill={fullWidth}
           onLayout={(event) => {
             const { x: left, width: size } = event.nativeEvent.layout;
             setSlots((current) => {
