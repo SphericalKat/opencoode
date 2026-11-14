@@ -10,7 +10,6 @@ import {
   Field,
   JsonView,
   BodyText,
-  Row,
   Sheet,
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
@@ -194,24 +193,23 @@ export const Models = ({
     ) ?? [];
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Row style={{ alignItems: "flex-end", flexWrap: "nowrap" }}>
-        <Field
-          label="Find a model"
-          placeholder="Name or provider"
-          value={query}
-          onChangeText={changeQuery}
-          containerStyle={{ flex: 1 }}
-        />
-        {!!query && (
-          <Button
-            title="Clear"
-            accessibilityLabel="Clear model search"
-            size="compact"
-            variant="ghost"
-            onPress={() => changeQuery("")}
-          />
-        )}
-      </Row>
+      <Field
+        label="Find a model"
+        placeholder="Name or provider"
+        value={query}
+        onChangeText={changeQuery}
+        trailing={
+          query ? (
+            <Button
+              title="Clear"
+              accessibilityLabel="Clear model search"
+              size="compact"
+              variant="ghost"
+              onPress={() => changeQuery("")}
+            />
+          ) : undefined
+        }
+      />
       <BodyText muted>
         Select a model inside a chat to use it.
         {client

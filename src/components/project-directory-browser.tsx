@@ -488,6 +488,7 @@ const ProjectDirectoryBrowser = ({
             <Button
               title="↑ Parent"
               size="compact"
+              alignSelf="center"
               variant="ghost"
               disabled={parent === path || pending}
               onPress={() => browse(parent)}
@@ -496,6 +497,7 @@ const ProjectDirectoryBrowser = ({
           <Button
             title={manual ? "Hide path" : "Enter a path"}
             size="compact"
+            alignSelf="center"
             variant="ghost"
             disabled={pending}
             onPress={() => setManual((open) => !open)}
@@ -504,6 +506,7 @@ const ProjectDirectoryBrowser = ({
             <Button
               title="Recent"
               size="compact"
+              alignSelf="center"
               variant="ghost"
               disabled={pending}
               onPress={() => setRecent(true)}

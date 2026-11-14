@@ -9,7 +9,6 @@ import {
   Field,
   BodyText,
   mono,
-  Row,
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
 import { useTheme, useThemedStyles } from "../../lib/theme";
@@ -47,23 +46,22 @@ export const Skills = ({
     [];
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Row style={{ alignItems: "flex-end", flexWrap: "nowrap" }}>
-        <Field
-          label="Find a skill or command"
-          value={query}
-          onChangeText={setQuery}
-          containerStyle={{ flex: 1 }}
-        />
-        {!!query && (
-          <Button
-            title="Clear"
-            accessibilityLabel="Clear skill and command search"
-            size="compact"
-            variant="ghost"
-            onPress={() => setQuery("")}
-          />
-        )}
-      </Row>
+      <Field
+        label="Find a skill or command"
+        value={query}
+        onChangeText={setQuery}
+        trailing={
+          query ? (
+            <Button
+              title="Clear"
+              accessibilityLabel="Clear skill and command search"
+              size="compact"
+              variant="ghost"
+              onPress={() => setQuery("")}
+            />
+          ) : undefined
+        }
+      />
       <BodyText muted>
         Use slash commands and skills from the chat composer.
       </BodyText>

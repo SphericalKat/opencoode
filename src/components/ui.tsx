@@ -167,6 +167,8 @@ const createStyles = (colors: ThemeColors) => {
     },
     fieldLabel: { fontSize: 14, fontWeight: "500", letterSpacing: 0 },
     fieldInputContainer: { position: "relative" },
+    fieldTrailingInput: { flex: 1, minWidth: 0 },
+    fieldTrailingRow: { alignItems: "center", flexDirection: "row", gap: 8 },
     fieldSecureInput: {
       minHeight: touchTarget + 2,
       paddingRight: touchTarget + 4,
@@ -427,6 +429,7 @@ export const Button = ({
   icon,
   iconPosition = "start",
   fullWidth,
+  alignSelf,
   disabled,
   busy,
   accessibilityLabel,
@@ -439,6 +442,9 @@ export const Button = ({
   icon?: ShellIconName;
   iconPosition?: "start" | "end";
   fullWidth?: boolean;
+  // A button hugs its label and sits at the start of a column. Inside a row
+  // with taller items, pass "center" so it lines up with them.
+  alignSelf?: "center";
   disabled?: boolean;
   busy?: boolean;
   accessibilityLabel?: string;
@@ -476,7 +482,10 @@ export const Button = ({
       disabled={inactive}
       hitSlop={{ bottom: slop, top: slop }}
       onPress={onPress}
-      style={isAndroid ? visual : [fullWidth && styles.buttonFill]}
+      style={[
+        isAndroid ? visual : fullWidth && styles.buttonFill,
+        alignSelf && { alignSelf },
+      ]}
     >
       {({ pressed }) =>
         isAndroid ? (
@@ -526,15 +535,37 @@ const FieldVisibilityToggle = ({
     </Pressable>
   );
 };
+const FieldInputRow = ({
+  trailing,
+  children,
+}: {
+  trailing?: React.ReactNode;
+  children: React.ReactNode;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  if (!trailing) {
+    return children;
+  }
+  return (
+    <View style={styles.fieldTrailingRow}>
+      <View style={styles.fieldTrailingInput}>{children}</View>
+      {trailing}
+    </View>
+  );
+};
+
 export const Field = ({
   label,
   style,
   containerStyle,
+  trailing,
   ref,
   ...props
 }: TextInputProps & {
   label?: string;
   containerStyle?: StyleProp<ViewStyle>;
+  // Sits beside the input, centered on it, below the label.
+  trailing?: React.ReactNode;
   ref?: React.Ref<TextInput>;
 }) => {
   const { colors } = useTheme();
@@ -599,7 +630,7 @@ export const Field = ({
           />
         </View>
       ) : (
-        input
+        <FieldInputRow trailing={trailing}>{input}</FieldInputRow>
       )}
     </View>
   );

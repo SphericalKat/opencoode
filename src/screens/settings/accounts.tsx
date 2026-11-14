@@ -9,7 +9,6 @@ import {
   ErrorNotice,
   Field,
   BodyText,
-  Row,
   Sheet,
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
@@ -72,24 +71,23 @@ export const Accounts = ({
     ) ?? [];
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Row style={{ alignItems: "flex-end", flexWrap: "nowrap" }}>
-        <Field
-          label="Find a provider or integration"
-          placeholder="Search accounts"
-          value={query}
-          onChangeText={changeQuery}
-          containerStyle={{ flex: 1 }}
-        />
-        {!!query && (
-          <Button
-            title="Clear"
-            accessibilityLabel="Clear provider search"
-            size="compact"
-            variant="ghost"
-            onPress={() => changeQuery("")}
-          />
-        )}
-      </Row>
+      <Field
+        label="Find a provider or integration"
+        placeholder="Search accounts"
+        value={query}
+        onChangeText={changeQuery}
+        trailing={
+          query ? (
+            <Button
+              title="Clear"
+              accessibilityLabel="Clear provider search"
+              size="compact"
+              variant="ghost"
+              onPress={() => changeQuery("")}
+            />
+          ) : undefined
+        }
+      />
       <ErrorNotice error={actionError} />
       {!!visibleCredentials?.length && (
         <BodyText style={styles.sectionLabel}>SAVED ACCOUNTS</BodyText>
