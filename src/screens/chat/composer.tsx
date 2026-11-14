@@ -1,8 +1,8 @@
 import type { SessionInfo } from "@opencode/client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { ComponentRef, RefObject } from "react";
 import { ScrollView, View } from "react-native";
-import type { LayoutChangeEvent, TextInput } from "react-native";
+import type { TextInput } from "react-native";
 
 import { AgentActivityBar } from "../../components/agent-activity";
 import { IconButton } from "../../components/icon-button";
@@ -138,7 +138,7 @@ export const AgentChip = ({
   return (
     <SelectMenu
       appearance="chip"
-      indicator="sheet"
+      indicator="menu"
       placement="top-start"
       gutter={AGENT_MENU_GUTTER}
       maxWidth={AGENT_CHIP_MAX_WIDTH}
@@ -165,13 +165,11 @@ interface ModelTriggerProps extends Pick<
   ChatController,
   "currentModel" | "pending" | "providerLabel" | "setPanel" | "styles"
 > {
-  maxWidth?: number;
   session: SessionInfo;
 }
 
 export const ModelTrigger = ({
   currentModel,
-  maxWidth,
   pending,
   providerLabel,
   session,
@@ -184,10 +182,9 @@ export const ModelTrigger = ({
   return (
     <SelectTrigger
       appearance="chip"
-      indicator="sheet"
+      flexible
       accessibilityLabel={`Choose model, ${providerLabel ? `${providerLabel}, ` : ""}${name}`}
       disabled={pending}
-      maxWidth={maxWidth}
       value={name}
       onPress={() => setPanel("models")}
     >
@@ -232,7 +229,6 @@ export const VariantTrigger = ({
   return (
     <SelectTrigger
       appearance="chip"
-      indicator="sheet"
       accessibilityLabel={`Choose model variant, ${label}`}
       disabled={pending}
       maxWidth={VARIANT_CHIP_MAX_WIDTH}
@@ -284,19 +280,9 @@ export const ComposerToolbar = ({
   styles,
 }: ComposerToolbarProps) => {
   const { colors } = useTheme();
-  const [chipsWidth, setChipsWidth] = useState<number | undefined>();
-  const onChipsLayout = (event: LayoutChangeEvent) =>
-    setChipsWidth(event.nativeEvent.layout.width);
   return (
     <View style={styles.composerControls}>
-      <ScrollView
-        horizontal
-        contentContainerStyle={styles.composerControlsContent}
-        keyboardShouldPersistTaps="handled"
-        onLayout={onChipsLayout}
-        showsHorizontalScrollIndicator={false}
-        style={styles.composerControlsScroll}
-      >
+      <View style={styles.composerControlsRow}>
         <AgentChip
           agents={agents}
           capabilities={capabilities}
@@ -308,7 +294,6 @@ export const ComposerToolbar = ({
         />
         <ModelTrigger
           currentModel={currentModel}
-          maxWidth={chipsWidth}
           pending={pending}
           providerLabel={providerLabel}
           setPanel={setPanel}
@@ -322,7 +307,7 @@ export const ComposerToolbar = ({
           selectedVariant={selectedVariant}
           setPanel={setPanel}
         />
-      </ScrollView>
+      </View>
       {active && hasPrompt && (
         <IconButton
           icon="stop"
@@ -875,56 +860,58 @@ export const Composer = ({
   };
   return (
     <View style={styles.composerDock}>
-      <AgentActivityBar
-        activity={activity}
-        connectionStatus={streamStatus}
-        sending={sending}
-        stopping={stopping}
-        animate={visible && foreground}
-        show={showActivityBar}
-        onReview={jumpToLatest}
-      />
-      <View style={[styles.composer, cardStyle]}>
-        {draftLoaded ? (
-          <ComposerBody
-            active={active}
-            agents={agents}
-            attachments={attachments}
-            capabilities={capabilities}
-            composerHeight={composerHeight}
-            currentModel={currentModel}
-            draft={draft}
-            hasPrompt={hasPrompt}
-            inputRef={inputRef}
-            interrupt={interrupt}
-            maximumComposerHeight={maximumComposerHeight}
-            minimumComposerHeight={minimumComposerHeight}
-            opencodeClient={opencodeClient}
-            pending={pending}
-            providerLabel={providerLabel}
-            selectedVariant={selectedVariant}
-            restoredSkillIDs={restoredSkillIDs}
-            run={run}
-            selectedAgentIDs={selectedAgentIDs}
-            selectedSkills={selectedSkills}
-            sessionID={sessionID}
-            setAttachments={setAttachments}
-            setDraft={setDraft}
-            setPanel={setPanel}
-            setRestoredSkillIDs={setRestoredSkillIDs}
-            setSelectedAgentIDs={setSelectedAgentIDs}
-            setSelectedMessageID={setSelectedMessageID}
-            setSelectedSkills={setSelectedSkills}
-            shellMode={shellMode}
-            stopReady={stopReady}
-            stopping={stopping}
-            styles={styles}
-            updateComposerHeight={updateComposerHeight}
-            session={session}
-          />
-        ) : (
-          <Busy />
-        )}
+      <View style={styles.composerCardArea}>
+        <AgentActivityBar
+          activity={activity}
+          connectionStatus={streamStatus}
+          sending={sending}
+          stopping={stopping}
+          animate={visible && foreground}
+          show={showActivityBar}
+          onReview={jumpToLatest}
+        />
+        <View style={[styles.composer, cardStyle]}>
+          {draftLoaded ? (
+            <ComposerBody
+              active={active}
+              agents={agents}
+              attachments={attachments}
+              capabilities={capabilities}
+              composerHeight={composerHeight}
+              currentModel={currentModel}
+              draft={draft}
+              hasPrompt={hasPrompt}
+              inputRef={inputRef}
+              interrupt={interrupt}
+              maximumComposerHeight={maximumComposerHeight}
+              minimumComposerHeight={minimumComposerHeight}
+              opencodeClient={opencodeClient}
+              pending={pending}
+              providerLabel={providerLabel}
+              selectedVariant={selectedVariant}
+              restoredSkillIDs={restoredSkillIDs}
+              run={run}
+              selectedAgentIDs={selectedAgentIDs}
+              selectedSkills={selectedSkills}
+              sessionID={sessionID}
+              setAttachments={setAttachments}
+              setDraft={setDraft}
+              setPanel={setPanel}
+              setRestoredSkillIDs={setRestoredSkillIDs}
+              setSelectedAgentIDs={setSelectedAgentIDs}
+              setSelectedMessageID={setSelectedMessageID}
+              setSelectedSkills={setSelectedSkills}
+              shellMode={shellMode}
+              stopReady={stopReady}
+              stopping={stopping}
+              styles={styles}
+              updateComposerHeight={updateComposerHeight}
+              session={session}
+            />
+          ) : (
+            <Busy />
+          )}
+        </View>
       </View>
       <TouchBar
         active={active}

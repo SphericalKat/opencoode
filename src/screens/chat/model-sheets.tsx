@@ -1,21 +1,38 @@
+import { BottomSheetSectionList } from "@gorhom/bottom-sheet";
 import type { ModelInfo } from "@opencode/client";
-import { FlatList, Pressable, ScrollView, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
-import { ListSheet } from "../../components/list-sheet";
+import { AnchoredMenu, useContextMenu } from "../../components/anchored-menu";
+import { IconButton } from "../../components/icon-button";
+import {
+  ListSheet,
+  SheetGroupItem,
+  SheetRow,
+} from "../../components/list-sheet";
 import type { ListSheetOption } from "../../components/list-sheet";
+import { useMotionPreference } from "../../components/motion";
+import { ProjectAvatar } from "../../components/project-avatar";
+import { ShellIcon } from "../../components/shell-icon";
+import { elevation } from "../../components/surface";
 import {
   Button,
   Empty,
   ErrorNotice,
   Field,
   BodyText,
-  Row,
   Sheet,
 } from "../../components/ui";
 import { playHaptic } from "../../lib/haptics";
 import { modelPreferenceID } from "../../lib/model-preferences";
-import { ChatIconButton } from "./controls";
+import { useTheme } from "../../lib/theme";
 import { emptyModelsTitle, emptyModelsDetail } from "./labels";
+import type { ModelGroup } from "./model-groups";
 import { capitalizeFirst } from "./model-label";
 import type { ChatController } from "./use-chat-controller";
 
@@ -81,516 +98,410 @@ export const VariantsSheet = ({
   );
 };
 
-type ModelSearchBarProps = Pick<
-  ChatController,
-  | "catalogError"
-  | "error"
-  | "modelFilter"
-  | "modelPreferences"
-  | "modelSearch"
-  | "setCatalogRevision"
-  | "setModelFilter"
-  | "setModelSearch"
-  | "styles"
->;
+const maxListHeight = 360;
+const listHeightRatio = 0.4;
+const chevronDuration = 150;
+const collapsedRotation = -90;
 
-export const ModelSearchBar = ({
-  catalogError,
-  error,
-  modelFilter,
-  modelPreferences,
-  modelSearch,
-  setCatalogRevision,
-  setModelFilter,
-  setModelSearch,
-  styles,
-}: ModelSearchBarProps) => (
-  <View style={styles.modelSearch}>
-    <Field
-      label="Search models"
-      value={modelSearch}
-      onChangeText={setModelSearch}
-      placeholder="Model or provider"
-    />
-    <Row>
-      <Button
-        title="All"
-        size="compact"
-        selected={modelFilter === "all"}
-        onPress={() => setModelFilter("all")}
-      />
-      <Button
-        title="Favorites"
-        size="compact"
-        selected={modelFilter === "favorites"}
-        onPress={() => setModelFilter("favorites")}
-      />
-      <Button
-        title="Recent"
-        size="compact"
-        selected={modelFilter === "recent"}
-        onPress={() => setModelFilter("recent")}
-      />
-    </Row>
-    <ErrorNotice
-      error={error || catalogError || modelPreferences.error}
-      onRetry={() => {
-        modelPreferences.reload();
-        setCatalogRevision((value) => value + 1);
-      }}
-    />
-  </View>
-);
+const styles = StyleSheet.create({
+  chevron: {
+    alignItems: "center",
+    height: 20,
+    justifyContent: "center",
+    width: 20,
+  },
+  clear: { position: "absolute", right: 8, top: 8 },
+  content: { paddingBottom: 16, paddingHorizontal: 12, paddingTop: 4 },
+  empty: { gap: 12, paddingVertical: 24 },
+  header: { alignItems: "center", minHeight: 44 },
+  headerLabel: { alignItems: "center", flexDirection: "row", gap: 8 },
+  headerTrigger: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: 4,
+    flexDirection: "row",
+    gap: 4,
+    height: 28,
+    paddingEnd: 8,
+    paddingStart: 4,
+  },
+  headerWrap: { alignSelf: "stretch" },
+  search: { paddingBottom: 12, paddingHorizontal: 12, paddingTop: 1 },
+  searchInput: {
+    borderRadius: 6,
+    fontSize: 13,
+    height: 40,
+    lineHeight: 20,
+    paddingHorizontal: 12,
+  },
+  sectionTitle: { fontSize: 13, fontWeight: "500", lineHeight: 16 },
+});
 
-type RenderModelVariantsProps = Pick<
-  ChatController,
-  | "capabilities"
-  | "chooseModel"
-  | "currentModel"
-  | "pending"
-  | "selectedVariant"
-  | "styles"
->;
-
-export const renderModelVariants = ({
-  capabilities,
-  chooseModel,
-  currentModel,
-  pending,
-  selectedVariant,
-  styles,
-}: RenderModelVariantsProps) =>
-  currentModel?.variants.length ? (
-    <View style={styles.variants}>
-      <BodyText muted>Variant · {currentModel.name}</BodyText>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 6 }}
-      >
-        {capabilities.defaultVariant && (
-          <Button
-            title="Model default"
-            size="compact"
-            selected={!selectedVariant}
-            disabled={pending}
-            onPress={() => {
-              void chooseModel(currentModel);
-            }}
-          />
-        )}
-        {currentModel.variants.map((variant) => (
-          <Button
-            key={variant.id}
-            title={variant.id}
-            selected={selectedVariant === variant.id}
-            size="compact"
-            disabled={pending}
-            onPress={() => {
-              void chooseModel(currentModel, variant.id);
-            }}
-          />
-        ))}
-      </ScrollView>
-    </View>
-  ) : undefined;
-
-interface RenderModelRowProps extends Pick<
-  ChatController,
-  | "chooseModel"
-  | "colors"
-  | "currentModel"
-  | "modelPreferences"
-  | "pending"
-  | "serverID"
-  | "styles"
-> {
-  model: ModelInfo;
-}
-
-export const renderModelRow = ({
-  chooseModel,
-  colors,
-  currentModel,
-  model,
-  modelPreferences,
-  pending,
-  serverID,
-  styles,
-}: RenderModelRowProps) => {
-  const selected =
-    currentModel?.id === model.id &&
-    currentModel.providerID === model.providerID;
-  const favorite = modelPreferences.favoriteIDs.includes(
-    modelPreferenceID(model.providerID, model.id)
-  );
+const ProviderChevron = ({ collapsed }: { collapsed: boolean }) => {
+  const { colors } = useTheme();
+  const reduced = useMotionPreference();
+  const rotation = useSharedValue(collapsed ? collapsedRotation : 0);
+  useEffect(() => {
+    rotation.value = withTiming(collapsed ? collapsedRotation : 0, {
+      duration: reduced ? 0 : chevronDuration,
+    });
+  }, [collapsed, reduced, rotation]);
+  const animated = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
   return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{
-        checked: selected,
-        disabled: pending,
-      }}
-      disabled={pending}
-      onPress={() => {
-        if (!selected) {
-          playHaptic("select");
-          void chooseModel(model, undefined, true);
-        }
-      }}
-      style={({ pressed }) => [
-        styles.modelRow,
-        selected && { backgroundColor: colors.selected },
-        pressed && { opacity: 0.6 },
-      ]}
-    >
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <BodyText numberOfLines={2} style={{ fontWeight: "500" }}>
-          {model.name}
-        </BodyText>
-        <BodyText muted numberOfLines={1} style={{ fontSize: 13 }}>
-          {model.providerID} · {model.limit.context.toLocaleString()} context
-        </BodyText>
-      </View>
-      <ChatIconButton
-        name="star"
-        label={`${favorite ? "Remove" : "Add"} ${model.name} ${favorite ? "from" : "to"} favorites`}
-        selected={favorite}
-        disabled={
-          !serverID || modelPreferences.loading || modelPreferences.saving
-        }
-        onPress={() => {
-          void modelPreferences.toggleFavorite(model.providerID, model.id);
-        }}
-      />
-      <View style={styles.radio}>
-        {selected && <View style={styles.radioDot} />}
-      </View>
-    </Pressable>
+    <Animated.View style={[styles.chevron, animated]}>
+      <ShellIcon name="chevron-down" size={16} color={colors.faint} />
+    </Animated.View>
   );
 };
 
-type RenderModelsEmptyProps = Pick<
-  ChatController,
-  | "enabledModels"
-  | "modelFilter"
-  | "modelSearch"
-  | "onOpenNavigation"
-  | "scopedModels"
-  | "setCatalogRevision"
-  | "setModelFilter"
-  | "setModelSearch"
-  | "setPanel"
->;
+interface SectionHeaderProps {
+  collapsed: boolean;
+  disabled: boolean;
+  first: boolean;
+  group: ModelGroup;
+  onToggle: () => void;
+}
 
-export const renderModelsEmpty = ({
-  enabledModels,
-  modelFilter,
+const SectionHeader = ({
+  collapsed,
+  disabled,
+  first,
+  group,
+  onToggle,
+}: SectionHeaderProps) => {
+  const { colors } = useTheme();
+  const title = (
+    <BodyText style={[styles.sectionTitle, { color: colors.text }]}>
+      {group.title}
+    </BodyText>
+  );
+  const frame = {
+    backgroundColor: colors.frame,
+    paddingTop: first ? 0 : 12,
+  };
+  if (!group.providerID) {
+    return (
+      <View style={[styles.headerWrap, frame]}>
+        <View accessibilityRole="header" style={styles.header}>
+          <View style={[styles.headerTrigger, { paddingStart: 4 }]}>
+            {title}
+          </View>
+        </View>
+      </View>
+    );
+  }
+  const expanded = disabled || !collapsed;
+  return (
+    <View style={[styles.headerWrap, frame]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={group.title}
+        accessibilityState={{ disabled, expanded }}
+        disabled={disabled}
+        onPress={onToggle}
+        style={styles.header}
+      >
+        <View style={styles.headerTrigger}>
+          <ProviderChevron collapsed={!expanded} />
+          <View style={styles.headerLabel}>
+            <ProjectAvatar name={group.title} ringColor={colors.frame} />
+            {title}
+          </View>
+        </View>
+      </Pressable>
+    </View>
+  );
+};
+
+interface ModelSearchFieldProps {
+  modelSearch: string;
+  onSubmit: () => void;
+  setModelSearch: (value: string) => void;
+}
+
+const ModelSearchField = ({
   modelSearch,
-  onOpenNavigation,
-  scopedModels,
-  setCatalogRevision,
-  setModelFilter,
+  onSubmit,
   setModelSearch,
-  setPanel,
-}: RenderModelsEmptyProps) => (
-  <View style={{ gap: 12, padding: 20 }}>
-    <Empty
-      title={emptyModelsTitle(
-        Boolean(enabledModels.length),
-        modelFilter,
-        Boolean(scopedModels.length)
-      )}
-      detail={emptyModelsDetail(
-        Boolean(enabledModels.length),
-        modelFilter,
-        Boolean(scopedModels.length)
-      )}
-    />
-    {enabledModels.length ? (
-      <Row>
-        {modelSearch && (
-          <Button title="Clear search" onPress={() => setModelSearch("")} />
-        )}
-        {modelFilter !== "all" && (
-          <Button
-            title="Show all models"
-            onPress={() => setModelFilter("all")}
-          />
-        )}
-      </Row>
-    ) : (
-      <>
-        <Button
-          title="Refresh models"
-          onPress={() => setCatalogRevision((value) => value + 1)}
+}: ModelSearchFieldProps) => {
+  const { colors, scheme } = useTheme();
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={styles.search}>
+      <Field
+        value={modelSearch}
+        onChangeText={setModelSearch}
+        placeholder="Search models"
+        accessibilityLabel="Search models"
+        autoComplete="off"
+        autoCorrect={false}
+        importantForAutofill="no"
+        returnKeyType="search"
+        spellCheck={false}
+        submitBehavior="blurAndSubmit"
+        onSubmitEditing={onSubmit}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={[
+          styles.searchInput,
+          {
+            backgroundColor: colors.bg,
+            borderBottomColor: focused ? colors.focus : colors.bg,
+            borderColor: focused ? colors.focus : colors.bg,
+            borderWidth: focused ? 1 : 0,
+            boxShadow: focused ? [] : elevation(scheme).input,
+            paddingEnd: modelSearch ? 40 : 12,
+          },
+        ]}
+      />
+      {modelSearch !== "" && (
+        <IconButton
+          icon="close"
+          size={24}
+          iconSize={14}
+          color={colors.faint}
+          borderless
+          accessibilityLabel="Clear"
+          onPress={() => setModelSearch("")}
+          style={styles.clear}
         />
-        {onOpenNavigation && (
-          <Button
-            title="Open navigation"
-            onPress={() => {
-              setPanel(null);
-              onOpenNavigation();
-            }}
-          />
-        )}
-      </>
-    )}
-  </View>
-);
+      )}
+    </View>
+  );
+};
 
-type ModelListProps = Pick<
+type ModelsEmptyProps = Pick<
   ChatController,
-  | "capabilities"
-  | "chooseModel"
-  | "colors"
-  | "currentModel"
-  | "enabledModels"
-  | "filteredModels"
-  | "modelFilter"
-  | "modelPreferences"
-  | "modelSearch"
-  | "onOpenNavigation"
-  | "pending"
-  | "scopedModels"
-  | "selectedVariant"
-  | "serverID"
-  | "setCatalogRevision"
-  | "setModelFilter"
-  | "setModelSearch"
-  | "setPanel"
-  | "styles"
+  "enabledModels" | "onOpenNavigation" | "setCatalogRevision" | "setPanel"
 >;
 
-export const ModelList = ({
-  capabilities,
-  chooseModel,
-  colors,
-  currentModel,
+const ModelsEmpty = ({
   enabledModels,
-  filteredModels,
-  modelFilter,
-  modelPreferences,
-  modelSearch,
   onOpenNavigation,
-  pending,
-  scopedModels,
-  serverID,
-  selectedVariant,
   setCatalogRevision,
-  setModelFilter,
-  setModelSearch,
   setPanel,
-  styles,
-}: ModelListProps) => (
-  <FlatList
-    data={filteredModels}
-    keyExtractor={(model) => `${model.providerID}/${model.id}`}
-    keyboardShouldPersistTaps="handled"
-    keyboardDismissMode="on-drag"
-    automaticallyAdjustKeyboardInsets
-    initialNumToRender={12}
-    maxToRenderPerBatch={12}
-    windowSize={5}
-    contentContainerStyle={styles.modelList}
-    ListHeaderComponent={renderModelVariants({
-      capabilities,
-      chooseModel,
-      currentModel,
-      pending,
-      selectedVariant,
-      styles,
-    })}
-    renderItem={({ item: model }) =>
-      renderModelRow({
-        chooseModel,
-        colors,
-        currentModel,
-        model,
-        modelPreferences,
-        pending,
-        serverID,
-        styles,
-      })
-    }
-    ListEmptyComponent={renderModelsEmpty({
-      enabledModels,
-      modelFilter,
-      modelSearch,
-      onOpenNavigation,
-      scopedModels,
-      setCatalogRevision,
-      setModelFilter,
-      setModelSearch,
-      setPanel,
-    })}
-  />
-);
+}: ModelsEmptyProps) => {
+  const hasEnabled = enabledModels.length > 0;
+  return (
+    <View style={styles.empty}>
+      <Empty
+        title={emptyModelsTitle(hasEnabled)}
+        detail={emptyModelsDetail(hasEnabled)}
+      />
+      {!hasEnabled && (
+        <>
+          <Button
+            title="Refresh models"
+            variant="ghost"
+            onPress={() => setCatalogRevision((value) => value + 1)}
+          />
+          {onOpenNavigation && (
+            <Button
+              title="Open navigation"
+              variant="ghost"
+              onPress={() => {
+                setPanel(null);
+                onOpenNavigation();
+              }}
+            />
+          )}
+        </>
+      )}
+    </View>
+  );
+};
 
 type ModelPickerProps = Pick<
   ChatController,
-  | "capabilities"
   | "catalogError"
   | "chooseModel"
-  | "colors"
   | "currentModel"
   | "enabledModels"
   | "error"
-  | "filteredModels"
-  | "modelFilter"
+  | "modelGroups"
   | "modelPreferences"
   | "modelSearch"
   | "onOpenNavigation"
   | "pending"
-  | "scopedModels"
-  | "selectedVariant"
   | "serverID"
   | "setCatalogRevision"
-  | "setModelFilter"
   | "setModelSearch"
   | "setPanel"
-  | "styles"
 >;
+
+interface MenuTarget {
+  anchor: { height: number; width: number; x: number; y: number };
+  model: ModelInfo;
+}
 
 export const ModelPicker = ({
-  capabilities,
   catalogError,
   chooseModel,
-  colors,
   currentModel,
   enabledModels,
   error,
-  filteredModels,
-  modelFilter,
+  modelGroups,
   modelPreferences,
   modelSearch,
   onOpenNavigation,
   pending,
-  scopedModels,
   serverID,
-  selectedVariant,
   setCatalogRevision,
-  setModelFilter,
   setModelSearch,
   setPanel,
-  styles,
-}: ModelPickerProps) => (
-  <View style={{ flex: 1, minHeight: 0 }}>
-    <ModelSearchBar
-      catalogError={catalogError}
-      error={error}
-      modelFilter={modelFilter}
-      modelPreferences={modelPreferences}
-      modelSearch={modelSearch}
-      setCatalogRevision={setCatalogRevision}
-      setModelFilter={setModelFilter}
-      setModelSearch={setModelSearch}
-      styles={styles}
-    />
-    <ModelList
-      capabilities={capabilities}
-      chooseModel={chooseModel}
-      colors={colors}
-      currentModel={currentModel}
-      enabledModels={enabledModels}
-      filteredModels={filteredModels}
-      modelFilter={modelFilter}
-      modelPreferences={modelPreferences}
-      modelSearch={modelSearch}
-      onOpenNavigation={onOpenNavigation}
-      pending={pending}
-      scopedModels={scopedModels}
-      serverID={serverID}
-      setCatalogRevision={setCatalogRevision}
-      setModelFilter={setModelFilter}
-      setModelSearch={setModelSearch}
-      setPanel={setPanel}
-      styles={styles}
-      selectedVariant={selectedVariant}
-    />
-  </View>
-);
+}: ModelPickerProps) => {
+  const { height } = useWindowDimensions();
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
+  const pressedModel = useRef<ModelInfo | null>(null);
+  const contextMenu = useContextMenu({
+    onOpen: (anchor) => {
+      if (pressedModel.current) {
+        setMenuTarget({ anchor, model: pressedModel.current });
+      }
+    },
+  });
+  // Upstream resets the search each time the picker opens.
+  useEffect(() => {
+    setModelSearch("");
+  }, [setModelSearch]);
+  const searching = modelSearch.length > 0;
+  const isCurrent = (model: ModelInfo) =>
+    currentModel?.id === model.id &&
+    currentModel.providerID === model.providerID;
+  const pick = (model: ModelInfo) => {
+    setPanel(null);
+    if (isCurrent(model)) {
+      return;
+    }
+    playHaptic("select");
+    void chooseModel(model, undefined, true);
+  };
+  const sections = modelGroups.map((group, index) => ({
+    ...group,
+    data: collapsed[group.key] && !searching ? [] : group.items,
+    first: index === 0,
+  }));
+  const menuModel = menuTarget?.model;
+  const menuFavorite =
+    menuModel !== undefined &&
+    modelPreferences.favoriteIDs.includes(
+      modelPreferenceID(menuModel.providerID, menuModel.id)
+    );
+  return (
+    <View>
+      <ModelSearchField
+        modelSearch={modelSearch}
+        setModelSearch={setModelSearch}
+        onSubmit={() => {
+          const first = modelGroups[0]?.items[0];
+          if (first) {
+            pick(first);
+          }
+        }}
+      />
+      <ErrorNotice
+        error={error || catalogError || modelPreferences.error}
+        onRetry={() => {
+          modelPreferences.reload();
+          setCatalogRevision((value) => value + 1);
+        }}
+      />
+      <BottomSheetSectionList
+        sections={sections}
+        keyExtractor={(model) => `${model.providerID}/${model.id}`}
+        style={{ maxHeight: Math.min(maxListHeight, listHeightRatio * height) }}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        stickySectionHeadersEnabled
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <ModelsEmpty
+            enabledModels={enabledModels}
+            onOpenNavigation={onOpenNavigation}
+            setCatalogRevision={setCatalogRevision}
+            setPanel={setPanel}
+          />
+        }
+        renderSectionHeader={({ section }) => (
+          <SectionHeader
+            collapsed={Boolean(collapsed[section.key])}
+            disabled={searching}
+            first={section.first}
+            group={section}
+            onToggle={() =>
+              setCollapsed((value) => ({
+                ...value,
+                [section.key]: !value[section.key],
+              }))
+            }
+          />
+        )}
+        renderItem={({ item: model, index, section }) => (
+          <SheetGroupItem
+            variant="grouped"
+            first={index === 0}
+            last={index === section.data.length - 1}
+          >
+            <SheetRow
+              label={model.name}
+              checked={isCurrent(model)}
+              disabled={pending}
+              accessibilityRole="radio"
+              onPress={() => pick(model)}
+              onLongPress={(event) => {
+                pressedModel.current = model;
+                contextMenu.onLongPress(event);
+              }}
+            />
+          </SheetGroupItem>
+        )}
+      />
+      <AnchoredMenu
+        visible={menuTarget !== null}
+        anchor={menuTarget?.anchor ?? null}
+        accessibilityLabel={menuModel ? `${menuModel.name} actions` : "Actions"}
+        onClose={() => setMenuTarget(null)}
+        items={[
+          {
+            disabled:
+              !serverID || modelPreferences.loading || modelPreferences.saving,
+            key: "favorite",
+            label: menuFavorite ? "Remove from favorites" : "Add to favorites",
+            onSelect: () => {
+              if (menuModel) {
+                void modelPreferences.toggleFavorite(
+                  menuModel.providerID,
+                  menuModel.id
+                );
+              }
+            },
+          },
+        ]}
+      />
+    </View>
+  );
+};
 
-type ModelsSheetProps = Pick<
-  ChatController,
-  | "capabilities"
-  | "catalogError"
-  | "chooseModel"
-  | "colors"
-  | "currentModel"
-  | "enabledModels"
-  | "error"
-  | "filteredModels"
-  | "modelFilter"
-  | "modelPreferences"
-  | "modelSearch"
-  | "onOpenNavigation"
-  | "panel"
-  | "pending"
-  | "scopedModels"
-  | "selectedVariant"
-  | "serverID"
-  | "setCatalogRevision"
-  | "setModelFilter"
-  | "setModelSearch"
-  | "setPanel"
-  | "styles"
->;
+interface ModelsSheetProps extends ModelPickerProps {
+  panel: ChatController["panel"];
+}
 
 export const ModelsSheet = ({
-  capabilities,
-  catalogError,
-  chooseModel,
-  colors,
-  currentModel,
-  enabledModels,
-  error,
-  filteredModels,
-  modelFilter,
-  modelPreferences,
-  modelSearch,
-  onOpenNavigation,
   panel,
-  pending,
-  scopedModels,
-  serverID,
-  selectedVariant,
-  setCatalogRevision,
-  setModelFilter,
-  setModelSearch,
   setPanel,
-  styles,
+  ...picker
 }: ModelsSheetProps) => (
   <Sheet
     visible={panel === "models"}
     title="Choose model"
+    fitContent
     scroll={false}
     onClose={() => setPanel(null)}
   >
-    {panel === "models" && (
-      <ModelPicker
-        capabilities={capabilities}
-        catalogError={catalogError}
-        chooseModel={chooseModel}
-        colors={colors}
-        currentModel={currentModel}
-        enabledModels={enabledModels}
-        error={error}
-        filteredModels={filteredModels}
-        modelFilter={modelFilter}
-        modelPreferences={modelPreferences}
-        modelSearch={modelSearch}
-        onOpenNavigation={onOpenNavigation}
-        pending={pending}
-        scopedModels={scopedModels}
-        serverID={serverID}
-        setCatalogRevision={setCatalogRevision}
-        setModelFilter={setModelFilter}
-        setModelSearch={setModelSearch}
-        setPanel={setPanel}
-        styles={styles}
-        selectedVariant={selectedVariant}
-      />
-    )}
+    {panel === "models" && <ModelPicker {...picker} setPanel={setPanel} />}
   </Sheet>
 );

@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import type { StyleProp, ViewStyle } from "react-native";
+import type { GestureResponderEvent, StyleProp, ViewStyle } from "react-native";
 
 import { playHaptic } from "../lib/haptics";
 import { useTheme, useThemedStyles } from "../lib/theme";
@@ -242,7 +242,7 @@ export const SheetRow = ({
   destructive?: boolean;
   disabled?: boolean;
   onPress?: () => void;
-  onLongPress?: () => void;
+  onLongPress?: (event: GestureResponderEvent) => void;
   accessibilityLabel?: string;
   accessibilityRole?: "button" | "radio" | "switch";
 }) => {

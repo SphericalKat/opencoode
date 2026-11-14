@@ -49,6 +49,7 @@ const createStyles = (colors: ThemeColors) =>
       overflow: "hidden",
     },
     chevron: { marginStart: CHEVRON_GAP },
+    flexible: { flexShrink: 1, minWidth: 0 },
     outline: {
       borderColor: colors.border,
       borderWidth: StyleSheet.hairlineWidth,
@@ -89,6 +90,7 @@ export const SelectTrigger = ({
   expanded,
   busy,
   disabled,
+  flexible,
   maxWidth,
   ref,
 }: {
@@ -101,6 +103,7 @@ export const SelectTrigger = ({
   expanded?: boolean;
   busy?: boolean;
   disabled?: boolean;
+  flexible?: boolean;
   maxWidth?: number;
   ref?: React.Ref<React.ComponentRef<typeof Pressable>>;
 }) => {
@@ -141,6 +144,7 @@ export const SelectTrigger = ({
       style={({ pressed }) => [
         styles.base,
         appearance === "outline" && styles.outline,
+        flexible && styles.flexible,
         {
           borderRadius: size.radius,
           height: size.height,

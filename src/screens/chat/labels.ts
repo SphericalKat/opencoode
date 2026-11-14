@@ -5,7 +5,6 @@ import type {
   SessionInfo,
 } from "@opencode/client";
 
-import { modelPreferenceID } from "../../lib/model-preferences";
 import { capitalizeFirst } from "./model-label";
 
 export const inboxItemText = (item: SessionInboxInfo) => {
@@ -32,53 +31,13 @@ export const sendButtonLabel = (
   return "Send message";
 };
 
-export const emptyModelsTitle = (
-  hasEnabled: boolean,
-  modelFilter: string,
-  hasScoped: boolean
-) => {
-  if (!hasEnabled) {
-    return "No connected models";
-  }
-  if (modelFilter !== "all" && !hasScoped) {
-    return modelFilter === "favorites"
-      ? "No favorite models"
-      : "No recent models";
-  }
-  return "No models match";
-};
+export const emptyModelsTitle = (hasEnabled: boolean) =>
+  hasEnabled ? "No model results" : "No connected models";
 
-export const emptyModelsDetail = (
-  hasEnabled: boolean,
-  modelFilter: string,
-  hasScoped: boolean
-) => {
-  if (!hasEnabled) {
-    return "Connect a provider in Settings, then refresh this list.";
-  }
-  if (modelFilter === "favorites" && !hasScoped) {
-    return "Tap the star beside a model to save it here.";
-  }
-  if (modelFilter === "recent" && !hasScoped) {
-    return "Models appear here after you select them.";
-  }
-  return "Try a model name or provider.";
-};
-
-export const sortByPreference = (
-  models: ModelInfo[],
-  preferredIDs: string[]
-) => {
-  const sorted = models.filter((model) =>
-    preferredIDs.includes(modelPreferenceID(model.providerID, model.id))
-  );
-  sorted.sort(
-    (a, b) =>
-      preferredIDs.indexOf(modelPreferenceID(a.providerID, a.id)) -
-      preferredIDs.indexOf(modelPreferenceID(b.providerID, b.id))
-  );
-  return sorted;
-};
+export const emptyModelsDetail = (hasEnabled: boolean) =>
+  hasEnabled
+    ? undefined
+    : "Connect a provider in Settings, then refresh this list.";
 
 export const modelSummary = (
   session: Pick<SessionInfo, "model">,

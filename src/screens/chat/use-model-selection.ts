@@ -2,7 +2,7 @@ import type { ModelInfo } from "@opencode/client";
 import { useMemo, useState } from "react";
 
 import type { useModelPreferences } from "../../lib/model-preferences";
-import { sortByPreference } from "./labels";
+import { groupModels } from "./model-groups";
 import { composerModelLabel } from "./model-label";
 import type { CoreClient } from "./session-sync";
 import type { SetPanel } from "./types";
@@ -45,9 +45,6 @@ export const useModelSelection = ({
   const staged = pick && modelKey(pick) !== sessionModelKey ? pick : undefined;
   const selected = staged ?? session?.model;
   const [modelSearch, setModelSearch] = useState("");
-  const [modelFilter, setModelFilter] = useState<
-    "all" | "favorites" | "recent"
-  >("all");
   const selectedModelID = selected?.id;
   const selectedProviderID = selected?.providerID;
   const selectedModel = useMemo(
@@ -76,25 +73,17 @@ export const useModelSelection = ({
     () => models.filter((model) => model.enabled),
     [models]
   );
-  const preferredIDs =
-    modelFilter === "favorites"
-      ? modelPreferences.favoriteIDs
-      : modelPreferences.recentIDs;
-  const scopedModels = useMemo(
+  const { favoriteIDs, recentIDs } = modelPreferences;
+  const modelGroups = useMemo(
     () =>
-      modelFilter === "all"
-        ? enabledModels
-        : sortByPreference(enabledModels, preferredIDs),
-    [enabledModels, modelFilter, preferredIDs]
-  );
-  const filteredModels = useMemo(
-    () =>
-      scopedModels.filter((model) =>
-        `${model.name} ${model.providerID} ${model.id}`
-          .toLowerCase()
-          .includes(modelSearch.toLowerCase())
-      ),
-    [scopedModels, modelSearch]
+      groupModels({
+        favoriteIDs,
+        models: enabledModels,
+        providers,
+        recentIDs,
+        search: modelSearch,
+      }),
+    [enabledModels, favoriteIDs, modelSearch, providers, recentIDs]
   );
   const chooseModel = async (
     model: ModelInfo,
@@ -132,13 +121,10 @@ export const useModelSelection = ({
     commitModel,
     currentModel,
     enabledModels,
-    filteredModels,
-    modelFilter,
+    modelGroups,
     modelSearch,
     providerLabel,
-    scopedModels,
     selectedVariant,
-    setModelFilter,
     setModelSearch,
   };
 };

@@ -241,15 +241,13 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     catalogError,
     chooseModel,
     client,
-    colors,
     currentModel,
     delivery,
     enabledModels,
     error,
     exportSession,
-    filteredModels,
     inspect,
-    modelFilter,
+    modelGroups,
     modelPreferences,
     modelSearch,
     onOpenNavigation,
@@ -258,18 +256,15 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     panel,
     pending,
     run,
-    scopedModels,
     selectedVariant,
     serverID,
     sessionID,
     setBackgroundDirectory,
     setBackgroundShellID,
     setCatalogRevision,
-    setModelFilter,
     setModelSearch,
     setPanel,
     setSideQuestion,
-    styles,
   } = chat;
   return (
     <>
@@ -306,28 +301,21 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         setPanel={setPanel}
       />
       <ModelsSheet
-        capabilities={capabilities}
         catalogError={catalogError}
         chooseModel={chooseModel}
-        colors={colors}
         currentModel={currentModel}
         enabledModels={enabledModels}
         error={error}
-        filteredModels={filteredModels}
-        modelFilter={modelFilter}
+        modelGroups={modelGroups}
         modelPreferences={modelPreferences}
         modelSearch={modelSearch}
         onOpenNavigation={onOpenNavigation}
         panel={panel}
         pending={pending}
-        scopedModels={scopedModels}
         serverID={serverID}
         setCatalogRevision={setCatalogRevision}
-        setModelFilter={setModelFilter}
         setModelSearch={setModelSearch}
         setPanel={setPanel}
-        selectedVariant={selectedVariant}
-        styles={styles}
       />
     </>
   );
