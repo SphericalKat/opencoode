@@ -35,13 +35,13 @@ import type { TerminalEvent } from "../lib/terminal";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { useUnsavedChanges, useUnsavedGuard } from "../lib/unsaved";
+import { confirmAction } from "./dialog";
 import { useMotionPreference } from "./motion";
 import { TerminalRenderer } from "./terminal-renderer";
 import type { TerminalRendererHandle } from "./terminal-renderer.types";
 import {
   Busy,
   Button,
-  confirmAction,
   Empty,
   ErrorNotice,
   BodyText,
@@ -1296,7 +1296,8 @@ const TerminalList = ({
       !selectedID ||
       !(await confirmAction(
         "Terminate this shell?",
-        "The server will stop this shell and its child processes."
+        "The server will stop this shell and its child processes.",
+        { confirmLabel: "Terminate" }
       ))
     ) {
       return;

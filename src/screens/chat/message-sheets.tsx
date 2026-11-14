@@ -1,6 +1,7 @@
 import type { SessionInfo, SessionMessageInfo } from "@opencode/client";
 
-import { Button, confirmAction, ErrorNotice, Sheet } from "../../components/ui";
+import { confirmAction } from "../../components/dialog";
+import { Button, ErrorNotice, Sheet } from "../../components/ui";
 import { copyText } from "../../lib/clipboard";
 import { MessageRow } from "./message-rows";
 import type { ChatController } from "./use-chat-controller";
@@ -176,7 +177,8 @@ export const MessageSheet = ({
                 if (
                   await confirmAction(
                     "Undo from this message?",
-                    "The server will stage a revert of later messages and file changes. You can restore the staged changes."
+                    "The server will stage a revert of later messages and file changes. You can restore the staged changes.",
+                    { confirmLabel: "Revert" }
                   )
                 ) {
                   await opencodeClient.session.revert.stage({

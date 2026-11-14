@@ -20,13 +20,13 @@ import {
   View,
 } from "react-native";
 
+import { confirmAction } from "../components/dialog";
 import { Patch } from "../components/patch";
 import { TerminalPanel } from "../components/terminal-panel";
 import {
   Busy,
   Button,
   Card,
-  confirmAction,
   Empty,
   ErrorNotice,
   Field,
@@ -498,7 +498,8 @@ const FileActionRows = ({
           } else {
             void confirmAction(
               "Reload the file?",
-              "Your unsaved edits will be lost."
+              "Your unsaved edits will be lost.",
+              { confirmLabel: "Reload" }
             ).then((yes) => {
               if (yes) {
                 void onOpen(file.path);
@@ -729,7 +730,8 @@ const Files = ({
       file.text !== file.initialText &&
       !(await confirmAction(
         "Discard your edits?",
-        "Your unsaved edits will be lost."
+        "Your unsaved edits will be lost.",
+        { confirmLabel: "Discard" }
       ))
     ) {
       return false;
@@ -1125,7 +1127,8 @@ const Changes = ({
       reviewComment.trim() &&
       !(await confirmAction(
         "Discard review comment?",
-        "Your comment has not been added to a prompt."
+        "Your comment has not been added to a prompt.",
+        { confirmLabel: "Discard" }
       ))
     ) {
       return;
@@ -1141,7 +1144,8 @@ const Changes = ({
         reviewComment.trim() &&
         !(await confirmAction(
           "Discard review comment?",
-          "Your comment has not been added to a prompt."
+          "Your comment has not been added to a prompt.",
+          { confirmLabel: "Discard" }
         ))
       ) {
         return;
@@ -1470,7 +1474,8 @@ const Worktrees = ({
       tree.directory === location.project.directory ||
       !(await confirmAction(
         "Remove this worktree?",
-        `The server will remove ${tree.directory}. Removal stops if the worktree has uncommitted changes.`
+        `The server will remove ${tree.directory}. Removal stops if the worktree has uncommitted changes.`,
+        { confirmLabel: "Remove" }
       ))
     ) {
       return;

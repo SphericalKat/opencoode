@@ -1,4 +1,4 @@
-import { confirmAction } from "../components/ui";
+import { confirmAction } from "../components/dialog";
 import { errorMessage } from "../lib/client";
 import type { Connection } from "../lib/client";
 import { saveActiveConnectionId, saveConnections } from "../lib/storage";
@@ -98,7 +98,8 @@ export const useWorkspaceActions = (
     if (
       !(await confirmAction(
         "Remove server?",
-        `Remove the saved connection to ${connection.name}?`
+        `Remove the saved connection to ${connection.name}?`,
+        { confirmLabel: "Remove" }
       ))
     ) {
       return;

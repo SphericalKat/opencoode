@@ -5,7 +5,7 @@ import * as Sharing from "expo-sharing";
 import { useEffect, useRef, useState } from "react";
 import { FlatList, Keyboard, Platform, View } from "react-native";
 
-import { confirmAction } from "../components/ui";
+import { confirmAction } from "../components/dialog";
 import { settle, withCleanup } from "../lib/async";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
@@ -305,7 +305,8 @@ export const SessionsScreen = ({
       if (
         !(await confirmAction(
           "Import session?",
-          `Import this transcript into ${creationDirectory}? The server validates its contents.`
+          `Import this transcript into ${creationDirectory}? The server validates its contents.`,
+          { confirmLabel: "Import", destructive: false }
         ))
       ) {
         return;
@@ -557,7 +558,8 @@ export const SessionsScreen = ({
             if (
               await confirmAction(
                 "Delete session?",
-                `Delete ${sessionLabel(item)} and all child sessions from the server?`
+                `Delete ${sessionLabel(item)} and all child sessions from the server?`,
+                { confirmLabel: "Delete" }
               )
             ) {
               await client.session.remove({ sessionID: item.id });

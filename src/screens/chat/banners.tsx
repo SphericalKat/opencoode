@@ -1,13 +1,8 @@
 import type { SessionInfo } from "@opencode/client";
 import { View } from "react-native";
 
-import {
-  Button,
-  confirmAction,
-  ErrorNotice,
-  BodyText,
-  Row,
-} from "../../components/ui";
+import { confirmAction } from "../../components/dialog";
+import { Button, ErrorNotice, BodyText, Row } from "../../components/ui";
 import type { ChatController } from "./use-chat-controller";
 
 type ErrorBannersProps = Pick<
@@ -106,7 +101,8 @@ export const RevertBanner = ({
               if (
                 await confirmAction(
                   "Commit this revert?",
-                  "This permanently removes messages after the revert point."
+                  "This permanently removes messages after the revert point.",
+                  { confirmLabel: "Commit revert" }
                 )
               ) {
                 await opencodeClient.session.revert.commit({ sessionID });

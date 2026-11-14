@@ -10,16 +10,8 @@ import { View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
-import {
-  Button,
-  Busy,
-  Card,
-  ErrorNotice,
-  Field,
-  BodyText,
-  Row,
-  confirmAction,
-} from "./ui";
+import { confirmAction } from "./dialog";
+import { Button, Busy, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
 const fetchInstructions = async (
   client: Client,
@@ -202,7 +194,8 @@ export const Instructions = ({
                   if (
                     (await confirmAction(
                       "Delete instruction?",
-                      `Remove the instruction named ${entry.key}?`
+                      `Remove the instruction named ${entry.key}?`,
+                      { confirmLabel: "Delete" }
                     )) &&
                     owner === scope.current &&
                     mounted.current

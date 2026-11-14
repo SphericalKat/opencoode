@@ -1,10 +1,10 @@
 import type { CredentialEntry, IntegrationInfo } from "@opencode/client";
 import { useState } from "react";
 
+import { confirmAction } from "../../components/dialog";
 import {
   Button,
   Card,
-  confirmAction,
   Empty,
   ErrorNotice,
   Field,
@@ -233,7 +233,8 @@ export const Accounts = ({
             const credentialID = credential.id;
             void confirmAction(
               "Remove account?",
-              "This removes the saved credential from your OpenCode server."
+              "This removes the saved credential from your OpenCode server.",
+              { confirmLabel: "Remove" }
             ).then((confirmed) => {
               if (confirmed) {
                 void run(async (signal) => {

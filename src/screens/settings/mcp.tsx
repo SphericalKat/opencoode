@@ -1,10 +1,10 @@
 import { useState } from "react";
 
+import { confirmAction } from "../../components/dialog";
 import { GlobalForms } from "../../components/global-forms";
 import {
   Button,
   Card,
-  confirmAction,
   Empty,
   ErrorNotice,
   Field,
@@ -130,7 +130,8 @@ export const Mcp = ({
             onPress={() => {
               void confirmAction(
                 "Remove MCP server?",
-                `This removes ${item.name} from the project configuration.`
+                `This removes ${item.name} from the project configuration.`,
+                { confirmLabel: "Remove" }
               ).then((confirmed) => {
                 if (confirmed) {
                   void run(async (signal) => {

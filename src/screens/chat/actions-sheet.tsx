@@ -1,9 +1,9 @@
 import type { SessionInfo } from "@opencode/client";
 import { View } from "react-native";
 
+import { confirmAction } from "../../components/dialog";
 import {
   Button,
-  confirmAction,
   Disclosure,
   ErrorNotice,
   Field,
@@ -317,7 +317,8 @@ export const ManageSession = ({
             if (
               await confirmAction(
                 "Delete this session?",
-                "This permanently deletes this session and its messages."
+                "This permanently deletes this session and its messages.",
+                { confirmLabel: "Delete" }
               )
             ) {
               await opencodeClient.session.remove({ sessionID });

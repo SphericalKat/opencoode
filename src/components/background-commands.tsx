@@ -7,11 +7,11 @@ import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { objectKey } from "../lib/object-key";
 import { useTheme } from "../lib/theme";
+import { confirmAction } from "./dialog";
 import {
   Button,
   Busy,
   Card,
-  confirmAction,
   Empty,
   ErrorNotice,
   BodyText,
@@ -211,7 +211,8 @@ const confirmRemoval = (running: boolean) =>
     running ? "Stop this command?" : "Remove retained output?",
     running
       ? "The server will stop this command and remove its captured output."
-      : "The server will delete the captured output for this command."
+      : "The server will delete the captured output for this command.",
+    { confirmLabel: running ? "Stop" : "Remove" }
   );
 
 interface RemoveContext {

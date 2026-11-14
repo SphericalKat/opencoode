@@ -1,12 +1,7 @@
 import { useState } from "react";
 
-import {
-  Button,
-  Card,
-  confirmAction,
-  ErrorNotice,
-  BodyText,
-} from "../../components/ui";
+import { confirmAction } from "../../components/dialog";
+import { Button, Card, ErrorNotice, BodyText } from "../../components/ui";
 import type { Client } from "../../lib/client";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { Page, runBusy, useResource } from "./shared";
@@ -99,7 +94,8 @@ export const Plugins = ({
                       item.source.type === "package" &&
                       (await confirmAction(
                         "Update plugin?",
-                        "This installs the latest package version on your server."
+                        "This installs the latest package version on your server.",
+                        { confirmLabel: "Update", destructive: false }
                       ))
                     ) {
                       await client.plugin.update({

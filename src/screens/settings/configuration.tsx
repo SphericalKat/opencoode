@@ -2,11 +2,11 @@ import { isFileNotFoundError } from "@opencode/client";
 import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 
+import { confirmAction } from "../../components/dialog";
 import { ShellIcon } from "../../components/shell-icon";
 import {
   Button,
   Card,
-  confirmAction,
   Disclosure,
   disabledOpacity,
   ErrorNotice,
@@ -392,7 +392,8 @@ export const Configuration = ({
           } else {
             void confirmAction(
               "Discard changes?",
-              "Your unsaved changes will be lost."
+              "Your unsaved changes will be lost.",
+              { confirmLabel: "Discard" }
             ).then((ok) => {
               if (ok) {
                 setEditing(undefined);

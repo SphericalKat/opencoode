@@ -19,6 +19,7 @@
   <!-- 2026-11-13: "I'm wondering if like a downward pointing chevron is the best representation for this since what appears is actually a bottom sheet?" -->
 - **Full-width pressable rows and bars use the native press feedback of the platform. On Android, use `android_ripple` with `{ alpha: 0.12, color: colors.text, foreground: true }`. On iOS and web, dim the content. Never scale a full-width row or bar on press.** On Android, buttons use `android_ripple` through `usePressFeedback` and do not scale. On iOS and web, buttons keep the scale feedback of `PressFeedback`. Why: native feedback makes a control feel native and good to tap. A full-width bar that scales looks wrong.
   <!-- 2026-11-13: "Try and use like native elements. Like it should feel really native and good to type all of that stuff" -->
+- **Confirm a destructive or irreversible action with `confirmAction` from `src/components/dialog.tsx`, and label the confirm button with a verb such as `Delete` or `Discard`. Ask for text with `promptText`. Never use `Alert`.** A removal shows a snackbar with Undo through `useUndoableRemoval` instead of a confirmation. Why: a system alert ignores the theme and looks like a different app.
 
 ## Copy
 

@@ -5,16 +5,8 @@ import { AppState, View } from "react-native";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { useTheme } from "../lib/theme";
-import {
-  Button,
-  Busy,
-  Card,
-  Empty,
-  ErrorNotice,
-  BodyText,
-  Row,
-  confirmAction,
-} from "./ui";
+import { confirmAction } from "./dialog";
+import { Button, Busy, Card, Empty, ErrorNotice, BodyText, Row } from "./ui";
 
 const ignore = () => null;
 
@@ -265,7 +257,8 @@ export const ChildSessions = ({
         if (
           !(await confirmAction(
             "Stop this child session?",
-            "This interrupts its current execution."
+            "This interrupts its current execution.",
+            { confirmLabel: "Stop" }
           ))
         ) {
           return;

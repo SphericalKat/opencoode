@@ -22,7 +22,6 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   BackHandler,
   Modal,
   Platform,
@@ -1044,27 +1043,6 @@ export const Sheet = ({
       </SafeAreaRoot>
     </Modal>
   );
-};
-export const confirmAction = async (
-  title: string,
-  message: string,
-  options: { confirmLabel?: string; destructive?: boolean } = {}
-): Promise<boolean> => {
-  const { promise, resolve } = Promise.withResolvers<boolean>();
-  Alert.alert(
-    title,
-    message,
-    [
-      { onPress: () => resolve(false), style: "cancel", text: "Cancel" },
-      {
-        onPress: () => resolve(true),
-        style: options.destructive === false ? "default" : "destructive",
-        text: options.confirmLabel || "Continue",
-      },
-    ],
-    { cancelable: true, onDismiss: () => resolve(false) }
-  );
-  return await promise;
 };
 export const JsonView = ({ value }: { value: unknown }) => {
   const { colors } = useTheme();

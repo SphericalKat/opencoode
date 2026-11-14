@@ -6,16 +6,8 @@ import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { prepareSchedule } from "../lib/schedules";
 import type { ScheduleDraft } from "../lib/schedules";
-import {
-  Button,
-  Busy,
-  Card,
-  ErrorNotice,
-  Field,
-  BodyText,
-  Row,
-  confirmAction,
-} from "./ui";
+import { confirmAction } from "./dialog";
+import { Button, Busy, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
 const emptyDraft: ScheduleDraft = {
   after: "",
@@ -386,7 +378,8 @@ export const Schedules = ({
                   if (
                     (await confirmAction(
                       "Delete schedule?",
-                      `Delete ${item.name || "this scheduled prompt"}?`
+                      `Delete ${item.name || "this scheduled prompt"}?`,
+                      { confirmLabel: "Delete" }
                     )) &&
                     owner === scope.current &&
                     mounted.current

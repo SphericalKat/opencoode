@@ -8,7 +8,7 @@ import React, {
   useSyncExternalStore,
 } from "react";
 
-import { confirmAction } from "../components/ui";
+import { confirmAction } from "../components/dialog";
 
 interface Guard {
   update: (id: string, label: string | null) => void;
@@ -62,7 +62,8 @@ export const UnsavedProvider = ({
       !labels.length ||
       (await confirmAction(
         "Leave this view?",
-        `${labels.join(", ")} contains unsaved changes. Continue?`
+        `${labels.join(", ")} contains unsaved changes. Continue?`,
+        { confirmLabel: "Leave" }
       ))
     );
   }, []);

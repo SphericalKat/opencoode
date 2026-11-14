@@ -1,10 +1,10 @@
 import type { PermissionSavedInfo } from "@opencode/client";
 import { useState } from "react";
 
+import { confirmAction } from "../../components/dialog";
 import {
   Button,
   Card,
-  confirmAction,
   Empty,
   ErrorNotice,
   Field,
@@ -86,7 +86,8 @@ export const Permissions = ({
               onPress={() => {
                 void confirmAction(
                   "Revoke saved approval?",
-                  "OpenCode will ask again when this action requires permission."
+                  "OpenCode will ask again when this action requires permission.",
+                  { confirmLabel: "Revoke" }
                 ).then((confirmed) => {
                   if (confirmed) {
                     void run(async (signal) => {
