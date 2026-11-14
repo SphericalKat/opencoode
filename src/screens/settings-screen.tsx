@@ -38,6 +38,7 @@ export const SettingsScreen = ({
   backLabel,
   onOpenNavigation,
   onManageServers,
+  sectionRequest,
 }: {
   client?: Client;
   modelCatalog?: ModelCatalog;
@@ -49,6 +50,7 @@ export const SettingsScreen = ({
   backLabel?: string;
   onOpenNavigation?: () => void;
   onManageServers?: () => void;
+  sectionRequest?: { id: number; section: Section };
   serverLabel?: string;
 }) => {
   const modelCatalog = modelCatalogProp ?? client?.model;
@@ -86,6 +88,14 @@ export const SettingsScreen = ({
     },
     [availableSections, selected, confirmNavigation]
   );
+  const handledRequest = useRef(0);
+  useEffect(() => {
+    if (!sectionRequest || sectionRequest.id === handledRequest.current) {
+      return;
+    }
+    handledRequest.current = sectionRequest.id;
+    void changeSection(sectionRequest.section);
+  }, [sectionRequest, changeSection]);
   const exit = useCallback(async () => {
     if ((await confirmNavigation()) && mounted.current) {
       onBack?.();

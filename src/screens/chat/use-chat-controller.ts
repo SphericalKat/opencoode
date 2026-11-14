@@ -361,6 +361,7 @@ export const useChatController = ({
     modelSearch: modelChoice.modelSearch,
     onOpenNavigation,
     onOpenSession,
+    onOpenSettings,
     opencodeClient,
     panel: sheets.panel,
     panelLoading: tools.panelLoading,

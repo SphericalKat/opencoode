@@ -252,6 +252,7 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     modelSearch,
     onOpenNavigation,
     onOpenSession,
+    onOpenSettings,
     opencodeClient,
     panel,
     pending,
@@ -310,6 +311,7 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         modelPreferences={modelPreferences}
         modelSearch={modelSearch}
         onOpenNavigation={onOpenNavigation}
+        onOpenSettings={onOpenSettings}
         panel={panel}
         pending={pending}
         serverID={serverID}

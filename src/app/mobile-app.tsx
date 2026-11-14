@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { Keyboard, Linking, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -17,6 +18,7 @@ import { ShellFrame } from "./shell-frame";
 import { deriveShellView } from "./shell-view";
 import { createStyles } from "./styles";
 import { SessionsTab, SettingsTab, WorkspaceTab } from "./tabs";
+import type { SettingsSectionRequest } from "./types";
 import { useAppState } from "./use-app-state";
 import { useClientBindings } from "./use-client-bindings";
 import { useConnection } from "./use-connection";
@@ -173,6 +175,15 @@ export const MobileApp = () => {
     };
     setMoreOpen(false);
   };
+  const [settingsRequest, setSettingsRequest] = useState<
+    SettingsSectionRequest | undefined
+  >();
+  const settingsRequestID = useRef(0);
+  const openSettingsSection = (section: SettingsSectionRequest["section"]) => {
+    settingsRequestID.current += 1;
+    setSettingsRequest({ id: settingsRequestID.current, section });
+    void changeTab("settings");
+  };
   const requestSessionPanel = (panel: "stats" | "actions") => {
     if (!sessionID) {
       return;
@@ -287,6 +298,7 @@ export const MobileApp = () => {
               bumpRevision();
             }}
             onOpenSessionFromList={openSession}
+            onOpenSettings={openSettingsSection}
             onSelectionChange={setMessageSelected}
             onSessionChanged={() => {
               bumpRevision();
@@ -323,6 +335,7 @@ export const MobileApp = () => {
             onBackStateChange={setSettingsBackState}
             onManageServers={openServers}
             onOpenNavigation={openNavigation}
+            sectionRequest={settingsRequest}
             tab={tab}
           />
         </ShellFrame>

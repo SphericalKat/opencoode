@@ -113,6 +113,7 @@ const styles = StyleSheet.create({
   clear: { position: "absolute", right: 8, top: 8 },
   content: { paddingBottom: 16, paddingHorizontal: 12, paddingTop: 4 },
   empty: { gap: 12, paddingVertical: 24 },
+  footer: { borderTopWidth: StyleSheet.hairlineWidth, paddingBottom: 8 },
   header: { alignItems: "center", minHeight: 44 },
   headerLabel: { alignItems: "center", flexDirection: "row", gap: 8 },
   headerTrigger: {
@@ -324,6 +325,7 @@ type ModelPickerProps = Pick<
   | "modelPreferences"
   | "modelSearch"
   | "onOpenNavigation"
+  | "onOpenSettings"
   | "pending"
   | "serverID"
   | "setCatalogRevision"
@@ -346,6 +348,7 @@ export const ModelPicker = ({
   modelPreferences,
   modelSearch,
   onOpenNavigation,
+  onOpenSettings,
   pending,
   serverID,
   setCatalogRevision,
@@ -353,6 +356,7 @@ export const ModelPicker = ({
   setPanel,
 }: ModelPickerProps) => {
   const { height } = useWindowDimensions();
+  const { colors } = useTheme();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
   const pressedModel = useRef<ModelInfo | null>(null);
@@ -378,6 +382,10 @@ export const ModelPicker = ({
     }
     playHaptic("select");
     void chooseModel(model, undefined, true);
+  };
+  const openSettings = (section: "Models" | "Accounts") => {
+    setPanel(null);
+    onOpenSettings?.(section);
   };
   const sections = modelGroups.map((group, index) => ({
     ...group,
@@ -460,6 +468,20 @@ export const ModelPicker = ({
           </SheetGroupItem>
         )}
       />
+      {onOpenSettings && (
+        <View style={[styles.footer, { borderTopColor: colors.border }]}>
+          <SheetRow
+            icon="sliders"
+            label="Manage models"
+            onPress={() => openSettings("Models")}
+          />
+          <SheetRow
+            icon="plus"
+            label="Connect an integration"
+            onPress={() => openSettings("Accounts")}
+          />
+        </View>
+      )}
       <AnchoredMenu
         visible={menuTarget !== null}
         anchor={menuTarget?.anchor ?? null}
