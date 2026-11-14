@@ -21,6 +21,7 @@ import {
 import type { TextStyle } from "react-native";
 
 import { copyText } from "../lib/clipboard";
+import { withAlpha } from "../lib/color";
 import { MessageActionsContext } from "../lib/message-actions";
 import { splitReveal } from "../lib/stream-reveal";
 import type { RevealChunk } from "../lib/stream-reveal";
@@ -28,8 +29,9 @@ import { highlightSegments } from "../lib/syntax";
 import type { SyntaxSegment } from "../lib/syntax";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { inlineCodeKind } from "../lib/transcript";
 import { FadeSpan } from "./fade-span";
-import { Button, mono, sans } from "./ui";
+import { Button, mono, monoMedium, sans } from "./ui";
 import { useStreamReveal } from "./use-stream-reveal";
 
 const parser = new MarkdownIt({
@@ -87,10 +89,12 @@ const createStyles = (colors: ThemeColors) => ({
     group: { gap: 8, minWidth: 0 },
     heading: { fontWeight: "700" },
     inlineCode: {
-      backgroundColor: colors.raised,
-      fontFamily: mono,
-      fontSize: 14,
+      backgroundColor: withAlpha(colors.text, 0.08),
+      color: colors.text,
+      fontFamily: monoMedium,
+      fontWeight: "400",
     },
+    inlineCodePath: { backgroundColor: "transparent", color: colors.codePath },
     italic: { fontStyle: "italic" },
     language: {
       color: colors.muted,
@@ -145,8 +149,8 @@ const createStyles = (colors: ThemeColors) => ({
       color: colors.text,
       flexShrink: 1,
       fontFamily: sans,
-      fontSize: 15,
-      lineHeight: 23,
+      fontSize: 14,
+      lineHeight: 22,
       ...Platform.select({ web: { overflowWrap: "anywhere" } as TextStyle }),
     },
   }),
@@ -383,8 +387,45 @@ const plainLeaf = (
   return undefined;
 };
 
+const INLINE_CODE_SCALE = 0.9;
+const DEFAULT_CODE_SIZE = 13.5;
+const TABLE_CODE_SIZE = 12;
+const ZERO_WIDTH_SPACE = "\u200B";
+const hyphenPattern = /-(?=[^-])/gu;
+
+const inlineStyle = (
+  styles: ReturnType<typeof createStyles>,
+  styleName: ReturnType<typeof inlineStyleName>,
+  kind: ReturnType<typeof inlineCodeKind>,
+  codeSize: number
+) => {
+  if (styleName !== "inlineCode") {
+    return styleName && styles[styleName];
+  }
+  return [
+    styles.inlineCode,
+    { fontSize: codeSize },
+    kind === "path" && styles.inlineCodePath,
+  ];
+};
+
+// Android does not break a line after a hyphen inside a word, so a long path
+// would split mid-segment. A zero-width space adds the break opportunity.
+const breakablePath = (content: React.ReactNode) =>
+  typeof content === "string"
+    ? content.replaceAll(hyphenPattern, `-${ZERO_WIDTH_SPACE}`)
+    : content;
+
 const Inline = memo(
-  function Inline({ nodes, reveal }: { nodes: Node[]; reveal?: Reveal }) {
+  function Inline({
+    nodes,
+    reveal,
+    codeSize = DEFAULT_CODE_SIZE,
+  }: {
+    nodes: Node[];
+    reveal?: Reveal;
+    codeSize?: number;
+  }) {
     const styles = useMarkdownStyles();
     const { colors } = useTheme();
     const selectable = useContext(SelectionContext);
@@ -403,7 +444,7 @@ const Inline = memo(
       const contentReveal =
         uri && nodeReveal ? { ...nodeReveal, color: colors.blue } : nodeReveal;
       const content = children.length ? (
-        <Inline nodes={children} reveal={contentReveal} />
+        <Inline nodes={children} reveal={contentReveal} codeSize={codeSize} />
       ) : (
         revealText(token.content, token, selectable, contentReveal)
       );
@@ -437,16 +478,20 @@ const Inline = memo(
         );
       }
       const styleName = inlineStyleName(token.type);
-      const style = styleName ? styles[styleName] : undefined;
+      const kind =
+        styleName === "inlineCode" ? inlineCodeKind(token.content) : undefined;
+      const style = inlineStyle(styles, styleName, kind, codeSize);
       return (
         <Text key={index} selectable={selectable} style={style}>
-          {content}
+          {kind === "path" ? breakablePath(content) : content}
         </Text>
       );
     });
   },
   (previous, next) =>
-    previous.reveal === next.reveal && sameNodes(previous.nodes, next.nodes)
+    previous.reveal === next.reveal &&
+    previous.codeSize === next.codeSize &&
+    sameNodes(previous.nodes, next.nodes)
 );
 
 const highlightCode = (
@@ -605,6 +650,7 @@ const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
             >
               <Inline
                 nodes={cell.children.flatMap((child) => child.children)}
+                codeSize={TABLE_CODE_SIZE}
               />
             </Text>
           </View>
@@ -752,6 +798,7 @@ const BlockView = ({
           <Inline
             nodes={children.flatMap((child) => child.children)}
             reveal={reveal}
+            codeSize={Math.round(fontSize * INLINE_CODE_SCALE)}
           />
         </Text>
       );

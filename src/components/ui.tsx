@@ -68,6 +68,7 @@ import type { ShellIconName } from "./shell-icon";
 export { darkColors as colors } from "../lib/theme";
 export const sans = "Inter";
 export const mono = "IBMPlexMono";
+export const monoMedium = "IBMPlexMono-Medium";
 export const touchTarget = Platform.OS === "android" ? 48 : 44;
 export const disabledOpacity = 0.55;
 const createStyles = (colors: ThemeColors) => {
