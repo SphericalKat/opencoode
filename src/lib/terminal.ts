@@ -1,7 +1,8 @@
 export type TerminalEvent =
   | { type: "ready" }
   | { type: "input"; data: string; binary?: boolean }
-  | { type: "resize"; cols: number; rows: number };
+  | { type: "resize"; cols: number; rows: number }
+  | { type: "tap" };
 
 export interface TerminalPalette {
   background: string;
@@ -19,6 +20,12 @@ export interface TerminalPalette {
   brightBlue: string;
   white: string;
   brightWhite: string;
+  yellow: string;
+  brightYellow: string;
+  magenta: string;
+  brightMagenta: string;
+  cyan: string;
+  brightCyan: string;
 }
 
 export type TerminalCommand =
@@ -92,6 +99,9 @@ export const terminalEvent = (value: unknown): TerminalEvent | undefined => {
   }
   if (value.type === "ready") {
     return { type: "ready" };
+  }
+  if (value.type === "tap") {
+    return { type: "tap" };
   }
   if (
     value.type === "input" &&
@@ -173,4 +183,19 @@ export const ptyControlCursor = (bytes: ArrayBuffer): number | undefined => {
   } catch {
     // A malformed control frame carries no cursor.
   }
+};
+
+export const bufferEdit = (
+  previous: string,
+  next: string
+): { deletes: number; insert: string } => {
+  const limit = Math.min(previous.length, next.length);
+  let prefix = 0;
+  while (prefix < limit && previous[prefix] === next[prefix]) {
+    prefix += 1;
+  }
+  return {
+    deletes: previous.length - prefix,
+    insert: next.slice(prefix),
+  };
 };

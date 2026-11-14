@@ -16,7 +16,7 @@ const script = (value) =>
     .replaceAll(/\/\/# sourceMappingURL=.*$/gmu, "")
     .replaceAll(/<\/[sS][cC][rR][iI][pP][tT]/gu, "<\\/script");
 const html = `<!doctype html><!-- @xterm/xterm\n${xtermLicense}\n@xterm/addon-fit\n${fitLicense}\n--><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"><style>${css}
-html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent}#terminal{visibility:hidden;width:100%;height:100%;box-sizing:border-box;padding:12px 14px;overflow-x:auto;overflow-y:hidden}.xterm{height:100%}.xterm .xterm-viewport{background-color:transparent}</style></head><body><div id="terminal" role="application" aria-label="Remote terminal"></div><script>${script(xterm)}</script><script>${script(fit)}</script><script>${script(runtime)}</script></body></html>`;
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent}#terminal{visibility:hidden;width:100%;height:100%;box-sizing:border-box;padding:12px 14px;overflow-x:auto;overflow-y:hidden}.xterm{height:100%}.xterm .xterm-viewport{background-color:transparent}.xterm .xterm-scrollable-element>.scrollbar{display:none!important}</style></head><body><div id="terminal" role="application" aria-label="Remote terminal"></div><script>${script(xterm)}</script><script>${script(fit)}</script><script>${script(runtime)}</script></body></html>`;
 await mkdir(path.resolve(root, "src/generated"), { recursive: true });
 await writeFile(
   path.resolve(root, "src/generated/terminal-html.ts"),

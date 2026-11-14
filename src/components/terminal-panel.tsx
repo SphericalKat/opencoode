@@ -2,7 +2,6 @@ import type { Pty } from "@opencode/client";
 import React, {
   useCallback,
   useEffect,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -10,7 +9,6 @@ import React, {
 } from "react";
 import {
   AppState,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,13 +17,14 @@ import {
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { errorMessage } from "../lib/client";
 import type { Client, Connection } from "../lib/client";
 import { withAlpha } from "../lib/color";
 import { useSheetCoordinator } from "../lib/sheets";
 import {
+  bufferEdit,
   persistentInputFrame,
   persistentPtySocketUrl,
   ptyControlCursor,
@@ -34,10 +33,8 @@ import {
 import type { TerminalEvent } from "../lib/terminal";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import { useUnsavedChanges, useUnsavedGuard } from "../lib/unsaved";
 import { IconButton } from "./icon-button";
-import { useMotionPreference } from "./motion";
-import { useUndoableRemoval } from "./snackbar";
+import { useSnackbarInset, useUndoableRemoval } from "./snackbar";
 import { TerminalRenderer } from "./terminal-renderer";
 import type { TerminalRendererHandle } from "./terminal-renderer.types";
 import {
@@ -46,8 +43,6 @@ import {
   Empty,
   ErrorNotice,
   BodyText,
-  mono,
-  Row,
   sans,
   usePressFeedback,
 } from "./ui";
@@ -69,8 +64,24 @@ const selectionColor = (
   sixDigitHex.test(colors.text)
     ? withAlpha(colors.text, scheme === "dark" ? 0.25 : 0.2)
     : colors.selected;
-const ModalSafeAreaRoot =
-  Platform.OS === "web" ? React.Fragment : SafeAreaProvider;
+const MAX_BUFFER_LENGTH = 256;
+const SIZE_DEBOUNCE_MS = 120;
+const KEY_FADE_WIDTH = 16;
+const STRIP_PADDING = 12;
+const KEY_BAR_GAP = 4;
+const KEY_BAR_HEIGHT = 48;
+const KEY_BAR_PADDING = 8;
+const BACKSPACE = "\u007F";
+const terminalKeys = [
+  ["Ctrl C", "Control C", "\u0003"],
+  ["Esc", "Escape", "\u001B"],
+  ["Tab", "Tab", "\t"],
+  ["←", "Left arrow", "\u001B[D"],
+  ["↓", "Down arrow", "\u001B[B"],
+  ["↑", "Up arrow", "\u001B[A"],
+  ["→", "Right arrow", "\u001B[C"],
+  ["Enter", "Enter", "\r"],
+] as const;
 
 const newAttachmentID = (): string =>
   `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -79,32 +90,29 @@ const binaryBytes = (data: string): Uint8Array<ArrayBuffer> =>
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    connectionBar: {
-      flexShrink: 0,
-      flexWrap: "nowrap",
-      paddingBottom: 8,
-      paddingHorizontal: 16,
-    },
-    fullscreen: { backgroundColor: colors.bg, flex: 1, paddingTop: 8 },
-    keys: { flexGrow: 0, flexShrink: 0, height: 54 },
-    nativeComposer: {
-      flexShrink: 0,
-      flexWrap: "nowrap",
-      paddingHorizontal: 8,
-      paddingTop: 8,
-    },
-    nativeInput: {
-      backgroundColor: colors.panel,
+    keyBar: {
+      backgroundColor: colors.bg,
       borderColor: colors.border,
-      borderRadius: 6,
-      borderWidth: 1,
-      color: colors.text,
-      flex: 1,
-      fontFamily: mono,
-      fontSize: 15,
-      minHeight: 44,
-      minWidth: 0,
-      padding: 10,
+      borderTopWidth: 1,
+      flexShrink: 0,
+      height: KEY_BAR_HEIGHT,
+      paddingBottom: 4,
+    },
+    keyBarContent: {
+      alignItems: "center",
+      flexGrow: 1,
+      gap: KEY_BAR_GAP,
+      paddingHorizontal: KEY_BAR_PADDING,
+    },
+    key: { flexGrow: 1, minWidth: 32 },
+    keyFade: { bottom: 0, position: "absolute", top: 0, width: KEY_FADE_WIDTH },
+    keyboardInput: {
+      bottom: 0,
+      height: 1,
+      left: 0,
+      opacity: 0,
+      position: "absolute",
+      width: 1,
     },
     notice: { flexShrink: 0, paddingBottom: 8, paddingHorizontal: 16 },
     panel: { flex: 1, minHeight: 0 },
@@ -156,9 +164,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingStart: STRIP_PADDING,
     },
     terminal: {
-      borderBottomWidth: 1,
-      borderColor: colors.border,
-      borderTopWidth: 1,
+      backgroundColor: colors.bg,
       flex: 1,
       minHeight: 0,
     },
@@ -171,37 +177,88 @@ const detachSocket = (ws: WebSocket) => {
   socketListeners.delete(ws);
 };
 
-const connectionLabel = (
-  status: ConnectionStatus,
-  active: boolean,
-  mode: Mode,
-  controller: boolean,
-  size: { cols: number; rows: number }
-) => {
-  if (status === "connected") {
-    let role = "Connected";
-    if (mode === "desktop") {
-      role = controller ? "In control" : "View only";
-    }
-    return `${role} · ${size.cols} × ${size.rows}`;
-  }
-  if (!active) {
-    return "Paused in background";
-  }
-  return status === "connecting" ? "Connect to shell…" : "Disconnected";
+const EdgeFade = ({ side }: { side: "left" | "right" }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const id = `key-fade-${side}`;
+  const solid = side === "left" ? 1 : 0;
+  return (
+    <View
+      pointerEvents="none"
+      style={[styles.keyFade, side === "left" ? { left: 0 } : { right: 0 }]}
+    >
+      <Svg width={KEY_FADE_WIDTH} height="100%">
+        <Defs>
+          <LinearGradient id={id} x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor={colors.bg} stopOpacity={solid} />
+            <Stop offset="1" stopColor={colors.bg} stopOpacity={1 - solid} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+      </Svg>
+    </View>
+  );
 };
 
-const composerPlaceholder = (
-  canSend: boolean,
-  mode: Mode,
-  controller: boolean
-) => {
-  if (canSend) {
-    return "Text for the terminal";
-  }
-  return mode === "desktop" && !controller
-    ? "Take control to send text"
-    : "Connect to send text";
+const KeyBar = ({
+  disabled,
+  onKey,
+}: {
+  disabled: boolean;
+  onKey: (data: string) => void;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  useSnackbarInset(KEY_BAR_HEIGHT);
+  const [viewport, setViewport] = useState(0);
+  const [content, setContent] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [keyWidths, setKeyWidths] = useState<Record<string, number>>({});
+  const keysWidth =
+    Object.values(keyWidths).reduce((sum, width) => sum + width, 0) +
+    KEY_BAR_GAP * (terminalKeys.length - 1) +
+    KEY_BAR_PADDING * 2;
+  const contentWidth = Math.max(content, keysWidth);
+  const overflows = contentWidth > viewport + 1;
+  return (
+    <View style={styles.keyBar}>
+      <ScrollView
+        horizontal
+        keyboardShouldPersistTaps="always"
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.keyBarContent}
+        onLayout={(layout) => setViewport(layout.nativeEvent.layout.width)}
+        onContentSizeChange={(width) => setContent(width)}
+        onScroll={(scroll) => setOffset(scroll.nativeEvent.contentOffset.x)}
+      >
+        {terminalKeys.map(([title, label, data]) => (
+          <View
+            key={title}
+            style={styles.key}
+            onLayout={(layout) => {
+              const { width } = layout.nativeEvent.layout;
+              setKeyWidths((widths) =>
+                widths[title] === width ? widths : { ...widths, [title]: width }
+              );
+            }}
+          >
+            <Button
+              title={title}
+              accessibilityLabel={label}
+              size="compact"
+              fullWidth
+              disabled={disabled}
+              onPress={() => onKey(data)}
+            />
+          </View>
+        ))}
+      </ScrollView>
+      {overflows && offset > 1 && <EdgeFade side="left" />}
+      {overflows && offset + viewport < contentWidth - 1 && (
+        <EdgeFade side="right" />
+      )}
+    </View>
+  );
 };
 
 const TerminalSession = ({
@@ -220,12 +277,9 @@ const TerminalSession = ({
   onAutoFocus: () => void;
   onExit: () => void;
 }) => {
-  const reducedMotion = useMotionPreference();
   const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { suspended, recoveryPending, presentSheet, dismissSheet } =
-    useSheetCoordinator();
-  const modalID = useId();
+  const { suspended, recoveryPending } = useSheetCoordinator();
   const suspendedRef = useRef(suspended);
   const renderer = useRef<TerminalRendererHandle>(null);
   const socket = useRef<WebSocket | null>(null);
@@ -233,6 +287,7 @@ const TerminalSession = ({
   const attachmentID = useMemo(() => newAttachmentID(), []);
   const restored = useRef(false);
   const controllerRef = useRef(false);
+  const claimed = useRef(false);
   const sizeRef = useRef({ cols: 80, rows: 24 });
   const pending = useRef<string[]>([]);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -251,67 +306,18 @@ const TerminalSession = ({
   const [error, setError] = useState<string | null>(null);
   const stopConnection = useRef<(() => void) | null>(null);
   const [size, setSize] = useState({ cols: 80, rows: 24 });
-  const [controller, setController] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [nativeText, setNativeText] = useState("");
-  useUnsavedChanges(
-    `terminal-input:${connection.id}:${terminal.id}`,
-    "Terminal input",
-    nativeText.length > 0
-  );
-  const [privateInput, setPrivateInput] = useState(false);
-  const nativeInput = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const [buffer, setBuffer] = useState("");
+  const bufferRef = useRef("");
+  const keyboardInput = useRef<React.ComponentRef<typeof TextInput>>(null);
   const rendererGeneration = useRef(0);
-  const effectiveFullscreen = fullscreen && !suspended;
   const status: ConnectionStatus =
     ready && active && !suspended ? connectionStatus : "disconnected";
-  const requestedModal = useRef(effectiveFullscreen);
   useLayoutEffect(() => {
     suspendedRef.current = suspended;
     onExitRef.current = onExit;
     sizeRef.current = size;
-    requestedModal.current = effectiveFullscreen;
-  }, [suspended, onExit, size, effectiveFullscreen]);
-  const previousModalVisible = useRef(effectiveFullscreen);
-  const pendingModalDismiss = useRef(false);
+  }, [suspended, onExit, size]);
   const previousSuspended = useRef(suspended);
-
-  const notifyModalDismissed = useCallback(() => {
-    if (requestedModal.current || !pendingModalDismiss.current) {
-      return;
-    }
-    pendingModalDismiss.current = false;
-    dismissSheet(modalID);
-  }, [dismissSheet, modalID]);
-
-  useLayoutEffect(() => {
-    if (effectiveFullscreen) {
-      pendingModalDismiss.current = false;
-      presentSheet(modalID);
-    } else if (previousModalVisible.current) {
-      pendingModalDismiss.current = true;
-    }
-    previousModalVisible.current = effectiveFullscreen;
-  }, [effectiveFullscreen, presentSheet, modalID]);
-
-  useEffect(
-    () => () => {
-      dismissSheet(modalID);
-    },
-    [dismissSheet, modalID]
-  );
-
-  useEffect(() => {
-    if (
-      effectiveFullscreen ||
-      !pendingModalDismiss.current ||
-      Platform.OS !== "android"
-    ) {
-      return;
-    }
-    const frame = requestAnimationFrame(notifyModalDismissed);
-    return () => cancelAnimationFrame(frame);
-  }, [effectiveFullscreen, notifyModalDismissed]);
 
   const resetTerminalView = useCallback(() => {
     const ws = socket.current;
@@ -331,7 +337,6 @@ const TerminalSession = ({
     rendererGeneration.current += 1;
     setReady(false);
     setRendererBroken(false);
-    setController(false);
     setConnectionStatus("connecting");
     setRendererEpoch((value) => value + 1);
   }, []);
@@ -343,7 +348,7 @@ const TerminalSession = ({
     previousSuspended.current = suspended;
     resetTerminalView();
     if (suspended) {
-      nativeInput.current?.blur();
+      keyboardInput.current?.blur();
     }
   }, [suspended, resetTerminalView]);
 
@@ -440,7 +445,6 @@ const TerminalSession = ({
       setConnectionStatus("connecting");
       restored.current = false;
       controllerRef.current = false;
-      setController(false);
       try {
         let url: string;
         if (mode === "desktop") {
@@ -551,12 +555,14 @@ const TerminalSession = ({
           }
           controllerRef.current =
             "role" in message && message.role === "controller";
-          setController(controllerRef.current);
         };
         const handleReplayComplete = (message: ControlMessage) => {
           restored.current = true;
           clearTimeout(connectTimer);
           setConnectionStatus("connected");
+          if (claimed.current && ws.readyState === WebSocket.OPEN) {
+            ws.send(persistentInputFrame(sizeRef.current));
+          }
           if ("endOffset" in message && typeof message.endOffset === "number") {
             cursor.current = message.endOffset;
           }
@@ -616,7 +622,9 @@ const TerminalSession = ({
             controllerRef.current =
               "attachmentID" in message &&
               message.attachmentID === attachmentID;
-            setController(controllerRef.current);
+            if (!controllerRef.current) {
+              claimed.current = false;
+            }
           } else if (message.type === "resized") {
             handleResized(message);
           } else if (message.type === "exited") {
@@ -736,20 +744,19 @@ const TerminalSession = ({
     if (status !== "connected" || suspended) {
       return;
     }
-    if (mode === "desktop") {
-      if (
-        !suspendedRef.current &&
-        controller &&
-        restored.current &&
-        socket.current?.readyState === WebSocket.OPEN
-      ) {
-        socket.current.send(persistentInputFrame(size));
-      }
-      return;
-    }
     const requestController = new AbortController();
     const timer = setTimeout(() => {
       if (suspendedRef.current) {
+        return;
+      }
+      if (mode === "desktop") {
+        if (
+          (controllerRef.current || claimed.current) &&
+          restored.current &&
+          socket.current?.readyState === WebSocket.OPEN
+        ) {
+          socket.current.send(persistentInputFrame(size));
+        }
         return;
       }
       void client.pty
@@ -762,21 +769,12 @@ const TerminalSession = ({
             setError(errorMessage(error_));
           }
         });
-    }, 120);
+    }, SIZE_DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
       requestController.abort();
     };
-  }, [
-    client,
-    directory,
-    terminal.id,
-    size,
-    status,
-    controller,
-    mode,
-    suspended,
-  ]);
+  }, [client, directory, terminal.id, size, status, mode, suspended]);
 
   const send = (data: string, binary = false, reportError = false): boolean => {
     const ws = socket.current;
@@ -791,14 +789,12 @@ const TerminalSession = ({
       }
       return false;
     }
-    if (mode === "desktop" && (!restored.current || !controllerRef.current)) {
-      if (reportError) {
-        setError("Take control of the terminal before you send text");
-      }
+    if (mode === "desktop" && !restored.current) {
       return false;
     }
     try {
       if (mode === "desktop") {
+        claimed.current = true;
         const bytes = binary
           ? binaryBytes(data)
           : new TextEncoder().encode(data);
@@ -814,13 +810,15 @@ const TerminalSession = ({
       return false;
     }
   };
-  const takeControl = () => {
+  const claimControl = () => {
+    claimed.current = true;
     if (
+      mode === "desktop" &&
       !suspendedRef.current &&
       restored.current &&
       socket.current?.readyState === WebSocket.OPEN
     ) {
-      socket.current.send(persistentInputFrame(size));
+      socket.current.send(persistentInputFrame(sizeRef.current));
     }
   };
   const event = (message: TerminalEvent) => {
@@ -832,6 +830,10 @@ const TerminalSession = ({
     }
     if (message.type === "input") {
       send(message.data, message.binary);
+    }
+    if (message.type === "tap") {
+      claimControl();
+      focusInput();
     }
     if (message.type === "resize") {
       setSize((current) =>
@@ -858,149 +860,72 @@ const TerminalSession = ({
     }
     setError(null);
   };
-  const changeFullscreen = (next: boolean) => {
-    if (suspendedRef.current) {
-      return;
-    }
-    resetTerminalView();
-    setFullscreen(next);
-  };
-  const submitNative = (appendReturn: boolean, text = nativeText) => {
-    if (!text && !appendReturn) {
-      return;
-    }
-    if (send(`${text}${appendReturn ? "\r" : ""}`, false, true)) {
-      setNativeText("");
-    }
-  };
   const focusInput = () => {
     if (suspendedRef.current) {
       return;
     }
     if (Platform.OS === "android") {
-      nativeInput.current?.focus();
+      if (canSend) {
+        keyboardInput.current?.focus();
+      }
     } else {
       renderer.current?.send({ type: "focus" });
     }
+  };
+  const sendKey = (data: string) => {
+    send(data, false, true);
+  };
+  const typeText = (text: string) => {
+    send(text, false, true);
+  };
+  const applyBufferChange = (next: string) => {
+    const { deletes, insert } = bufferEdit(bufferRef.current, next);
+    if (deletes > 0) {
+      sendKey(BACKSPACE.repeat(deletes));
+    }
+    if (insert) {
+      typeText(insert);
+    }
+    const settled = next.length > MAX_BUFFER_LENGTH && next.endsWith(" ");
+    bufferRef.current = settled ? "" : next;
+    setBuffer(bufferRef.current);
+  };
+  const clearBuffer = () => {
+    bufferRef.current = "";
+    setBuffer("");
   };
   const afterAttach = () => {
     if (!autoFocusPending.current) {
       return;
     }
     autoFocusPending.current = false;
-    if (mode === "desktop") {
-      takeControl();
-    }
+    claimControl();
     focusInput();
     onAutoFocus();
   };
   useLayoutEffect(() => {
     afterAttachRef.current = afterAttach;
   });
-  const canSend =
-    !suspended &&
-    ready &&
-    status === "connected" &&
-    (mode !== "desktop" || controller);
+  const canSend = !suspended && ready && status === "connected";
   const generation = rendererEpoch;
-  const renderNotice = () =>
-    recoveryPending ? (
-      <View style={styles.notice}>
-        <BodyText accessibilityRole="alert">
-          Close this panel to open the connection wizard.
-        </BodyText>
-      </View>
-    ) : (
-      error && (
+  return (
+    <KeyboardAvoidingView
+      style={styles.session}
+      behavior="padding"
+      automaticOffset
+    >
+      {recoveryPending && (
         <View style={styles.notice}>
-          <ErrorNotice error={error} />
-        </View>
-      )
-    );
-  const renderAndroidInput = () =>
-    Platform.OS === "android" &&
-    (fullscreen ? (
-      <Row style={styles.nativeComposer}>
-        <TextInput
-          ref={nativeInput}
-          accessibilityLabel="Terminal text"
-          placeholder={composerPlaceholder(canSend, mode, controller)}
-          placeholderTextColor={colors.faint}
-          style={styles.nativeInput}
-          value={nativeText}
-          onChangeText={setNativeText}
-          editable={canSend}
-          autoCorrect={false}
-          autoCapitalize="none"
-          spellCheck={false}
-          secureTextEntry={privateInput}
-          textContentType="none"
-          autoComplete="off"
-          importantForAutofill="no"
-          submitBehavior="submit"
-          returnKeyType="send"
-          onSubmitEditing={(submitEvent) =>
-            submitNative(true, submitEvent.nativeEvent.text)
-          }
-        />
-        <Button
-          title="Send line"
-          size="compact"
-          variant="primary"
-          disabled={!canSend}
-          onPress={() => submitNative(true)}
-        />
-      </Row>
-    ) : (
-      <View style={styles.notice}>
-        <Button
-          title="Open full screen to type"
-          size="compact"
-          onPress={() => changeFullscreen(true)}
-        />
-      </View>
-    ));
-  const renderAndroidKeys = () =>
-    Platform.OS === "android" &&
-    fullscreen && (
-      <>
-        <Button
-          title="Send text"
-          size="compact"
-          disabled={!canSend || !nativeText}
-          onPress={() => submitNative(false)}
-        />
-        <Button
-          title={privateInput ? "Show text" : "Hide text"}
-          size="compact"
-          onPress={() => setPrivateInput((value) => !value)}
-        />
-      </>
-    );
-  const content = (
-    <View style={styles.session}>
-      <Row style={styles.connectionBar}>
-        <BodyText muted style={{ flex: 1, fontSize: 12 }}>
-          {connectionLabel(status, active, mode, controller, size)}
-        </BodyText>
-        {mode === "desktop" && status === "connected" && !controller && (
-          <Button title="Take control" size="compact" onPress={takeControl} />
-        )}
-        <Button
-          title={fullscreen ? "Close" : "Full screen"}
-          size="compact"
-          onPress={() => changeFullscreen(!fullscreen)}
-        />
-      </Row>
-      {fullscreen && (
-        <Row style={styles.connectionBar}>
-          <BodyText muted style={{ flex: 1 }} numberOfLines={1}>
-            {terminal.title || terminal.command}
+          <BodyText accessibilityRole="alert">
+            Close this panel to open the connection wizard.
           </BodyText>
-          <Button title="Reconnect" size="compact" onPress={reconnect} />
-        </Row>
+        </View>
       )}
-      {renderNotice()}
+      {!recoveryPending && error && (
+        <View style={styles.notice}>
+          <ErrorNotice error={error} onRetry={reconnect} />
+        </View>
+      )}
       <View style={styles.terminal}>
         <TerminalRenderer
           key={rendererEpoch}
@@ -1020,80 +945,38 @@ const TerminalSession = ({
           }}
         />
       </View>
-      {renderAndroidInput()}
-      <ScrollView
-        horizontal
-        keyboardShouldPersistTaps="always"
-        style={styles.keys}
-        contentContainerStyle={{ gap: 6, padding: 8 }}
-      >
-        {renderAndroidKeys()}
-        {(
-          [
-            ["Enter", "\r"],
-            ["Esc", "\u001B"],
-            ["Tab", "\t"],
-            ["Ctrl C", "\u0003"],
-            ["Ctrl D", "\u0004"],
-            ["↑", "\u001B[A"],
-            ["↓", "\u001B[B"],
-            ["←", "\u001B[D"],
-            ["→", "\u001B[C"],
-            ["Ctrl L", "\u000C"],
-            ["Ctrl Z", "\u001A"],
-            ["Ctrl R", "\u0012"],
-            ["Home", "\u001B[H"],
-            ["End", "\u001B[F"],
-            ["Delete", "\u001B[3~"],
-          ] as const
-        ).map(([title, data]) => (
-          <Button
-            key={title}
-            title={title}
-            accessibilityLabel={`Send ${title} to terminal`}
-            size="compact"
-            disabled={!canSend}
-            onPress={() => {
-              send(data, false, true);
-              focusInput();
-            }}
-          />
-        ))}
-      </ScrollView>
-    </View>
-  );
-  return (
-    <View style={styles.session}>
-      {!fullscreen && content}
-      <Modal
-        visible={effectiveFullscreen}
-        animationType={reducedMotion ? "fade" : "slide"}
-        presentationStyle="fullScreen"
-        supportedOrientations={[
-          "portrait",
-          "portrait-upside-down",
-          "landscape-left",
-          "landscape-right",
-        ]}
-        onRequestClose={() => changeFullscreen(false)}
-        onDismiss={notifyModalDismissed}
-      >
-        <ModalSafeAreaRoot>
-          <SafeAreaView
-            style={styles.fullscreen}
-            edges={["top", "bottom", "left", "right"]}
-          >
-            <KeyboardAvoidingView
-              style={styles.session}
-              behavior="padding"
-              automaticOffset
-            >
-              {fullscreen && content}
-            </KeyboardAvoidingView>
-          </SafeAreaView>
-        </ModalSafeAreaRoot>
-      </Modal>
-    </View>
+      {Platform.OS === "android" && (
+        <TextInput
+          ref={keyboardInput}
+          accessibilityLabel="Terminal keyboard"
+          style={styles.keyboardInput}
+          value={buffer}
+          onChangeText={applyBufferChange}
+          onKeyPress={({ nativeEvent }) => {
+            if (nativeEvent.key === "Backspace" && buffer === "") {
+              sendKey(BACKSPACE);
+            }
+          }}
+          onSubmitEditing={() => {
+            sendKey("\r");
+            clearBuffer();
+          }}
+          editable={canSend}
+          autoCorrect={false}
+          autoCapitalize="none"
+          spellCheck={false}
+          autoComplete="off"
+          importantForAutofill="no"
+          textContentType="none"
+          caretHidden
+          contextMenuHidden
+          submitBehavior="submit"
+          returnKeyType="default"
+          multiline={false}
+        />
+      )}
+      {Platform.OS !== "web" && <KeyBar disabled={!canSend} onKey={sendKey} />}
+    </KeyboardAvoidingView>
   );
 };
 
@@ -1342,7 +1225,6 @@ const TerminalList = ({
   sessionID,
 }: Props & { desktop: boolean }) => {
   const styles = useThemedStyles(createStyles);
-  const confirmUnsaved = useUnsavedGuard();
   const { hidden, remove } = useUndoableRemoval<string>("terminals");
   const { suspended } = useSheetCoordinator();
   const [shells, setShells] = useState<Shell[]>([]);
@@ -1434,9 +1316,6 @@ const TerminalList = ({
   }, [client, desktop, directory, sessionID, foreground, refresh, suspended]);
 
   const create = useCallback(async () => {
-    if (!(await confirmUnsaved())) {
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
@@ -1479,7 +1358,7 @@ const TerminalList = ({
     if (mounted.current) {
       setBusy(false);
     }
-  }, [client, confirmUnsaved, desktop, directory, sessionID]);
+  }, [client, desktop, directory, sessionID]);
 
   useLayoutEffect(() => {
     createRef.current = create;

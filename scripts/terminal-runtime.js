@@ -5,9 +5,12 @@
   let inputEnabled = true;
   const term = new Terminal({
     cursorBlink: true,
+    cursorInactiveStyle: "bar",
     cursorStyle: "bar",
+    drawBoldTextInBrightColors: false,
     fontFamily: "Menlo, Consolas, monospace",
     fontSize: 14,
+    fontWeightBold: "500",
     screenReaderMode: true,
     scrollback: 2000,
   });
@@ -35,6 +38,25 @@
       window.parent.postMessage(message, "*");
     }
   };
+  const tapMaxMovePx = 10;
+  const tapMaxMs = 500;
+  let pointerStart;
+  term.element.addEventListener("pointerdown", (event) => {
+    pointerStart = { time: Date.now(), x: event.clientX, y: event.clientY };
+  });
+  term.element.addEventListener("pointerup", (event) => {
+    const start = pointerStart;
+    pointerStart = undefined;
+    if (
+      start &&
+      Math.abs(event.clientX - start.x) < tapMaxMovePx &&
+      Math.abs(event.clientY - start.y) < tapMaxMovePx &&
+      Date.now() - start.time < tapMaxMs &&
+      !term.hasSelection()
+    ) {
+      send({ type: "tap" });
+    }
+  });
   const applyInputEnabled = (message) => {
     inputEnabled = message.enabled;
     term.textarea.readOnly = !inputEnabled;
