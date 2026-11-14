@@ -9,7 +9,13 @@ import type {
 import { ClientError } from "@opencode/client";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import React, { useEffect, useEffectEvent, useRef, useState } from "react";
+import React, {
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import { Image, Linking, Platform, ScrollView, Text, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
@@ -18,6 +24,7 @@ import { copyText } from "../lib/clipboard";
 import { externalURL } from "../lib/settings";
 import { useNativePresentation } from "../lib/sheets";
 import { useTheme } from "../lib/theme";
+import { HeaderRefreshContext } from "../screens/settings/shared";
 import { ListSheet } from "./list-sheet";
 import type { ListSheetOption } from "./list-sheet";
 import { SegmentedControl } from "./segmented-control";
@@ -236,6 +243,14 @@ const Usage = ({
   const loadOnMount = useEffectEvent(() => {
     void fetchUsage();
   });
+  const setHeaderRefresh = useContext(HeaderRefreshContext);
+  const refreshUsage = useEffectEvent(() => {
+    void load();
+  });
+  useEffect(() => {
+    setHeaderRefresh?.({ loading, refresh: refreshUsage });
+    return () => setHeaderRefresh?.(null);
+  }, [setHeaderRefresh, loading]);
   useEffect(() => {
     active.current = true;
     loadOnMount();
@@ -248,19 +263,6 @@ const Usage = ({
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ gap: 14, padding: 18 }}
     >
-      <Row>
-        <BodyText style={{ flex: 1, fontSize: 19, fontWeight: "600" }}>
-          Server usage
-        </BodyText>
-        <Button
-          title="Refresh"
-          size="compact"
-          busy={loading}
-          onPress={() => {
-            void load();
-          }}
-        />
-      </Row>
       <ErrorNotice
         error={error}
         onRetry={() => {

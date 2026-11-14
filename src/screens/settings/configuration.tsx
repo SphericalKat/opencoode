@@ -1,14 +1,13 @@
 import { isFileNotFoundError } from "@opencode/client";
 import { useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator } from "react-native";
 
 import { confirmAction } from "../../components/dialog";
-import { ShellIcon } from "../../components/shell-icon";
+import { SheetGroup, SheetRow } from "../../components/list-sheet";
 import {
   Button,
   Card,
   Disclosure,
-  disabledOpacity,
   ErrorNotice,
   Field,
   JsonView,
@@ -18,10 +17,9 @@ import {
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
 import { saveConfigFile, withSettingsRequest } from "../../lib/settings";
-import { useTheme, useThemedStyles } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
 import { useUnsavedChanges } from "../../lib/unsaved";
 import { Page, runBusy, useResource } from "./shared";
-import { createStyles } from "./styles";
 
 type ConfigAction =
   | { kind: "reload" }
@@ -58,46 +56,27 @@ const rowStatus = (
 
 const ConfigActionRow = ({
   onPress,
-  showDivider,
   status,
   title,
 }: {
   onPress: () => void;
-  showDivider: boolean;
   status: "busy" | "disabled" | "idle";
   title: string;
 }) => {
   const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const isActive = status === "busy";
-  const dimmed = status === "disabled";
   return (
-    <View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        accessibilityState={{ busy: isActive, disabled: status !== "idle" }}
-        disabled={status !== "idle"}
-        onPress={onPress}
-        style={({ pressed }) => [
-          styles.sectionRow,
-          pressed && { backgroundColor: colors.raised },
-          dimmed && { opacity: disabledOpacity },
-        ]}
-      >
-        <View style={styles.detail}>
-          <BodyText style={styles.sectionName}>{title}</BodyText>
-        </View>
-        {isActive ? (
+    <SheetRow
+      label={title}
+      onPress={onPress}
+      disabled={status !== "idle"}
+      trailing={
+        status === "busy" ? (
           <ActivityIndicator size="small" color={colors.muted} />
         ) : (
-          <ShellIcon name="chevron" size={16} color={colors.muted} />
-        )}
-      </Pressable>
-      {showDivider && (
-        <View pointerEvents="none" style={styles.sectionDivider} />
-      )}
-    </View>
+          "chevron"
+        )
+      }
+    />
   );
 };
 
@@ -194,7 +173,6 @@ export const Configuration = ({
   directory: string;
 }) => {
   const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
   const { data, error, loading, refresh } = useResource(
     client,
     directory,
@@ -252,9 +230,8 @@ export const Configuration = ({
       {notice && (
         <BodyText style={{ color: colors.success }}>{notice}</BodyText>
       )}
-      <View style={styles.groupPanel}>
+      <SheetGroup variant="grouped">
         <ConfigActionRow
-          showDivider={false}
           status={rowStatus(activeAction, { kind: "reload" })}
           title="Reload server configuration"
           onPress={() => {
@@ -267,7 +244,6 @@ export const Configuration = ({
           }}
         />
         <ConfigActionRow
-          showDivider
           status={rowStatus(activeAction, { kind: "open-project" })}
           title="Open project configuration"
           onPress={() => {
@@ -296,7 +272,7 @@ export const Configuration = ({
             });
           }}
         />
-      </View>
+      </SheetGroup>
       {data?.entries.map((entry, index) => (
         <Card key={index}>
           <BodyText style={{ fontFamily: mono, fontSize: 13 }}>

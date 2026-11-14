@@ -29,3 +29,53 @@ export const sectionGroups: { title: string; items: Section[] }[] = [
   { items: ["Advanced"], title: "Advanced" },
 ];
 export const allSections = sectionGroups.flatMap((group) => group.items);
+
+export type SectionMenuValue = Section | "Servers";
+export type SectionMenuEntry =
+  | { value: SectionMenuValue; label: string }
+  | { type: "separator"; key: string };
+
+export const filterSections = (
+  sections: Section[],
+  hasClient: boolean,
+  hasModelCatalog: boolean
+) =>
+  sections.filter(
+    (value) =>
+      hasClient ||
+      value === "Look and feel" ||
+      (value === "Models" && hasModelCatalog)
+  );
+
+export const resolveSelected = (
+  section: Section | null,
+  availableSections: Section[]
+): Section | null =>
+  section !== null && availableSections.includes(section)
+    ? section
+    : (availableSections[0] ?? null);
+
+export const sectionMenuEntries = (
+  availableSections: Section[],
+  canManageServers: boolean
+): SectionMenuEntry[] => {
+  const entries: SectionMenuEntry[] = [];
+  for (const group of sectionGroups) {
+    const values: SectionMenuValue[] = group.items.filter((item) =>
+      availableSections.includes(item)
+    );
+    if (canManageServers && group.title === "Connections") {
+      values.unshift("Servers");
+    }
+    if (values.length === 0) {
+      continue;
+    }
+    if (entries.length > 0) {
+      entries.push({ key: `separator-${group.title}`, type: "separator" });
+    }
+    for (const value of values) {
+      entries.push({ label: value, value });
+    }
+  }
+  return entries;
+};
