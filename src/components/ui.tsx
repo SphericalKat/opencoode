@@ -253,10 +253,6 @@ const createStyles = (colors: ThemeColors) => {
       flexWrap: "wrap",
       gap: 8,
     },
-    selectedButton: {
-      backgroundColor: colors.selected,
-      borderColor: colors.faint,
-    },
     sheet: { backgroundColor: colors.panel, flex: 1 },
     sheetBody: { flex: 1, minHeight: 0 },
     sheetContent: { gap: 16, padding: 18, paddingBottom: 24 },
@@ -299,12 +295,8 @@ const createStyles = (colors: ThemeColors) => {
 
 const busyIndicatorColor = (
   themeColors: ThemeColors,
-  variant: ButtonVariant,
-  selected: boolean | undefined
+  variant: ButtonVariant
 ) => {
-  if (selected) {
-    return themeColors.text;
-  }
   if (variant === "primary") {
     return themeColors.primaryText;
   }
@@ -370,18 +362,16 @@ const ButtonContent = ({
   icon,
   iconPosition,
   busy,
-  selected,
 }: {
   title: string;
   variant: ButtonVariant;
   icon?: ShellIconName;
   iconPosition: "start" | "end";
   busy?: boolean;
-  selected?: boolean;
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const labelColor = selected ? colors.text : buttonLabelColor(colors, variant);
+  const labelColor = buttonLabelColor(colors, variant);
   const glyph = icon && !busy && (
     <ShellIcon name={icon} color={labelColor} size={buttonIconSize} />
   );
@@ -391,12 +381,10 @@ const ButtonContent = ({
       {busy && (
         <ActivityIndicator
           size="small"
-          color={busyIndicatorColor(colors, variant, selected)}
+          color={busyIndicatorColor(colors, variant)}
         />
       )}
-      <Text style={[styles.buttonText, { color: labelColor }]}>
-        {selected ? `✓ ${title}` : title}
-      </Text>
+      <Text style={[styles.buttonText, { color: labelColor }]}>{title}</Text>
       {iconPosition === "end" && glyph}
     </>
   );
@@ -408,14 +396,12 @@ const useButtonStyle = ({
   shape,
   fullWidth,
   inactive,
-  selected,
 }: {
   variant: ButtonVariant;
   size: ButtonSize;
   shape: "default" | "rounded";
   fullWidth?: boolean;
   inactive: boolean;
-  selected?: boolean;
 }) => {
   const styles = useThemedStyles(createStyles);
   const { height, paddingHorizontal, radius } = buttonSizes[size];
@@ -427,7 +413,6 @@ const useButtonStyle = ({
     variant === "primary" && styles.buttonPrimary,
     variant === "submit" && styles.buttonSubmit,
     variant === "ghost" && styles.buttonGhost,
-    selected && styles.selectedButton,
     fullWidth && styles.buttonFill,
     inactive && { opacity: dimmedVariants.has(variant) ? 0.4 : 0.5 },
   ];
@@ -444,7 +429,6 @@ export const Button = ({
   fullWidth,
   disabled,
   busy,
-  selected,
   accessibilityLabel,
 }: {
   title: string;
@@ -457,7 +441,6 @@ export const Button = ({
   fullWidth?: boolean;
   disabled?: boolean;
   busy?: boolean;
-  selected?: boolean;
   accessibilityLabel?: string;
 }) => {
   const styles = useThemedStyles(createStyles);
@@ -467,7 +450,6 @@ export const Button = ({
   const visual = useButtonStyle({
     fullWidth,
     inactive,
-    selected,
     shape,
     size,
     variant,
@@ -480,7 +462,6 @@ export const Button = ({
       icon={icon}
       iconPosition={iconPosition}
       busy={busy}
-      selected={selected}
     />
   );
   return (
@@ -490,9 +471,7 @@ export const Button = ({
       accessibilityState={{
         busy: !!busy,
         disabled: inactive,
-        selected,
       }}
-      aria-pressed={selected}
       android_ripple={android_ripple}
       disabled={inactive}
       hitSlop={{ bottom: slop, top: slop }}
