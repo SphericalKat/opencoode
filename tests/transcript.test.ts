@@ -9,6 +9,7 @@ import type {
 import {
   agentSwitchLabel,
   inlineCodeKind,
+  isCredentialError,
   isInterruptedError,
   modelSwitchLabel,
   parsePathLineSuffix,
@@ -111,6 +112,26 @@ test("isInterruptedError matches abort and interrupt types", () => {
   assert.equal(isInterruptedError({ type: "session.interrupted" }), true);
   assert.equal(isInterruptedError({ type: "provider.error" }), false);
   assert.equal(isInterruptedError(), false);
+});
+
+test("isCredentialError flags authentication failures only", () => {
+  assert.equal(
+    isCredentialError({ message: "Invalid credential", type: "provider.auth" }),
+    true
+  );
+  assert.equal(
+    isCredentialError({ message: "Request failed: 401", type: "api" }),
+    true
+  );
+  assert.equal(
+    isCredentialError({ message: "Aborted", type: "session.interrupted" }),
+    false
+  );
+  assert.equal(
+    isCredentialError({ message: "Too many requests", type: "rate_limit" }),
+    false
+  );
+  assert.equal(isCredentialError(), false);
 });
 
 test("visibleTranscriptMessages drops idle rows that repeat a failure", () => {

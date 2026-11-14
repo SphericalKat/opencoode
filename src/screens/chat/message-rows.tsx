@@ -2,7 +2,7 @@ import type {
   SessionMessageAssistant,
   SessionMessageInfo,
 } from "@opencode/client";
-import React, { memo, useCallback } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 import {
   Image,
   Platform,
@@ -15,7 +15,12 @@ import {
 import { useContextMenu, useMenuAnchor } from "../../components/anchored-menu";
 import { AssistantActivityPart as AssistantPart } from "../../components/assistant-turn";
 import { ResponseFooter } from "../../components/response-footer";
-import { SessionErrorNotice } from "../../components/session-error";
+import {
+  AssistantErrorContext,
+  AssistantErrorNotice,
+  SessionErrorNotice,
+} from "../../components/session-error";
+import type { AssistantErrorContextValue } from "../../components/session-error";
 import { Button, Disclosure, BodyText, mono } from "../../components/ui";
 import { UserMessageBubble } from "../../components/user-message-bubble";
 import type { AgentActivity } from "../../lib/activity";
@@ -198,10 +203,7 @@ export const renderAssistantMessage = ({
       />
     ))}
     {message.error && (
-      <SessionErrorNotice
-        message={message.error.message}
-        selectable={selectable}
-      />
+      <AssistantErrorNotice error={message.error} selectable={selectable} />
     )}
     {!live &&
       message.content.some(
@@ -363,6 +365,8 @@ export interface MessageRowProps {
   client?: Client;
   directory: string;
   modelName?: string;
+  providerName?: string;
+  errorActions?: AssistantErrorContextValue["errorActions"];
 }
 export const MessageRowBody = ({
   message,
@@ -380,6 +384,8 @@ export const MessageRowBody = ({
   client,
   directory,
   modelName,
+  providerName,
+  errorActions,
 }: MessageRowProps) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -410,21 +416,27 @@ export const MessageRowBody = ({
     openAt(await measureButton());
   }, [measureButton, openAt]);
   const longPress = selectionActive ? moveSelection : openAtPress;
+  const errorContext = useMemo(
+    () => ({ errorActions, providerName }),
+    [errorActions, providerName]
+  );
   const separateContent = screenReader || Platform.OS === "web";
   if (message.type === "idle" && !message.error) {
     return null;
   }
   if (!onMenu) {
     return (
-      children ?? (
-        <MessageContent
-          message={message}
-          client={client}
-          directory={directory}
-          modelName={modelName}
-          selectable
-        />
-      )
+      <AssistantErrorContext.Provider value={errorContext}>
+        {children ?? (
+          <MessageContent
+            message={message}
+            client={client}
+            directory={directory}
+            modelName={modelName}
+            selectable
+          />
+        )}
+      </AssistantErrorContext.Provider>
     );
   }
   return (
@@ -477,20 +489,22 @@ export const MessageRowBody = ({
           style={[styles.selectionMarker, { backgroundColor: colors.muted }]}
         />
       )}
-      <MessageActionsContext.Provider value={longPress}>
-        {children ?? (
-          <MessageContent
-            message={message}
-            live={live}
-            activityKind={activityKind}
-            animate={animate}
-            client={client}
-            directory={directory}
-            modelName={modelName}
-            selectable={false}
-          />
-        )}
-      </MessageActionsContext.Provider>
+      <AssistantErrorContext.Provider value={errorContext}>
+        <MessageActionsContext.Provider value={longPress}>
+          {children ?? (
+            <MessageContent
+              message={message}
+              live={live}
+              activityKind={activityKind}
+              animate={animate}
+              client={client}
+              directory={directory}
+              modelName={modelName}
+              selectable={false}
+            />
+          )}
+        </MessageActionsContext.Provider>
+      </AssistantErrorContext.Provider>
       {screenReader && (
         <View ref={buttonRef} collapsable={false}>
           <Button

@@ -32,7 +32,7 @@ import {
   WorkingIndicator,
 } from "./motion";
 import { ResponseFooter } from "./response-footer";
-import { SessionErrorNotice } from "./session-error";
+import { AssistantErrorNotice, SessionErrorNotice } from "./session-error";
 import { ToolCallDetails, toolDisplayName } from "./tool-call-details";
 import { BodyText, sans, usePressFeedback } from "./ui";
 
@@ -939,8 +939,11 @@ const AssistantTurnView = ({
           selectable={false}
         />
       ) : (
-        <SessionErrorNotice
-          message={entry.error || "The assistant reported an error"}
+        <AssistantErrorNotice
+          error={{
+            message: entry.error || "The assistant reported an error",
+            type: entry.message.error?.type ?? "",
+          }}
           selectable={false}
         />
       )

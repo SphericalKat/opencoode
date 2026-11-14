@@ -144,6 +144,16 @@ export const isInterruptedError = (error?: { type: string }): boolean => {
   return type.includes("abort") || type.includes("interrupt");
 };
 
+const credentialMessage = /credential|api key|unauthori[sz]ed|\b401\b/iu;
+
+export const isCredentialError = (error?: {
+  type: string;
+  message?: string;
+}): boolean =>
+  error !== undefined &&
+  (error.type.toLowerCase().includes("auth") ||
+    credentialMessage.test(error.message ?? ""));
+
 const hasFailure = (error?: { type: string }): boolean =>
   error !== undefined && !isInterruptedError(error);
 

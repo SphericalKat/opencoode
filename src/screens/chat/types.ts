@@ -15,6 +15,7 @@ export interface Props {
   draftKey?: string;
   visible?: boolean;
   onOpenNavigation?: () => void;
+  onOpenSettings?: (section: "Models" | "Accounts") => void;
   serverID?: string;
   onSelectionChange?: (selected: boolean) => void;
   onSessionInfo?: (session: SessionInfo) => void;

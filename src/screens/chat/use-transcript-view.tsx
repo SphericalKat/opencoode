@@ -13,9 +13,11 @@ import { sessionActivity } from "../../lib/activity";
 import type { AgentActivity } from "../../lib/activity";
 import { withoutReverted } from "../../lib/chat";
 import type { Rect } from "../../lib/menu-position";
+import { isInterruptedError } from "../../lib/transcript";
 import type { MessageMenuContext } from "./message-menu-entries";
 import { MessageRow } from "./message-rows";
 import type { OpenCodeClient } from "./session-sync";
+import type { SetPanel } from "./types";
 import type { SessionState } from "./use-session-state";
 
 const createTranscriptGrouper = () => {
@@ -32,11 +34,13 @@ interface UseTranscriptViewOptions {
   foreground: boolean;
   menu: MessageMenuContext;
   openMessageMenu: (id: string, anchor: Rect) => void;
+  onOpenSettings?: (section: "Models" | "Accounts") => void;
   opencodeClient: OpenCodeClient;
   screenReader: boolean;
   selectedMessageID: string | null;
   setSelectedMessageID: (id: string) => void;
   sessionID: string;
+  setPanel: SetPanel;
   stopping: boolean;
   visible: boolean;
   sync: SessionState;
@@ -48,10 +52,12 @@ export const useTranscriptView = ({
   foreground,
   menu,
   openMessageMenu,
+  onOpenSettings,
   opencodeClient,
   screenReader,
   selectedMessageID,
   sessionID,
+  setPanel,
   setSelectedMessageID,
   stopping,
   visible,
@@ -67,6 +73,7 @@ export const useTranscriptView = ({
     streamStatus,
     backendWaiting,
     models,
+    providers,
   } = sync;
   const modelNames = useMemo(
     () =>
@@ -74,6 +81,27 @@ export const useTranscriptView = ({
         models.map((model) => [`${model.providerID}/${model.id}`, model.name])
       ),
     [models]
+  );
+  const providerNames = useMemo(
+    () => new Map(providers.map((provider) => [provider.id, provider.name])),
+    [providers]
+  );
+  const providerName = useCallback(
+    (message: SessionMessageInfo) =>
+      message.type === "assistant" && message.error
+        ? (providerNames.get(message.model.providerID) ??
+          message.model.providerID)
+        : undefined,
+    [providerNames]
+  );
+  const errorActions = useMemo(
+    () => ({
+      onChangeModel: () => setPanel("models"),
+      onOpenAccounts: onOpenSettings
+        ? () => onOpenSettings("Accounts")
+        : undefined,
+    }),
+    [setPanel, onOpenSettings]
   );
   const revertMessageID = session?.revert?.messageID;
   const messages = useMemo(
@@ -121,6 +149,16 @@ export const useTranscriptView = ({
     !latestStep.error
       ? latestStep.id
       : undefined;
+  const failedMessageID = useMemo(() => {
+    const newest = messages.findLast(
+      (message) => message.type === "assistant" || message.type === "user"
+    );
+    return newest?.type === "assistant" &&
+      newest.error &&
+      !isInterruptedError(newest.error)
+      ? newest.id
+      : undefined;
+  }, [messages]);
   const messageDirectory = session?.location.directory || "";
   const groupTranscript = useMemo(() => createTranscriptGrouper(), []);
   const transcriptMessages = useMemo(
@@ -145,6 +183,8 @@ export const useTranscriptView = ({
         screenReader={screenReader}
         client={opencodeClient}
         directory={messageDirectory}
+        providerName={providerName(message)}
+        errorActions={message.id === failedMessageID ? errorActions : undefined}
       >
         {content}
       </MessageRow>
@@ -157,6 +197,9 @@ export const useTranscriptView = ({
       screenReader,
       opencodeClient,
       messageDirectory,
+      providerName,
+      failedMessageID,
+      errorActions,
     ]
   );
   const renderMessage = useCallback(
@@ -184,6 +227,8 @@ export const useTranscriptView = ({
           screenReader={screenReader}
           client={opencodeClient}
           directory={messageDirectory}
+          providerName={providerName(item.message)}
+          errorActions={item.id === failedMessageID ? errorActions : undefined}
           modelName={
             item.message.type === "model-switched"
               ? modelNames.get(
@@ -195,6 +240,9 @@ export const useTranscriptView = ({
       ),
     [
       modelNames,
+      providerName,
+      failedMessageID,
+      errorActions,
       renderSource,
       menu,
       openMessageMenu,
