@@ -21,7 +21,8 @@ import { MessageActionsContext } from "../lib/message-actions";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { ArtifactContent, isImageArtifact } from "./artifact-content";
-import { Disclosure, ErrorNotice, BodyText, mono, touchTarget } from "./ui";
+import { SessionErrorNotice } from "./session-error";
+import { Disclosure, BodyText, mono, touchTarget } from "./ui";
 
 type Arguments = Record<string, JsonValue>;
 interface Section {
@@ -531,7 +532,9 @@ const ToolCallDetailsView = ({
           directory={directory}
         />
       ))}
-      {state.status === "error" && <ErrorNotice error={state.error.message} />}
+      {state.status === "error" && (
+        <SessionErrorNotice message={state.error.message} selectable />
+      )}
       {!fallback && (
         <Disclosure
           disclosureKey={`${tool.id}:arguments`}

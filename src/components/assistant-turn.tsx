@@ -21,6 +21,7 @@ import {
   MessageDisclosureContext,
 } from "../lib/message-actions";
 import { useTheme, useThemedStyles } from "../lib/theme";
+import { visibleTranscriptMessages } from "../lib/transcript";
 import { ArtifactContent, isImageArtifact } from "./artifact-content";
 import { Markdown } from "./markdown";
 import {
@@ -29,12 +30,13 @@ import {
   WorkingIndicator,
 } from "./motion";
 import { ResponseFooter } from "./response-footer";
+import { SessionErrorNotice } from "./session-error";
 import {
   ToolCallDetails,
   toolDetail,
   toolDisplayName,
 } from "./tool-call-details";
-import { ErrorNotice, BodyText, mono } from "./ui";
+import { BodyText, mono } from "./ui";
 
 export type TranscriptItem =
   | { type: "message"; id: string; message: SessionMessageInfo }
@@ -94,10 +96,7 @@ export const groupTranscriptMessages = (
     items.push(item);
     assistants = [];
   };
-  for (const message of messages) {
-    if (message.type === "idle" && !message.error) {
-      continue;
-    }
+  for (const message of visibleTranscriptMessages(messages)) {
     if (message.type === "assistant") {
       assistants.push(message);
       continue;
@@ -393,7 +392,10 @@ const AssistantActivityPartView = ({
         <ToolResultImages tool={part} client={client} directory={directory} />
       )}
       {!open && part.type === "tool" && part.state.status === "error" && (
-        <ErrorNotice error={part.state.error.message || "The tool failed"} />
+        <SessionErrorNotice
+          message={part.state.error.message || "The tool failed"}
+          selectable
+        />
       )}
     </View>
   );
@@ -477,8 +479,9 @@ const TurnActivities = ({
               renderSource(
                 entry.message,
                 `${entry.key}:error`,
-                <ErrorNotice
-                  error={entry.part.state.error.message || "The tool failed"}
+                <SessionErrorNotice
+                  message={entry.part.state.error.message || "The tool failed"}
+                  selectable
                 />
               )}
           </React.Fragment>
@@ -572,7 +575,10 @@ const AssistantTurnView = ({
           selectable={false}
         />
       ) : (
-        <ErrorNotice error={entry.error || "The assistant reported an error"} />
+        <SessionErrorNotice
+          message={entry.error || "The assistant reported an error"}
+          selectable={false}
+        />
       )
     );
   const finalText = entries.findLast(

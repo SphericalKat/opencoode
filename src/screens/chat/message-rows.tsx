@@ -7,13 +7,8 @@ import { Image, Platform, Pressable, View } from "react-native";
 
 import { AssistantActivityPart as AssistantPart } from "../../components/assistant-turn";
 import { ResponseFooter } from "../../components/response-footer";
-import {
-  Button,
-  Disclosure,
-  ErrorNotice,
-  BodyText,
-  mono,
-} from "../../components/ui";
+import { SessionErrorNotice } from "../../components/session-error";
+import { Button, Disclosure, BodyText, mono } from "../../components/ui";
 import { UserMessageBubble } from "../../components/user-message-bubble";
 import type { AgentActivity } from "../../lib/activity";
 import type { Client } from "../../lib/client";
@@ -123,7 +118,12 @@ export const renderAssistantMessage = ({
         selectable={selectable}
       />
     ))}
-    {message.error && <ErrorNotice error={message.error.message} />}
+    {message.error && (
+      <SessionErrorNotice
+        message={message.error.message}
+        selectable={selectable}
+      />
+    )}
     {!live &&
       message.content.some(
         (part) => part.type === "text" && !!part.text.trim()
@@ -179,7 +179,12 @@ export const MessageContentBody = ({
 }) => {
   const styles = useThemedStyles(createStyles);
   if (message.type === "idle") {
-    return message.error ? <ErrorNotice error={message.error.message} /> : null;
+    return message.error ? (
+      <SessionErrorNotice
+        message={message.error.message}
+        selectable={selectable}
+      />
+    ) : null;
   }
   if (message.type === "assistant") {
     return renderAssistantMessage({
@@ -221,7 +226,12 @@ export const MessageContentBody = ({
         {"summary" in message && (
           <MessageText text={message.summary} selectable={selectable} />
         )}
-        {"error" in message && <ErrorNotice error={message.error.message} />}
+        {"error" in message && (
+          <SessionErrorNotice
+            message={message.error.message}
+            selectable={selectable}
+          />
+        )}
       </Disclosure>
     );
   }
