@@ -1,9 +1,6 @@
 import type {
-  FileDiffInfo,
   FileSystemEntry,
   LocationPublicInfo,
-  VcsFileStatus,
-  VcsInfo,
   WorktreeDirectory,
 } from "@opencode/client";
 import { File, Paths } from "expo-file-system";
@@ -21,7 +18,6 @@ import {
 } from "react-native";
 
 import { confirmAction } from "../components/dialog";
-import { Patch } from "../components/patch";
 import { useUndoableRemoval } from "../components/snackbar";
 import { TerminalPanel } from "../components/terminal-panel";
 import {
@@ -48,9 +44,12 @@ import {
   decodeEditableFile,
   fileName,
   parentPath,
+  quotedText,
+  runWithFlag,
   saveEditableFile,
   serverFilePath,
 } from "../lib/workspace";
+import { ChangesPane } from "./changes/changes-pane";
 
 export type WorkspaceSection = "Files" | "Changes" | "Worktrees" | "Terminal";
 
@@ -189,15 +188,6 @@ const base64 = (bytes: Uint8Array): string => {
     );
   }
   return btoa(chunks.join(""));
-};
-
-const quotedText = (text: string, language = ""): string => {
-  let longest = 2;
-  for (const match of text.matchAll(/`+/gu)) {
-    longest = Math.max(longest, match[0].length);
-  }
-  const fence = "`".repeat(longest + 1);
-  return `${fence}${language}\n${text}\n${fence}`;
 };
 
 const MAX_PREVIEW_BYTES = 8 * 1024 * 1024;
@@ -375,18 +365,6 @@ const loadEntriesInto = async (
   }
   if (!signal.aborted) {
     setters.setLoading(false);
-  }
-};
-
-const runWithFlag = async (
-  setFlag: (value: boolean) => void,
-  task: () => Promise<void>
-) => {
-  setFlag(true);
-  try {
-    await task();
-  } finally {
-    setFlag(false);
   }
 };
 
@@ -1004,389 +982,6 @@ const Files = ({
   );
 };
 
-const Changes = ({
-  client,
-  directory,
-  onAttachFile,
-}: Pick<Props, "client" | "directory" | "onAttachFile">) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const [info, setInfo] = useState<VcsInfo | null>(null);
-  const [files, setFiles] = useState<VcsFileStatus[]>([]);
-  const [branches, setBranches] = useState<string[]>([]);
-  const [mode, setMode] = useState<"working" | "branch" | "committed">(
-    "working"
-  );
-  const [base, setBase] = useState("");
-  const [diff, setDiff] = useState<FileDiffInfo[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [branchesVisible, setBranchesVisible] = useState(false);
-  const [revision, setRevision] = useState(0);
-  const [review, setReview] = useState<FileDiffInfo | null>(null);
-  const [reviewVisible, setReviewVisible] = useState(false);
-  const [reviewComment, setReviewComment] = useState("");
-  const [addingReview, setAddingReview] = useState(false);
-  useUnsavedChanges(
-    `workspace-review:${directory}`,
-    "Review comment",
-    !!review && !!reviewComment.trim() && !addingReview
-  );
-  const [vcsRequest, setVcsRequest] = useState({
-    client,
-    directory,
-    revision,
-  });
-  if (
-    vcsRequest.client !== client ||
-    vcsRequest.directory !== directory ||
-    vcsRequest.revision !== revision
-  ) {
-    setVcsRequest({ client, directory, revision });
-    setLoading(true);
-    setError(null);
-  }
-  useEffect(() => {
-    const { client: requestClient, directory: requestDirectory } = vcsRequest;
-    const controller = new AbortController();
-    void Promise.allSettled([
-      requestClient.vcs.get(
-        { location: { directory: requestDirectory } },
-        { signal: controller.signal }
-      ),
-      requestClient.vcs.status(
-        { location: { directory: requestDirectory } },
-        { signal: controller.signal }
-      ),
-    ])
-      .then(([vcs, status]) => {
-        if (controller.signal.aborted) {
-          return false;
-        }
-        if (vcs.status === "fulfilled") {
-          setInfo(vcs.value.data);
-        }
-        if (status.status === "fulfilled") {
-          setFiles(status.value.data);
-        }
-        const failures = [vcs, status].filter(
-          (result) => result.status === "rejected"
-        );
-        if (failures.length) {
-          setError(
-            failures.map((result) => errorMessage(result.reason)).join("\n")
-          );
-        }
-        return true;
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [vcsRequest]);
-  const loadDiff = async (file?: string) => {
-    setError(null);
-    await runWithFlag(setBusy, async () => {
-      try {
-        const result = await client.vcs.diff({
-          base: base.trim() || undefined,
-          location: { directory },
-          mode,
-          untracked: "files",
-        });
-        setDiff(
-          file ? result.data.filter((item) => item.file === file) : result.data
-        );
-      } catch (error_) {
-        setError(errorMessage(error_));
-      }
-    });
-  };
-  const loadBranches = async () => {
-    setError(null);
-    await runWithFlag(setBusy, async () => {
-      try {
-        const result = await client.vcs.branch.list({
-          limit: 200,
-          location: { directory },
-        });
-        setBranches(result.data);
-        setBranchesVisible(true);
-      } catch (error_) {
-        setError(errorMessage(error_));
-      }
-    });
-  };
-  const closeDiff = async () => {
-    if (addingReview) {
-      return;
-    }
-    if (
-      reviewComment.trim() &&
-      !(await confirmAction(
-        "Discard review comment?",
-        "Your comment has not been added to a prompt.",
-        { confirmLabel: "Discard" }
-      ))
-    ) {
-      return;
-    }
-    setReview(null);
-    setReviewVisible(false);
-    setReviewComment("");
-    setDiff(null);
-  };
-  const openReview = async (file: FileDiffInfo) => {
-    if (review?.file !== file.file) {
-      if (
-        reviewComment.trim() &&
-        !(await confirmAction(
-          "Discard review comment?",
-          "Your comment has not been added to a prompt.",
-          { confirmLabel: "Discard" }
-        ))
-      ) {
-        return;
-      }
-      setReviewComment("");
-    }
-    setReview(file);
-    setReviewVisible(true);
-    setError(null);
-  };
-  const addReview = async () => {
-    if (!review || !onAttachFile || !reviewComment.trim()) {
-      return;
-    }
-    setError(null);
-    const target = review;
-    await runWithFlag(setAddingReview, async () => {
-      try {
-        const context = `Review feedback for ${serverFilePath(directory, target.file)}:\n\n${reviewComment.trim()}\n\n${quotedText(target.patch, "diff")}${target.more ? "\n\nThe server truncated this diff." : ""}`;
-        if (
-          (await onAttachFile(
-            serverFilePath(directory, target.file),
-            context
-          )) === false
-        ) {
-          setError("The review was not added. Check the connection and retry.");
-        } else {
-          setReview(null);
-          setReviewVisible(false);
-          setReviewComment("");
-          setDiff(null);
-        }
-      } catch (error_) {
-        setError(errorMessage(error_));
-      }
-    });
-  };
-  return (
-    <View style={styles.screen}>
-      <View style={styles.controls}>
-        <Row style={{ flexWrap: "nowrap" }}>
-          <BodyText
-            numberOfLines={1}
-            ellipsizeMode="middle"
-            style={{ flex: 1, fontFamily: mono, minWidth: 0 }}
-          >
-            ⑂ {info?.branch.current || "No branch"}
-          </BodyText>
-          <Button
-            title="Branches"
-            size="compact"
-            variant="ghost"
-            onPress={() => {
-              void loadBranches();
-            }}
-            busy={busy}
-          />
-          <Button
-            title="Refresh"
-            size="compact"
-            variant="ghost"
-            onPress={() => setRevision((value) => value + 1)}
-          />
-        </Row>
-        <Row>
-          {(["working", "branch", "committed"] as const).map((value) => (
-            <Button
-              key={value}
-              title={
-                {
-                  branch: "Branch",
-                  committed: "Committed",
-                  working: "Working tree",
-                }[value]
-              }
-              size="compact"
-              variant={mode === value ? "primary" : "secondary"}
-              onPress={() => setMode(value)}
-            />
-          ))}
-        </Row>
-        {mode !== "working" && (
-          <Field
-            label="Base branch or commit (optional)"
-            placeholder="Server default"
-            value={base}
-            onChangeText={setBase}
-          />
-        )}
-        <Button
-          title="View diff"
-          onPress={() => {
-            void loadDiff();
-          }}
-          busy={busy}
-        />
-        <ErrorNotice
-          error={error}
-          onRetry={() => setRevision((value) => value + 1)}
-        />
-      </View>
-      {loading ? (
-        <Busy />
-      ) : (
-        <FlatList
-          data={files}
-          keyExtractor={(file) => file.file}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <Empty
-              title={error ? "Changes unavailable" : "No changes"}
-              detail={
-                error
-                  ? "Retry the request or check your repository."
-                  : "Your working tree has no changed files."
-              }
-            />
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`View diff for ${item.file}`}
-              style={styles.fileRow}
-              onPress={() => {
-                void loadDiff(item.file);
-              }}
-            >
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <BodyText numberOfLines={2} ellipsizeMode="middle">
-                  {item.file}
-                </BodyText>
-                <BodyText muted style={{ fontSize: 12 }}>
-                  {item.status}
-                </BodyText>
-              </View>
-              <BodyText style={{ color: colors.success }}>
-                +{item.additions}
-              </BodyText>
-              <BodyText style={{ color: colors.danger }}>
-                −{item.deletions}
-              </BodyText>
-            </Pressable>
-          )}
-        />
-      )}
-      <Sheet
-        visible={diff !== null}
-        title={reviewVisible ? "Review comment" : "Changes"}
-        onClose={() => {
-          void closeDiff();
-        }}
-      >
-        {reviewVisible && review ? (
-          <>
-            <BodyText selectable style={{ fontFamily: mono }}>
-              {review.file}
-            </BodyText>
-            <Field
-              label="Comment for OpenCode"
-              multiline
-              value={reviewComment}
-              onChangeText={setReviewComment}
-              editable={!addingReview}
-            />
-            <ErrorNotice error={error} />
-            <Button
-              title="Add review to prompt"
-              variant="primary"
-              busy={addingReview}
-              disabled={!reviewComment.trim()}
-              onPress={() => {
-                void addReview();
-              }}
-            />
-            <Button
-              title="Back to diff"
-              disabled={addingReview}
-              onPress={() => setReviewVisible(false)}
-            />
-          </>
-        ) : (
-          <>
-            {diff?.length === 0 && (
-              <Empty
-                title="No diff"
-                detail="The selected comparison has no changes."
-              />
-            )}
-            {diff?.map((file) => (
-              <Card key={file.file}>
-                <BodyText selectable style={{ fontFamily: mono }}>
-                  {file.file}
-                </BodyText>
-                <BodyText muted>
-                  +{file.additions} −{file.deletions} · {file.status}
-                </BodyText>
-                <Patch patch={file.patch} />
-                {file.more && (
-                  <BodyText muted>The server truncated this diff.</BodyText>
-                )}
-                {onAttachFile && (
-                  <Button
-                    title={
-                      review?.file === file.file && reviewComment.trim()
-                        ? "Continue review comment"
-                        : "Add review comment"
-                    }
-                    size="compact"
-                    onPress={() => {
-                      void openReview(file);
-                    }}
-                  />
-                )}
-              </Card>
-            ))}
-          </>
-        )}
-      </Sheet>
-      <Sheet
-        visible={branchesVisible}
-        title="Branches"
-        onClose={() => setBranchesVisible(false)}
-      >
-        <BodyText muted>Select a branch as the comparison base.</BodyText>
-        {branches.map((branch) => (
-          <Button
-            key={branch}
-            title={branch}
-            onPress={() => {
-              setBase(branch);
-              setMode("branch");
-              setBranchesVisible(false);
-            }}
-          />
-        ))}
-      </Sheet>
-    </View>
-  );
-};
-
 const Worktrees = ({
   client,
   directory,
@@ -1642,9 +1237,10 @@ const Workspace = ({
         />
       </View>
       {activeTab === "Changes" && (
-        <Changes
+        <ChangesPane
           client={client}
           directory={directory}
+          sessionID={sessionID}
           onAttachFile={onAttachFile}
         />
       )}

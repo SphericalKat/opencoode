@@ -9,12 +9,13 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import IBMPlexMono from "../../assets/fonts/IBMPlexMono-Text.ttf";
 import Inter from "../../assets/fonts/Inter.ttf";
 import { Markdown } from "../../src/components/markdown";
-import { Patch } from "../../src/components/patch";
 import { Button } from "../../src/components/ui";
 import type { ChatBackend } from "../../src/lib/chat-backend";
+import { diffRows } from "../../src/lib/diff";
 import { SheetCoordinatorProvider } from "../../src/lib/sheets";
 import { ThemeProvider, useTheme } from "../../src/lib/theme";
 import { UnsavedProvider } from "../../src/lib/unsaved";
+import { DiffLineRow } from "../../src/screens/changes/diff-line";
 import { ChatScreen } from "../../src/screens/chat-screen";
 import { AppearanceSettings } from "../../src/screens/settings-screen";
 
@@ -96,7 +97,14 @@ const Content = () => {
             '```javascript\nconst message = "hello";\nconsole.log(message);\n```'
           }
         />
-        <Patch patch={"@@ -1,2 +1,2 @@\n context\n-old text\n+new text\n"} />
+        {diffRows(
+          "@@ -1,2 +1,2 @@\n context\n-old text\n+new text\n",
+          new Set()
+        ).map((row, index) =>
+          row.kind === "line" ? (
+            <DiffLineRow key={index} line={row.line} gutterWidth={39} />
+          ) : null
+        )}
       </ScrollView>
     );
   }
