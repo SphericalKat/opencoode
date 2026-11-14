@@ -4,7 +4,7 @@ import { View } from "react-native";
 import { ActionsSheet } from "./actions-sheet";
 import { ErrorBanners, RevertBanner } from "./banners";
 import { Composer } from "./composer";
-import { ToolsSheet, CommandsSheet, MentionsSheet } from "./composer-sheets";
+import { CommandsSheet, MentionsSheet } from "./composer-sheets";
 import { ChatKeyboardView } from "./controls";
 import { SelectionBar } from "./header";
 import { MessageMenu } from "./message-menu";
@@ -32,6 +32,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     activity,
     activityNotice,
     agents,
+    attachDevice,
     attachments,
     beginUserScroll,
     capabilities,
@@ -71,6 +72,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     minimumComposerHeight,
     onOpenSession,
     opencodeClient,
+    panel,
     pending,
     permissions,
     providerLabel,
@@ -184,6 +186,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         active={active}
         activity={activity}
         agents={agents}
+        attachDevice={attachDevice}
         attachments={attachments}
         capabilities={capabilities}
         colors={colors}
@@ -199,6 +202,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         maximumComposerHeight={maximumComposerHeight}
         minimumComposerHeight={minimumComposerHeight}
         opencodeClient={opencodeClient}
+        panel={panel}
         pending={pending}
         providerLabel={providerLabel}
         selectedVariant={selectedVariant}
@@ -240,7 +244,6 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     colors,
     currentModel,
     delivery,
-    draftLoaded,
     enabledModels,
     error,
     exportSession,
@@ -254,7 +257,6 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     opencodeClient,
     panel,
     pending,
-    queueDevicePicker,
     run,
     scopedModels,
     selectedVariant,
@@ -263,13 +265,11 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     setBackgroundDirectory,
     setBackgroundShellID,
     setCatalogRevision,
-    setDelivery,
     setModelFilter,
     setModelSearch,
     setPanel,
     setSideQuestion,
     styles,
-    toolsDismissed,
   } = chat;
   return (
     <>
@@ -329,18 +329,6 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         selectedVariant={selectedVariant}
         styles={styles}
       />
-      <ToolsSheet
-        capabilities={capabilities}
-        delivery={delivery}
-        draftLoaded={draftLoaded}
-        opencodeClient={opencodeClient}
-        panel={panel}
-        queueDevicePicker={queueDevicePicker}
-        setDelivery={setDelivery}
-        setPanel={setPanel}
-        setSideQuestion={setSideQuestion}
-        toolsDismissed={toolsDismissed}
-      />
     </>
   );
 };
@@ -348,6 +336,7 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
 const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
   const {
     agents,
+    capabilities,
     closeMessageMenu,
     client,
     commands,
@@ -418,6 +407,8 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
       />
       <MentionsSheet
         agents={agents}
+        capabilities={capabilities}
+        opencodeClient={opencodeClient}
         fileQuery={fileQuery}
         fileResults={fileResults}
         fileSearchBusy={fileSearchBusy}

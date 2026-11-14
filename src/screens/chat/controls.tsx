@@ -64,29 +64,20 @@ export const ChatIconButton = ({
   name,
   label,
   onPress,
-  raised,
   disabled,
   busy,
   selected,
-  compactFace,
 }: {
   name: ChatIconName;
   label: string;
   onPress: () => void;
-  raised?: boolean;
   disabled?: boolean;
   busy?: boolean;
   selected?: boolean;
-  compactFace?: boolean;
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  let glyphColor = colors.muted;
-  if (raised) {
-    glyphColor = compactFace ? colors.onEmphasis : colors.primaryText;
-  } else if (selected) {
-    glyphColor = colors.text;
-  }
+  const glyphColor = selected ? colors.text : colors.muted;
   return (
     <Pressable
       accessibilityRole="button"
@@ -108,17 +99,7 @@ export const ChatIconButton = ({
         <PressFeedback
           pressed={pressed}
           disabled={disabled || busy}
-          style={[
-            styles.iconFace,
-            compactFace && {
-              borderRadius: raised ? 6 : 14,
-              height: 28,
-              width: 28,
-            },
-            raised && styles.raisedFace,
-            raised && compactFace && styles.betaRaisedFace,
-            (disabled || busy) && { opacity: 0.4 },
-          ]}
+          style={[styles.iconFace, (disabled || busy) && { opacity: 0.4 }]}
         >
           {busy ? (
             <ActivityIndicator size="small" color={colors.primaryText} />
@@ -169,7 +150,7 @@ export const ChatKeyboardView = ({
     () => ({
       paddingBottom: enabled ? Math.max(0, -height.value - bottom) : 0,
     }),
-    [enabled, bottom]
+    Platform.OS === "web" ? [enabled, bottom] : undefined
   );
   if (Platform.OS === "android") {
     return (

@@ -32,7 +32,6 @@ export type Panel =
   | "models"
   | "commands"
   | "mentions"
-  | "tools"
   | "selectText"
   | "diff"
   | "context"

@@ -66,7 +66,7 @@ export const useSendMessage = ({
   const [sending, setSending] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [stopReady, setStopReady] = useState(false);
-  const send = async () => {
+  const send = async (options?: { delivery?: "steer" | "queue" }) => {
     if (!draftLoaded) {
       return;
     }
@@ -142,7 +142,7 @@ export const useSendMessage = ({
           } else {
             const common = {
               agents: sentAgentIDs.map((name) => ({ name })),
-              delivery,
+              delivery: options?.delivery ?? delivery,
               files: sentAttachments,
               sessionID,
               skills: sentSkillIDs.map((id) => ({ id })),

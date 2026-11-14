@@ -24,10 +24,10 @@ export const sendButtonLabel = (
   delivery: "steer" | "queue"
 ) => {
   if (active && !hasPrompt) {
-    return "Stop generation";
+    return "Stop";
   }
-  if (active && delivery === "queue") {
-    return "Queue message";
+  if (active) {
+    return delivery === "queue" ? "Queue message" : "Steer message";
   }
   return "Send message";
 };

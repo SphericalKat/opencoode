@@ -8,11 +8,6 @@ export const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     assistant: { gap: 6 },
     betaMessages: { flexGrow: 1, padding: 16, paddingBottom: 24 },
-    betaRaisedFace: {
-      backgroundColor: colors.emphasis,
-      borderColor: colors.emphasis,
-      borderTopColor: colors.emphasis,
-    },
     code: {
       backgroundColor: colors.bg,
       borderColor: colors.border,
@@ -63,6 +58,22 @@ export const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 12,
       paddingTop: 4,
     },
+    touchBar: {
+      alignItems: "center",
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 4,
+      height: 56,
+      marginTop: 8,
+      maxWidth: 736,
+      paddingHorizontal: 6,
+      width: "100%",
+    },
+    touchBarSpacer: { flex: 1 },
+    composerInputShell: { fontFamily: mono, letterSpacing: -0.04 },
     composerInput: {
       backgroundColor: "transparent",
       borderRadius: 0,
@@ -173,17 +184,6 @@ export const createStyles = (colors: ThemeColors) =>
       borderRadius: 4,
       height: 8,
       width: 8,
-    },
-    raisedFace: {
-      backgroundColor: colors.primary,
-      borderColor: colors.border,
-      borderTopColor: colors.controlTopEdge,
-      borderWidth: 1,
-      elevation: 2,
-      shadowColor: "#000000",
-      shadowOffset: { height: 1, width: 0 },
-      shadowOpacity: 0.2,
-      shadowRadius: 1,
     },
     revert: {
       backgroundColor: colors.raised,

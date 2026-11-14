@@ -1,14 +1,15 @@
 import type { SessionInfo } from "@opencode/client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ComponentRef, RefObject } from "react";
 import { ScrollView, View } from "react-native";
-import type { LayoutChangeEvent } from "react-native";
+import type { LayoutChangeEvent, TextInput } from "react-native";
 
 import { AgentActivityBar } from "../../components/agent-activity";
+import { IconButton } from "../../components/icon-button";
 import { SelectMenu, SelectTrigger } from "../../components/select";
 import { elevation } from "../../components/surface";
-import { Button, Busy, Field, BodyText } from "../../components/ui";
+import { Button, Busy, Field, BodyText, mono } from "../../components/ui";
 import { useTheme } from "../../lib/theme";
-import { ChatIconButton } from "./controls";
 import { sendButtonLabel } from "./labels";
 import { capitalizeFirst, modelDisplayName } from "./model-label";
 import type { ChatController } from "./use-chat-controller";
@@ -98,6 +99,13 @@ export const ComposerChips = ({
       ))}
     </ScrollView>
   );
+
+type InputHandle = ComponentRef<typeof TextInput>;
+
+const TOUCH_BAR_BUTTON = 44;
+const GLYPH_FONT_SIZE = 17;
+const GLYPH_LINE_HEIGHT = 20;
+const LEADING_BANG = /^!/u;
 
 const AGENT_CHIP_MAX_WIDTH = 220;
 const AGENT_MENU_GUTTER = 6;
@@ -234,77 +242,12 @@ export const VariantTrigger = ({
   );
 };
 
-type StopControlsProps = Pick<
-  ChatController,
-  "active" | "hasPrompt" | "interrupt" | "pending" | "stopping"
->;
-
-export const StopControls = ({
-  active,
-  hasPrompt,
-  interrupt,
-  pending,
-  stopping,
-}: StopControlsProps) =>
-  active &&
-  hasPrompt && (
-    <ChatIconButton
-      name="stop"
-      label="Stop generation"
-      compactFace
-      disabled={pending || stopping}
-      onPress={() => {
-        void interrupt();
-      }}
-    />
-  );
-
-type SendButtonProps = Pick<
-  ChatController,
-  | "active"
-  | "delivery"
-  | "hasPrompt"
-  | "interrupt"
-  | "pending"
-  | "send"
-  | "stopReady"
-  | "stopping"
->;
-
-export const SendButton = ({
-  active,
-  delivery,
-  hasPrompt,
-  interrupt,
-  pending,
-  send,
-  stopReady,
-  stopping,
-}: SendButtonProps) => (
-  <ChatIconButton
-    name={active && !hasPrompt ? "stop" : "up"}
-    label={sendButtonLabel(active, hasPrompt, delivery)}
-    raised
-    compactFace
-    busy={pending}
-    disabled={active && !hasPrompt ? !stopReady || stopping : !hasPrompt}
-    onPress={() => {
-      if (active && !hasPrompt) {
-        void interrupt();
-      } else {
-        void send();
-      }
-    }}
-  />
-);
-
 interface ComposerToolbarProps extends Pick<
   ChatController,
   | "active"
   | "agents"
   | "capabilities"
   | "currentModel"
-  | "delivery"
   | "hasPrompt"
   | "interrupt"
   | "opencodeClient"
@@ -312,7 +255,6 @@ interface ComposerToolbarProps extends Pick<
   | "providerLabel"
   | "selectedVariant"
   | "run"
-  | "send"
   | "sessionID"
   | "setPanel"
   | "stopReady"
@@ -327,7 +269,6 @@ export const ComposerToolbar = ({
   agents,
   capabilities,
   currentModel,
-  delivery,
   hasPrompt,
   interrupt,
   opencodeClient,
@@ -335,7 +276,6 @@ export const ComposerToolbar = ({
   providerLabel,
   selectedVariant,
   run,
-  send,
   session,
   sessionID,
   setPanel,
@@ -343,17 +283,12 @@ export const ComposerToolbar = ({
   stopping,
   styles,
 }: ComposerToolbarProps) => {
+  const { colors } = useTheme();
   const [chipsWidth, setChipsWidth] = useState<number | undefined>();
   const onChipsLayout = (event: LayoutChangeEvent) =>
     setChipsWidth(event.nativeEvent.layout.width);
   return (
     <View style={styles.composerControls}>
-      <ChatIconButton
-        name="plus"
-        label="Message tools"
-        compactFace
-        onPress={() => setPanel("tools")}
-      />
       <ScrollView
         horizontal
         contentContainerStyle={styles.composerControlsContent}
@@ -388,25 +323,298 @@ export const ComposerToolbar = ({
           setPanel={setPanel}
         />
       </ScrollView>
-      <StopControls
-        active={active}
-        hasPrompt={hasPrompt}
-        interrupt={interrupt}
-        pending={pending}
-        stopping={stopping}
-      />
-      <SendButton
-        active={active}
-        delivery={delivery}
-        hasPrompt={hasPrompt}
-        interrupt={interrupt}
-        pending={pending}
-        send={send}
-        stopReady={stopReady}
-        stopping={stopping}
-      />
+      {active && hasPrompt && (
+        <IconButton
+          icon="stop"
+          size={28}
+          color={colors.muted}
+          pressedColor={colors.text}
+          accessibilityLabel="Stop"
+          disabled={!stopReady || stopping}
+          busy={stopping}
+          onPress={() => {
+            void interrupt();
+          }}
+        />
+      )}
     </View>
   );
+};
+
+const textGlyph = (character: string) => {
+  const Glyph = (color: string) => (
+    <BodyText
+      style={{
+        color,
+        fontFamily: mono,
+        fontSize: GLYPH_FONT_SIZE,
+        lineHeight: GLYPH_LINE_HEIGHT,
+      }}
+    >
+      {character}
+    </BodyText>
+  );
+  return Glyph;
+};
+
+const commandsGlyph = textGlyph("/");
+const mentionsGlyph = textGlyph("@");
+const shellGlyph = textGlyph("!");
+
+type TouchBarLeftProps = Pick<
+  ChatController,
+  | "attachDevice"
+  | "capabilities"
+  | "draft"
+  | "draftLoaded"
+  | "opencodeClient"
+  | "setDraft"
+  | "setPanel"
+> & {
+  focusInput: () => void;
+  shellMode: boolean;
+};
+
+const TouchBarLeft = ({
+  attachDevice,
+  capabilities,
+  draft,
+  draftLoaded,
+  focusInput,
+  opencodeClient,
+  setDraft,
+  setPanel,
+  shellMode,
+}: TouchBarLeftProps) => {
+  const { colors } = useTheme();
+  if (shellMode) {
+    return (
+      <Button
+        variant="ghost"
+        size="large"
+        title="Exit"
+        onPress={() => {
+          setDraft(draft.replace(LEADING_BANG, ""));
+          focusInput();
+        }}
+      />
+    );
+  }
+  const disabled = !draftLoaded;
+  const color = colors.faint;
+  const pressedColor = colors.text;
+  return (
+    <>
+      {capabilities.attachments && (
+        <IconButton
+          icon="plus"
+          size={TOUCH_BAR_BUTTON}
+          color={color}
+          pressedColor={pressedColor}
+          accessibilityLabel="Add images and files"
+          disabled={disabled}
+          onPress={() => {
+            void attachDevice();
+          }}
+        />
+      )}
+      {opencodeClient && (capabilities.commands || capabilities.skills) && (
+        <IconButton
+          icon={commandsGlyph}
+          size={TOUCH_BAR_BUTTON}
+          color={color}
+          pressedColor={pressedColor}
+          accessibilityLabel="Commands"
+          disabled={disabled}
+          onPress={() => setPanel("commands")}
+        />
+      )}
+      {opencodeClient && (capabilities.files || capabilities.resources) && (
+        <IconButton
+          icon={mentionsGlyph}
+          size={TOUCH_BAR_BUTTON}
+          color={color}
+          pressedColor={pressedColor}
+          accessibilityLabel="Context"
+          disabled={disabled}
+          onPress={() => setPanel("mentions")}
+        />
+      )}
+      {capabilities.shell && (
+        <IconButton
+          icon={shellGlyph}
+          size={TOUCH_BAR_BUTTON}
+          color={color}
+          pressedColor={pressedColor}
+          accessibilityLabel="Shell command"
+          disabled={disabled}
+          onPress={() => {
+            if (!draft.startsWith("!")) {
+              setDraft(`!${draft}`);
+            }
+            focusInput();
+          }}
+        />
+      )}
+    </>
+  );
+};
+
+type TouchBarRightProps = Pick<
+  ChatController,
+  | "active"
+  | "capabilities"
+  | "delivery"
+  | "hasPrompt"
+  | "interrupt"
+  | "pending"
+  | "send"
+  | "stopReady"
+  | "stopping"
+> & {
+  shellMode: boolean;
+};
+
+const TouchBarRight = ({
+  active,
+  capabilities,
+  delivery,
+  hasPrompt,
+  interrupt,
+  pending,
+  send,
+  shellMode,
+  stopReady,
+  stopping,
+}: TouchBarRightProps) => {
+  const { colors } = useTheme();
+  const stopDisabled = !stopReady || stopping;
+  if (active && !hasPrompt) {
+    return (
+      <Button
+        variant="secondary"
+        size="large"
+        shape="rounded"
+        icon="stop"
+        title="Stop"
+        disabled={stopDisabled}
+        onPress={() => {
+          void interrupt();
+        }}
+      />
+    );
+  }
+  const queued = delivery === "queue";
+  const alternate = active && capabilities.delivery;
+  let submitTitle = "Send";
+  if (alternate) {
+    submitTitle = queued ? "Queue" : "Steer";
+  }
+  return (
+    <>
+      {active && shellMode && (
+        <IconButton
+          icon="stop"
+          size={TOUCH_BAR_BUTTON}
+          color={colors.muted}
+          pressedColor={colors.text}
+          accessibilityLabel="Stop"
+          disabled={stopDisabled}
+          busy={stopping}
+          onPress={() => {
+            void interrupt();
+          }}
+        />
+      )}
+      {alternate && (
+        <Button
+          variant="secondary"
+          size="large"
+          shape="rounded"
+          title={queued ? "Steer" : "Queue"}
+          onPress={() => {
+            void send({ delivery: queued ? "steer" : "queue" });
+          }}
+        />
+      )}
+      <Button
+        variant="submit"
+        size="large"
+        shape="rounded"
+        icon={shellMode ? "return" : "arrow-up"}
+        iconPosition="end"
+        title={submitTitle}
+        accessibilityLabel={sendButtonLabel(!!alternate, hasPrompt, delivery)}
+        busy={pending}
+        disabled={!hasPrompt}
+        onPress={() => {
+          void send();
+        }}
+      />
+    </>
+  );
+};
+
+type TouchBarProps = TouchBarLeftProps & TouchBarRightProps;
+
+const TouchBar = ({
+  active,
+  attachDevice,
+  capabilities,
+  delivery,
+  draft,
+  draftLoaded,
+  focusInput,
+  hasPrompt,
+  interrupt,
+  opencodeClient,
+  pending,
+  send,
+  setDraft,
+  setPanel,
+  shellMode,
+  stopReady,
+  stopping,
+  styles,
+}: TouchBarProps & Pick<ChatController, "styles">) => (
+  <View style={styles.touchBar}>
+    <TouchBarLeft
+      attachDevice={attachDevice}
+      capabilities={capabilities}
+      draft={draft}
+      draftLoaded={draftLoaded}
+      focusInput={focusInput}
+      opencodeClient={opencodeClient}
+      setDraft={setDraft}
+      setPanel={setPanel}
+      shellMode={shellMode}
+    />
+    <View style={styles.touchBarSpacer} />
+    <TouchBarRight
+      active={active}
+      capabilities={capabilities}
+      delivery={delivery}
+      hasPrompt={hasPrompt}
+      interrupt={interrupt}
+      pending={pending}
+      send={send}
+      shellMode={shellMode}
+      stopReady={stopReady}
+      stopping={stopping}
+    />
+  </View>
+);
+
+const composerPlaceholder = (
+  capabilities: ChatController["capabilities"],
+  shellMode: boolean
+) => {
+  if (shellMode) {
+    return "Enter shell command…";
+  }
+  return capabilities.commands || capabilities.files
+    ? "Ask anything, / for commands, @ for context…"
+    : "Ask anything…";
 };
 
 interface ComposerBodyProps extends Pick<
@@ -417,7 +625,6 @@ interface ComposerBodyProps extends Pick<
   | "capabilities"
   | "composerHeight"
   | "currentModel"
-  | "delivery"
   | "draft"
   | "hasPrompt"
   | "interrupt"
@@ -431,7 +638,6 @@ interface ComposerBodyProps extends Pick<
   | "run"
   | "selectedAgentIDs"
   | "selectedSkills"
-  | "send"
   | "sessionID"
   | "setAttachments"
   | "setDraft"
@@ -445,7 +651,9 @@ interface ComposerBodyProps extends Pick<
   | "styles"
   | "updateComposerHeight"
 > {
+  inputRef: RefObject<InputHandle | null>;
   session: SessionInfo;
+  shellMode: boolean;
 }
 
 export const ComposerBody = ({
@@ -455,9 +663,9 @@ export const ComposerBody = ({
   capabilities,
   composerHeight,
   currentModel,
-  delivery,
   draft,
   hasPrompt,
+  inputRef,
   interrupt,
   maximumComposerHeight,
   minimumComposerHeight,
@@ -469,7 +677,6 @@ export const ComposerBody = ({
   run,
   selectedAgentIDs,
   selectedSkills,
-  send,
   session,
   sessionID,
   setAttachments,
@@ -479,6 +686,7 @@ export const ComposerBody = ({
   setSelectedAgentIDs,
   setSelectedMessageID,
   setSelectedSkills,
+  shellMode,
   stopReady,
   stopping,
   styles,
@@ -503,14 +711,11 @@ export const ComposerBody = ({
       <Field
         key={scheme}
         accessibilityLabel="Message"
-        placeholder={
-          capabilities.commands || capabilities.files
-            ? "Ask anything, / for commands, @ for context…"
-            : "Ask anything…"
-        }
-        autoCapitalize="sentences"
-        autoCorrect
-        spellCheck
+        ref={inputRef as never}
+        placeholder={composerPlaceholder(capabilities, shellMode)}
+        autoCapitalize={shellMode ? "none" : "sentences"}
+        autoCorrect={!shellMode}
+        spellCheck={!shellMode}
         returnKeyType="default"
         submitBehavior="newline"
         multiline
@@ -520,6 +725,7 @@ export const ComposerBody = ({
         onFocus={() => setSelectedMessageID(null)}
         style={[
           styles.composerInput,
+          shellMode && styles.composerInputShell,
           {
             height: draft
               ? Math.max(minimumComposerHeight, composerHeight)
@@ -529,27 +735,27 @@ export const ComposerBody = ({
           },
         ]}
       />
-      <ComposerToolbar
-        active={active}
-        agents={agents}
-        capabilities={capabilities}
-        currentModel={currentModel}
-        delivery={delivery}
-        hasPrompt={hasPrompt}
-        interrupt={interrupt}
-        opencodeClient={opencodeClient}
-        pending={pending}
-        providerLabel={providerLabel}
-        selectedVariant={selectedVariant}
-        run={run}
-        send={send}
-        sessionID={sessionID}
-        setPanel={setPanel}
-        stopReady={stopReady}
-        stopping={stopping}
-        styles={styles}
-        session={session}
-      />
+      {!shellMode && (
+        <ComposerToolbar
+          active={active}
+          agents={agents}
+          capabilities={capabilities}
+          currentModel={currentModel}
+          hasPrompt={hasPrompt}
+          interrupt={interrupt}
+          opencodeClient={opencodeClient}
+          pending={pending}
+          providerLabel={providerLabel}
+          selectedVariant={selectedVariant}
+          run={run}
+          sessionID={sessionID}
+          setPanel={setPanel}
+          stopReady={stopReady}
+          stopping={stopping}
+          styles={styles}
+          session={session}
+        />
+      )}
     </>
   );
 };
@@ -559,6 +765,7 @@ interface ComposerProps extends Pick<
   | "active"
   | "activity"
   | "agents"
+  | "attachDevice"
   | "attachments"
   | "capabilities"
   | "colors"
@@ -575,6 +782,7 @@ interface ComposerProps extends Pick<
   | "minimumComposerHeight"
   | "opencodeClient"
   | "pending"
+  | "panel"
   | "providerLabel"
   | "selectedVariant"
   | "restoredSkillIDs"
@@ -606,6 +814,7 @@ export const Composer = ({
   active,
   activity,
   agents,
+  attachDevice,
   attachments,
   capabilities,
   colors,
@@ -621,6 +830,7 @@ export const Composer = ({
   maximumComposerHeight,
   minimumComposerHeight,
   opencodeClient,
+  panel,
   pending,
   providerLabel,
   selectedVariant,
@@ -648,6 +858,17 @@ export const Composer = ({
   visible,
 }: ComposerProps) => {
   const { scheme } = useTheme();
+  const inputRef = useRef<InputHandle>(null);
+  const focusInput = () => inputRef.current?.focus();
+  const shellMode = capabilities.shell && draft.startsWith("!");
+  const previousPanel = useRef(panel);
+  useEffect(() => {
+    const closed = previousPanel.current;
+    previousPanel.current = panel;
+    if (panel === null && (closed === "commands" || closed === "mentions")) {
+      inputRef.current?.focus();
+    }
+  }, [panel]);
   const cardStyle = {
     backgroundColor: scheme === "dark" ? colors.panel : colors.bg,
     boxShadow: elevation(scheme).raised,
@@ -672,9 +893,9 @@ export const Composer = ({
             capabilities={capabilities}
             composerHeight={composerHeight}
             currentModel={currentModel}
-            delivery={delivery}
             draft={draft}
             hasPrompt={hasPrompt}
+            inputRef={inputRef}
             interrupt={interrupt}
             maximumComposerHeight={maximumComposerHeight}
             minimumComposerHeight={minimumComposerHeight}
@@ -686,7 +907,6 @@ export const Composer = ({
             run={run}
             selectedAgentIDs={selectedAgentIDs}
             selectedSkills={selectedSkills}
-            send={send}
             sessionID={sessionID}
             setAttachments={setAttachments}
             setDraft={setDraft}
@@ -695,6 +915,7 @@ export const Composer = ({
             setSelectedAgentIDs={setSelectedAgentIDs}
             setSelectedMessageID={setSelectedMessageID}
             setSelectedSkills={setSelectedSkills}
+            shellMode={shellMode}
             stopReady={stopReady}
             stopping={stopping}
             styles={styles}
@@ -705,6 +926,26 @@ export const Composer = ({
           <Busy />
         )}
       </View>
+      <TouchBar
+        active={active}
+        attachDevice={attachDevice}
+        capabilities={capabilities}
+        delivery={delivery}
+        draft={draft}
+        draftLoaded={draftLoaded}
+        focusInput={focusInput}
+        hasPrompt={hasPrompt}
+        interrupt={interrupt}
+        opencodeClient={opencodeClient}
+        pending={pending}
+        send={send}
+        setDraft={setDraft}
+        setPanel={setPanel}
+        shellMode={shellMode}
+        stopReady={stopReady}
+        stopping={stopping}
+        styles={styles}
+      />
     </View>
   );
 };
