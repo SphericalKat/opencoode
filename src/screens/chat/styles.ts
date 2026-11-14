@@ -51,7 +51,12 @@ export const createStyles = (colors: ThemeColors) =>
       flexGrow: 1,
       gap: 2,
     },
-    composerControlsScroll: { flex: 1, marginEnd: 12, marginStart: 4 },
+    composerControlsViewport: {
+      flex: 1,
+      marginEnd: 12,
+      marginStart: 4,
+      minWidth: 0,
+    },
     composerActions: {
       alignItems: "center",
       flexDirection: "row",

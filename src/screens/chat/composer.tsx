@@ -12,6 +12,7 @@ import {
   useMenuAnchor,
 } from "../../components/anchored-menu";
 import type { Rect } from "../../components/anchored-menu";
+import { EdgeFade } from "../../components/edge-fade";
 import { IconButton } from "../../components/icon-button";
 import { SelectMenu, SelectTrigger } from "../../components/select";
 import { elevation } from "../../components/surface";
@@ -139,29 +140,33 @@ export const AgentChip = ({
   const currentID = session.agent ?? primary[0].id;
   const name =
     agents.find((agent) => agent.id === currentID)?.name ?? currentID;
+  // SelectMenu pins itself to the top of its parent, so this wrapper lets the
+  // chip row center it with the other chips.
   return (
-    <SelectMenu
-      appearance="chip"
-      indicator="menu"
-      placement="top-start"
-      gutter={AGENT_MENU_GUTTER}
-      maxWidth={AGENT_CHIP_MAX_WIDTH}
-      accessibilityLabel="Choose agent"
-      disabled={pending}
-      label={capitalizeFirst(name)}
-      value={currentID}
-      options={primary.map((agent) => ({
-        label: capitalizeFirst(agent.name),
-        value: agent.id,
-      }))}
-      onSelect={(id) => {
-        if (id !== currentID) {
-          void run(() =>
-            opencodeClient.session.switchAgent({ agent: id, sessionID })
-          );
-        }
-      }}
-    />
+    <View>
+      <SelectMenu
+        appearance="chip"
+        indicator="menu"
+        placement="top-start"
+        gutter={AGENT_MENU_GUTTER}
+        maxWidth={AGENT_CHIP_MAX_WIDTH}
+        accessibilityLabel="Choose agent"
+        disabled={pending}
+        label={capitalizeFirst(name)}
+        value={currentID}
+        options={primary.map((agent) => ({
+          label: capitalizeFirst(agent.name),
+          value: agent.id,
+        }))}
+        onSelect={(id) => {
+          if (id !== currentID) {
+            void run(() =>
+              opencodeClient.session.switchAgent({ agent: id, sessionID })
+            );
+          }
+        }}
+      />
+    </View>
   );
 };
 
@@ -473,6 +478,38 @@ const ComposerActions = ({
   );
 };
 
+const ChipScroller = ({
+  children,
+  styles,
+}: Pick<ChatController, "styles"> & { children: React.ReactNode }) => {
+  const { colors, scheme } = useTheme();
+  const [viewport, setViewport] = useState(0);
+  const [content, setContent] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const fade = scheme === "dark" ? colors.panel : colors.bg;
+  const overflows = content > viewport + 1;
+  return (
+    <View style={styles.composerControlsViewport}>
+      <ScrollView
+        horizontal
+        keyboardShouldPersistTaps="handled"
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.composerControlsRow}
+        onLayout={(event) => setViewport(event.nativeEvent.layout.width)}
+        onContentSizeChange={(width) => setContent(width)}
+        onScroll={(event) => setOffset(event.nativeEvent.contentOffset.x)}
+      >
+        {children}
+      </ScrollView>
+      {overflows && offset > 1 && <EdgeFade side="left" color={fade} />}
+      {overflows && offset + viewport < content - 1 && (
+        <EdgeFade side="right" color={fade} />
+      )}
+    </View>
+  );
+};
+
 interface ComposerToolbarProps
   extends
     Pick<
@@ -496,13 +533,7 @@ export const ComposerToolbar = (props: ComposerToolbarProps) => {
   return (
     <View style={styles.composerControls}>
       <AddMenu {...props} />
-      <ScrollView
-        horizontal
-        keyboardShouldPersistTaps="handled"
-        showsHorizontalScrollIndicator={false}
-        style={styles.composerControlsScroll}
-        contentContainerStyle={styles.composerControlsRow}
-      >
+      <ChipScroller styles={styles}>
         <AgentChip
           agents={props.agents}
           capabilities={props.capabilities}
@@ -527,7 +558,7 @@ export const ComposerToolbar = (props: ComposerToolbarProps) => {
           selectedVariant={props.selectedVariant}
           setPanel={props.setPanel}
         />
-      </ScrollView>
+      </ChipScroller>
       <ComposerActions {...props} />
     </View>
   );
