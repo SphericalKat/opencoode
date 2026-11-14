@@ -67,7 +67,11 @@ const ResourceCard = ({
           {resource.description}
         </Text>
       )}
-      <Button title="Add resource reference" compact onPress={onAttach} />
+      <Button
+        title="Add resource reference"
+        size="compact"
+        onPress={onAttach}
+      />
     </Card>
   );
 };
@@ -116,7 +120,7 @@ const TemplateCard = ({
       )}
       <Button
         title="Add template reference"
-        compact
+        size="compact"
         disabled={!uri.trim() || unresolved}
         onPress={() => onAttach(uri.trim())}
       />
@@ -228,7 +232,7 @@ export const McpResources = ({ client, location, onAttachContext }: Props) => {
         </BodyText>
         <Button
           title="Refresh resources"
-          compact
+          size="compact"
           variant="ghost"
           busy={loading}
           onPress={() => {

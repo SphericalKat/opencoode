@@ -13,6 +13,7 @@ import {
   Empty,
   BodyText,
   mono,
+  JsonView,
   Row,
   Sheet,
 } from "../../components/ui";
@@ -228,14 +229,16 @@ export const ChildrenSheet = ({
 
 interface StatsSheetProps extends Pick<
   ChatController,
-  "active" | "capabilities" | "panel" | "setPanel"
+  "active" | "agents" | "capabilities" | "currentModel" | "panel" | "setPanel"
 > {
   session: SessionInfo;
 }
 
 export const StatsSheet = ({
   active,
+  agents,
   capabilities,
+  currentModel,
   panel,
   session,
   setPanel,
@@ -243,11 +246,36 @@ export const StatsSheet = ({
   <Sheet
     visible={panel === "stats"}
     title="Session statistics"
+    fitContent
+    contentStyle={{ gap: 12, paddingTop: 4 }}
     onClose={() => setPanel(null)}
   >
     {capabilities.statistics && panel === "stats" && (
-      <SessionStats session={session} running={active} />
+      <SessionStats
+        session={session}
+        running={active}
+        agents={agents}
+        currentModel={currentModel}
+      />
     )}
+  </Sheet>
+);
+
+type RawSessionSheetProps = Pick<ChatController, "panel" | "setPanel"> & {
+  session: SessionInfo;
+};
+
+export const RawSessionSheet = ({
+  panel,
+  session,
+  setPanel,
+}: RawSessionSheetProps) => (
+  <Sheet
+    visible={panel === "raw"}
+    title="Raw session details"
+    onClose={() => setPanel(null)}
+  >
+    {panel === "raw" && <JsonView value={session} />}
   </Sheet>
 );
 

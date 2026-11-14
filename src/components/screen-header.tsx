@@ -1,29 +1,15 @@
 import React from "react";
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { pageInset } from "../lib/layout";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import { ShellIcon } from "./shell-icon";
+import { BackButton } from "./back-button";
+import { IconButton } from "./icon-button";
 import { BodyText } from "./ui";
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    back: {
-      alignItems: "center",
-      borderRadius: 6,
-      height: Platform.OS === "android" ? 48 : 44,
-      justifyContent: "center",
-      marginEnd: 8,
-      marginStart: -16,
-      width: Platform.OS === "android" ? 48 : 44,
-    },
     header: {
       alignItems: "center",
       borderBottomColor: colors.border,
@@ -33,17 +19,46 @@ const createStyles = (colors: ThemeColors) =>
       minHeight: 56,
       paddingHorizontal: pageInset,
     },
-    menu: {
-      alignItems: "center",
-      borderRadius: 6,
-      height: Platform.OS === "android" ? 48 : 44,
-      justifyContent: "center",
-      marginEnd: -16,
-      width: Platform.OS === "android" ? 48 : 44,
-    },
-    pressed: { backgroundColor: colors.selected },
+    action: { marginEnd: -16 },
     title: { flex: 1, fontSize: 18, fontWeight: "600", lineHeight: 24 },
   });
+
+export { BackButton };
+
+export const HeaderMenuButton = ({ onPress }: { onPress: () => void }) => {
+  const { colors } = useTheme();
+  return (
+    <IconButton
+      icon="menu"
+      size={32}
+      borderless
+      color={colors.text}
+      accessibilityLabel="Open navigation"
+      onPress={onPress}
+    />
+  );
+};
+
+export const HeaderRefreshButton = ({
+  onPress,
+  busy,
+}: {
+  onPress: () => void;
+  busy?: boolean;
+}) => {
+  const { colors } = useTheme();
+  return (
+    <IconButton
+      icon="refresh"
+      size={32}
+      borderless
+      color={colors.text}
+      accessibilityLabel="Refresh"
+      busy={busy}
+      onPress={onPress}
+    />
+  );
+};
 
 export const ScreenHeader = ({
   title,
@@ -60,19 +75,14 @@ export const ScreenHeader = ({
   onRefresh?: () => void;
   refreshing?: boolean;
 }) => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.header}>
       {onBack && (
-        <Pressable
-          accessibilityRole="button"
+        <BackButton
           accessibilityLabel={`Back to ${backLabel || "Sessions"}`}
           onPress={onBack}
-          style={({ pressed }) => [styles.back, pressed && styles.pressed]}
-        >
-          <ShellIcon name="back" color={colors.text} size={22} />
-        </Pressable>
+        />
       )}
       <BodyText
         accessibilityRole="header"
@@ -82,30 +92,14 @@ export const ScreenHeader = ({
         {title}
       </BodyText>
       {onRefresh && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Refresh"
-          accessibilityState={{ busy: refreshing, disabled: refreshing }}
-          disabled={refreshing}
-          onPress={() => onRefresh()}
-          style={({ pressed }) => [styles.menu, pressed && styles.pressed]}
-        >
-          {refreshing ? (
-            <ActivityIndicator size="small" color={colors.muted} />
-          ) : (
-            <ShellIcon name="refresh" color={colors.text} />
-          )}
-        </Pressable>
+        <View style={styles.action}>
+          <HeaderRefreshButton onPress={onRefresh} busy={refreshing} />
+        </View>
       )}
       {onOpenNavigation && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open navigation"
-          onPress={onOpenNavigation}
-          style={({ pressed }) => [styles.menu, pressed && styles.pressed]}
-        >
-          <ShellIcon name="menu" color={colors.text} />
-        </Pressable>
+        <View style={styles.action}>
+          <HeaderMenuButton onPress={onOpenNavigation} />
+        </View>
       )}
     </View>
   );

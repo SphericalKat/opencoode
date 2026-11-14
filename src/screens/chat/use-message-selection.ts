@@ -28,8 +28,6 @@ export const useMessageSelection = ({
   const [selectedMessageID, setSelectedMessageID] = useState<string | null>(
     null
   );
-  const [textSelectionMessage, setTextSelectionMessage] =
-    useState<SessionMessageInfo | null>(null);
   useEffect(() => {
     if (Platform.OS !== "android" || !visible || !selectedMessageID) {
       return;
@@ -62,9 +60,7 @@ export const useMessageSelection = ({
     !messages.some((message) => message.id === selectedMessageID)
   ) {
     setSelectedMessageID(null);
-    setPanel((current) =>
-      current === "message" || current === "selectText" ? null : current
-    );
+    setPanel((current) => (current === "selectText" ? null : current));
   }
   useEffect(() => {
     onSelectionChange?.(visible && !!selectedMessageID);
@@ -73,12 +69,6 @@ export const useMessageSelection = ({
   const actionMessage = selectedMessageID
     ? messages.find((message) => message.id === selectedMessageID)
     : undefined;
-  const canCopySelected =
-    actionMessage?.type === "assistant"
-      ? actionMessage.content.some(
-          (part) => part.type === "text" && !!part.text
-        )
-      : !!actionMessage;
   const copySelected = () => {
     if (actionMessage) {
       const messageID = actionMessage.id;
@@ -100,11 +90,8 @@ export const useMessageSelection = ({
 
   return {
     actionMessage,
-    canCopySelected,
     copySelected,
     selectedMessageID,
     setSelectedMessageID,
-    setTextSelectionMessage,
-    textSelectionMessage,
   };
 };

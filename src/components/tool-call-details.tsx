@@ -3,7 +3,14 @@ import type {
   SessionMessageAssistantTool,
   ToolContent,
 } from "@opencode/client";
-import React, { memo, useContext, useMemo, useState } from "react";
+import React, {
+  memo,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Platform,
   Pressable,
@@ -12,83 +19,80 @@ import {
   Text,
   View,
 } from "react-native";
-import Svg, { Path, Rect } from "react-native-svg";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { copyText } from "../lib/clipboard";
+import { withAlpha } from "../lib/color";
 import { MessageActionsContext } from "../lib/message-actions";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { ArtifactContent, isImageArtifact } from "./artifact-content";
-import { Disclosure, ErrorNotice, BodyText, mono, touchTarget } from "./ui";
+import { IconButton } from "./icon-button";
+import { SessionErrorNotice } from "./session-error";
+import { BodyText, mono, touchTarget } from "./ui";
 
 type Arguments = Record<string, JsonValue>;
 interface Section {
-  label?: string;
-  text: string;
+  copy: string;
   diff?: boolean;
+  display: string;
+  text: string;
 }
+type LineKind = "added" | "removed";
 const textPageSize = 24_000;
-const inset = 14;
-const copyIconSize = 14;
-const copyHeight = 36;
-const copyHitSlop = {
-  bottom: (touchTarget - copyHeight) / 2,
-  top: (touchTarget - copyHeight) / 2,
-};
+const sectionMaxHeight = 240;
+const sectionPadding = 12;
+const copiedMs = 2000;
+const copyBackgroundAlpha = 0.92;
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     added: { backgroundColor: colors.successBackground, color: colors.success },
     body: { gap: 10, minWidth: 0 },
-    code: {
-      color: colors.text,
-      fontFamily: mono,
-      fontSize: 13,
-      lineHeight: 20,
+    card: {
+      borderColor: colors.border,
+      borderRadius: 6,
+      borderWidth: StyleSheet.hairlineWidth,
+      marginBottom: 8,
+      marginTop: 2,
+      overflow: "hidden",
     },
-    codeContent: { gap: 8, padding: inset, paddingTop: 8 },
-    codeRow: { alignItems: "flex-start", flexDirection: "row" },
-    copyAction: { flexShrink: 0, maxWidth: 160 },
+    content: { padding: sectionPadding },
+    copy: { position: "absolute", right: 4, top: 4 },
     copyError: {
       color: colors.danger,
       fontSize: 12,
       lineHeight: 17,
       padding: 8,
     },
-    // The icon sits on the target's trailing edge so it lines up with the
-    // text inset while the rest of the target stays tappable.
-    copyTarget: {
-      alignItems: "flex-end",
-      height: copyHeight,
-      justifyContent: "center",
-      paddingRight: inset,
-      width: touchTarget,
+    inputSection: { backgroundColor: colors.bg },
+    inputText: {
+      color: colors.text,
+      fontFamily: mono,
+      fontSize: 13,
+      lineHeight: 20,
     },
-    divider: { borderTopColor: colors.border, borderTopWidth: 1 },
-    disclosedContent: { padding: 0, paddingTop: 0 },
     more: { justifyContent: "center", minHeight: touchTarget },
-    output: { backgroundColor: colors.bg },
-    panel: {
+    outputSection: {
       backgroundColor: colors.panel,
-      borderColor: colors.border,
-      borderRadius: 8,
-      borderWidth: 1,
-      overflow: "hidden",
+      borderTopColor: colors.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
     },
-    labeledContent: { paddingTop: 0 },
-    pending: { fontSize: 13, lineHeight: 19, padding: inset },
+    outputText: {
+      color: colors.muted,
+      fontFamily: mono,
+      fontSize: 13,
+      lineHeight: 20,
+    },
+    pending: {
+      color: colors.faint,
+      fontSize: 13,
+      lineHeight: 16,
+      padding: sectionPadding,
+    },
     removed: { backgroundColor: colors.dangerBackground, color: colors.danger },
-    sectionHeader: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      paddingLeft: inset,
-      paddingTop: 4,
-    },
-    sectionLabel: { fontSize: 12, lineHeight: 17 },
-    viewport: { flex: 1, maxHeight: 200 },
+    viewport: { maxHeight: sectionMaxHeight },
   });
 
 const nameOf = (name: string): string =>
@@ -167,16 +171,30 @@ export const toolDetail = (
   );
 };
 
-const editSections = (
-  file: Section[],
+const lineKind = (line: string): LineKind | undefined => {
+  if (line.startsWith("+") && !line.startsWith("+++")) {
+    return "added";
+  }
+  if (line.startsWith("-") && !line.startsWith("---")) {
+    return "removed";
+  }
+};
+
+const prefixLines = (value: string, prefix: string): string =>
+  value
+    .split("\n")
+    .map((line) => `${prefix}${line}`)
+    .join("\n");
+
+const editInput = (
   input: Arguments,
   metadata?: Arguments
-): Section[] => {
+): string | undefined => {
   const diff =
     text(metadata, "diff", "patch") ??
     text(input, "diff", "patch", "patchText");
   if (diff) {
-    return [...file, { diff: true, label: "Diff", text: diff }];
+    return diff;
   }
   const before = optionalString(
     input,
@@ -192,153 +210,111 @@ const editSections = (
     "newString",
     "new_string"
   );
-  return [
-    ...file,
-    ...(before === undefined ? [] : [{ label: "Before", text: before }]),
-    ...(after === undefined ? [] : [{ label: "After", text: after }]),
+  const parts = [
+    ...(before === undefined ? [] : [prefixLines(before, "-")]),
+    ...(after === undefined ? [] : [prefixLines(after, "+")]),
   ];
+  return parts.length ? parts.join("\n") : undefined;
 };
 
-const writeSections = (file: Section[], input: Arguments): Section[] => {
-  const content = optionalString(input, "content", "text");
-  return [
-    ...file,
-    ...(content === undefined ? [] : [{ label: "Content", text: content }]),
-  ];
-};
-
-const searchSections = (input: Arguments, path?: string): Section[] => {
-  const pattern = text(input, "pattern", "query");
-  return [
-    ...(pattern ? [{ label: "Pattern", text: pattern }] : []),
-    ...(path ? [{ label: "Directory", text: path }] : []),
-  ];
-};
-
-const webFetchSections = (input: Arguments): Section[] => {
+const webFetchInput = (input: Arguments): string | undefined => {
   const url = text(input, "url");
   const prompt = text(input, "prompt");
-  return [
-    ...(url ? [{ label: "URL", text: url }] : []),
-    ...(prompt ? [{ label: "Request", text: prompt }] : []),
-  ];
+  if (url && prompt) {
+    return `${url}\n\n${prompt}`;
+  }
+  return url ?? prompt;
 };
 
-const inputSections = (
+const noInputTools = new Set(["Read", "List", "Glob", "Grep"]);
+
+const plain = (value: string | undefined): Section | undefined =>
+  value === undefined
+    ? undefined
+    : { copy: "Copy input", display: value, text: value };
+
+const inputSection = (
   name: string,
   input: Arguments,
   metadata?: Arguments
-): Section[] => {
-  const path = text(input, "filePath", "file_path", "path");
-  const file = path ? [{ label: "File", text: path }] : [];
-  switch (toolNames[nameOf(name)]) {
+): Section | undefined => {
+  const tool = toolNames[nameOf(name)];
+  if (tool && noInputTools.has(tool)) {
+    return;
+  }
+  switch (tool) {
     case "Shell": {
       const command = text(input, "command", "cmd");
-      return command ? [{ text: command }] : [];
-    }
-    case "Read":
-    case "List": {
-      return file;
+      return command
+        ? {
+            copy: "Copy command",
+            display: `$ ${command}`,
+            text: command,
+          }
+        : undefined;
     }
     case "Edit":
     case "Patch": {
-      return editSections(file, input, metadata);
+      const edit = editInput(input, metadata);
+      return edit === undefined
+        ? undefined
+        : { copy: "Copy input", diff: true, display: edit, text: edit };
     }
     case "Write": {
-      return writeSections(file, input);
-    }
-    case "Glob":
-    case "Grep": {
-      return searchSections(input, path);
+      return plain(optionalString(input, "content", "text"));
     }
     case "Web fetch": {
-      return webFetchSections(input);
+      return plain(webFetchInput(input));
     }
     case "Web search": {
-      const query = text(input, "query");
-      return query ? [{ label: "Search", text: query }] : [];
+      return plain(text(input, "query"));
     }
     case "Execute": {
-      const code = text(input, "code", "command");
-      return code ? [{ label: "Code", text: code }] : [];
+      return plain(text(input, "code", "command"));
     }
     case "Agent":
     case "Task": {
-      const prompt = text(input, "prompt", "task", "description");
-      return prompt ? [{ label: "Task", text: prompt }] : [];
+      return plain(text(input, "prompt", "task", "description"));
     }
     default: {
-      return [];
+      return plain(JSON.stringify(input, null, 2));
     }
   }
 };
 
-const CopyAction = ({ value, label }: { value: string; label: string }) => {
-  const { colors } = useTheme();
+const CopyControl = ({
+  value,
+  label,
+  background,
+}: {
+  value: string;
+  label: string;
+  background: string;
+}) => {
   const styles = useThemedStyles(createStyles);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string>();
-  const [copiedFor, setCopiedFor] = useState(value);
-  if (copiedFor !== value) {
-    setCopiedFor(value);
-    setCopied(false);
-    setError(undefined);
-  }
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
   return (
-    <View style={styles.copyAction}>
-      <Pressable
-        accessibilityRole="button"
+    <View style={styles.copy}>
+      <IconButton
         accessibilityLabel={copied ? "Copied" : label}
-        onPress={(event) => {
-          event.stopPropagation();
+        icon={copied ? "check" : "copy"}
+        onPress={() => {
           void copyText(value)
             .then(() => {
               setCopied(true);
               setError(undefined);
+              clearTimeout(timer.current);
+              timer.current = setTimeout(() => setCopied(false), copiedMs);
               return null;
             })
             .catch((error_) => setError(errorMessage(error_)));
         }}
-        onLongPress={(event) => event.stopPropagation()}
-        hitSlop={copyHitSlop}
-        style={({ pressed }) => [
-          styles.copyTarget,
-          pressed && { opacity: 0.6 },
-        ]}
-      >
-        <Svg
-          width={copyIconSize}
-          height={copyIconSize}
-          viewBox="0 0 16 16"
-          fill="none"
-          aria-hidden
-        >
-          {copied ? (
-            <Path
-              d="m3 8 3 3 7-7"
-              stroke={colors.muted}
-              strokeWidth={1.4}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ) : (
-            <>
-              <Rect
-                x={2}
-                y={5}
-                width={9}
-                height={9}
-                rx={1.5}
-                stroke={colors.muted}
-              />
-              <Path
-                d="M5 5V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-2"
-                stroke={colors.muted}
-              />
-            </>
-          )}
-        </Svg>
-      </Pressable>
+        size={24}
+        style={{ backgroundColor: withAlpha(background, copyBackgroundAlpha) }}
+      />
       {error && (
         <BodyText accessibilityRole="alert" style={styles.copyError}>
           {error}
@@ -348,14 +324,12 @@ const CopyAction = ({ value, label }: { value: string; label: string }) => {
   );
 };
 
-const diffLineStyle = (
-  line: string,
-  styles: ReturnType<typeof createStyles>
-) => {
-  if (line.startsWith("+") && !line.startsWith("+++")) {
+const lineStyle = (line: string, styles: ReturnType<typeof createStyles>) => {
+  const kind = lineKind(line);
+  if (kind === "added") {
     return styles.added;
   }
-  if (line.startsWith("-") && !line.startsWith("---")) {
+  if (kind === "removed") {
     return styles.removed;
   }
 };
@@ -363,87 +337,70 @@ const diffLineStyle = (
 const CodeSection = ({
   section,
   output,
-  divided,
-  disclosed,
   selectable,
+  background,
 }: {
   section: Section;
   output?: boolean;
-  divided?: boolean;
-  disclosed?: boolean;
   selectable: boolean;
+  background: string;
 }) => {
   const styles = useThemedStyles(createStyles);
   const actions = useContext(MessageActionsContext);
   const [limit, setLimit] = useState(textPageSize);
-  const shown = section.text.slice(0, limit);
+  const shown = section.display.slice(0, limit);
   const lines = useMemo(
     () => (section.diff ? shown.split("\n") : undefined),
     [section.diff, shown]
   );
   return (
-    <View style={[output && styles.output, divided && styles.divider]}>
-      {section.label && !disclosed ? (
-        <View style={styles.sectionHeader}>
-          <BodyText muted style={styles.sectionLabel}>
-            {section.label}
-          </BodyText>
-          <CopyAction
-            value={section.text}
-            label={
-              output ? "Copy output" : `Copy ${section.label.toLowerCase()}`
-            }
-          />
-        </View>
-      ) : null}
-      <View style={styles.codeRow}>
-        <ScrollView
-          nestedScrollEnabled
-          style={styles.viewport}
-          contentContainerStyle={[
-            styles.codeContent,
-            !!section.label && styles.labeledContent,
-            disclosed && styles.disclosedContent,
-          ]}
-          keyboardShouldPersistTaps="handled"
+    <View style={output ? styles.outputSection : styles.inputSection}>
+      <ScrollView
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+        style={styles.viewport}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text
+          selectable={selectable}
+          onLongPress={
+            !selectable && Platform.OS !== "web" ? actions : undefined
+          }
+          style={output ? styles.outputText : styles.inputText}
         >
-          <Text
-            selectable={selectable}
-            onLongPress={
-              !selectable && Platform.OS !== "web" ? actions : undefined
-            }
-            style={styles.code}
+          {lines
+            ? lines.map((line, index) => (
+                <Text key={index} style={lineStyle(line, styles)}>
+                  {line}
+                  {index < lines.length - 1 ? "\n" : ""}
+                </Text>
+              ))
+            : shown}
+        </Text>
+        {section.display.length > limit && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show more text"
+            onPress={(event) => {
+              event.stopPropagation();
+              setLimit((current) => current + textPageSize);
+            }}
+            style={styles.more}
           >
-            {lines
-              ? lines.map((line, index) => (
-                  <Text key={index} style={diffLineStyle(line, styles)}>
-                    {line}
-                    {index < lines.length - 1 ? "\n" : ""}
-                  </Text>
-                ))
-              : shown}
-          </Text>
-          {section.text.length > limit && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Show more text"
-              onPress={(event) => {
-                event.stopPropagation();
-                setLimit((current) => current + textPageSize);
-              }}
-              style={styles.more}
-            >
-              <BodyText muted>
-                Show more text ({(section.text.length - limit).toLocaleString()}{" "}
-                characters left)
-              </BodyText>
-            </Pressable>
-          )}
-        </ScrollView>
-        {!section.label && !disclosed && (
-          <CopyAction value={section.text} label="Copy command" />
+            <BodyText muted>
+              Show more text (
+              {(section.display.length - limit).toLocaleString()} characters
+              left)
+            </BodyText>
+          </Pressable>
         )}
-      </View>
+      </ScrollView>
+      <CopyControl
+        background={background}
+        label={section.copy}
+        value={section.text}
+      />
     </View>
   );
 };
@@ -460,19 +417,13 @@ const ToolCallDetailsView = ({
   selectable: boolean;
 }) => {
   const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const { state } = tool;
   const input = state.status === "streaming" ? undefined : state.input;
   const metadata = "metadata" in state ? state.metadata : undefined;
-  const sections = useMemo(
-    () => (input ? inputSections(tool.name, input, metadata) : []),
+  const section = useMemo(
+    () => (input ? inputSection(tool.name, input, metadata) : undefined),
     [tool.name, input, metadata]
-  );
-  const argumentsText = useMemo(
-    () =>
-      state.status === "streaming"
-        ? state.input
-        : JSON.stringify(state.input, null, 2),
-    [state.input, state.status]
   );
   const content: ToolContent[] =
     "content" in state ? (state.content ?? []) : [];
@@ -486,43 +437,32 @@ const ToolCallDetailsView = ({
   const files = content
     .filter((item) => item.type === "file")
     .filter((item) => !isImageArtifact(item));
-  const fallback = !!input && !sections.length;
+  const streaming = state.status === "streaming";
+  const showCard = !!section || !!output || streaming;
   return (
     <View style={styles.body}>
-      <View style={styles.panel}>
-        {sections.map((section, index) => (
-          <CodeSection
-            key={`${tool.id}:${index}`}
-            section={section}
-            divided={index > 0}
-            selectable={selectable}
-          />
-        ))}
-        {fallback && (
-          <CodeSection
-            section={{ label: "Arguments", text: argumentsText }}
-            selectable={selectable}
-          />
-        )}
-        {state.status === "streaming" && (
-          <BodyText muted style={styles.pending}>
-            Receiving tool arguments
-          </BodyText>
-        )}
-        {!!output && (
-          <CodeSection
-            section={{ label: "Output", text: output }}
-            output
-            divided={sections.length > 0 || fallback}
-            selectable={selectable}
-          />
-        )}
-        {!output && !content.length && state.status === "completed" && (
-          <BodyText muted style={[styles.pending, styles.divider]}>
-            No output
-          </BodyText>
-        )}
-      </View>
+      {showCard && (
+        <View style={styles.card}>
+          {section && (
+            <CodeSection
+              background={colors.bg}
+              section={section}
+              selectable={selectable}
+            />
+          )}
+          {streaming && (
+            <BodyText style={styles.pending}>Receiving tool arguments</BodyText>
+          )}
+          {!!output && (
+            <CodeSection
+              background={colors.panel}
+              section={{ copy: "Copy output", display: output, text: output }}
+              output
+              selectable={selectable}
+            />
+          )}
+        </View>
+      )}
       {files.map((file, index) => (
         <ArtifactContent
           key={`${file.uri}:${index}`}
@@ -531,21 +471,8 @@ const ToolCallDetailsView = ({
           directory={directory}
         />
       ))}
-      {state.status === "error" && <ErrorNotice error={state.error.message} />}
-      {!fallback && (
-        <Disclosure
-          disclosureKey={`${tool.id}:arguments`}
-          headerAction={
-            <CopyAction value={argumentsText} label="Copy arguments" />
-          }
-          title="Arguments"
-        >
-          <CodeSection
-            section={{ label: "Arguments", text: argumentsText }}
-            disclosed
-            selectable={selectable}
-          />
-        </Disclosure>
+      {state.status === "error" && (
+        <SessionErrorNotice message={state.error.message} selectable />
       )}
     </View>
   );

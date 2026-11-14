@@ -1,23 +1,20 @@
 import type { PermissionSavedInfo } from "@opencode/client";
 import { useState } from "react";
 
+import { SheetGroup } from "../../components/list-sheet";
+import { useUndoableRemoval } from "../../components/snackbar";
 import {
+  BodyText,
   Button,
-  Card,
-  confirmAction,
   Empty,
   ErrorNotice,
   Field,
-  BodyText,
-  mono,
-  Row,
   Sheet,
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
 import { withSettingsRequest } from "../../lib/settings";
-import { useThemedStyles } from "../../lib/theme";
+import { MonoRow } from "./configuration";
 import { Page, runBusy, useResource } from "./shared";
-import { createStyles } from "./styles";
 
 export const Permissions = ({
   client,
@@ -26,7 +23,6 @@ export const Permissions = ({
   client: Client;
   directory: string;
 }) => {
-  const styles = useThemedStyles(createStyles);
   const { data, error, loading, refresh } = useResource(
     client,
     directory,
@@ -41,6 +37,8 @@ export const Permissions = ({
       );
     }
   );
+  const { hidden, remove: removeApproval } = useUndoableRemoval("approvals");
+  const visible = data?.filter((item) => !hidden.has(item.id));
   const [selected, setSelected] = useState<PermissionSavedInfo>();
   const [action, setAction] = useState("");
   const [resource, setResource] = useState("");
@@ -62,14 +60,13 @@ export const Permissions = ({
         project.
       </BodyText>
       <ErrorNotice error={errorAction} />
-      {data?.map((item) => (
-        <Card key={item.id}>
-          <BodyText style={styles.name}>{item.action}</BodyText>
-          <BodyText style={{ fontFamily: mono }}>{item.resource}</BodyText>
-          <Row>
-            <Button
-              title="Edit"
-              compact
+      {visible && visible.length > 0 && (
+        <SheetGroup variant="grouped" title="Saved approvals">
+          {visible.map((item) => (
+            <MonoRow
+              key={item.id}
+              label={item.action}
+              subtitle={item.resource}
               disabled={busy}
               onPress={() => {
                 setSelected(item);
@@ -78,32 +75,10 @@ export const Permissions = ({
                 setErrorAction(null);
               }}
             />
-            <Button
-              title="Revoke"
-              variant="danger"
-              compact
-              busy={busy}
-              onPress={() => {
-                void confirmAction(
-                  "Revoke saved approval?",
-                  "OpenCode will ask again when this action requires permission."
-                ).then((confirmed) => {
-                  if (confirmed) {
-                    void run(async (signal) => {
-                      await client.permission.saved.remove(
-                        { id: item.id },
-                        { signal }
-                      );
-                    });
-                  }
-                  return confirmed;
-                });
-              }}
-            />
-          </Row>
-        </Card>
-      ))}
-      {data && !data.length && (
+          ))}
+        </SheetGroup>
+      )}
+      {visible && !visible.length && (
         <Empty
           title="No saved approvals"
           detail="OpenCode will ask you before protected actions."
@@ -151,6 +126,26 @@ export const Permissions = ({
               );
               signal.throwIfAborted();
               setSelected(undefined);
+            });
+          }}
+        />
+        <Button
+          title="Revoke approval"
+          variant="danger"
+          disabled={busy}
+          onPress={() => {
+            if (!selected) {
+              return;
+            }
+            const { id } = selected;
+            setSelected(undefined);
+            removeApproval(id, {
+              commit: () =>
+                withSettingsRequest(async (signal) => {
+                  await client.permission.saved.remove({ id }, { signal });
+                  await refresh(signal);
+                }),
+              message: "Approval revoked",
             });
           }}
         />

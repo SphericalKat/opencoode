@@ -7,7 +7,9 @@ import type { Client } from "../lib/client";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { fileName } from "../lib/workspace";
+import { confirmAction } from "./dialog";
 import { NavIcon } from "./icons";
+import { BackButton } from "./screen-header";
 import {
   Button,
   Busy,
@@ -17,7 +19,6 @@ import {
   BodyText,
   mono,
   Row,
-  confirmAction,
   touchTarget,
 } from "./ui";
 
@@ -477,17 +478,17 @@ const ProjectDirectoryBrowser = ({
         </BodyText>
         <Row style={{ flexWrap: "nowrap" }}>
           {recent ? (
-            <Button
-              title="‹ Folders"
-              compact
-              variant="ghost"
+            <BackButton
+              label="Folders"
+              accessibilityLabel="Back to folders"
               disabled={pending}
               onPress={() => setRecent(false)}
             />
           ) : (
             <Button
               title="↑ Parent"
-              compact
+              size="compact"
+              alignSelf="center"
               variant="ghost"
               disabled={parent === path || pending}
               onPress={() => browse(parent)}
@@ -495,7 +496,8 @@ const ProjectDirectoryBrowser = ({
           )}
           <Button
             title={manual ? "Hide path" : "Enter a path"}
-            compact
+            size="compact"
+            alignSelf="center"
             variant="ghost"
             disabled={pending}
             onPress={() => setManual((open) => !open)}
@@ -503,7 +505,8 @@ const ProjectDirectoryBrowser = ({
           {!recent && (
             <Button
               title="Recent"
-              compact
+              size="compact"
+              alignSelf="center"
               variant="ghost"
               disabled={pending}
               onPress={() => setRecent(true)}
@@ -522,7 +525,7 @@ const ProjectDirectoryBrowser = ({
             />
             <Button
               title="Browse this path"
-              compact
+              size="compact"
               onPress={() => browse(value)}
               disabled={!value.trim() || pending}
             />

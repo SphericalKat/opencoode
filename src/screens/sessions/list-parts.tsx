@@ -1,6 +1,6 @@
 import { View } from "react-native";
 
-import { BodyText, Busy, Button, Empty } from "../../components/ui";
+import { BodyText, Busy, Empty } from "../../components/ui";
 import { useThemedStyles } from "../../lib/theme";
 import { emptyDetail, emptyTitle } from "./format";
 import { NewSessionPill } from "./new-session-buttons";
@@ -54,14 +54,4 @@ export const SessionsEmpty = ({
   );
 };
 
-interface SessionsFooterProps {
-  loadMore: () => void;
-  loading: boolean;
-}
-
-export const SessionsFooter = ({ loadMore, loading }: SessionsFooterProps) => {
-  if (loading) {
-    return <Busy />;
-  }
-  return <Button title="Load more" variant="ghost" onPress={loadMore} />;
-};
+export const SessionsFooter = () => <Busy />;

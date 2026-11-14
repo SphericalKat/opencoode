@@ -1,8 +1,9 @@
 import { createContext } from "react";
+import type { GestureResponderEvent } from "react-native";
 
-export const MessageActionsContext = createContext<(() => void) | undefined>(
-  undefined
-);
+export const MessageActionsContext = createContext<
+  ((event: GestureResponderEvent) => void) | undefined
+>(undefined);
 
 export const MessageDisclosureContext = createContext<
   | {

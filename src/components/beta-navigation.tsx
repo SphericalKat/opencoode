@@ -12,6 +12,8 @@ import Svg, { Path, Rect } from "react-native-svg";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { NavIcon } from "./icons";
+import { SheetGroup, SheetRow } from "./list-sheet";
+import { ProjectAvatar } from "./project-avatar";
 import { ShellIcon } from "./shell-icon";
 import { BodyText, Sheet } from "./ui";
 
@@ -37,16 +39,6 @@ const stripChevronOffset = ((0.727 - 0.546) / 2) * stripTitleSize;
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     activeTab: { backgroundColor: colors.selected },
-    badge: {
-      alignItems: "center",
-      backgroundColor: colors.muted,
-      borderRadius: 3,
-      flexShrink: 0,
-      justifyContent: "center",
-      minHeight: 16,
-      minWidth: 16,
-    },
-    badgeText: { color: colors.bg, fontSize: 12, lineHeight: 15 },
     closeTab: {
       alignItems: "center",
       height: 48,
@@ -85,14 +77,6 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 8,
     },
     menuText: { color: colors.muted, fontSize: 14, lineHeight: 19 },
-    moreRow: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      minHeight: 48,
-      paddingHorizontal: 12,
-    },
-    moreText: { fontSize: 14, lineHeight: 19 },
     openTab: { alignItems: "center", borderRadius: 6, flexDirection: "row" },
     openTabMain: {
       alignItems: "center",
@@ -146,7 +130,6 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       flexDirection: "row",
     },
-    sheetContent: { gap: 0, padding: 12, paddingBottom: 4, paddingTop: 0 },
     strip: {
       alignItems: "center",
       flexDirection: "row",
@@ -196,15 +179,9 @@ const HomeIcon = ({ color }: { color: string }) => (
 );
 
 const ProjectBadge = ({ directory }: { directory: string }) => {
-  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const name = directory.split(/[\\/]/u).findLast(Boolean) || "Project";
-  return (
-    <View style={styles.badge}>
-      <BodyText style={styles.badgeText}>
-        {name.slice(0, 1).toUpperCase()}
-      </BodyText>
-    </View>
-  );
+  return <ProjectAvatar name={name} ringColor={colors.bg} />;
 };
 
 export const BetaTabStrip = ({
@@ -313,18 +290,20 @@ export const BetaSessionNavigation = ({
           </BodyText>
         </Pressable>
       </View>
-      <Pressable
-        accessibilityRole={onProject ? "button" : undefined}
-        accessibilityLabel={`Project: ${directory}${onProject ? ". Open project" : ""}`}
-        disabled={!onProject}
-        onPress={onProject}
-        style={({ pressed }) => [styles.project, pressed && styles.pressed]}
-      >
-        <ProjectBadge directory={directory} />
-        <BodyText muted numberOfLines={1} style={styles.projectName}>
-          {directory.split(/[\\/]/u).findLast(Boolean) || directory}
-        </BodyText>
-      </Pressable>
+      {pane === "Session" && (
+        <Pressable
+          accessibilityRole={onProject ? "button" : undefined}
+          accessibilityLabel={`Project: ${directory}${onProject ? ". Open project" : ""}`}
+          disabled={!onProject}
+          onPress={onProject}
+          style={({ pressed }) => [styles.project, pressed && styles.pressed]}
+        >
+          <ProjectBadge directory={directory} />
+          <BodyText muted numberOfLines={1} style={styles.projectName}>
+            {directory.split(/[\\/]/u).findLast(Boolean) || directory}
+          </BodyText>
+        </Pressable>
+      )}
     </>
   );
 };
@@ -367,137 +346,143 @@ export const BetaTabsSheet = ({
       visible={visible}
       title="Tabs"
       fitContent
-      showHeader={false}
       onClose={onClose}
       onDismiss={onDismiss}
-      contentStyle={styles.sheetContent}
     >
-      {tabs.map((item) => (
-        <View
-          key={item.id}
-          style={[styles.openTab, selectedID === item.id && styles.activeTab]}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${item.title}`}
-            accessibilityState={{ selected: selectedID === item.id }}
-            onPress={() => onSelect(item.id)}
-            style={({ pressed }) => [
-              styles.openTabMain,
-              pressed && styles.pressed,
-            ]}
+      <SheetGroup variant="menu">
+        {tabs.map((item) => (
+          <View
+            key={item.id}
+            style={[styles.openTab, selectedID === item.id && styles.activeTab]}
           >
-            <ProjectBadge directory={item.directory} />
-            <BodyText numberOfLines={1} style={styles.openTabTitle}>
-              {item.title}
-            </BodyText>
-          </Pressable>
-          {onCloseTab && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Close tab ${item.title}`}
-              onPress={() => onCloseTab(item.id)}
+              accessibilityLabel={`Open ${item.title}`}
+              accessibilityState={{ selected: selectedID === item.id }}
+              onPress={() => onSelect(item.id)}
               style={({ pressed }) => [
-                styles.closeTab,
+                styles.openTabMain,
                 pressed && styles.pressed,
               ]}
             >
-              <ShellIcon name="close" size={14} color={colors.faint} />
+              <ProjectBadge directory={item.directory} />
+              <BodyText numberOfLines={1} style={styles.openTabTitle}>
+                {item.title}
+              </BodyText>
             </Pressable>
-          )}
-        </View>
-      ))}
-      {recent.some((item) => !tabs.some((tab) => tab.id === item.id)) && (
-        <>
-          <BodyText muted style={styles.recentTitle}>
-            Recent sessions
-          </BodyText>
-          {recent
-            .filter((item) => !tabs.some((tab) => tab.id === item.id))
-            .map((item) => (
+            {onCloseTab && (
               <Pressable
-                key={item.id}
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${item.title}`}
-                onPress={() => onSelect(item.id)}
+                accessibilityLabel={`Close tab ${item.title}`}
+                onPress={() => onCloseTab(item.id)}
                 style={({ pressed }) => [
-                  styles.openTabMain,
+                  styles.closeTab,
                   pressed && styles.pressed,
                 ]}
               >
-                <ProjectBadge directory={item.directory} />
-                <BodyText numberOfLines={1} style={styles.openTabTitle}>
-                  {item.title}
-                </BodyText>
+                <ShellIcon name="close" size={14} color={colors.faint} />
               </Pressable>
-            ))}
-        </>
-      )}
-      <Pressable
-        accessibilityRole="button"
-        onPress={onNew}
-        style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
-      >
-        <ShellIcon name="compose" size={16} color={colors.muted} />
-        <BodyText style={styles.menuText}>New session</BodyText>
-      </Pressable>
-      <View style={styles.divider} />
-      {onHome && (
+            )}
+          </View>
+        ))}
+        {recent.some((item) => !tabs.some((tab) => tab.id === item.id)) && (
+          <>
+            <BodyText muted style={styles.recentTitle}>
+              Recent sessions
+            </BodyText>
+            {recent
+              .filter((item) => !tabs.some((tab) => tab.id === item.id))
+              .map((item) => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${item.title}`}
+                  onPress={() => onSelect(item.id)}
+                  style={({ pressed }) => [
+                    styles.openTabMain,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <ProjectBadge directory={item.directory} />
+                  <BodyText numberOfLines={1} style={styles.openTabTitle}>
+                    {item.title}
+                  </BodyText>
+                </Pressable>
+              ))}
+          </>
+        )}
         <Pressable
           accessibilityRole="button"
-          onPress={onHome}
+          onPress={onNew}
           style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
         >
-          <HomeIcon color={colors.muted} />
-          <BodyText style={styles.menuText}>Home</BodyText>
+          <ShellIcon name="compose" size={16} color={colors.muted} />
+          <BodyText style={styles.menuText}>New session</BodyText>
         </Pressable>
-      )}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Switch server. Current server: ${serverLabel}`}
-        onPress={onServer}
-        style={({ pressed }) => [styles.serverRow, pressed && styles.pressed]}
-      >
-        <ShellIcon name="server" size={16} color={colors.muted} />
-        <View style={styles.serverText}>
-          <BodyText numberOfLines={1} style={styles.serverName}>
-            {serverLabel}
-          </BodyText>
-          <BodyText muted style={styles.serverDetail}>
-            Current server
-          </BodyText>
+        <View style={styles.divider} />
+        {onHome && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onHome}
+            style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
+          >
+            <HomeIcon color={colors.muted} />
+            <BodyText style={styles.menuText}>Home</BodyText>
+          </Pressable>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Switch server. Current server: ${serverLabel}`}
+          onPress={onServer}
+          style={({ pressed }) => [styles.serverRow, pressed && styles.pressed]}
+        >
+          <ShellIcon name="server" size={16} color={colors.muted} />
+          <View style={styles.serverText}>
+            <BodyText numberOfLines={1} style={styles.serverName}>
+              {serverLabel}
+            </BodyText>
+            <BodyText muted style={styles.serverDetail}>
+              Current server
+            </BodyText>
+          </View>
+          <ShellIcon name="chevron" size={14} color={colors.muted} />
+        </Pressable>
+        <View style={styles.footer}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onSettings}
+            style={({ pressed }) => [
+              styles.footerButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <NavIcon name="settings" color={colors.muted} size={16} />
+            <BodyText style={styles.menuText}>Settings</BodyText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onHelp}
+            style={({ pressed }) => [
+              styles.footerButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <BodyText muted style={styles.menuText}>
+              ⓘ
+            </BodyText>
+            <BodyText style={styles.menuText}>Help</BodyText>
+          </Pressable>
         </View>
-        <ShellIcon name="chevron" size={14} color={colors.muted} />
-      </Pressable>
-      <View style={styles.footer}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onSettings}
-          style={({ pressed }) => [
-            styles.footerButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <NavIcon name="settings" color={colors.muted} size={16} />
-          <BodyText style={styles.menuText}>Settings</BodyText>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onHelp}
-          style={({ pressed }) => [
-            styles.footerButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <BodyText muted style={styles.menuText}>
-            ⓘ
-          </BodyText>
-          <BodyText style={styles.menuText}>Help</BodyText>
-        </Pressable>
-      </View>
+      </SheetGroup>
     </Sheet>
   );
 };
+
+const moreIcons = {
+  Files: "folder",
+  Terminal: "terminal",
+  Worktrees: "branch",
+} as const;
 
 export const BetaMoreSheet = ({
   visible,
@@ -515,50 +500,34 @@ export const BetaMoreSheet = ({
   onView?: (pane: "Files" | "Terminal" | "Worktrees") => void;
   onUsage?: () => void;
   onDetails?: () => void;
-}) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  return (
-    <Sheet
-      visible={visible}
-      title="More options"
-      fitContent
-      showHeader={false}
-      contentStyle={styles.sheetContent}
-      onClose={onClose}
-      onDismiss={onDismiss}
-    >
+}) => (
+  <Sheet
+    visible={visible}
+    title="More options"
+    fitContent
+    onClose={onClose}
+    onDismiss={onDismiss}
+  >
+    <SheetGroup variant="menu">
       {onView &&
         (["Files", "Terminal", "Worktrees"] as const).map((view) => (
-          <Pressable
+          <SheetRow
             key={view}
-            accessibilityRole="button"
+            label={view}
+            icon={moreIcons[view]}
+            checked={pane === view}
             onPress={() => onView(view)}
-            style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}
-          >
-            <BodyText style={styles.moreText}>{view}</BodyText>
-            <BodyText muted>{pane === view ? "✓" : ""}</BodyText>
-          </Pressable>
+          />
         ))}
-      {onUsage && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onUsage}
-          style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}
-        >
-          <BodyText style={styles.moreText}>Usage</BodyText>
-        </Pressable>
-      )}
+      {onUsage && <SheetRow label="Usage" icon="list" onPress={onUsage} />}
       {onDetails && (
-        <Pressable
-          accessibilityRole="button"
+        <SheetRow
+          label="Session details"
+          icon="info"
+          trailing="chevron"
           onPress={onDetails}
-          style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}
-        >
-          <BodyText style={styles.moreText}>Session details</BodyText>
-          <ShellIcon name="chevron" size={14} color={colors.muted} />
-        </Pressable>
+        />
       )}
-    </Sheet>
-  );
-};
+    </SheetGroup>
+  </Sheet>
+);

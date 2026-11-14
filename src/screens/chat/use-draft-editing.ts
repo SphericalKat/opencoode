@@ -1,7 +1,7 @@
 import type { SessionInboxInfo, SessionMessageInfo } from "@opencode/client";
 import React from "react";
 
-import { confirmAction } from "../../components/ui";
+import { confirmAction } from "../../components/dialog";
 import type { OpenCodeClient, Capabilities } from "./session-sync";
 import type { Alive, SetPanel } from "./types";
 import type { ComposerDraft } from "./use-composer-draft";
@@ -62,7 +62,8 @@ export const useDraftEditing = ({
           selectedAgentIDs.length) &&
         !(await confirmAction(
           "Replace the message draft?",
-          "This opens the pending input in the composer and replaces the current draft."
+          "This opens the pending input in the composer and replaces the current draft.",
+          { confirmLabel: "Replace draft", destructive: false }
         ))
       ) {
         return;
@@ -152,7 +153,8 @@ export const useDraftEditing = ({
           selectedAgentIDs.length) &&
         !(await confirmAction(
           "Replace the message draft?",
-          "This opens the earlier message in the composer and replaces the current draft."
+          "This opens the earlier message in the composer and replaces the current draft.",
+          { confirmLabel: "Replace draft", destructive: false }
         ))
       ) {
         return;

@@ -174,7 +174,7 @@ const SideQuestionBody = ({
           <Row>
             <Button
               title={copied ? "Copied" : "Copy answer"}
-              compact
+              size="compact"
               disabled={!answer.text}
               onPress={() => {
                 copy();

@@ -1,39 +1,31 @@
-import { useNavigationContainerRef } from "@react-navigation/native";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
-import { Platform, useWindowDimensions, View } from "react-native";
-import { SafeAreaInsetsContext } from "react-native-safe-area-context";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BackHandler, View } from "react-native";
 
 import type { Client } from "../lib/client";
 import { useThemedStyles } from "../lib/theme";
 import { useUnsavedGuard } from "../lib/unsaved";
+import { SettingsTopBar } from "./settings/navigation";
+import { SettingsSection } from "./settings/section-views";
 import {
+  allSections,
   filterSections,
   resolveSelected,
-  useInlineBackHandling,
-  useNativeStackBackHandling,
-  SettingsInlineLayout,
-} from "./settings/inline-layout";
-import { SettingsIndex, SettingsNativeStack } from "./settings/navigation";
-import { SettingsSection } from "./settings/section-views";
-import { allSections } from "./settings/sections";
+  sectionDescriptions,
+} from "./settings/sections";
 import type { Section, ModelCatalog } from "./settings/sections";
-import { zeroInsets } from "./settings/stack";
-import type { SettingsStackParams } from "./settings/stack";
+import {
+  HeaderRefreshContext,
+  SectionHeaderContext,
+  SectionPageHeader,
+} from "./settings/shared";
+import type { HeaderRefresh } from "./settings/shared";
 import { createStyles } from "./settings/styles";
 
 export type { Section } from "./settings/sections";
 export { AppearanceSettings } from "./settings/appearance-settings";
 
-const keepState = (state: boolean) => state;
-const isNativeStackWidth = (width: number) =>
-  Platform.OS !== "web" && width < 920;
+// Advanced renders its own scroll views, so Page cannot carry its header.
+const headerInPage = (section: Section) => section !== "Advanced";
 
 export const SettingsScreen = ({
   client,
@@ -46,7 +38,7 @@ export const SettingsScreen = ({
   backLabel,
   onOpenNavigation,
   onManageServers,
-  serverLabel,
+  sectionRequest,
 }: {
   client?: Client;
   modelCatalog?: ModelCatalog;
@@ -58,17 +50,15 @@ export const SettingsScreen = ({
   backLabel?: string;
   onOpenNavigation?: () => void;
   onManageServers?: () => void;
+  sectionRequest?: { id: number; section: Section };
   serverLabel?: string;
 }) => {
   const modelCatalog = modelCatalogProp ?? client?.model;
   const styles = useThemedStyles(createStyles);
-  const { width } = useWindowDimensions();
-  // A resize must not replace the navigator and discard an open editor.
-  const [nativeStackEnabled] = useReducer(keepState, width, isNativeStackWidth);
   const [section, setSection] = useState<Section | null>(null);
+  const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
   const mounted = useRef(true);
-  const navigationRef = useNavigationContainerRef<SettingsStackParams>();
   const hasClient = !!client;
   const hasModelCatalog = !!modelCatalog;
   const availableSections = useMemo(
@@ -83,92 +73,94 @@ export const SettingsScreen = ({
     };
   }, []);
   const changeSection = useCallback(
-    async (next: Section | null) => {
-      if (next !== null && !availableSections.includes(next)) {
+    async (next: Section) => {
+      if (!availableSections.includes(next)) {
         return false;
       }
-      if (next === section) {
+      if (next === selected) {
         return true;
       }
-      if (section !== null && !(await confirmNavigation())) {
-        return false;
-      }
-      if (!mounted.current) {
+      if (!(await confirmNavigation()) || !mounted.current) {
         return false;
       }
       setSection(next);
       return true;
     },
-    [section, availableSections, confirmNavigation]
+    [availableSections, selected, confirmNavigation]
   );
-  useInlineBackHandling({
-    changeSection,
-    nativeStackEnabled,
-    onBackStateChange,
-    section,
-    visible,
-  });
-  const updateNativeBackState = useNativeStackBackHandling({
-    nativeStackEnabled,
-    navigationRef,
-    onBackStateChange,
-    visible,
-  });
+  const handledRequest = useRef(0);
+  useEffect(() => {
+    if (!sectionRequest || sectionRequest.id === handledRequest.current) {
+      return;
+    }
+    handledRequest.current = sectionRequest.id;
+    void changeSection(sectionRequest.section);
+  }, [sectionRequest, changeSection]);
+  const exit = useCallback(async () => {
+    if ((await confirmNavigation()) && mounted.current) {
+      onBack?.();
+    }
+  }, [confirmNavigation, onBack]);
+  const canExit = visible && !!onBack;
+  useEffect(() => {
+    onBackStateChange?.(canExit);
+    return () => onBackStateChange?.(false);
+  }, [onBackStateChange, canExit]);
+  useEffect(() => {
+    if (!canExit) {
+      return;
+    }
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        void exit();
+        return true;
+      }
+    );
+    return () => subscription.remove();
+  }, [canExit, exit]);
 
-  const renderIndex = () => (
-    <SettingsIndex
-      onSelect={(next) => {
-        if (!nativeStackEnabled) {
-          void changeSection(next);
-          return;
-        }
-        navigationRef.navigate("Section", { section: next });
-      }}
-      sections={availableSections}
-      selected={selected}
-      onManageServers={onManageServers}
-      serverLabel={serverLabel}
-    />
+  const header = useMemo(
+    () =>
+      selected
+        ? { description: sectionDescriptions[selected], title: selected }
+        : null,
+    [selected]
   );
-  const renderSection = (value: Section) => (
-    <SettingsSection
-      client={client}
-      modelCatalog={modelCatalog}
-      directory={directory}
-      section={value}
-    />
-  );
-
+  const pageHeader = selected && headerInPage(selected) ? header : null;
+  const handleBack = () => {
+    void exit();
+  };
+  const handleSelectSection = (next: Section) => {
+    void changeSection(next);
+  };
   return (
-    <View style={[styles.screen, styles.narrowScreen]}>
-      {nativeStackEnabled ? (
-        <SafeAreaInsetsContext.Provider value={zeroInsets}>
-          <View style={styles.nativeNavigation}>
-            <SettingsNativeStack
-              availableSections={availableSections}
-              backLabel={backLabel}
-              client={client}
-              directory={directory}
-              modelCatalog={modelCatalog}
-              navigationRef={navigationRef}
-              onBack={onBack}
-              onReady={updateNativeBackState}
-              renderIndex={renderIndex}
-            />
+    <View style={styles.screen}>
+      <SettingsTopBar
+        availableSections={availableSections}
+        backLabel={backLabel}
+        headerRefresh={headerRefresh}
+        onBack={onBack ? handleBack : undefined}
+        onManageServers={onManageServers}
+        onOpenNavigation={onOpenNavigation}
+        onSelectSection={handleSelectSection}
+        selected={selected}
+      />
+      {header && !pageHeader && <SectionPageHeader {...header} />}
+      <HeaderRefreshContext.Provider value={setHeaderRefresh}>
+        <SectionHeaderContext.Provider value={pageHeader}>
+          <View style={styles.body}>
+            {selected && (
+              <SettingsSection
+                client={client}
+                modelCatalog={modelCatalog}
+                directory={directory}
+                section={selected}
+              />
+            )}
           </View>
-        </SafeAreaInsetsContext.Provider>
-      ) : (
-        <SettingsInlineLayout
-          backLabel={backLabel}
-          changeSection={changeSection}
-          onBack={onBack}
-          onOpenNavigation={onOpenNavigation}
-          renderIndex={renderIndex}
-          renderSection={renderSection}
-          section={section}
-          selected={selected}
-        />
-      )}
+        </SectionHeaderContext.Provider>
+      </HeaderRefreshContext.Provider>
     </View>
   );
 };

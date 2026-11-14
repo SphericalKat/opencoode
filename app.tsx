@@ -1,6 +1,7 @@
 import { useFonts } from "expo-font";
 import { View } from "react-native";
 
+import ibmPlexMonoMediumFont from "./assets/fonts/IBMPlexMono-Medium.ttf";
 import ibmPlexMonoFont from "./assets/fonts/IBMPlexMono-Text.ttf";
 import interFont from "./assets/fonts/Inter.ttf";
 import { MobileApp } from "./src/app/mobile-app";
@@ -10,6 +11,7 @@ import { SheetVisibilityProvider } from "./src/lib/sheet-visibility";
 
 const fonts = {
   IBMPlexMono: ibmPlexMonoFont,
+  "IBMPlexMono-Medium": ibmPlexMonoMediumFont,
   Inter: interFont,
 };
 

@@ -1,87 +1,81 @@
 import type { SessionMessageInfo } from "@opencode/client";
 import { View } from "react-native";
 
+import { IconButton } from "../../components/icon-button";
 import { Button, BodyText } from "../../components/ui";
 import { usePublishSelectionBar } from "../../lib/selection-bar";
-import { ChatIconButton } from "./controls";
+import { messageMenuEntries, messageMenuInput } from "./message-menu-entries";
+import { messageText } from "./message-rows";
 import type { ChatController } from "./use-chat-controller";
 
-interface RenderSelectionHeaderProps extends Pick<
+type SelectionBarFields = Pick<
   ChatController,
-  | "active"
-  | "backend"
-  | "canCopySelected"
-  | "capabilities"
   | "client"
   | "copySelected"
-  | "draftLoaded"
   | "editMessage"
+  | "menuContext"
   | "onOpenSession"
-  | "pending"
   | "run"
   | "sessionID"
-  | "setPanel"
   | "setSelectedMessageID"
   | "styles"
-> {
+>;
+
+interface RenderSelectionHeaderProps extends SelectionBarFields {
   actionMessage: SessionMessageInfo;
 }
 
 export const renderSelectionHeader = ({
   actionMessage,
-  active,
-  backend,
-  canCopySelected,
-  capabilities,
   client,
   copySelected,
-  draftLoaded,
   editMessage,
+  menuContext,
   onOpenSession,
-  pending,
   run,
   sessionID,
-  setPanel,
   setSelectedMessageID,
   styles,
-}: RenderSelectionHeaderProps) => (
-  <>
-    <View style={styles.headerLeading}>
-      <ChatIconButton
-        name="close"
-        label="Close message selection"
-        onPress={() => setSelectedMessageID(null)}
-      />
-    </View>
-    <BodyText accessibilityRole="header" style={styles.selectionCount}>
-      1 selected
-    </BodyText>
-    <Button
-      title="Copy"
-      compact
-      variant="ghost"
-      disabled={!canCopySelected}
-      onPress={copySelected}
-    />
-    {actionMessage.type === "user" && (
-      <Button
-        title="Edit"
-        compact
-        variant="ghost"
-        disabled={!draftLoaded || pending || active}
-        onPress={() => {
-          void editMessage(actionMessage);
-        }}
-      />
-    )}
-    {actionMessage.type !== "user" &&
-      capabilities.forkMessage &&
-      (!backend.canForkMessage || backend.canForkMessage(actionMessage)) && (
+}: RenderSelectionHeaderProps) => {
+  const entries = messageMenuEntries(
+    messageMenuInput(actionMessage, messageText(actionMessage), menuContext)
+  );
+  return (
+    <>
+      <View style={styles.headerLeading}>
+        <IconButton
+          icon="close"
+          size={32}
+          accessibilityLabel="Exit selection"
+          onPress={() => setSelectedMessageID(null)}
+        />
+      </View>
+      <BodyText accessibilityRole="header" style={styles.selectionCount}>
+        1 selected
+      </BodyText>
+      {entries.includes("copy") && (
+        <Button
+          title="Copy"
+          size="compact"
+          variant="ghost"
+          onPress={copySelected}
+        />
+      )}
+      {entries.includes("edit") && actionMessage.type === "user" && (
+        <Button
+          title="Edit"
+          size="compact"
+          variant="ghost"
+          onPress={() => {
+            void editMessage(actionMessage);
+          }}
+        />
+      )}
+      {entries.includes("fork") && (
         <Button
           title="Fork"
-          compact
+          size="compact"
           variant="ghost"
-          disabled={pending}
           onPress={() => {
             void run(async () => {
               const next = await client.session.fork({
@@ -93,54 +87,17 @@ export const renderSelectionHeader = ({
           }}
         />
       )}
-    <View style={styles.headerTrailing}>
-      <ChatIconButton
-        name="more"
-        label="Selected message actions"
-        onPress={() => setPanel("message")}
-      />
-    </View>
-  </>
-);
+    </>
+  );
+};
 
-type ChatHeaderProps = Pick<
-  ChatController,
-  | "actionMessage"
-  | "active"
-  | "backend"
-  | "canCopySelected"
-  | "capabilities"
-  | "client"
-  | "copySelected"
-  | "draftLoaded"
-  | "editMessage"
-  | "onOpenSession"
-  | "pending"
-  | "run"
-  | "sessionID"
-  | "setPanel"
-  | "setSelectedMessageID"
-  | "styles"
-> & { placement: "shell" | "inline" };
+type ChatHeaderProps = SelectionBarFields &
+  Pick<ChatController, "actionMessage"> & { placement: "shell" | "inline" };
 
 export const ChatHeader = ({
   placement,
   actionMessage,
-  active,
-  backend,
-  canCopySelected,
-  capabilities,
-  client,
-  copySelected,
-  draftLoaded,
-  editMessage,
-  onOpenSession,
-  pending,
-  run,
-  sessionID,
-  setPanel,
-  setSelectedMessageID,
-  styles,
+  ...fields
 }: ChatHeaderProps) => {
   if (!actionMessage) {
     return null;
@@ -149,28 +106,11 @@ export const ChatHeader = ({
     <View
       style={
         placement === "shell"
-          ? [styles.header, styles.shellSelectionHeader]
-          : [styles.header, styles.selectionHeader]
+          ? [fields.styles.header, fields.styles.shellSelectionHeader]
+          : [fields.styles.header, fields.styles.selectionHeader]
       }
     >
-      {renderSelectionHeader({
-        actionMessage,
-        active,
-        backend,
-        canCopySelected,
-        capabilities,
-        client,
-        copySelected,
-        draftLoaded,
-        editMessage,
-        onOpenSession,
-        pending,
-        run,
-        sessionID,
-        setPanel,
-        setSelectedMessageID,
-        styles,
-      })}
+      {renderSelectionHeader({ actionMessage, ...fields })}
     </View>
   );
 };

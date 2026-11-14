@@ -6,7 +6,7 @@ import { noop } from "../lib/async";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { SessionForms } from "./session-forms";
-import { Button, Busy, ErrorNotice, Heading, BodyText, Row } from "./ui";
+import { Button, Busy, ErrorNotice, BodyText, Row } from "./ui";
 
 const createFormsSync = ({
   client,
@@ -180,12 +180,16 @@ export const GlobalForms = ({
 
   return (
     <View style={{ gap: 12 }}>
-      <Row style={{ justifyContent: "space-between" }}>
-        <Heading>Pending requests</Heading>
+      <Row style={{ justifyContent: "space-between", paddingLeft: 12 }}>
+        <BodyText accessibilityRole="header" muted>
+          Pending requests
+        </BodyText>
         <Button
-          title="Refresh requests"
-          compact
+          title="Refresh"
+          accessibilityLabel="Refresh pending requests"
+          size="compact"
           variant="ghost"
+          alignSelf="center"
           disabled={loading || !foreground}
           onPress={() => refreshRef.current()}
         />
@@ -193,7 +197,9 @@ export const GlobalForms = ({
       <ErrorNotice error={error} onRetry={() => refreshRef.current()} />
       {loading && <Busy />}
       {!loading && !error && !forms.length && (
-        <BodyText muted>No pending MCP questions</BodyText>
+        <BodyText muted style={{ paddingLeft: 12 }}>
+          No pending MCP questions
+        </BodyText>
       )}
       <SessionForms
         client={client}

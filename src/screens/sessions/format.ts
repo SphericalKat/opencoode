@@ -32,7 +32,7 @@ export const sessionStatus = (
     return "Completed";
   }
   if (session.outcome === "failed") {
-    return "Needs attention";
+    return "Failed";
   }
   if (session.outcome === "interrupted") {
     return "Stopped";
@@ -43,11 +43,6 @@ export const sessionStatus = (
 export const isUnread = (session: SessionInfo) =>
   session.time.idle &&
   (!session.time.viewed || session.time.viewed < session.time.idle);
-
-export const visibleSessionStatus = (status: string): string | undefined =>
-  status === "Working" || status === "Needs attention" || status === "Stopped"
-    ? status
-    : undefined;
 
 export const startsDateGroup = ({
   group,
@@ -119,13 +114,6 @@ export const emptyDetail = (
   return archived
     ? "Sessions appear here after you archive them."
     : "Create a session to work with OpenCode in this directory.";
-};
-
-export const actionsTitle = (actions: "menu" | "filter" | "create"): string => {
-  if (actions === "create") {
-    return "Name a new session";
-  }
-  return actions === "filter" ? "Session history" : "Session list actions";
 };
 
 export const projectName = (projects: Project[], item: SessionInfo): string =>

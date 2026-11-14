@@ -1,9 +1,13 @@
 import type { SessionInfo } from "@opencode/client";
 import { FlashList } from "@shopify/flash-list";
 import { Platform, View } from "react-native";
+import Animated, { cubicBezier } from "react-native-reanimated";
 
 import type { TranscriptItem } from "../../components/assistant-turn";
+import { IconButton } from "../../components/icon-button";
+import { useMotionPreference } from "../../components/motion";
 import { SessionForms } from "../../components/session-forms";
+import { elevation } from "../../components/surface";
 import {
   Button,
   Card,
@@ -12,8 +16,10 @@ import {
   BodyText,
   Row,
 } from "../../components/ui";
+import { withAlpha } from "../../lib/color";
 import { MessageDisclosureContext } from "../../lib/message-actions";
-import { ChatIconButton, MessageText } from "./controls";
+import { useTheme } from "../../lib/theme";
+import { MessageText } from "./controls";
 import { inboxItemText } from "./labels";
 import type { ChatController } from "./use-chat-controller";
 
@@ -21,6 +27,56 @@ const messageKey = (item: TranscriptItem) => item.id;
 const messageType = (item: TranscriptItem) =>
   item.type === "message" ? item.message.type : item.type;
 const MessageSeparator = () => <View style={{ height: 24 }} />;
+
+const chipShownEase = cubicBezier(0.2, 0.8, 0.2, 1);
+const chipHiddenEase = cubicBezier(0.4, 0, 1, 1);
+const chipShownMs = 150;
+const chipHiddenMs = 110;
+const chipRiseOffset = 4;
+const chipFaceAlpha = 0.92;
+
+const JumpToLatest = ({
+  visible,
+  onPress,
+}: {
+  visible: boolean;
+  onPress: () => void;
+}) => {
+  const { colors, scheme } = useTheme();
+  const reduced = useMotionPreference();
+  const translateY = visible || reduced ? 0 : chipRiseOffset;
+  return (
+    <Animated.View
+      accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? "auto" : "no-hide-descendants"}
+      pointerEvents={visible ? "auto" : "none"}
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: [{ translateY }],
+        transitionDuration: visible ? chipShownMs : chipHiddenMs,
+        transitionProperty: ["opacity", "transform"],
+        transitionTimingFunction: visible ? chipShownEase : chipHiddenEase,
+      }}
+    >
+      <IconButton
+        icon="arrow-down"
+        size={28}
+        color={colors.text}
+        accessibilityLabel="Jump to latest"
+        onPress={onPress}
+        style={{
+          backgroundColor: withAlpha(colors.bg, chipFaceAlpha),
+          borderRadius: 8,
+          boxShadow: [
+            ...elevation(scheme).raised,
+            { offsetX: 0, offsetY: 2, blurRadius: 8, color: colors.bg },
+          ],
+          width: 32,
+        }}
+      />
+    </Animated.View>
+  );
+};
 
 type PendingInputsProps = Pick<
   ChatController,
@@ -74,7 +130,7 @@ export const PendingInputs = ({
             <Button
               disabled={pending}
               title={item.delivery === "steer" ? "Queue" : "Steer"}
-              compact
+              size="compact"
               onPress={() => {
                 void run(() =>
                   opencodeClient.session.inbox.update({
@@ -88,7 +144,7 @@ export const PendingInputs = ({
             {(item.type === "user" || item.type === "synthetic") && (
               <Button
                 title="Edit"
-                compact
+                size="compact"
                 disabled={!draftLoaded || pending}
                 onPress={() => {
                   void editInbox(item);
@@ -97,7 +153,7 @@ export const PendingInputs = ({
             )}
             <Button
               title="Cancel"
-              compact
+              size="compact"
               variant="ghost"
               disabled={pending}
               onPress={() => {
@@ -282,7 +338,7 @@ export const TranscriptList = ({
             <Button
               title="Load earlier messages"
               variant="ghost"
-              compact
+              size="compact"
               busy={loadingOlder}
               onPress={() => {
                 setFollowing(false);
@@ -317,16 +373,9 @@ export const TranscriptList = ({
           />
         }
       />
-      {showLatestControl && (
-        <View style={styles.betaLatestOverlay}>
-          <ChatIconButton
-            name="down"
-            label="Jump to latest"
-            raised
-            onPress={jumpToLatest}
-          />
-        </View>
-      )}
+      <View pointerEvents="box-none" style={styles.jumpToLatest}>
+        <JumpToLatest visible={showLatestControl} onPress={jumpToLatest} />
+      </View>
     </View>
   </MessageDisclosureContext.Provider>
 );

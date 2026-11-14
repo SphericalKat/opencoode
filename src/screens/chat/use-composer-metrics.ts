@@ -4,9 +4,9 @@ import type { TextInputProps } from "react-native";
 
 export const useComposerMetrics = () => {
   const { fontScale } = useWindowDimensions();
-  const minimumComposerHeight = Math.max(44, Math.ceil(23 * fontScale + 20));
-  const maximumComposerHeight = Math.max(120, minimumComposerHeight);
-  const [composerHeight, setComposerHeight] = useState(44);
+  const minimumComposerHeight = Math.max(44, Math.ceil(20 * fontScale + 24));
+  const maximumComposerHeight = Math.max(180, minimumComposerHeight);
+  const [composerHeight, setComposerHeight] = useState(minimumComposerHeight);
   const updateComposerHeight = useCallback<
     NonNullable<TextInputProps["onContentSizeChange"]>
   >(

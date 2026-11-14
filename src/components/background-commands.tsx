@@ -7,11 +7,12 @@ import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { objectKey } from "../lib/object-key";
 import { useTheme } from "../lib/theme";
+import { confirmAction } from "./dialog";
+import { SheetGroup, SheetRow } from "./list-sheet";
 import {
   Button,
   Busy,
   Card,
-  confirmAction,
   Empty,
   ErrorNotice,
   BodyText,
@@ -211,7 +212,8 @@ const confirmRemoval = (running: boolean) =>
     running ? "Stop this command?" : "Remove retained output?",
     running
       ? "The server will stop this command and remove its captured output."
-      : "The server will delete the captured output for this command."
+      : "The server will delete the captured output for this command.",
+    { confirmLabel: running ? "Stop" : "Remove" }
   );
 
 interface RemoveContext {
@@ -354,7 +356,7 @@ const renderPage = (
     <Row>
       <Button
         title="Start over"
-        compact
+        size="compact"
         disabled={outputBusy || page.start === 0}
         onPress={() => {
           void loadOutput(selectedID);
@@ -362,7 +364,7 @@ const renderPage = (
       />
       <Button
         title="Next output"
-        compact
+        size="compact"
         disabled={outputBusy || page.cursor >= page.size}
         onPress={() => {
           void loadOutput(selectedID, page.cursor);
@@ -370,7 +372,7 @@ const renderPage = (
       />
       <Button
         title="Refresh output"
-        compact
+        size="compact"
         busy={outputBusy}
         onPress={() => {
           void loadOutput(selectedID, page.start);
@@ -643,7 +645,7 @@ const Commands = ({
         </BodyText>
         <Button
           title="Refresh"
-          compact
+          size="compact"
           busy={showLoading}
           onPress={() => {
             void refresh();
@@ -666,31 +668,26 @@ const Commands = ({
           detail="Open a shell message's full output to inspect a completed command."
         />
       )}
-      {commands.slice(0, limit).map((command) => (
-        <Card key={command.id}>
-          <BodyText
-            selectable
-            numberOfLines={3}
-            style={{ fontFamily: mono, fontSize: 13 }}
-          >
-            {command.command}
-          </BodyText>
-          <BodyText muted numberOfLines={2}>
-            {command.cwd}
-          </BodyText>
-          <Button
-            title={selectedID === command.id ? "Selected" : "View output"}
-            compact
-            selected={selectedID === command.id}
-            disabled={stopping}
-            onPress={() => setSelectedID(command.id)}
-          />
-        </Card>
-      ))}
+      {commands.length > 0 && (
+        <SheetGroup>
+          {commands.slice(0, limit).map((command) => (
+            <SheetRow
+              key={command.id}
+              label={command.command}
+              description={command.cwd}
+              checked={selectedID === command.id}
+              disabled={stopping}
+              accessibilityRole="radio"
+              accessibilityLabel={`View output: ${command.command}`}
+              onPress={() => setSelectedID(command.id)}
+            />
+          ))}
+        </SheetGroup>
+      )}
       {commands.length > limit && (
         <Button
           title="Load more commands"
-          compact
+          size="compact"
           onPress={() => setLimit((value) => value + 20)}
         />
       )}

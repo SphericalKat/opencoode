@@ -6,6 +6,12 @@ import {
   saveConfigFile,
   validateConfig,
 } from "../src/lib/settings";
+import {
+  filterSections,
+  resolveSelected,
+  sectionMenuEntries,
+} from "../src/screens/settings/sections";
+import type { Section } from "../src/screens/settings/sections";
 
 test("configuration accepts comments and trailing commas but rejects non-objects and syntax errors", () => {
   validateConfig('{ // Project options\n "default_agent": "build",\n}');
@@ -127,4 +133,44 @@ test("integration links permit browser URLs and block executable schemes", () =>
     /unsupported link/u
   );
   assert.throws(() => externalURL("file:///etc/passwd"), /unsupported link/u);
+});
+
+test("settings without a server connection keep only Look and feel and Models", () => {
+  const all: Section[] = ["Look and feel", "Config", "Models", "Accounts"];
+  assert.deepEqual(filterSections(all, false, true), [
+    "Look and feel",
+    "Models",
+  ]);
+  assert.deepEqual(filterSections(all, false, false), ["Look and feel"]);
+  assert.deepEqual(filterSections(all, true, false), all);
+});
+
+test("settings open the first section when the chosen one is unavailable", () => {
+  const available: Section[] = ["Look and feel", "Models"];
+  assert.equal(resolveSelected(null, available), "Look and feel");
+  assert.equal(resolveSelected("Config", available), "Look and feel");
+  assert.equal(resolveSelected("Models", available), "Models");
+  assert.equal(resolveSelected(null, []), null);
+});
+
+test("section menu separates groups and lists Servers first among connections", () => {
+  const entries = sectionMenuEntries(
+    ["Look and feel", "Config", "Accounts", "Models", "Advanced"],
+    true
+  );
+  assert.deepEqual(
+    entries.map((entry) => ("type" in entry ? "-" : entry.label)),
+    [
+      "Look and feel",
+      "Config",
+      "-",
+      "Servers",
+      "Accounts",
+      "Models",
+      "-",
+      "Advanced",
+    ]
+  );
+  const local = sectionMenuEntries(["Look and feel"], false);
+  assert.deepEqual(local, [{ label: "Look and feel", value: "Look and feel" }]);
 });

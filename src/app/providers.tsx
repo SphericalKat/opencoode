@@ -5,6 +5,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { DialogProvider } from "../components/dialog";
+import { SnackbarProvider } from "../components/snackbar";
 import { SheetCoordinatorProvider } from "../lib/sheets";
 import { ThemeProvider } from "../lib/theme";
 import { UnsavedProvider } from "../lib/unsaved";
@@ -26,7 +28,13 @@ export const AppProviders = ({ children }: AppProvidersProps) => (
         <ThemeProvider>
           <SheetCoordinatorProvider>
             <UnsavedProvider>
-              <BottomSheetModalProvider>{children}</BottomSheetModalProvider>
+              <DialogProvider>
+                <SnackbarProvider>
+                  <BottomSheetModalProvider>
+                    {children}
+                  </BottomSheetModalProvider>
+                </SnackbarProvider>
+              </DialogProvider>
             </UnsavedProvider>
           </SheetCoordinatorProvider>
         </ThemeProvider>

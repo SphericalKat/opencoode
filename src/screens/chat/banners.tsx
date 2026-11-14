@@ -1,13 +1,8 @@
 import type { SessionInfo } from "@opencode/client";
 import { View } from "react-native";
 
-import {
-  Button,
-  confirmAction,
-  ErrorNotice,
-  BodyText,
-  Row,
-} from "../../components/ui";
+import { confirmAction } from "../../components/dialog";
+import { Button, ErrorNotice, BodyText, Row } from "../../components/ui";
 import type { ChatController } from "./use-chat-controller";
 
 type ErrorBannersProps = Pick<
@@ -38,7 +33,7 @@ export const ErrorBanners = ({
         <ErrorNotice error={error} />
         <Button
           title="Dismiss"
-          compact
+          size="compact"
           variant="ghost"
           onPress={() => setError(null)}
         />
@@ -91,14 +86,14 @@ export const RevertBanner = ({
       <Row>
         <Button
           title="Restore"
-          compact
+          size="compact"
           onPress={() => {
             void run(() => opencodeClient.session.revert.clear({ sessionID }));
           }}
         />
         <Button
           title="Commit revert"
-          compact
+          size="compact"
           variant="danger"
           disabled={pending}
           onPress={() => {
@@ -106,7 +101,8 @@ export const RevertBanner = ({
               if (
                 await confirmAction(
                   "Commit this revert?",
-                  "This permanently removes messages after the revert point."
+                  "This permanently removes messages after the revert point.",
+                  { confirmLabel: "Commit revert" }
                 )
               ) {
                 await opencodeClient.session.revert.commit({ sessionID });

@@ -1,5 +1,5 @@
 import type { SessionMessageInfo } from "@opencode/client";
-import React, { useCallback, useLayoutEffect } from "react";
+import { useCallback, useLayoutEffect } from "react";
 
 import { withCleanup } from "../../lib/async";
 import { mergeMessages } from "../../lib/chat";
@@ -20,7 +20,6 @@ interface UseSessionRefreshOptions {
   opencodeClient: OpenCodeClient;
   reportConnectionFailure: (reason: unknown) => void;
   sessionID: string;
-  setTitle: React.Dispatch<React.SetStateAction<string>>;
   sync: SessionState;
 }
 
@@ -31,7 +30,6 @@ export const useSessionRefresh = ({
   opencodeClient,
   reportConnectionFailure,
   sessionID,
-  setTitle,
   sync,
 }: UseSessionRefreshOptions) => {
   const {
@@ -118,7 +116,6 @@ export const useSessionRefresh = ({
         if (sessionResult.status === "fulfilled") {
           sessionDirectoryRef.current = sessionResult.value.location.directory;
           setSession(sessionResult.value);
-          setTitle((current) => current || sessionResult.value.title || "");
         }
         if (messageResult.status === "fulfilled") {
           applyMessageSnapshot(messageResult.value.data, reset);
@@ -193,7 +190,6 @@ export const useSessionRefresh = ({
       refreshAgainRef,
       alive,
       setForms,
-      setTitle,
       activityRevisionRef,
       setSyncErrors,
       refreshingRef,

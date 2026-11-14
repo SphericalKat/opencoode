@@ -13,7 +13,12 @@ import { SettingsScreen } from "../screens/settings-screen";
 import { WorkspaceScreen } from "../screens/workspace-screen";
 import type { WorkspaceSection } from "../screens/workspace-screen";
 import { createStyles } from "./styles";
-import type { ServerClient, SessionPanelRequest, Tab } from "./types";
+import type {
+  ServerClient,
+  SessionPanelRequest,
+  SettingsSectionRequest,
+  Tab,
+} from "./types";
 
 interface ChatColumnProps {
   active: Connection;
@@ -25,6 +30,7 @@ interface ChatColumnProps {
   onAttachmentConsumed: () => void;
   onOpenNavigation: () => void;
   onOpenSession: (id: string) => void;
+  onOpenSettings: (section: "Models" | "Accounts") => void;
   onSelectionChange: (selected: boolean) => void;
   onSessionChanged: () => void;
   onSessionInfo: (session: SessionInfo) => void;
@@ -44,6 +50,7 @@ const ChatColumn = ({
   onAttachmentConsumed,
   onOpenNavigation,
   onOpenSession,
+  onOpenSettings,
   onSelectionChange,
   onSessionChanged,
   onSessionInfo,
@@ -69,6 +76,7 @@ const ChatColumn = ({
           onOpenNavigation={onOpenNavigation}
           onSessionChanged={onSessionChanged}
           onOpenSession={onOpenSession}
+          onOpenSettings={onOpenSettings}
           attachmentPath={attachmentPath}
           attachmentContext={attachmentContext}
           onAttachmentConsumed={onAttachmentConsumed}
@@ -123,7 +131,6 @@ export const SessionsTab = ({
           projectScope={betaHomeProject}
           onChooseDirectory={onChooseDirectory}
           onNewSession={onNewSession}
-          selectedSessionID={sessionID ?? undefined}
           revision={revision}
           onOpenSession={onOpenSessionFromList}
         />
@@ -143,6 +150,7 @@ interface WorkspaceTabProps {
   mounted: boolean;
   onAttachFile: (path: string, contextText?: string) => Promise<boolean>;
   onDirectoryChange: (directory: string) => void;
+  onSectionChange: (section: WorkspaceSection) => void;
   section: WorkspaceSection;
   sessionID: string | null;
   tab: Tab;
@@ -156,6 +164,7 @@ export const WorkspaceTab = ({
   mounted,
   onAttachFile,
   onDirectoryChange,
+  onSectionChange,
   section,
   sessionID,
   tab,
@@ -178,6 +187,7 @@ export const WorkspaceTab = ({
         section={section}
         visible={tab === "workspace"}
         onDirectoryChange={onDirectoryChange}
+        onSectionChange={onSectionChange}
         onAttachFile={onAttachFile}
       />
     </MotionScreen>
@@ -195,6 +205,7 @@ interface SettingsTabProps {
   onBackStateChange: (canGoBack: boolean) => void;
   onManageServers: () => void;
   onOpenNavigation: () => void;
+  sectionRequest: SettingsSectionRequest | undefined;
   tab: Tab;
 }
 
@@ -209,6 +220,7 @@ export const SettingsTab = ({
   onBackStateChange,
   onManageServers,
   onOpenNavigation,
+  sectionRequest,
   tab,
 }: SettingsTabProps) => {
   const styles = useThemedStyles(createStyles);
@@ -231,6 +243,7 @@ export const SettingsTab = ({
         onBack={onBack}
         backLabel={backLabel}
         onOpenNavigation={onOpenNavigation}
+        sectionRequest={sectionRequest}
       />
     </MotionScreen>
   );

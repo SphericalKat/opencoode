@@ -1,10 +1,11 @@
 import MarkdownIt from "markdown-it";
 import type { Token } from "markdown-it";
-import Prism from "prismjs";
 import React, {
   createContext,
   memo,
+  useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -22,33 +23,20 @@ import {
 import type { TextStyle } from "react-native";
 
 import { copyText } from "../lib/clipboard";
+import { withAlpha } from "../lib/color";
 import { MessageActionsContext } from "../lib/message-actions";
 import { splitReveal } from "../lib/stream-reveal";
-import "prismjs/components/prism-clike";
-import "prismjs/components/prism-javascript";
-import "prismjs/components/prism-typescript";
-import "prismjs/components/prism-jsx";
-import "prismjs/components/prism-tsx";
-import "prismjs/components/prism-json";
-import "prismjs/components/prism-bash";
-import "prismjs/components/prism-python";
-import "prismjs/components/prism-java";
-import "prismjs/components/prism-kotlin";
-import "prismjs/components/prism-c";
-import "prismjs/components/prism-cpp";
-import "prismjs/components/prism-csharp";
-import "prismjs/components/prism-go";
-import "prismjs/components/prism-rust";
-import "prismjs/components/prism-sql";
-import "prismjs/components/prism-yaml";
-import "prismjs/components/prism-css";
-import "prismjs/components/prism-markup";
-
 import type { RevealChunk } from "../lib/stream-reveal";
+import { highlightSegments } from "../lib/syntax";
+import type { SyntaxSegment } from "../lib/syntax";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { inlineCodeKind, tableColumnWidths } from "../lib/transcript";
+import { EdgeFade, useScrollEdges } from "./edge-fade";
 import { FadeSpan } from "./fade-span";
-import { Button, mono, sans } from "./ui";
+import { IconButton } from "./icon-button";
+import { elevation } from "./surface";
+import { mono, monoMedium, sans } from "./ui";
 import { useStreamReveal } from "./use-stream-reveal";
 
 const parser = new MarkdownIt({
@@ -59,37 +47,23 @@ const parser = new MarkdownIt({
 });
 const SelectionContext = createContext(true);
 
+const MEASURE_WIDTH = 10_000;
+
 const createStyles = (colors: ThemeColors) => ({
   ...StyleSheet.create({
     bold: { fontWeight: "700" },
-    cell: {
-      borderBottomWidth: 1,
-      borderColor: colors.border,
-      borderRightWidth: 1,
-      flexShrink: 0,
-      minWidth: 0,
-      padding: 10,
-    },
     code: {
-      backgroundColor: colors.bg,
+      backgroundColor: colors.codeBackground,
       borderColor: colors.border,
-      borderRadius: 10,
-      borderWidth: 1,
+      borderRadius: 6,
+      borderWidth: StyleSheet.hairlineWidth,
       minWidth: 0,
       overflow: "hidden",
+      position: "relative",
     },
-    codeContent: { paddingBottom: 12, paddingHorizontal: 12 },
-    codeHeader: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 8,
-      justifyContent: "space-between",
-      paddingLeft: 12,
-      // The ghost Copy button has its own 10pt padding, so its label ends
-      // 12pt from the edge, level with the language label.
-      paddingRight: 2,
-      paddingVertical: 4,
-    },
+    codeContent: { padding: 12 },
+    copyButton: { position: "absolute", right: 4, top: 4 },
+    copyFace: { backgroundColor: withAlpha(colors.codeBackground, 0.92) },
     codeText: {
       color: colors.text,
       fontFamily: mono,
@@ -106,17 +80,13 @@ const createStyles = (colors: ThemeColors) => ({
     group: { gap: 8, minWidth: 0 },
     heading: { fontWeight: "700" },
     inlineCode: {
-      backgroundColor: colors.raised,
-      fontFamily: mono,
-      fontSize: 14,
+      backgroundColor: withAlpha(colors.text, 0.08),
+      color: colors.text,
+      fontFamily: monoMedium,
+      fontWeight: "400",
     },
+    inlineCodePath: { backgroundColor: "transparent", color: colors.codePath },
     italic: { fontStyle: "italic" },
-    language: {
-      color: colors.muted,
-      flexShrink: 1,
-      fontFamily: mono,
-      fontSize: 12,
-    },
     link: { color: colors.blue, textDecorationLine: "underline" },
     list: { gap: 6, minWidth: 0 },
     // Keep an auto flex basis so native layout measures wrapped list text at its final width.
@@ -144,28 +114,47 @@ const createStyles = (colors: ThemeColors) => ({
     root: { flexShrink: 1, gap: 12, maxWidth: "100%", minWidth: 0 },
     rule: { backgroundColor: colors.border, height: 1, marginVertical: 4 },
     strike: { textDecorationLine: "line-through" },
-    table: {
-      borderColor: colors.border,
-      borderLeftWidth: 1,
-      borderTopWidth: 1,
-    },
+    tableBody: { borderRadius: 4, backgroundColor: colors.bg },
+    tableCell: { flexShrink: 0, minWidth: 0, paddingHorizontal: 12 },
+    tableCellBody: { paddingVertical: 10 },
+    tableCellHeader: { paddingVertical: 8 },
     tableContainer: { minWidth: 0, width: "100%" },
-    tableHeader: { backgroundColor: colors.raised },
-    tableHint: {
-      color: colors.muted,
-      fontFamily: sans,
-      fontSize: 13,
-      lineHeight: 19,
-      paddingTop: 4,
+    tableFrame: {
+      backgroundColor: colors.panel,
+      borderColor: colors.borderMuted,
+      borderRadius: 6,
+      borderWidth: StyleSheet.hairlineWidth,
+      minWidth: 0,
+      padding: 2,
+      width: "100%",
+    },
+    tableMeasure: {
+      left: 0,
+      opacity: 0,
+      position: "absolute",
+      top: 0,
+      width: MEASURE_WIDTH,
     },
     tableRow: { alignItems: "stretch", flexDirection: "row" },
+    tableRowDivider: {
+      borderBottomColor: colors.borderMuted,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
     tableScroll: { minWidth: 0, width: "100%" },
+    tableText: {
+      fontFamily: sans,
+      fontSize: 13,
+      fontVariant: ["tabular-nums"],
+      lineHeight: 18,
+    },
+    tableTextBody: { color: colors.text, fontWeight: "400" },
+    tableTextHeader: { color: colors.muted, fontWeight: "500" },
     text: {
       color: colors.text,
       flexShrink: 1,
       fontFamily: sans,
-      fontSize: 15,
-      lineHeight: 23,
+      fontSize: 14,
+      lineHeight: 22,
       ...Platform.select({ web: { overflowWrap: "anywhere" } as TextStyle }),
     },
   }),
@@ -402,8 +391,45 @@ const plainLeaf = (
   return undefined;
 };
 
+const INLINE_CODE_SCALE = 0.9;
+const DEFAULT_CODE_SIZE = 13.5;
+const TABLE_CODE_SIZE = 12;
+const ZERO_WIDTH_SPACE = "\u200B";
+const hyphenPattern = /-(?=[^-])/gu;
+
+const inlineStyle = (
+  styles: ReturnType<typeof createStyles>,
+  styleName: ReturnType<typeof inlineStyleName>,
+  kind: ReturnType<typeof inlineCodeKind>,
+  codeSize: number
+) => {
+  if (styleName !== "inlineCode") {
+    return styleName && styles[styleName];
+  }
+  return [
+    styles.inlineCode,
+    { fontSize: codeSize },
+    kind === "path" && styles.inlineCodePath,
+  ];
+};
+
+// Android does not break a line after a hyphen inside a word, so a long path
+// would split mid-segment. A zero-width space adds the break opportunity.
+const breakablePath = (content: React.ReactNode) =>
+  typeof content === "string"
+    ? content.replaceAll(hyphenPattern, `-${ZERO_WIDTH_SPACE}`)
+    : content;
+
 const Inline = memo(
-  function Inline({ nodes, reveal }: { nodes: Node[]; reveal?: Reveal }) {
+  function Inline({
+    nodes,
+    reveal,
+    codeSize = DEFAULT_CODE_SIZE,
+  }: {
+    nodes: Node[];
+    reveal?: Reveal;
+    codeSize?: number;
+  }) {
     const styles = useMarkdownStyles();
     const { colors } = useTheme();
     const selectable = useContext(SelectionContext);
@@ -422,7 +448,7 @@ const Inline = memo(
       const contentReveal =
         uri && nodeReveal ? { ...nodeReveal, color: colors.blue } : nodeReveal;
       const content = children.length ? (
-        <Inline nodes={children} reveal={contentReveal} />
+        <Inline nodes={children} reveal={contentReveal} codeSize={codeSize} />
       ) : (
         revealText(token.content, token, selectable, contentReveal)
       );
@@ -456,177 +482,88 @@ const Inline = memo(
         );
       }
       const styleName = inlineStyleName(token.type);
-      const style = styleName ? styles[styleName] : undefined;
+      const kind =
+        styleName === "inlineCode" ? inlineCodeKind(token.content) : undefined;
+      const style = inlineStyle(styles, styleName, kind, codeSize);
       return (
         <Text key={index} selectable={selectable} style={style}>
-          {content}
+          {kind === "path" ? breakablePath(content) : content}
         </Text>
       );
     });
   },
   (previous, next) =>
-    previous.reveal === next.reveal && sameNodes(previous.nodes, next.nodes)
+    previous.reveal === next.reveal &&
+    previous.codeSize === next.codeSize &&
+    sameNodes(previous.nodes, next.nodes)
 );
-
-const supportedLanguages: Record<string, string> = {
-  bash: "bash",
-  c: "c",
-  "c#": "csharp",
-  "c++": "cpp",
-  cpp: "cpp",
-  csharp: "csharp",
-  css: "css",
-  go: "go",
-  html: "markup",
-  java: "java",
-  javascript: "javascript",
-  js: "javascript",
-  json: "json",
-  jsx: "jsx",
-  kotlin: "kotlin",
-  kt: "kotlin",
-  py: "python",
-  python: "python",
-  rs: "rust",
-  rust: "rust",
-  sh: "bash",
-  shell: "bash",
-  sql: "sql",
-  ts: "typescript",
-  tsx: "tsx",
-  typescript: "typescript",
-  xml: "markup",
-  yaml: "yaml",
-  yml: "yaml",
-};
-
-type SyntaxColorKey =
-  | "syntaxComment"
-  | "syntaxConstant"
-  | "syntaxKeyword"
-  | "syntaxNumber"
-  | "syntaxProperty"
-  | "syntaxString"
-  | "syntaxType";
-
-const syntaxColorKeys = new Map<string, SyntaxColorKey>([
-  ["comment", "syntaxComment"],
-  ["prolog", "syntaxComment"],
-  ["doctype", "syntaxComment"],
-  ["string", "syntaxString"],
-  ["char", "syntaxString"],
-  ["attr-value", "syntaxString"],
-  ["keyword", "syntaxKeyword"],
-  ["atrule", "syntaxKeyword"],
-  ["selector", "syntaxKeyword"],
-  ["number", "syntaxNumber"],
-  ["boolean", "syntaxNumber"],
-  ["property", "syntaxProperty"],
-  ["function", "syntaxProperty"],
-  ["attr-name", "syntaxProperty"],
-  ["class-name", "syntaxType"],
-  ["builtin", "syntaxType"],
-  ["tag", "syntaxType"],
-  ["constant", "syntaxConstant"],
-  ["symbol", "syntaxConstant"],
-  ["variable", "syntaxConstant"],
-]);
 
 const highlightCode = (
   code: string,
   language: string,
   colors: ThemeColors
 ): React.ReactNode[] | null => {
-  const grammar = Prism.languages[supportedLanguages[language.toLowerCase()]];
-  if (!grammar) {
+  const segments = highlightSegments(code, language, colors);
+  if (!segments) {
     return null;
   }
-  const colorFor = (type: string) => {
-    const colorKey = syntaxColorKeys.get(type);
-    return colorKey ? colors[colorKey] : undefined;
-  };
   let key = 0;
-  const flatten = (
-    token: string | Prism.Token,
-    inherited?: string
-  ): React.ReactNode[] => {
-    if (typeof token === "string") {
-      const textKey = key;
-      key += 1;
-      return [
-        <Text
-          key={textKey}
-          style={inherited ? { color: inherited } : undefined}
-        >
-          {token}
-        </Text>,
-      ];
-    }
-    const color = colorFor(token.type) ?? inherited;
+  return segments.map((segment) => {
+    const segmentKey = key;
+    key += 1;
     return (
-      Array.isArray(token.content) ? token.content : [token.content]
-    ).flatMap((child) => flatten(child, color));
+      <Text key={segmentKey} style={segmentStyle(segment)}>
+        {segment.text}
+      </Text>
+    );
+  });
+};
+
+const segmentStyle = (segment: SyntaxSegment): TextStyle | undefined => {
+  if (!segment.color && !segment.bold) {
+    return undefined;
+  }
+  return {
+    ...(segment.color ? { color: segment.color } : null),
+    ...(segment.bold ? { fontWeight: "700" } : null),
   };
-  try {
-    return Prism.tokenize(code, grammar).flatMap((token) => flatten(token));
-  } catch {
-    return null;
-  }
 };
 
-const copyLabel = (feedback?: { failed: boolean }): string => {
-  if (feedback?.failed) {
-    return "Retry copy";
-  }
-  return feedback ? "Copied" : "Copy";
-};
+type CopyStatus = "idle" | "copied" | "failed";
 
-const CodeView = ({ code, language }: { code: string; language: string }) => {
+const copiedDurationMs = 2000;
+
+export const CodeCard = ({
+  code,
+  highlighted,
+  selectable,
+}: {
+  code: string;
+  highlighted?: React.ReactNode[] | null;
+  selectable: boolean;
+}) => {
   const styles = useMarkdownStyles();
   const { colors } = useTheme();
-  const selectable = useContext(SelectionContext);
   const selectMessage = useContext(MessageActionsContext);
-  const highlighted = useMemo(
-    () => highlightCode(code, language, colors),
-    [code, language, colors]
-  );
-  const [feedback, setFeedback] = useState<{ code: string; failed: boolean }>();
-  const currentFeedback = feedback?.code === code ? feedback : undefined;
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  useEffect(() => {
+    if (copyStatus !== "copied") {
+      return;
+    }
+    const timer = setTimeout(() => setCopyStatus("idle"), copiedDurationMs);
+    return () => clearTimeout(timer);
+  }, [copyStatus]);
+  const copied = copyStatus === "copied";
+  const edges = useScrollEdges("x");
   return (
     <View style={styles.code}>
-      <View style={styles.codeHeader}>
-        <Text selectable={selectable} style={styles.language}>
-          {language || "TEXT"}
-        </Text>
-        <Button
-          title={copyLabel(currentFeedback)}
-          compact
-          variant="ghost"
-          accessibilityLabel="Copy code"
-          onPress={() => {
-            void copyText(code)
-              .then(() => setFeedback({ code, failed: false }))
-              .catch(() => setFeedback({ code, failed: true }));
-          }}
-        />
-      </View>
-      {currentFeedback?.failed && (
-        <Text
-          selectable={selectable}
-          accessibilityRole="alert"
-          style={styles.copyError}
-        >
-          Copy failed.{" "}
-          {selectable ? "Select the text or try again." : "Try again."}
-        </Text>
-      )}
       <ScrollView
         horizontal
         nestedScrollEnabled
         directionalLockEnabled
-        persistentScrollbar
-        showsHorizontalScrollIndicator
+        showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.codeContent}
+        {...edges.handlers}
       >
         {/* A long-press handler makes this Text the JS responder instead of
             the message row. On Android the row would otherwise intercept
@@ -641,7 +578,45 @@ const CodeView = ({ code, language }: { code: string; language: string }) => {
           {highlighted ?? code}
         </Text>
       </ScrollView>
+      {edges.start && <EdgeFade side="left" color={colors.codeBackground} />}
+      {edges.end && <EdgeFade side="right" color={colors.codeBackground} />}
+      <View style={styles.copyButton}>
+        <IconButton
+          icon={copied ? "check" : "copy"}
+          size={24}
+          color={colors.muted}
+          accessibilityLabel={copied ? "Copied" : "Copy code"}
+          onPress={() => {
+            void copyText(code)
+              .then(() => setCopyStatus("copied"))
+              .catch(() => setCopyStatus("failed"));
+          }}
+          style={styles.copyFace}
+        />
+      </View>
+      {copyStatus === "failed" && (
+        <Text
+          selectable={selectable}
+          accessibilityRole="alert"
+          style={styles.copyError}
+        >
+          Copy failed.{" "}
+          {selectable ? "Select the text or try again." : "Try again."}
+        </Text>
+      )}
     </View>
+  );
+};
+
+const CodeView = ({ code, language }: { code: string; language: string }) => {
+  const { colors } = useTheme();
+  const selectable = useContext(SelectionContext);
+  const highlighted = useMemo(
+    () => highlightCode(code, language, colors),
+    [code, language, colors]
+  );
+  return (
+    <CodeCard code={code} highlighted={highlighted} selectable={selectable} />
   );
 };
 
@@ -662,83 +637,225 @@ const tableTextAlign = (
   return "left";
 };
 
-const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
-  const styles = useMarkdownStyles();
-  const selectable = useContext(SelectionContext);
-  const selectMessage = useContext(MessageActionsContext);
-  const [availableWidth, setAvailableWidth] = useState(0);
-  const rows = node.children.flatMap((section) => section.children);
-  const columnCount = Math.max(1, ...rows.map((row) => row.children.length));
-  const columnWidth = Math.max(
-    120,
-    Math.floor(((availableWidth || columnCount * 120 + 1) - 1) / columnCount)
+const tokenSeparator = /[\s/-]+/u;
+const CELL_PADDING = 24;
+const MIN_COLUMN_WIDTH = 48;
+const FRAME_INSET = 4;
+
+const plainText = (nodes: Node[]): string =>
+  nodes
+    .map((node) =>
+      node.children.length ? plainText(node.children) : node.token.content
+    )
+    .join("");
+
+const cellInline = (cell: Node) =>
+  cell.children.flatMap((child) => child.children);
+
+const minContentWidth = (text: string, maxContent: number) => {
+  const longest = Math.max(
+    0,
+    ...text.split(tokenSeparator).map((token) => token.length)
   );
-  const contentWidth = columnWidth * columnCount + 1;
-  const renderRow = (row: Node, rowIndex: number) => (
-    <View key={rowIndex} style={styles.tableRow}>
-      {row.children.map((cell, cellIndex) => {
-        const isHeader = cell.token.type === "th_open";
-        const textAlign = tableTextAlign(cell.token.attrGet("style"));
-        return (
-          <View
-            key={cellIndex}
-            style={[
-              styles.cell,
-              { width: columnWidth },
-              isHeader && styles.tableHeader,
-            ]}
-          >
-            <Text
-              selectable={selectable}
-              style={[
-                styles.text,
-                muted && styles.muted,
-                { textAlign },
-                isHeader && styles.bold,
-              ]}
-            >
-              <Inline
-                nodes={cell.children.flatMap((child) => child.children)}
-              />
-            </Text>
-          </View>
-        );
-      })}
+  const estimate =
+    Math.ceil((maxContent * longest) / Math.max(1, text.length)) + CELL_PADDING;
+  return Math.min(Math.max(estimate, MIN_COLUMN_WIDTH), maxContent);
+};
+
+interface TableCell {
+  key: string;
+  column: number;
+  header: boolean;
+  align: "center" | "left" | "right";
+  inline: Node[];
+  text: string;
+}
+
+const tableRows = (node: Node): TableCell[][] =>
+  node.children.flatMap((section, sectionIndex) =>
+    section.children.map((row, rowIndex) =>
+      row.children.map((cell, column) => ({
+        align: tableTextAlign(cell.token.attrGet("style")),
+        column,
+        header: cell.token.type === "th_open",
+        inline: cellInline(cell),
+        key: `${sectionIndex}:${rowIndex}:${column}`,
+        text: plainText(cellInline(cell)),
+      }))
+    )
+  );
+
+const TableCellView = ({
+  cell,
+  muted,
+  selectable,
+  width,
+  onLayoutWidth,
+}: {
+  cell: TableCell;
+  muted?: boolean;
+  selectable: boolean;
+  width?: number;
+  onLayoutWidth?: (key: string, width: number) => void;
+}) => {
+  const styles = useMarkdownStyles();
+  return (
+    <View
+      onLayout={
+        onLayoutWidth
+          ? (event) => onLayoutWidth(cell.key, event.nativeEvent.layout.width)
+          : undefined
+      }
+      style={[
+        styles.tableCell,
+        cell.header ? styles.tableCellHeader : styles.tableCellBody,
+        width === undefined ? { alignSelf: "flex-start" } : { width },
+      ]}
+    >
+      <Text
+        selectable={selectable}
+        style={[
+          styles.tableText,
+          cell.header ? styles.tableTextHeader : styles.tableTextBody,
+          muted && styles.muted,
+          { textAlign: cell.align },
+        ]}
+      >
+        <Inline nodes={cell.inline} codeSize={TABLE_CODE_SIZE} />
+      </Text>
     </View>
   );
+};
+
+const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
+  const styles = useMarkdownStyles();
+  const { colors, scheme } = useTheme();
+  const selectable = useContext(SelectionContext);
+  const selectMessage = useContext(MessageActionsContext);
+  const [frameWidth, setFrameWidth] = useState(0);
+  const [measured, setMeasured] = useState<Record<string, number>>({});
+  const rows = useMemo(() => tableRows(node), [node]);
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const available = Math.max(
+    0,
+    frameWidth - FRAME_INSET - StyleSheet.hairlineWidth * 2
+  );
+
+  const tableEdges = useScrollEdges("x");
+  const recordWidth = useCallback((key: string, layoutWidth: number) => {
+    // Layout widths are fractional. Rounding down leaves a cell a fraction
+    // narrower than its text, which wraps the last character.
+    const width = Math.ceil(layoutWidth);
+    setMeasured((previous) =>
+      previous[key] === width ? previous : { ...previous, [key]: width }
+    );
+  }, []);
+
+  const layout = useMemo(() => {
+    const maxContent = Array.from({ length: columnCount }, () => 0);
+    const minContent = Array.from({ length: columnCount }, () => 0);
+    for (const row of rows) {
+      for (const cell of row) {
+        const cellMax = measured[cell.key];
+        if (cellMax === undefined) {
+          return;
+        }
+        maxContent[cell.column] = Math.max(maxContent[cell.column], cellMax);
+        minContent[cell.column] = Math.max(
+          minContent[cell.column],
+          minContentWidth(cell.text, cellMax)
+        );
+      }
+    }
+    if (available <= 0) {
+      return;
+    }
+    return tableColumnWidths({ available, maxContent, minContent });
+  }, [available, columnCount, measured, rows]);
+
+  const widths = layout?.widths;
+  const contentWidth = widths
+    ? widths.reduce((total, width) => total + width, 0)
+    : undefined;
+  const headerRows = rows.filter((row) => row[0]?.header);
+  const bodyRows = rows.filter((row) => !row[0]?.header);
+
+  const renderRow = (row: TableCell[], divider: boolean, key: string) => (
+    <View
+      key={key}
+      style={[styles.tableRow, divider && styles.tableRowDivider]}
+    >
+      {row.map((cell) => (
+        <TableCellView
+          key={cell.key}
+          cell={cell}
+          muted={muted}
+          selectable={selectable}
+          width={widths?.[cell.column]}
+        />
+      ))}
+    </View>
+  );
+
   return (
     <View
       style={styles.tableContainer}
-      onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)}
+      onLayout={(event) => setFrameWidth(event.nativeEvent.layout.width)}
     >
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        directionalLockEnabled
-        persistentScrollbar
-        showsHorizontalScrollIndicator
-        contentContainerStyle={{ width: contentWidth }}
-        style={styles.tableScroll}
+      <View
+        importantForAccessibility="no-hide-descendants"
+        pointerEvents="none"
+        style={styles.tableMeasure}
       >
-        {/* The table claims the JS responder so the message row does not.
+        {rows.flat().map((cell) => (
+          <TableCellView
+            key={cell.key}
+            cell={cell}
+            muted={muted}
+            selectable={false}
+            onLayoutWidth={recordWidth}
+          />
+        ))}
+      </View>
+      <View style={[styles.tableFrame, !layout && { opacity: 0 }]}>
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          directionalLockEnabled
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ width: contentWidth }}
+          style={styles.tableScroll}
+          {...tableEdges.handlers}
+        >
+          {/* The table claims the JS responder so the message row does not.
             On Android the row would otherwise intercept every move, and this
             ScrollView could never start a drag. */}
-        <Pressable
-          accessible={false}
-          importantForAccessibility="no"
-          focusable={false}
-          disabled={!selectMessage || Platform.OS === "web"}
-          onLongPress={selectMessage}
-          style={[styles.table, { width: contentWidth }]}
-        >
-          {rows.map(renderRow)}
-        </Pressable>
-      </ScrollView>
-      {contentWidth > availableWidth && availableWidth > 0 && (
-        <Text style={[styles.tableHint, muted && styles.muted]}>
-          Swipe to see more columns
-        </Text>
-      )}
+          <Pressable
+            accessible={false}
+            importantForAccessibility="no"
+            focusable={false}
+            disabled={!selectMessage || Platform.OS === "web"}
+            onLongPress={selectMessage}
+            style={{ width: contentWidth }}
+          >
+            {headerRows.map((row, index) =>
+              renderRow(row, false, `head-${index}`)
+            )}
+            <View
+              style={[
+                styles.tableBody,
+                { boxShadow: elevation(scheme).raised },
+              ]}
+            >
+              {bodyRows.map((row, index) =>
+                renderRow(row, index < bodyRows.length - 1, `body-${index}`)
+              )}
+            </View>
+          </Pressable>
+        </ScrollView>
+        {tableEdges.start && <EdgeFade side="left" color={colors.bg} />}
+        {tableEdges.end && <EdgeFade side="right" color={colors.bg} />}
+      </View>
     </View>
   );
 };
@@ -846,6 +963,7 @@ const BlockView = ({
           <Inline
             nodes={children.flatMap((child) => child.children)}
             reveal={reveal}
+            codeSize={Math.round(fontSize * INLINE_CODE_SCALE)}
           />
         </Text>
       );

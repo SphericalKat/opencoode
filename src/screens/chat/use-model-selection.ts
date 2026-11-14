@@ -2,103 +2,129 @@ import type { ModelInfo } from "@opencode/client";
 import { useMemo, useState } from "react";
 
 import type { useModelPreferences } from "../../lib/model-preferences";
-import { sortByPreference } from "./labels";
+import { groupModels } from "./model-groups";
+import { composerModelLabel } from "./model-label";
 import type { CoreClient } from "./session-sync";
-import type { RunAction } from "./use-run-action";
+import type { SetPanel } from "./types";
 import type { SessionState } from "./use-session-state";
-
-const providerLabels = new Map([
-  ["openai", "OpenAI"],
-  ["openai-codex", "OpenAI Codex"],
-]);
 
 interface UseModelSelectionOptions {
   client: CoreClient;
+  defaultModel: ModelInfo | null;
   modelPreferences: ReturnType<typeof useModelPreferences>;
-  run: RunAction;
   sessionID: string;
+  setPanel: SetPanel;
+  showError: (reason: unknown) => void;
   sync: SessionState;
 }
 
+interface StagedModel {
+  id: string;
+  providerID: string;
+  variant?: string;
+}
+
+const stagedModels = new Map<string, StagedModel>();
+
+const modelKey = (model: StagedModel) =>
+  `${model.providerID}/${model.id}/${model.variant ?? ""}`;
+
 export const useModelSelection = ({
   client,
+  defaultModel,
   modelPreferences,
-  run,
   sessionID,
+  setPanel,
+  showError,
   sync,
 }: UseModelSelectionOptions) => {
   const { session, models, providers } = sync;
+  const [, setRevision] = useState(0);
+  const sessionModelKey = session?.model ? modelKey(session.model) : undefined;
+  const pick = stagedModels.get(sessionID);
+  const staged = pick && modelKey(pick) !== sessionModelKey ? pick : undefined;
+  const selected = staged ?? session?.model;
   const [modelSearch, setModelSearch] = useState("");
-  const [modelFilter, setModelFilter] = useState<
-    "all" | "favorites" | "recent"
-  >("all");
-  const sessionModelID = session?.model?.id;
-  const sessionProviderID = session?.model?.providerID;
-  const currentModel = useMemo(
+  const selectedModelID = selected?.id;
+  const selectedProviderID = selected?.providerID;
+  const selectedModel = useMemo(
     () =>
       models.find(
         (model) =>
-          model.id === sessionModelID && model.providerID === sessionProviderID
+          model.id === selectedModelID &&
+          model.providerID === selectedProviderID
       ),
-    [models, sessionModelID, sessionProviderID]
+    [models, selectedModelID, selectedProviderID]
   );
-  const providerID = currentModel?.providerID || sessionProviderID;
-  const providerLabel =
-    providers.find((provider) => provider.id === providerID)?.name ||
-    (providerID ? providerLabels.get(providerID) : undefined) ||
-    providerID
-      ?.replaceAll(/[-_]/gu, " ")
-      .replaceAll(/\b\w/gu, (letter) => letter.toUpperCase());
+  const hasSelectedModel = !!selectedModelID;
+  const currentModel =
+    selectedModel ??
+    (hasSelectedModel ? undefined : (defaultModel ?? undefined));
+  const selectedVariant = selected?.variant;
+  const labelSource =
+    currentModel ??
+    (selectedModelID && selectedProviderID
+      ? { name: selectedModelID, providerID: selectedProviderID }
+      : undefined);
+  const providerLabel = labelSource
+    ? composerModelLabel(labelSource, providers).provider
+    : undefined;
   const enabledModels = useMemo(
     () => models.filter((model) => model.enabled),
     [models]
   );
-  const preferredIDs =
-    modelFilter === "favorites"
-      ? modelPreferences.favoriteIDs
-      : modelPreferences.recentIDs;
-  const scopedModels = useMemo(
+  const { favoriteIDs, recentIDs } = modelPreferences;
+  const modelGroups = useMemo(
     () =>
-      modelFilter === "all"
-        ? enabledModels
-        : sortByPreference(enabledModels, preferredIDs),
-    [enabledModels, modelFilter, preferredIDs]
+      groupModels({
+        favoriteIDs,
+        models: enabledModels,
+        providers,
+        recentIDs,
+        search: modelSearch,
+      }),
+    [enabledModels, favoriteIDs, modelSearch, providers, recentIDs]
   );
-  const filteredModels = useMemo(
-    () =>
-      scopedModels.filter((model) =>
-        `${model.name} ${model.providerID} ${model.id}`
-          .toLowerCase()
-          .includes(modelSearch.toLowerCase())
-      ),
-    [scopedModels, modelSearch]
-  );
-  const chooseModel = (
+  const chooseModel = async (
     model: ModelInfo,
     variant?: string,
     closePanel = false
-  ) =>
-    run(async () => {
-      await client.session.switchModel({
-        model: {
-          id: model.id,
-          providerID: model.providerID,
-          ...(variant === undefined ? {} : { variant }),
-        },
-        sessionID,
-      });
+  ) => {
+    stagedModels.set(sessionID, {
+      id: model.id,
+      providerID: model.providerID,
+      ...(variant === undefined ? {} : { variant }),
+    });
+    setRevision((value) => value + 1);
+    if (closePanel) {
+      setPanel(null);
+    }
+    try {
       await modelPreferences.recordRecent(model.providerID, model.id);
-    }, closePanel);
+    } catch (error) {
+      showError(error);
+    }
+  };
+  const commitModel = async () => {
+    const stagedPick = stagedModels.get(sessionID);
+    if (!stagedPick) {
+      return;
+    }
+    if (modelKey(stagedPick) !== sessionModelKey) {
+      await client.session.switchModel({ model: stagedPick, sessionID });
+    }
+    stagedModels.delete(sessionID);
+    setRevision((value) => value + 1);
+  };
   return {
     chooseModel,
+    commitModel,
     currentModel,
     enabledModels,
-    filteredModels,
-    modelFilter,
+    modelGroups,
     modelSearch,
     providerLabel,
-    scopedModels,
-    setModelFilter,
+    selectedVariant,
     setModelSearch,
   };
 };

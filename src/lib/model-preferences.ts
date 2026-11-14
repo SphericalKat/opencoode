@@ -2,6 +2,8 @@ import { File, Paths } from "expo-file-system";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
+import { modelPreferenceID } from "./model-preference-id";
+
 interface Preferences {
   favoriteIDs: string[];
   recentIDs: string[];
@@ -16,10 +18,7 @@ type State = Preferences & {
 
 const writes = new Map<string, Promise<Preferences>>();
 
-export const modelPreferenceID = (
-  providerID: string,
-  modelID: string
-): string => JSON.stringify([providerID, modelID]);
+export { modelPreferenceID };
 
 const storageName = (serverID: string): string =>
   `opencoode-models-${Array.from(serverID, (character) => (character.codePointAt(0) ?? 0).toString(16)).join("-")}.json`;

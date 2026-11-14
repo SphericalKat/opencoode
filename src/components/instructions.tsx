@@ -10,16 +10,8 @@ import { View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
-import {
-  Button,
-  Busy,
-  Card,
-  ErrorNotice,
-  Field,
-  BodyText,
-  Row,
-  confirmAction,
-} from "./ui";
+import { useUndoableRemoval } from "./snackbar";
+import { Button, Busy, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
 const fetchInstructions = async (
   client: Client,
@@ -64,6 +56,7 @@ export const Instructions = ({
   const [error, setError] = useState<string>();
   const sequence = useRef(0);
   const mounted = useRef(true);
+  const { hidden, remove: removeEntry } = useUndoableRemoval("instructions");
   const scope = useRef({ client, sessionID });
   useLayoutEffect(() => {
     if (
@@ -116,6 +109,7 @@ export const Instructions = ({
     };
   }, [load]);
 
+  const visibleEntries = entries.filter((entry) => !hidden.has(entry.key));
   const run = async (operation: () => Promise<void>) => {
     if (busy) {
       return;
@@ -152,7 +146,7 @@ export const Instructions = ({
       </BodyText>
       <Button
         title="Refresh instructions"
-        compact
+        size="compact"
         disabled={busy || loading}
         onPress={() => {
           void refresh();
@@ -165,10 +159,10 @@ export const Instructions = ({
         }}
       />
       {loading && <Busy />}
-      {!loading && !error && entries.length === 0 && (
+      {!loading && !error && visibleEntries.length === 0 && (
         <BodyText muted>No saved instruction entries</BodyText>
       )}
-      {entries.map((entry) => (
+      {visibleEntries.map((entry) => (
         <Card key={entry.key}>
           <BodyText style={{ fontWeight: "600" }}>{entry.key}</BodyText>
           <BodyText selectable>
@@ -179,7 +173,7 @@ export const Instructions = ({
           <Row>
             <Button
               title="Edit"
-              compact
+              size="compact"
               disabled={busy}
               onPress={() => {
                 setKey(entry.key);
@@ -193,24 +187,20 @@ export const Instructions = ({
             />
             <Button
               title="Delete"
-              compact
+              size="compact"
               variant="danger"
               disabled={busy}
               onPress={() => {
-                void run(async () => {
-                  const owner = scope.current;
-                  if (
-                    (await confirmAction(
-                      "Delete instruction?",
-                      `Remove the instruction named ${entry.key}?`
-                    )) &&
-                    owner === scope.current &&
-                    mounted.current
-                  ) {
+                removeEntry(entry.key, {
+                  commit: async () => {
                     await client.experimental.session.instructions.entry.remove(
                       { key: entry.key, sessionID }
                     );
-                  }
+                    if (mounted.current) {
+                      await load();
+                    }
+                  },
+                  message: "Instruction deleted",
                 });
               }}
             />
@@ -231,7 +221,7 @@ export const Instructions = ({
         />
         <Button
           title={json ? "Value format: JSON" : "Value format: text"}
-          compact
+          size="compact"
           onPress={() => setJson(!json)}
         />
         <Field

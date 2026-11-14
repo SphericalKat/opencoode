@@ -6,16 +6,9 @@ import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { prepareSchedule } from "../lib/schedules";
 import type { ScheduleDraft } from "../lib/schedules";
-import {
-  Button,
-  Busy,
-  Card,
-  ErrorNotice,
-  Field,
-  BodyText,
-  Row,
-  confirmAction,
-} from "./ui";
+import { SelectMenu } from "./select";
+import { useUndoableRemoval } from "./snackbar";
+import { Button, Busy, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
 const emptyDraft: ScheduleDraft = {
   after: "",
@@ -27,11 +20,11 @@ const emptyDraft: ScheduleDraft = {
   trigger: "",
   until: "",
 };
-const modes = [
-  { id: "in", title: "After a delay" },
-  { id: "at", title: "At a time" },
-  { id: "every", title: "Repeat" },
-  { id: "cron", title: "Cron" },
+const modeOptions = [
+  { label: "After a delay", value: "in" },
+  { label: "At a time", value: "at" },
+  { label: "Repeat", value: "every" },
+  { label: "Cron", value: "cron" },
 ] as const;
 
 const triggerLabel = (item: ScheduleInfo) => {
@@ -89,6 +82,7 @@ export const Schedules = ({
   client: Client;
   sessionID: string;
 }) => {
+  const { hidden, remove: removeSchedule } = useUndoableRemoval("schedules");
   const [items, setItems] = useState<ScheduleInfo[]>([]);
   const [draft, setDraft] = useState<ScheduleDraft>(emptyDraft);
   const [adding, setAdding] = useState(false);
@@ -194,6 +188,7 @@ export const Schedules = ({
   };
   const change = (field: keyof ScheduleDraft, value: string) =>
     setDraft((previous) => ({ ...previous, [field]: value }));
+  const visibleItems = items.filter((item) => !hidden.has(item.id));
   const repeating = draft.mode === "every" || draft.mode === "cron";
 
   return (
@@ -205,13 +200,13 @@ export const Schedules = ({
       <Row>
         <Button
           title={adding ? "Cancel new schedule" : "+ Schedule prompt"}
-          compact
+          size="compact"
           disabled={busy}
           onPress={() => setAdding(!adding)}
         />
         <Button
           title="Refresh"
-          compact
+          size="compact"
           disabled={busy || loading}
           onPress={() => {
             void refresh();
@@ -225,7 +220,7 @@ export const Schedules = ({
         }}
       />
       {loading && <Busy />}
-      {!loading && !error && items.length === 0 && (
+      {!loading && !error && visibleItems.length === 0 && (
         <BodyText muted>No schedules for this session</BodyText>
       )}
       {adding && (
@@ -242,23 +237,15 @@ export const Schedules = ({
             value={draft.prompt}
             onChangeText={(value) => change("prompt", value)}
           />
-          <Row>
-            {modes.map((mode) => (
-              <Button
-                key={mode.id}
-                title={mode.title}
-                compact
-                variant={draft.mode === mode.id ? "primary" : "secondary"}
-                onPress={() =>
-                  setDraft((previous) => ({
-                    ...previous,
-                    mode: mode.id,
-                    trigger: "",
-                  }))
-                }
-              />
-            ))}
-          </Row>
+          <SelectMenu
+            accessibilityLabel="Schedule type"
+            appearance="outline"
+            options={modeOptions}
+            value={draft.mode}
+            onSelect={(mode) =>
+              setDraft((previous) => ({ ...previous, mode, trigger: "" }))
+            }
+          />
           <Field
             label={triggerFieldLabel(draft.mode)}
             placeholder={triggerPlaceholder(draft.mode)}
@@ -318,7 +305,7 @@ export const Schedules = ({
           />
         </Card>
       )}
-      {items.map((item) => (
+      {visibleItems.map((item) => (
         <Card key={item.id}>
           <BodyText style={{ fontSize: 17, fontWeight: "600" }}>
             {item.name || "Scheduled prompt"}
@@ -341,7 +328,7 @@ export const Schedules = ({
           <Row>
             <Button
               title="Details"
-              compact
+              size="compact"
               disabled={busy}
               onPress={() => {
                 void run(async () => {
@@ -358,7 +345,7 @@ export const Schedules = ({
             {item.status !== "done" && (
               <Button
                 title={item.status === "paused" ? "Resume" : "Pause"}
-                compact
+                size="compact"
                 disabled={busy}
                 onPress={() => {
                   void run(() =>
@@ -377,26 +364,18 @@ export const Schedules = ({
             )}
             <Button
               title="Delete"
-              compact
+              size="compact"
               variant="danger"
               disabled={busy}
               onPress={() => {
-                void run(async () => {
-                  const owner = scope.current;
-                  if (
-                    (await confirmAction(
-                      "Delete schedule?",
-                      `Delete ${item.name || "this scheduled prompt"}?`
-                    )) &&
-                    owner === scope.current &&
-                    mounted.current
-                  ) {
-                    await mutate(() =>
+                removeSchedule(item.id, {
+                  commit: () =>
+                    mutate(() =>
                       client.experimental.schedule.delete({
                         scheduleID: item.id,
                       })
-                    );
-                  }
+                    ),
+                  message: "Schedule deleted",
                 });
               }}
             />
@@ -421,7 +400,7 @@ export const Schedules = ({
               </BodyText>
               <Button
                 title="Hide details"
-                compact
+                size="compact"
                 variant="ghost"
                 onPress={() => setDetail(undefined)}
               />

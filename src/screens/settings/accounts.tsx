@@ -1,23 +1,31 @@
 import type { CredentialEntry, IntegrationInfo } from "@opencode/client";
 import { useState } from "react";
 
+import { SheetGroup, SheetRow } from "../../components/list-sheet";
+import { useUndoableRemoval } from "../../components/snackbar";
 import {
   Button,
-  Card,
-  confirmAction,
   Empty,
   ErrorNotice,
   Field,
   BodyText,
-  Row,
   Sheet,
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
 import { withSettingsRequest } from "../../lib/settings";
-import { useTheme, useThemedStyles } from "../../lib/theme";
 import { ConnectIntegration } from "./connect-integration";
-import { Page, SettingsCardHeader, runBusy, useResource } from "./shared";
-import { createStyles } from "./styles";
+import { Page, runBusy, useResource } from "./shared";
+
+const integrationDescription = (item: IntegrationInfo) => {
+  const count = item.connections.length;
+  const summary = count
+    ? `${count} connection${count === 1 ? "" : "s"}`
+    : "Not connected";
+  const problems = item.connections.flatMap((connection) =>
+    connection.status ? [connection.status.message] : []
+  );
+  return [summary, ...problems].join(" · ");
+};
 
 export const Accounts = ({
   client,
@@ -26,8 +34,6 @@ export const Accounts = ({
   client: Client;
   directory: string;
 }) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
   const { data, error, loading, refresh } = useResource(
     client,
     directory,
@@ -39,6 +45,7 @@ export const Accounts = ({
       return { credentials, integrations: integrations.data };
     }
   );
+  const { hidden, remove: removeAccount } = useUndoableRemoval("accounts");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<IntegrationInfo>();
   const [limit, setLimit] = useState(40);
@@ -48,6 +55,9 @@ export const Accounts = ({
     }
     setQuery(next);
   };
+  const visibleCredentials = data?.credentials.filter(
+    (item) => !hidden.has(item.id)
+  );
   const [credential, setCredential] = useState<CredentialEntry>();
   const [label, setLabel] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -68,75 +78,56 @@ export const Accounts = ({
     ) ?? [];
   return (
     <Page error={error} loading={loading} refresh={refresh}>
-      <Row style={{ alignItems: "flex-end", flexWrap: "nowrap" }}>
-        <Field
-          label="Find a provider or integration"
-          placeholder="Search accounts"
-          value={query}
-          onChangeText={changeQuery}
-          containerStyle={{ flex: 1 }}
-        />
-        {!!query && (
-          <Button
-            title="Clear"
-            accessibilityLabel="Clear provider search"
-            compact
-            variant="ghost"
-            onPress={() => changeQuery("")}
-          />
-        )}
-      </Row>
+      <Field
+        label="Find a provider or integration"
+        placeholder="Search accounts"
+        value={query}
+        onChangeText={changeQuery}
+        trailing={
+          query ? (
+            <Button
+              title="Clear"
+              accessibilityLabel="Clear provider search"
+              size="compact"
+              variant="ghost"
+              onPress={() => changeQuery("")}
+            />
+          ) : undefined
+        }
+      />
       <ErrorNotice error={actionError} />
-      {!!data?.credentials.length && (
-        <BodyText style={styles.sectionLabel}>SAVED ACCOUNTS</BodyText>
+      {!!visibleCredentials?.length && (
+        <SheetGroup title="Saved accounts">
+          {visibleCredentials.map((item) => (
+            <SheetRow
+              key={item.id}
+              label={item.label || item.integrationID}
+              description={`${item.integrationID} · ${item.value.type}${item.active ? " · Active" : ""}`}
+              trailing="chevron"
+              accessibilityLabel={`Manage ${item.label || item.integrationID}`}
+              onPress={() => {
+                setCredential(item);
+                setLabel(item.label);
+                setActionError(null);
+              }}
+            />
+          ))}
+        </SheetGroup>
       )}
-      {data?.credentials.map((item) => (
-        <Card key={item.id} style={styles.card}>
-          <SettingsCardHeader
-            action={
-              <Button
-                title="Manage"
-                compact
-                onPress={() => {
-                  setCredential(item);
-                  setLabel(item.label);
-                  setActionError(null);
-                }}
-              />
-            }
-            subtitle={`${item.integrationID} · ${item.value.type}${item.active ? " · Active" : ""}`}
-            title={item.label || item.integrationID}
-          />
-        </Card>
-      ))}
-      <BodyText style={styles.sectionLabel}>CONNECT AN ACCOUNT</BodyText>
-      {integrations.slice(0, limit).map((item) => (
-        <Card key={item.id} style={styles.card}>
-          <SettingsCardHeader
-            action={
-              <Button
-                title="Connect"
-                compact
-                onPress={() => setSelected(item)}
-              />
-            }
-            subtitle={
-              item.connections.length
-                ? `${item.connections.length} connection${item.connections.length === 1 ? "" : "s"}`
-                : "Not connected"
-            }
-            title={item.name}
-          />
-          {item.connections.map(
-            (connection, index) =>
-              connection.status && (
-                <BodyText key={index} style={{ color: colors.danger }}>
-                  {connection.status.message}
-                </BodyText>
-              )
-          )}
-        </Card>
-      ))}
+      {!!integrations.length && (
+        <SheetGroup title="Connect an account">
+          {integrations.slice(0, limit).map((item) => (
+            <SheetRow
+              key={item.id}
+              label={item.name}
+              description={integrationDescription(item)}
+              trailing="chevron"
+              accessibilityLabel={`Connect ${item.name}`}
+              onPress={() => setSelected(item)}
+            />
+          ))}
+        </SheetGroup>
+      )}
       {integrations.length > limit && (
         <>
           <BodyText muted>
@@ -154,13 +145,13 @@ export const Accounts = ({
         !!data.integrations.length &&
         !!search &&
         !integrations.length && (
-          <Card>
+          <>
             <Empty
               title="No matching providers"
               detail="Try a provider name or integration ID, or clear the search to see all providers."
             />
             <Button title="Clear search" onPress={() => changeQuery("")} />
-          </Card>
+          </>
         )}
       {data && !data.integrations.length && (
         <Empty
@@ -231,18 +222,14 @@ export const Accounts = ({
               return;
             }
             const credentialID = credential.id;
-            void confirmAction(
-              "Remove account?",
-              "This removes the saved credential from your OpenCode server."
-            ).then((confirmed) => {
-              if (confirmed) {
-                void run(async (signal) => {
+            setCredential(undefined);
+            removeAccount(credentialID, {
+              commit: () =>
+                withSettingsRequest(async (signal) => {
                   await client.credential.remove({ credentialID }, { signal });
-                  signal.throwIfAborted();
-                  setCredential(undefined);
-                });
-              }
-              return confirmed;
+                  await refresh(signal);
+                }),
+              message: "Account removed",
             });
           }}
         />

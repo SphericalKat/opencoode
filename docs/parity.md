@@ -148,7 +148,7 @@ Mobile operating systems suspend background connections. Server execution can co
 
 OAuth flows that depend on a server-local callback need a reachable callback or a supported alternate method. Opening an authorization page on the phone does not prove that its callback reaches the host.
 
-The app supplies a terminal renderer, WebSocket transport, resize support, and keyboard controls. Android full-screen terminals use buffered native text input to avoid keyboard composition errors. Physical phone behavior and literal Unicode input on Android remain outside the recorded native evidence.
+The app supplies a terminal renderer, WebSocket transport, resize support, and a key bar. A tap on the terminal takes control of a desktop shell and opens the keyboard. On Android, a hidden native text input receives the keystrokes and the app sends the difference between buffer states, which avoids the keyboard composition errors of the renderer text area. Physical phone behavior and literal Unicode input on Android remain outside the recorded native evidence.
 
 Sources: [server pairing and capabilities](https://github.com/anomalyco/opencode/blob/v2.2.1/packages/protocol/src/groups/server.ts), [desktop plugin bundle contract](https://github.com/anomalyco/opencode/blob/v2.2.1/packages/protocol/src/groups/plugin.ts), [desktop built-in plugins](https://github.com/anomalyco/opencode/tree/v2.2.1/packages/gui-plugins/src).
 

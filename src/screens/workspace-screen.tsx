@@ -1,14 +1,11 @@
 import type {
-  FileDiffInfo,
   FileSystemEntry,
   LocationPublicInfo,
-  VcsFileStatus,
-  VcsInfo,
   WorktreeDirectory,
 } from "@opencode/client";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useEffectEvent, useState } from "react";
 import {
   FlatList,
   Image,
@@ -16,17 +13,18 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 
-import { Patch } from "../components/patch";
+import { confirmAction } from "../components/dialog";
+import { FileIcon } from "../components/file-icon";
+import { ShellIcon } from "../components/shell-icon";
+import { useUndoableRemoval } from "../components/snackbar";
 import { TerminalPanel } from "../components/terminal-panel";
 import {
   Busy,
   Button,
   Card,
-  confirmAction,
   Empty,
   ErrorNotice,
   Field,
@@ -47,9 +45,12 @@ import {
   decodeEditableFile,
   fileName,
   parentPath,
+  quotedText,
+  runWithFlag,
   saveEditableFile,
   serverFilePath,
 } from "../lib/workspace";
+import { ChangesPane } from "./changes/changes-pane";
 
 export type WorkspaceSection = "Files" | "Changes" | "Worktrees" | "Terminal";
 
@@ -65,6 +66,12 @@ interface Props {
   visible?: boolean;
   sessionID?: string;
   section: WorkspaceSection;
+  onSectionChange?: (section: WorkspaceSection) => void;
+}
+
+interface FileRequest {
+  id: number;
+  path: string;
 }
 
 const createStyles = (colors: ThemeColors) =>
@@ -77,7 +84,6 @@ const createStyles = (colors: ThemeColors) =>
     },
     controls: { gap: 8, paddingBottom: 10, paddingHorizontal: pageInset },
     editor: { flex: 1, gap: 12, minHeight: 0, padding: 16 },
-    fileIcon: { color: colors.muted, fontFamily: mono, fontSize: 23 },
     fileRow: {
       alignItems: "center",
       borderBottomWidth: 1,
@@ -188,15 +194,6 @@ const base64 = (bytes: Uint8Array): string => {
     );
   }
   return btoa(chunks.join(""));
-};
-
-const quotedText = (text: string, language = ""): string => {
-  let longest = 2;
-  for (const match of text.matchAll(/`+/gu)) {
-    longest = Math.max(longest, match[0].length);
-  }
-  const fence = "`".repeat(longest + 1);
-  return `${fence}${language}\n${text}\n${fence}`;
 };
 
 const MAX_PREVIEW_BYTES = 8 * 1024 * 1024;
@@ -377,18 +374,6 @@ const loadEntriesInto = async (
   }
 };
 
-const runWithFlag = async (
-  setFlag: (value: boolean) => void,
-  task: () => Promise<void>
-) => {
-  setFlag(true);
-  try {
-    await task();
-  } finally {
-    setFlag(false);
-  }
-};
-
 const shareTitle = () =>
   Platform.OS === "web" ? "Download file" : "Save or share";
 
@@ -417,7 +402,7 @@ const FileHeaderRow = ({
     {file.original && (
       <Button
         title={saved && file.text === file.initialText ? "Saved" : "Save file"}
-        compact
+        size="compact"
         variant="primary"
         disabled={file.text === file.initialText || sharing}
         busy={fileBusy}
@@ -427,7 +412,7 @@ const FileHeaderRow = ({
     {file.bytes && !file.original && showAttach && (
       <Button
         title="Attach to prompt"
-        compact
+        size="compact"
         variant="primary"
         disabled={fileBusy || sharing}
         onPress={onAttach}
@@ -435,7 +420,7 @@ const FileHeaderRow = ({
     )}
     <Button
       title={fileActionsOpen ? "Hide actions" : "More actions"}
-      compact
+      size="compact"
       variant="ghost"
       disabled={fileBusy || sharing}
       onPress={onToggleActions}
@@ -475,7 +460,7 @@ const FileActionRows = ({
       {showAttach && (
         <Button
           title="Attach to prompt"
-          compact
+          size="compact"
           disabled={fileBusy || sharing}
           onPress={onAttach}
         />
@@ -483,14 +468,14 @@ const FileActionRows = ({
       {showAttach && file.original && (
         <Button
           title="Attach selection"
-          compact
+          size="compact"
           disabled={fileBusy || sharing || selection.end <= selection.start}
           onPress={onAttachSelection}
         />
       )}
       <Button
         title="Reload"
-        compact
+        size="compact"
         disabled={fileBusy || sharing}
         onPress={() => {
           if (file.text === file.initialText) {
@@ -498,7 +483,8 @@ const FileActionRows = ({
           } else {
             void confirmAction(
               "Reload the file?",
-              "Your unsaved edits will be lost."
+              "Your unsaved edits will be lost.",
+              { confirmLabel: "Reload" }
             ).then((yes) => {
               if (yes) {
                 void onOpen(file.path);
@@ -511,7 +497,7 @@ const FileActionRows = ({
       {file.original && (
         <Button
           title={copied ? "Copied" : "Copy text"}
-          compact
+          size="compact"
           onPress={() => {
             void copyText(file.text).then(onCopied).catch(onCopyError);
           }}
@@ -520,7 +506,7 @@ const FileActionRows = ({
       {file.bytes && (
         <Button
           title={shareTitle()}
-          compact
+          size="compact"
           busy={sharing}
           disabled={fileBusy}
           onPress={onShare}
@@ -555,6 +541,10 @@ const FileBody = ({
   onShare: () => void;
 }) => {
   const styles = useThemedStyles(createStyles);
+  // Android scrolls a long multiline input to its end unless the caret is set.
+  const [releasedPath, setReleasedPath] = useState<string | null>(null);
+  const caretPinned = releasedPath !== file.path;
+  const releaseCaret = () => setReleasedPath(file.path);
   if (fileBusy && !file.bytes) {
     return <Busy />;
   }
@@ -585,12 +575,21 @@ const FileBody = ({
   if (file.original) {
     return (
       <Field
+        key={file.path}
         accessibilityLabel={`Edit ${file.path}`}
         multiline
         scrollEnabled
         value={file.text}
-        onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
+        selection={caretPinned ? { end: 0, start: 0 } : undefined}
+        onSelectionChange={(event) => {
+          const next = event.nativeEvent.selection;
+          if (next.start !== 0 || next.end !== 0) {
+            releaseCaret();
+          }
+          setSelection(next);
+        }}
         onChangeText={(text) => {
+          releaseCaret();
           setFile((current) => current && { ...current, text });
           setSaved(false);
           setCopied(false);
@@ -629,7 +628,10 @@ const Files = ({
   client,
   directory,
   onAttachFile,
-}: Pick<Props, "client" | "directory" | "onAttachFile">) => {
+  openRequest,
+}: Pick<Props, "client" | "directory" | "onAttachFile"> & {
+  openRequest?: FileRequest | null;
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const presentNative = useNativePresentation();
@@ -729,7 +731,8 @@ const Files = ({
       file.text !== file.initialText &&
       !(await confirmAction(
         "Discard your edits?",
-        "Your unsaved edits will be lost."
+        "Your unsaved edits will be lost.",
+        { confirmLabel: "Discard" }
       ))
     ) {
       return false;
@@ -737,6 +740,21 @@ const Files = ({
     setFile(null);
     return true;
   };
+
+  const openRequested = useEffectEvent(async (requested: FileRequest) => {
+    if (await closeFile()) {
+      await openFile(requested.path);
+    }
+  });
+  useEffect(() => {
+    if (!openRequest) {
+      return;
+    }
+    const run = async () => {
+      await openRequested(openRequest);
+    };
+    void run();
+  }, [openRequest]);
 
   const save = async () => {
     const original = file?.original;
@@ -849,7 +867,7 @@ const Files = ({
         <Row style={{ flexWrap: "nowrap" }}>
           <Button
             title="↑ Parent"
-            compact
+            size="compact"
             disabled={!path || searching}
             onPress={() => setPath(parentPath(path))}
           />
@@ -863,7 +881,7 @@ const Files = ({
           </BodyText>
           <Button
             title="Refresh"
-            compact
+            size="compact"
             variant="ghost"
             onPress={() => setRevision((value) => value + 1)}
           />
@@ -898,9 +916,11 @@ const Files = ({
                 }
               }}
             >
-              <Text style={styles.fileIcon}>
-                {item.type === "directory" ? "▱" : "≡"}
-              </Text>
+              {item.type === "directory" ? (
+                <ShellIcon name="folder" size={16} color={colors.muted} />
+              ) : (
+                <FileIcon path={item.path} size={16} />
+              )}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <BodyText numberOfLines={2}>{fileName(item.path)}</BodyText>
                 {searching && (
@@ -914,7 +934,9 @@ const Files = ({
                   </BodyText>
                 )}
               </View>
-              <BodyText muted>{item.type === "directory" ? "›" : ""}</BodyText>
+              {item.type === "directory" && (
+                <ShellIcon name="chevron" size={16} color={colors.faint} />
+              )}
             </Pressable>
           )}
         />
@@ -1001,383 +1023,14 @@ const Files = ({
   );
 };
 
-const Changes = ({
-  client,
-  directory,
-  onAttachFile,
-}: Pick<Props, "client" | "directory" | "onAttachFile">) => {
+// Marks the checkout or worktree this session works in. It is a status, so it
+// is plain text rather than a disabled button.
+const CurrentTag = () => {
   const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const [info, setInfo] = useState<VcsInfo | null>(null);
-  const [files, setFiles] = useState<VcsFileStatus[]>([]);
-  const [branches, setBranches] = useState<string[]>([]);
-  const [mode, setMode] = useState<"working" | "branch" | "committed">(
-    "working"
-  );
-  const [base, setBase] = useState("");
-  const [diff, setDiff] = useState<FileDiffInfo[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [branchesVisible, setBranchesVisible] = useState(false);
-  const [revision, setRevision] = useState(0);
-  const [review, setReview] = useState<FileDiffInfo | null>(null);
-  const [reviewVisible, setReviewVisible] = useState(false);
-  const [reviewComment, setReviewComment] = useState("");
-  const [addingReview, setAddingReview] = useState(false);
-  useUnsavedChanges(
-    `workspace-review:${directory}`,
-    "Review comment",
-    !!review && !!reviewComment.trim() && !addingReview
-  );
-  const [vcsRequest, setVcsRequest] = useState({
-    client,
-    directory,
-    revision,
-  });
-  if (
-    vcsRequest.client !== client ||
-    vcsRequest.directory !== directory ||
-    vcsRequest.revision !== revision
-  ) {
-    setVcsRequest({ client, directory, revision });
-    setLoading(true);
-    setError(null);
-  }
-  useEffect(() => {
-    const { client: requestClient, directory: requestDirectory } = vcsRequest;
-    const controller = new AbortController();
-    void Promise.allSettled([
-      requestClient.vcs.get(
-        { location: { directory: requestDirectory } },
-        { signal: controller.signal }
-      ),
-      requestClient.vcs.status(
-        { location: { directory: requestDirectory } },
-        { signal: controller.signal }
-      ),
-    ])
-      .then(([vcs, status]) => {
-        if (controller.signal.aborted) {
-          return false;
-        }
-        if (vcs.status === "fulfilled") {
-          setInfo(vcs.value.data);
-        }
-        if (status.status === "fulfilled") {
-          setFiles(status.value.data);
-        }
-        const failures = [vcs, status].filter(
-          (result) => result.status === "rejected"
-        );
-        if (failures.length) {
-          setError(
-            failures.map((result) => errorMessage(result.reason)).join("\n")
-          );
-        }
-        return true;
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [vcsRequest]);
-  const loadDiff = async (file?: string) => {
-    setError(null);
-    await runWithFlag(setBusy, async () => {
-      try {
-        const result = await client.vcs.diff({
-          base: base.trim() || undefined,
-          location: { directory },
-          mode,
-          untracked: "files",
-        });
-        setDiff(
-          file ? result.data.filter((item) => item.file === file) : result.data
-        );
-      } catch (error_) {
-        setError(errorMessage(error_));
-      }
-    });
-  };
-  const loadBranches = async () => {
-    setError(null);
-    await runWithFlag(setBusy, async () => {
-      try {
-        const result = await client.vcs.branch.list({
-          limit: 200,
-          location: { directory },
-        });
-        setBranches(result.data);
-        setBranchesVisible(true);
-      } catch (error_) {
-        setError(errorMessage(error_));
-      }
-    });
-  };
-  const closeDiff = async () => {
-    if (addingReview) {
-      return;
-    }
-    if (
-      reviewComment.trim() &&
-      !(await confirmAction(
-        "Discard review comment?",
-        "Your comment has not been added to a prompt."
-      ))
-    ) {
-      return;
-    }
-    setReview(null);
-    setReviewVisible(false);
-    setReviewComment("");
-    setDiff(null);
-  };
-  const openReview = async (file: FileDiffInfo) => {
-    if (review?.file !== file.file) {
-      if (
-        reviewComment.trim() &&
-        !(await confirmAction(
-          "Discard review comment?",
-          "Your comment has not been added to a prompt."
-        ))
-      ) {
-        return;
-      }
-      setReviewComment("");
-    }
-    setReview(file);
-    setReviewVisible(true);
-    setError(null);
-  };
-  const addReview = async () => {
-    if (!review || !onAttachFile || !reviewComment.trim()) {
-      return;
-    }
-    setError(null);
-    const target = review;
-    await runWithFlag(setAddingReview, async () => {
-      try {
-        const context = `Review feedback for ${serverFilePath(directory, target.file)}:\n\n${reviewComment.trim()}\n\n${quotedText(target.patch, "diff")}${target.more ? "\n\nThe server truncated this diff." : ""}`;
-        if (
-          (await onAttachFile(
-            serverFilePath(directory, target.file),
-            context
-          )) === false
-        ) {
-          setError("The review was not added. Check the connection and retry.");
-        } else {
-          setReview(null);
-          setReviewVisible(false);
-          setReviewComment("");
-          setDiff(null);
-        }
-      } catch (error_) {
-        setError(errorMessage(error_));
-      }
-    });
-  };
   return (
-    <View style={styles.screen}>
-      <View style={styles.controls}>
-        <Row style={{ flexWrap: "nowrap" }}>
-          <BodyText
-            numberOfLines={1}
-            ellipsizeMode="middle"
-            style={{ flex: 1, fontFamily: mono, minWidth: 0 }}
-          >
-            ⑂ {info?.branch.current || "No branch"}
-          </BodyText>
-          <Button
-            title="Branches"
-            compact
-            variant="ghost"
-            onPress={() => {
-              void loadBranches();
-            }}
-            busy={busy}
-          />
-          <Button
-            title="Refresh"
-            compact
-            variant="ghost"
-            onPress={() => setRevision((value) => value + 1)}
-          />
-        </Row>
-        <Row>
-          {(["working", "branch", "committed"] as const).map((value) => (
-            <Button
-              key={value}
-              title={
-                {
-                  branch: "Branch",
-                  committed: "Committed",
-                  working: "Working tree",
-                }[value]
-              }
-              compact
-              variant={mode === value ? "primary" : "secondary"}
-              onPress={() => setMode(value)}
-            />
-          ))}
-        </Row>
-        {mode !== "working" && (
-          <Field
-            label="Base branch or commit (optional)"
-            placeholder="Server default"
-            value={base}
-            onChangeText={setBase}
-          />
-        )}
-        <Button
-          title="View diff"
-          onPress={() => {
-            void loadDiff();
-          }}
-          busy={busy}
-        />
-        <ErrorNotice
-          error={error}
-          onRetry={() => setRevision((value) => value + 1)}
-        />
-      </View>
-      {loading ? (
-        <Busy />
-      ) : (
-        <FlatList
-          data={files}
-          keyExtractor={(file) => file.file}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <Empty
-              title={error ? "Changes unavailable" : "No changes"}
-              detail={
-                error
-                  ? "Retry the request or check your repository."
-                  : "Your working tree has no changed files."
-              }
-            />
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`View diff for ${item.file}`}
-              style={styles.fileRow}
-              onPress={() => {
-                void loadDiff(item.file);
-              }}
-            >
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <BodyText numberOfLines={2} ellipsizeMode="middle">
-                  {item.file}
-                </BodyText>
-                <BodyText muted style={{ fontSize: 12 }}>
-                  {item.status}
-                </BodyText>
-              </View>
-              <BodyText style={{ color: colors.success }}>
-                +{item.additions}
-              </BodyText>
-              <BodyText style={{ color: colors.danger }}>
-                −{item.deletions}
-              </BodyText>
-            </Pressable>
-          )}
-        />
-      )}
-      <Sheet
-        visible={diff !== null}
-        title={reviewVisible ? "Review comment" : "Changes"}
-        onClose={() => {
-          void closeDiff();
-        }}
-      >
-        {reviewVisible && review ? (
-          <>
-            <BodyText selectable style={{ fontFamily: mono }}>
-              {review.file}
-            </BodyText>
-            <Field
-              label="Comment for OpenCode"
-              multiline
-              value={reviewComment}
-              onChangeText={setReviewComment}
-              editable={!addingReview}
-            />
-            <ErrorNotice error={error} />
-            <Button
-              title="Add review to prompt"
-              variant="primary"
-              busy={addingReview}
-              disabled={!reviewComment.trim()}
-              onPress={() => {
-                void addReview();
-              }}
-            />
-            <Button
-              title="Back to diff"
-              disabled={addingReview}
-              onPress={() => setReviewVisible(false)}
-            />
-          </>
-        ) : (
-          <>
-            {diff?.length === 0 && (
-              <Empty
-                title="No diff"
-                detail="The selected comparison has no changes."
-              />
-            )}
-            {diff?.map((file) => (
-              <Card key={file.file}>
-                <BodyText selectable style={{ fontFamily: mono }}>
-                  {file.file}
-                </BodyText>
-                <BodyText muted>
-                  +{file.additions} −{file.deletions} · {file.status}
-                </BodyText>
-                <Patch patch={file.patch} />
-                {file.more && (
-                  <BodyText muted>The server truncated this diff.</BodyText>
-                )}
-                {onAttachFile && (
-                  <Button
-                    title={
-                      review?.file === file.file && reviewComment.trim()
-                        ? "Continue review comment"
-                        : "Add review comment"
-                    }
-                    compact
-                    onPress={() => {
-                      void openReview(file);
-                    }}
-                  />
-                )}
-              </Card>
-            ))}
-          </>
-        )}
-      </Sheet>
-      <Sheet
-        visible={branchesVisible}
-        title="Branches"
-        onClose={() => setBranchesVisible(false)}
-      >
-        <BodyText muted>Select a branch as the comparison base.</BodyText>
-        {branches.map((branch) => (
-          <Button
-            key={branch}
-            title={branch}
-            onPress={() => {
-              setBase(branch);
-              setMode("branch");
-              setBranchesVisible(false);
-            }}
-          />
-        ))}
-      </Sheet>
+    <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
+      <ShellIcon name="check" size={16} color={colors.muted} />
+      <BodyText muted>Current</BodyText>
     </View>
   );
 };
@@ -1390,6 +1043,8 @@ const Worktrees = ({
   const styles = useThemedStyles(createStyles);
   const [location, setLocation] = useState<LocationPublicInfo | null>(null);
   const [trees, setTrees] = useState<WorktreeDirectory[]>([]);
+  const { hidden, remove: removeTree } = useUndoableRemoval("worktrees");
+  const visibleTrees = trees.filter((tree) => !hidden.has(tree.directory));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1464,30 +1119,21 @@ const Worktrees = ({
       }
     });
   };
-  const remove = async (tree: WorktreeDirectory) => {
-    if (
-      !location ||
-      tree.directory === location.project.directory ||
-      !(await confirmAction(
-        "Remove this worktree?",
-        `The server will remove ${tree.directory}. Removal stops if the worktree has uncommitted changes.`
-      ))
-    ) {
+  const remove = (tree: WorktreeDirectory) => {
+    if (!location || tree.directory === location.project.directory) {
       return;
     }
-    setError(null);
     const projectID = location.project.id;
-    await runWithFlag(setBusy, async () => {
-      try {
+    removeTree(tree.directory, {
+      commit: async () => {
         await client.worktree.remove({
           directory: tree.directory,
           force: false,
           projectID,
         });
         setRevision((value) => value + 1);
-      } catch (error_) {
-        setError(errorMessage(error_));
-      }
+      },
+      message: "Worktree removed",
     });
   };
   return (
@@ -1498,14 +1144,13 @@ const Worktrees = ({
         </BodyText>
         <Button
           title="Create"
-          compact
-          variant="primary"
+          size="compact"
           disabled={!location}
           onPress={() => setCreateVisible(true)}
         />
         <Button
           title="Refresh"
-          compact
+          size="compact"
           onPress={() => setRevision((value) => value + 1)}
         />
       </Row>
@@ -1522,59 +1167,64 @@ const Worktrees = ({
               <BodyText style={{ fontWeight: "600" }}>
                 Project checkout
               </BodyText>
-              <BodyText muted style={{ fontFamily: mono, fontSize: 13 }}>
+              <BodyText
+                muted
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                style={{ fontFamily: mono, fontSize: 13 }}
+              >
                 {location.project.directory}
               </BodyText>
-              <Button
-                title={
-                  directory === location.project.directory
-                    ? "Current checkout"
-                    : "Open checkout"
-                }
-                disabled={directory === location.project.directory}
-                onPress={() => onDirectoryChange(location.project.directory)}
-              />
+              {directory === location.project.directory ? (
+                <CurrentTag />
+              ) : (
+                <Button
+                  title="Open checkout"
+                  onPress={() => onDirectoryChange(location.project.directory)}
+                />
+              )}
             </Card>
           )}
-          {!error && trees.length === 0 && (
+          {!error && visibleTrees.length === 0 && (
             <Empty
               title="No worktrees"
               detail="Create a worktree to keep a separate branch and set of files."
             />
           )}
-          {trees.map((tree) => (
+          {visibleTrees.map((tree) => (
             <Card key={tree.directory}>
               <BodyText style={{ fontWeight: "600" }}>
                 {fileName(tree.directory)}
               </BodyText>
               <BodyText
-                selectable
                 muted
+                numberOfLines={1}
+                ellipsizeMode="middle"
                 style={{ fontFamily: mono, fontSize: 13 }}
               >
                 {tree.directory}
               </BodyText>
-              <Row>
-                <Button
-                  title={
-                    tree.directory === directory ? "Current worktree" : "Open"
-                  }
-                  disabled={tree.directory === directory || busy}
-                  onPress={() => onDirectoryChange(tree.directory)}
-                />
-                <Button
-                  title="Remove"
-                  variant="danger"
-                  disabled={
-                    tree.directory === directory ||
-                    tree.directory === location?.project.directory
-                  }
-                  busy={busy}
-                  onPress={() => {
-                    void remove(tree);
-                  }}
-                />
-              </Row>
+              {tree.directory === directory ? (
+                <CurrentTag />
+              ) : (
+                <Row>
+                  <Button
+                    title="Open"
+                    disabled={busy}
+                    onPress={() => onDirectoryChange(tree.directory)}
+                  />
+                  {tree.directory !== location?.project.directory && (
+                    <Button
+                      title="Remove"
+                      variant="danger"
+                      busy={busy}
+                      onPress={() => {
+                        remove(tree);
+                      }}
+                    />
+                  )}
+                </Row>
+              )}
             </Card>
           ))}
         </>
@@ -1627,11 +1277,17 @@ const Workspace = ({
   directory,
   onDirectoryChange,
   onAttachFile,
+  onSectionChange,
   visible = true,
   sessionID,
   section: activeTab,
 }: Props) => {
   const styles = useThemedStyles(createStyles);
+  const [fileRequest, setFileRequest] = useState<FileRequest | null>(null);
+  const openChangedFile = (path: string) => {
+    setFileRequest((previous) => ({ id: (previous?.id ?? 0) + 1, path }));
+    onSectionChange?.("Files");
+  };
   return (
     <View style={styles.screen}>
       <View
@@ -1641,13 +1297,16 @@ const Workspace = ({
           client={client}
           directory={directory}
           onAttachFile={onAttachFile}
+          openRequest={fileRequest}
         />
       </View>
       {activeTab === "Changes" && (
-        <Changes
+        <ChangesPane
           client={client}
           directory={directory}
+          sessionID={sessionID}
           onAttachFile={onAttachFile}
+          onOpenFile={openChangedFile}
         />
       )}
       {activeTab === "Worktrees" && (

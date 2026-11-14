@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo } from "react";
 
 import { makeOpenCodeChatBackend } from "../lib/chat-backend";
 import { createClient } from "../lib/client";
+import { sessionLabel } from "../lib/session-title";
 import { noop } from "./constants";
 import type { MobileState } from "./use-app-state";
 
@@ -38,7 +39,7 @@ export const useClientBindings = (model: MobileState) => {
       const next = {
         directory: session.location.directory,
         id: session.id,
-        title: session.title || "New session",
+        title: sessionLabel(session),
       };
       setOpenTabs((current) => {
         const previous = current.find((item) => item.id === next.id);

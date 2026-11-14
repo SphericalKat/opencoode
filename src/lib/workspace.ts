@@ -68,3 +68,24 @@ export const serverFilePath = (directory: string, path: string): string => {
   }
   return `${directory.replace(/[\\/]+$/u, "")}/${path}`;
 };
+
+export const quotedText = (text: string, language = ""): string => {
+  let longest = 2;
+  for (const match of text.matchAll(/`+/gu)) {
+    longest = Math.max(longest, match[0].length);
+  }
+  const fence = "`".repeat(longest + 1);
+  return `${fence}${language}\n${text}\n${fence}`;
+};
+
+export const runWithFlag = async (
+  setFlag: (value: boolean) => void,
+  task: () => Promise<void>
+) => {
+  setFlag(true);
+  try {
+    await task();
+  } finally {
+    setFlag(false);
+  }
+};

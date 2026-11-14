@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { useModelPreferences } from "../../lib/model-preferences";
 import { useNativePresentation } from "../../lib/sheets";
 import { useTheme, useThemedStyles } from "../../lib/theme";
+import type { MessageMenuContext } from "./message-menu-entries";
 import { createStyles } from "./styles";
 import type { Props } from "./types";
 import { useAttachmentHandoff } from "./use-attachment-handoff";
@@ -44,6 +45,7 @@ export const useChatController = ({
   draftKey = sessionID,
   visible = true,
   onOpenNavigation,
+  onOpenSettings,
   serverID,
   onSelectionChange,
   onSessionInfo,
@@ -59,7 +61,7 @@ export const useChatController = ({
   const metrics = useComposerMetrics();
   const sync = useSessionState(backend);
   const sheets = useSheetState();
-  const { panel, setPanel, setSideQuestion, setTitle } = sheets;
+  const { panel, setPanel, setSideQuestion } = sheets;
   const [foreground, setForeground] = useState(
     AppState.currentState !== "background"
   );
@@ -97,12 +99,10 @@ export const useChatController = ({
     alive,
     foreground,
     panel,
-    screenReaderEnabled,
-    setPanel,
     setSelectedMessageID,
     visible,
   });
-  const { jumpToLatest } = scroll;
+  const { closeMessageMenu, jumpToLatest, messageMenu } = scroll;
   const composer = useComposerDraft({
     draftKey,
     showError,
@@ -122,7 +122,6 @@ export const useChatController = ({
     opencodeClient,
     reportConnectionFailure,
     sessionID,
-    setTitle,
     sync,
   });
   useForegroundTracking({ composer, draftKey, setForeground, showError });
@@ -142,7 +141,7 @@ export const useChatController = ({
     sync,
     visible,
   });
-  useSessionCatalog({
+  const { defaultModel } = useSessionCatalog({
     capabilities,
     client,
     foreground,
@@ -175,10 +174,20 @@ export const useChatController = ({
     setPanel,
     showError,
   });
+  const modelChoice = useModelSelection({
+    client,
+    defaultModel,
+    modelPreferences,
+    sessionID,
+    setPanel,
+    showError,
+    sync,
+  });
   const messageSend = useSendMessage({
     alive,
     capabilities,
     client,
+    commitModel: modelChoice.commitModel,
     composer,
     draftKey,
     jumpToLatest,
@@ -207,10 +216,7 @@ export const useChatController = ({
     backend,
     capabilities,
     composer,
-    foreground,
-    setPanel,
     showError,
-    visible,
     withNativePresentation,
   });
   const older = useOlderMessages({ alive, client, sessionID, showError, sync });
@@ -236,22 +242,54 @@ export const useChatController = ({
     showError,
     withNativePresentation,
   });
-  const modelChoice = useModelSelection({
-    client,
-    modelPreferences,
-    run,
-    sessionID,
-    sync,
-  });
+  const menuContext = useMemo<MessageMenuContext>(
+    () => ({
+      busy: pending || sync.active,
+      canFork: (message) =>
+        capabilities.forkMessage && (backend.canForkMessage?.(message) ?? true),
+      canRevert: !!opencodeClient,
+      canShowOutput: !!opencodeClient && capabilities.background,
+      draftLoaded: composer.draftLoaded,
+    }),
+    [
+      pending,
+      sync.active,
+      capabilities.forkMessage,
+      capabilities.background,
+      backend,
+      opencodeClient,
+      composer.draftLoaded,
+    ]
+  );
+  const menuMessage = messageMenu
+    ? sync.messages.find((message) => message.id === messageMenu.messageID)
+    : undefined;
+  const messageMenuTarget = useMemo(
+    () =>
+      messageMenu && menuMessage
+        ? { anchor: messageMenu.anchor, message: menuMessage }
+        : null,
+    [messageMenu, menuMessage]
+  );
+  const menuGone = !!messageMenu && !menuMessage;
+  useEffect(() => {
+    if (menuGone) {
+      closeMessageMenu();
+    }
+  }, [menuGone, closeMessageMenu]);
   const view = useTranscriptView({
     awayFromLatest: scroll.awayFromLatest,
     followingLatest: scroll.followingLatest,
     foreground,
+    menu: menuContext,
+    openMessageMenu: scroll.openMessageMenu,
+    onOpenSettings,
     opencodeClient,
     screenReader,
-    selectMessage: scroll.selectMessage,
     selectedMessageID,
     sessionID,
+    setPanel,
+    setSelectedMessageID,
     stopping: messageSend.stopping,
     sync,
     visible,
@@ -263,12 +301,13 @@ export const useChatController = ({
     activityNotice: sync.activityNotice,
     agents: sync.agents,
     alive,
+    attachDevice: device.attachDevice,
     attachments: composer.attachments,
     backend,
     backgroundDirectory: sheets.backgroundDirectory,
     backgroundShellID: sheets.backgroundShellID,
     beginUserScroll: scroll.beginUserScroll,
-    canCopySelected: selection.canCopySelected,
+    closeMessageMenu,
     capabilities,
     catalogError: sync.catalogError,
     chooseModel: modelChoice.chooseModel,
@@ -295,7 +334,6 @@ export const useChatController = ({
     fileQuery: fileSearch.fileQuery,
     fileResults: fileSearch.fileResults,
     fileSearchBusy: fileSearch.fileSearchBusy,
-    filteredModels: modelChoice.filteredModels,
     finishUserScroll: scroll.finishUserScroll,
     foreground,
     forms: sync.forms,
@@ -314,30 +352,30 @@ export const useChatController = ({
     loadingOlder: older.loadingOlder,
     maintainPosition: scroll.maintainPosition,
     maximumComposerHeight: metrics.maximumComposerHeight,
+    menuContext,
+    messageMenuTarget,
     messages: sync.messages,
     minimumComposerHeight: metrics.minimumComposerHeight,
-    modelFilter: modelChoice.modelFilter,
+    modelGroups: modelChoice.modelGroups,
     modelPreferences,
     modelSearch: modelChoice.modelSearch,
-    moveDirectory: sheets.moveDirectory,
     onOpenNavigation,
     onOpenSession,
+    onOpenSettings,
     opencodeClient,
     panel: sheets.panel,
     panelLoading: tools.panelLoading,
     pending,
     permissions: sync.permissions,
     providerLabel: modelChoice.providerLabel,
-    queueDevicePicker: device.queueDevicePicker,
-    queuedMessagePanelRef: sheets.queuedMessagePanelRef,
     refresh,
     renderMessage: view.renderMessage,
     restoredSkillIDs: composer.restoredSkillIDs,
     run,
-    scopedModels: modelChoice.scopedModels,
     selectedAgentIDs: composer.selectedAgentIDs,
     selectedMessageID: selection.selectedMessageID,
     selectedSkills: composer.selectedSkills,
+    selectedVariant: modelChoice.selectedVariant,
     send: messageSend.send,
     sending: messageSend.sending,
     serverID,
@@ -352,17 +390,14 @@ export const useChatController = ({
     setError: errors.setError,
     setFileQuery: fileSearch.setFileQuery,
     setFollowing: scroll.setFollowing,
-    setModelFilter: modelChoice.setModelFilter,
     setModelSearch: modelChoice.setModelSearch,
-    setMoveDirectory: sheets.setMoveDirectory,
     setPanel: sheets.setPanel,
     setRestoredSkillIDs: composer.setRestoredSkillIDs,
     setSelectedAgentIDs: composer.setSelectedAgentIDs,
     setSelectedMessageID: selection.setSelectedMessageID,
     setSelectedSkills: composer.setSelectedSkills,
     setSideQuestion: sheets.setSideQuestion,
-    setTextSelectionMessage: selection.setTextSelectionMessage,
-    setTitle: sheets.setTitle,
+    setTextSelectionMessage: sheets.setTextSelectionMessage,
     showActivityBar: view.showActivityBar,
     showError: errors.showError,
     showLatestControl: view.showLatestControl,
@@ -373,9 +408,7 @@ export const useChatController = ({
     streamStatus: sync.streamStatus,
     styles,
     syncErrors: sync.syncErrors,
-    textSelectionMessage: selection.textSelectionMessage,
-    title: sheets.title,
-    toolsDismissed: device.toolsDismissed,
+    textSelectionMessage: sheets.textSelectionMessage,
     transcriptLayoutChanged: scroll.transcriptLayoutChanged,
     transcriptMessages: view.transcriptMessages,
     updateComposerHeight: metrics.updateComposerHeight,

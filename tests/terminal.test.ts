@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  bufferEdit,
   persistentInputFrame,
   persistentPtySocketUrl,
   ptyControlCursor,
@@ -111,4 +112,24 @@ test("persistent terminal opens as an observer without credentials or automatic 
   assert.equal(url.searchParams.get("input_protocol"), "1");
   assert.equal(url.username, "");
   assert.equal(url.password, "");
+});
+
+test("terminal tap events keep only their type", () => {
+  assert.deepEqual(terminalEvent({ extra: 1, type: "tap" }), { type: "tap" });
+});
+
+test("buffer edits send only the difference between keyboard states", () => {
+  assert.deepEqual(bufferEdit("echo andr", "echo android"), {
+    deletes: 0,
+    insert: "oid",
+  });
+  assert.deepEqual(bufferEdit("echo andorid", "echo android"), {
+    deletes: 4,
+    insert: "roid",
+  });
+  assert.deepEqual(bufferEdit("", "git status"), {
+    deletes: 0,
+    insert: "git status",
+  });
+  assert.deepEqual(bufferEdit("ls", "l"), { deletes: 1, insert: "" });
 });

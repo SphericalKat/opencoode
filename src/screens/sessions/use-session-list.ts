@@ -103,13 +103,14 @@ export const useSessionList = ({
         setLoading(true);
         setListError(undefined);
       }
+      const limit = cursor ? SESSION_PAGE_SIZE : loadedCount.current;
       const result = await fetchSessionPage(
         query.client,
         {
           archived: query.archived,
           cursor,
           directory: query.listDirectory,
-          limit: cursor ? SESSION_PAGE_SIZE : loadedCount.current,
+          limit,
           search: query.search,
         },
         pending
@@ -120,6 +121,7 @@ export const useSessionList = ({
           {
             aborted: controller.signal.aborted,
             cursor,
+            limit,
             timedOut: pending.state.timedOut,
           },
           {

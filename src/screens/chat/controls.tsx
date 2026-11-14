@@ -1,12 +1,5 @@
-import React, { useContext, useState } from "react";
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import React from "react";
+import { ActivityIndicator, Platform, Pressable } from "react-native";
 import {
   KeyboardAvoidingView,
   useReanimatedKeyboardAnimation,
@@ -15,13 +8,8 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
-import { Markdown } from "../../components/markdown";
+import { CodeCard, Markdown } from "../../components/markdown";
 import { PressFeedback } from "../../components/motion";
-import { ShellIcon } from "../../components/shell-icon";
-import { Button, ErrorNotice, BodyText, Row } from "../../components/ui";
-import { errorMessage } from "../../lib/client";
-import { copyText } from "../../lib/clipboard";
-import { MessageActionsContext } from "../../lib/message-actions";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { createStyles } from "./styles";
 
@@ -76,29 +64,20 @@ export const ChatIconButton = ({
   name,
   label,
   onPress,
-  raised,
   disabled,
   busy,
   selected,
-  compactFace,
 }: {
   name: ChatIconName;
   label: string;
   onPress: () => void;
-  raised?: boolean;
   disabled?: boolean;
   busy?: boolean;
   selected?: boolean;
-  compactFace?: boolean;
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  let glyphColor = colors.muted;
-  if (raised) {
-    glyphColor = compactFace ? colors.onEmphasis : colors.primaryText;
-  } else if (selected) {
-    glyphColor = colors.text;
-  }
+  const glyphColor = selected ? colors.text : colors.muted;
   return (
     <Pressable
       accessibilityRole="button"
@@ -120,17 +99,7 @@ export const ChatIconButton = ({
         <PressFeedback
           pressed={pressed}
           disabled={disabled || busy}
-          style={[
-            styles.iconFace,
-            compactFace && {
-              borderRadius: raised ? 6 : 14,
-              height: 28,
-              width: 28,
-            },
-            raised && styles.raisedFace,
-            raised && compactFace && styles.betaRaisedFace,
-            (disabled || busy) && { opacity: 0.4 },
-          ]}
+          style={[styles.iconFace, (disabled || busy) && { opacity: 0.4 }]}
         >
           {busy ? (
             <ActivityIndicator size="small" color={colors.primaryText} />
@@ -143,92 +112,19 @@ export const ChatIconButton = ({
   );
 };
 
-export const PanelLink = ({
-  title,
-  onPress,
-}: {
-  title: string;
-  onPress: () => void;
-}) => {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: "center",
-        flexDirection: "row",
-        gap: 12,
-        minHeight: Platform.OS === "android" ? 48 : 44,
-        opacity: pressed ? 0.6 : 1,
-        paddingVertical: 10,
-      })}
-    >
-      <BodyText style={{ flex: 1 }}>{title}</BodyText>
-      <ShellIcon name="chevron" size={16} color={colors.muted} />
-    </Pressable>
-  );
-};
-
 // Command output usually ends with a newline, which renders as an empty last
 // line.
 const trailingNewline = /\n$/u;
 
 export const CodeBlock = ({
   code,
-  language,
   selectable = true,
 }: {
   code: string;
-  language?: string;
   selectable?: boolean;
-}) => {
-  const styles = useThemedStyles(createStyles);
-  const selectMessage = useContext(MessageActionsContext);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <View style={styles.code}>
-      <Row style={styles.codeHeader}>
-        <BodyText muted style={{ fontSize: 12 }}>
-          {language || "TEXT"}
-        </BodyText>
-        <Button
-          title={copied ? "Copied" : "Copy"}
-          compact
-          variant="ghost"
-          onPress={() => {
-            void copyText(code)
-              .then(() => setCopied(true))
-              .catch((error_) => setError(errorMessage(error_)));
-          }}
-        />
-      </Row>
-      {error && <ErrorNotice error={error} />}
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        directionalLockEnabled
-        persistentScrollbar
-        showsHorizontalScrollIndicator
-      >
-        {/* A long-press handler makes this Text the JS responder instead of
-            the message row. On Android the row would otherwise intercept
-            every move, and this ScrollView could never start a drag. */}
-        <Text
-          selectable={selectable}
-          onLongPress={
-            !selectable && Platform.OS !== "web" ? selectMessage : undefined
-          }
-          style={styles.codeText}
-        >
-          {code.replace(trailingNewline, "")}
-        </Text>
-      </ScrollView>
-    </View>
-  );
-};
+}) => (
+  <CodeCard code={code.replace(trailingNewline, "")} selectable={selectable} />
+);
 
 export const MessageText = ({
   text,
@@ -254,7 +150,7 @@ export const ChatKeyboardView = ({
     () => ({
       paddingBottom: enabled ? Math.max(0, -height.value - bottom) : 0,
     }),
-    [enabled, bottom]
+    Platform.OS === "web" ? [enabled, bottom] : undefined
   );
   if (Platform.OS === "android") {
     return (

@@ -17,24 +17,29 @@ import { KeyboardEvents } from "react-native-keyboard-controller";
 
 import type { TranscriptItem } from "../../components/assistant-turn";
 import { noop } from "../../lib/async";
-import type { Panel, Alive, SetPanel } from "./types";
+import type { Rect } from "../../lib/menu-position";
+import type { Panel, Alive } from "./types";
+
+export interface MessageMenuState {
+  anchor: Rect;
+  messageID: string;
+}
 
 interface UseTranscriptScrollOptions {
   alive: Alive;
   foreground: boolean;
   panel: Panel;
-  screenReaderEnabled: React.RefObject<boolean>;
-  setPanel: SetPanel;
   setSelectedMessageID: React.Dispatch<React.SetStateAction<string | null>>;
   visible: boolean;
 }
+
+const rowMessageID = (row: HTMLElement) =>
+  decodeURIComponent(row.id.slice("chat-message-".length).split(":")[0]);
 
 export const useTranscriptScroll = ({
   alive,
   foreground,
   panel,
-  screenReaderEnabled,
-  setPanel,
   setSelectedMessageID,
   visible,
 }: UseTranscriptScrollOptions) => {
@@ -87,18 +92,17 @@ export const useTranscriptScroll = ({
     }),
     [setFollowing]
   );
-  const selectMessage = useCallback(
-    (id: string) => {
+  const [messageMenu, setMessageMenu] = useState<MessageMenuState | null>(null);
+  const openMessageMenu = useCallback(
+    (messageID: string, anchor: Rect) => {
       followKeyboard.current = false;
       setFollowing(false);
       Keyboard.dismiss();
-      setSelectedMessageID(id);
-      if (screenReaderEnabled.current) {
-        setPanel("message");
-      }
+      setMessageMenu({ anchor, messageID });
     },
-    [setFollowing, setSelectedMessageID, screenReaderEnabled, setPanel]
+    [setFollowing]
   );
+  const closeMessageMenu = useCallback(() => setMessageMenu(null), []);
   const followContent = useCallback(() => {
     if (
       !followingLatestRef.current ||
@@ -252,9 +256,12 @@ export const useTranscriptScroll = ({
         return;
       }
       event.preventDefault();
-      selectMessage(
-        decodeURIComponent(row.id.slice("chat-message-".length).split(":")[0])
-      );
+      openMessageMenu(rowMessageID(row), {
+        height: 0,
+        width: 0,
+        x: event.clientX,
+        y: event.clientY,
+      });
     };
     const keyboard = (event: KeyboardEvent) => {
       const row = selectedRow(event.target);
@@ -270,9 +277,13 @@ export const useTranscriptScroll = ({
         return;
       }
       event.preventDefault();
-      selectMessage(
-        decodeURIComponent(row.id.slice("chat-message-".length).split(":")[0])
-      );
+      const { left, top } = row.getBoundingClientRect();
+      openMessageMenu(rowMessageID(row), {
+        height: 0,
+        width: 0,
+        x: left,
+        y: top,
+      });
     };
     node.addEventListener("wheel", wheel, { passive: true });
     node.addEventListener("touchmove", touch, { passive: true });
@@ -290,7 +301,7 @@ export const useTranscriptScroll = ({
       node.removeEventListener("contextmenu", openContextMenu);
       node.removeEventListener("keydown", keyboard);
     };
-  }, [beginUserScroll, setFollowing, selectMessage]);
+  }, [beginUserScroll, setFollowing, openMessageMenu]);
   const listLoaded = useCallback(() => {
     if (followingLatestRef.current && !userScrolling.current) {
       list.current?.scrollToEnd({ animated: false });
@@ -362,8 +373,10 @@ export const useTranscriptScroll = ({
     jumpToLatest,
     list,
     listLoaded,
+    closeMessageMenu,
     maintainPosition,
-    selectMessage,
+    messageMenu,
+    openMessageMenu,
     setFollowing,
     transcriptLayoutChanged,
     updateScrollPosition,

@@ -1,11 +1,12 @@
 import {
-  BottomSheetBackdrop,
   BottomSheetHandle,
   BottomSheetModal,
   BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
+  useBottomSheet,
   useBottomSheetInternal,
+  useBottomSheetTimingConfigs,
 } from "@gorhom/bottom-sheet";
 import type {
   BottomSheetBackdropProps,
@@ -17,12 +18,13 @@ import React, {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   BackHandler,
   Modal,
   Platform,
@@ -41,13 +43,20 @@ import type {
   TextProps,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { ReduceMotion } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  ReduceMotion,
+  useAnimatedStyle,
+} from "react-native-reanimated";
 import {
   SafeAreaProvider,
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import { pageInset } from "../lib/layout";
 import {
   MessageActionsContext,
   MessageDisclosureContext,
@@ -55,60 +64,60 @@ import {
 import { useSheetCoordinator } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { BackButton } from "./back-button";
+import { EdgeFade, useScrollEdges } from "./edge-fade";
 import {
   MotionDisclosureBody,
   MotionDisclosureChevron,
   PressFeedback,
   useMotionPreference,
 } from "./motion";
+import { touchTarget, usePressFeedback } from "./press-feedback";
 import { ShellIcon } from "./shell-icon";
+import type { ShellIconName } from "./shell-icon";
+import { elevation } from "./surface";
 
 export { darkColors as colors } from "../lib/theme";
+export { touchTarget, usePressFeedback };
 export const sans = "Inter";
 export const mono = "IBMPlexMono";
-export const touchTarget = Platform.OS === "android" ? 48 : 44;
-export const compactButtonSize = 32;
+export const monoMedium = "IBMPlexMono-Medium";
 export const disabledOpacity = 0.55;
+const fitSheetMaxHeight = 0.75;
+const fitSheetTopGap = 16;
+const fitSheetMinInset = 12;
+const fitSheetHandleHeight = 28;
+const fitSheetDuration = 240;
+const fitSheetEasing = Easing.bezier(0.2, 0.8, 0.2, 1);
 const createStyles = (colors: ThemeColors) => {
   const inset = Platform.OS !== "android" || Number(Platform.Version) >= 29;
   return StyleSheet.create({
-    betaSheetContent: { gap: 12, paddingHorizontal: 14 },
-    betaSheetHeader: { paddingHorizontal: 14, paddingVertical: 8 },
-    betaSheetTitle: {
-      flexShrink: 1,
-      fontSize: 18,
-      fontWeight: "600",
-      lineHeight: 24,
-    },
     button: {
       alignItems: "center",
-      backgroundColor: colors.raised,
+      alignSelf: "flex-start",
+      flexDirection: "row",
+      gap: 6,
+      justifyContent: "center",
+      overflow: "hidden",
+    },
+    buttonFill: { alignSelf: "stretch" },
+    buttonGhost: { backgroundColor: "transparent" },
+    buttonOutlined: {
+      backgroundColor: colors.buttonNeutral,
       borderColor: colors.border,
-      borderRadius: 6,
-      borderTopColor: colors.controlTopEdge,
       borderWidth: 1,
-      boxShadow: [
-        { blurRadius: 1, color: "#00000035", offsetX: 0, offsetY: 1 },
-      ],
-      justifyContent: "center",
-      minHeight: 36,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
     },
-    buttonTarget: {
-      alignItems: "stretch",
-      justifyContent: "center",
-      minHeight: touchTarget,
-      minWidth: touchTarget,
-    },
+    buttonPrimary: { backgroundColor: colors.primary },
+    buttonSubmit: { backgroundColor: colors.emphasis },
+    pressOverlay: StyleSheet.absoluteFill,
     buttonText: {
       color: colors.text,
       fontFamily: sans,
-      fontSize: 14,
+      fontSize: 13,
       fontVariant: ["tabular-nums"],
       fontWeight: "500",
       letterSpacing: -0.04,
-      lineHeight: 21,
+      lineHeight: 20,
     },
     card: {
       backgroundColor: colors.panel,
@@ -119,12 +128,6 @@ const createStyles = (colors: ThemeColors) => {
       padding: 14,
       paddingHorizontal: 15,
     },
-    compact: {
-      minHeight: compactButtonSize,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-    },
-    danger: { backgroundColor: colors.raised },
     disclosure: { gap: 0, paddingHorizontal: 0, paddingVertical: 0 },
     disclosureBody: { gap: 10, padding: 14, paddingTop: 0 },
     disclosureEmbedded: {
@@ -140,6 +143,7 @@ const createStyles = (colors: ThemeColors) => {
       flex: 1,
       gap: 8,
       minHeight: touchTarget,
+      overflow: "hidden",
       padding: 14,
     },
     disclosureHeaderWithAction: { paddingRight: 0 },
@@ -164,6 +168,8 @@ const createStyles = (colors: ThemeColors) => {
     },
     fieldLabel: { fontSize: 14, fontWeight: "500", letterSpacing: 0 },
     fieldInputContainer: { position: "relative" },
+    fieldTrailingInput: { flex: 1, minWidth: 0 },
+    fieldTrailingRow: { alignItems: "center", flexDirection: "row", gap: 8 },
     fieldSecureInput: {
       minHeight: touchTarget + 2,
       paddingRight: touchTarget + 4,
@@ -185,18 +191,16 @@ const createStyles = (colors: ThemeColors) => {
       borderTopLeftRadius: 16,
       borderTopRightRadius: 16,
     },
+    fitSheetHandleRow: {
+      height: fitSheetHandleHeight,
+      justifyContent: "center",
+      paddingVertical: 0,
+    },
     fitSheetHandle: {
-      backgroundColor: colors.faint,
+      backgroundColor: colors.borderStrong,
       borderRadius: 2,
       height: 4,
-      opacity: 0.5,
       width: 32,
-    },
-    ghost: {
-      backgroundColor: "transparent",
-      borderColor: "transparent",
-      borderTopColor: "transparent",
-      boxShadow: [],
     },
     ghostPressed: { backgroundColor: colors.raised },
     heading: {
@@ -237,28 +241,14 @@ const createStyles = (colors: ThemeColors) => {
       padding: 12,
       paddingHorizontal: 15,
     },
-    pressed: {
-      borderTopColor: colors.border,
-      boxShadow: inset
-        ? [
-            {
-              blurRadius: 1,
-              color: "#00000030",
-              inset: true,
-              offsetX: 0,
-              offsetY: 1,
-            },
-          ]
-        : [],
-    },
-    primary: { backgroundColor: colors.primary },
     recoveryNotice: {
       backgroundColor: colors.raised,
       color: colors.muted,
+      fontFamily: sans,
       fontSize: 13,
-      lineHeight: 19,
-      paddingHorizontal: 18,
-      paddingVertical: 10,
+      lineHeight: 20,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
     },
     row: {
       alignItems: "center",
@@ -266,24 +256,28 @@ const createStyles = (colors: ThemeColors) => {
       flexWrap: "wrap",
       gap: 8,
     },
-    selectedButton: {
-      backgroundColor: colors.selected,
-      borderColor: colors.faint,
-      borderTopColor: colors.faint,
-    },
     sheet: { backgroundColor: colors.panel, flex: 1 },
+    fitSheetScrollArea: { flex: 1, minHeight: 0 },
     sheetBody: { flex: 1, minHeight: 0 },
     sheetContent: { gap: 16, padding: 18, paddingBottom: 24 },
+    fitSheetContent: { gap: 8 },
     sheetHeader: {
       alignItems: "center",
-      borderBottomWidth: 1,
-      borderColor: colors.border,
+      borderBottomColor: colors.border,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       flexDirection: "row",
       flexShrink: 0,
-      gap: 12,
-      justifyContent: "space-between",
-      paddingHorizontal: 18,
-      paddingVertical: 12,
+      gap: 8,
+      height: 56,
+      paddingHorizontal: pageInset,
+    },
+    sheetTitle: {
+      color: colors.text,
+      flex: 1,
+      fontFamily: sans,
+      fontSize: 16,
+      fontWeight: "500",
+      lineHeight: 24,
     },
     sheetInner: {
       alignSelf: "center",
@@ -305,13 +299,12 @@ const createStyles = (colors: ThemeColors) => {
 
 const busyIndicatorColor = (
   themeColors: ThemeColors,
-  variant: "primary" | "secondary" | "danger" | "ghost",
-  selected: boolean | undefined
+  variant: ButtonVariant
 ) => {
-  if (selected) {
-    return themeColors.text;
+  if (variant === "primary") {
+    return themeColors.primaryText;
   }
-  return variant === "primary" ? themeColors.primaryText : themeColors.muted;
+  return variant === "submit" ? themeColors.onEmphasis : themeColors.muted;
 };
 
 export const BodyText = ({
@@ -339,83 +332,178 @@ export const Heading = ({ children }: { children: React.ReactNode }) => {
     </Text>
   );
 };
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "danger"
+  | "ghost"
+  | "submit";
+export type ButtonSize = "small" | "compact" | "default" | "large";
+
+const buttonSizes = {
+  compact: { height: 28, paddingHorizontal: 11, radius: 6 },
+  default: { height: 32, paddingHorizontal: 15, radius: 6 },
+  large: { height: 44, paddingHorizontal: 16, radius: 6 },
+  small: { height: 24, paddingHorizontal: 9, radius: 4 },
+} as const;
+const roundedButtonRadius = 12;
+const buttonIconSize = 16;
+const dimmedVariants = new Set<ButtonVariant>(["primary", "submit"]);
+
+const buttonLabelColor = (colors: ThemeColors, variant: ButtonVariant) => {
+  if (variant === "primary") {
+    return colors.primaryText;
+  }
+  if (variant === "submit") {
+    return colors.onEmphasis;
+  }
+  return variant === "danger" ? colors.danger : colors.text;
+};
+
+const ButtonContent = ({
+  title,
+  variant,
+  icon,
+  iconPosition,
+  busy,
+}: {
+  title: string;
+  variant: ButtonVariant;
+  icon?: ShellIconName;
+  iconPosition: "start" | "end";
+  busy?: boolean;
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const labelColor = buttonLabelColor(colors, variant);
+  const glyph = icon && !busy && (
+    <ShellIcon name={icon} color={labelColor} size={buttonIconSize} />
+  );
+  return (
+    <>
+      {iconPosition === "start" && glyph}
+      {busy && (
+        <ActivityIndicator
+          size="small"
+          color={busyIndicatorColor(colors, variant)}
+        />
+      )}
+      <Text style={[styles.buttonText, { color: labelColor }]}>{title}</Text>
+      {iconPosition === "end" && glyph}
+    </>
+  );
+};
+
+const useButtonStyle = ({
+  variant,
+  size,
+  shape,
+  fullWidth,
+  inactive,
+}: {
+  variant: ButtonVariant;
+  size: ButtonSize;
+  shape: "default" | "rounded";
+  fullWidth?: boolean;
+  inactive: boolean;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const { height, paddingHorizontal, radius } = buttonSizes[size];
+  return [
+    styles.button,
+    { borderRadius: shape === "rounded" ? roundedButtonRadius : radius },
+    { height, paddingHorizontal },
+    (variant === "secondary" || variant === "danger") && styles.buttonOutlined,
+    variant === "primary" && styles.buttonPrimary,
+    variant === "submit" && styles.buttonSubmit,
+    variant === "ghost" && styles.buttonGhost,
+    fullWidth && styles.buttonFill,
+    inactive && { opacity: dimmedVariants.has(variant) ? 0.4 : 0.5 },
+  ];
+};
+
 export const Button = ({
   title,
   onPress,
   variant = "secondary",
+  size = "default",
+  shape = "default",
+  icon,
+  iconPosition = "start",
+  fullWidth,
+  alignSelf,
   disabled,
   busy,
-  compact,
-  selected,
   accessibilityLabel,
 }: {
   title: string;
   onPress: () => void;
-  variant?: "primary" | "secondary" | "danger" | "ghost";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  shape?: "default" | "rounded";
+  icon?: ShellIconName;
+  iconPosition?: "start" | "end";
+  fullWidth?: boolean;
+  // A button hugs its label and sits at the start of a column. Inside a row
+  // with taller items, pass "center" so it lines up with them.
+  alignSelf?: "center";
   disabled?: boolean;
   busy?: boolean;
-  compact?: boolean;
-  selected?: boolean;
   accessibilityLabel?: string;
 }) => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { android_ripple, pressedStyle } = usePressFeedback();
+  const isAndroid = Platform.OS === "android";
+  const inactive = !!disabled || !!busy;
+  const visual = useButtonStyle({
+    fullWidth,
+    inactive,
+    shape,
+    size,
+    variant,
+  });
+  const slop = Math.max(0, (touchTarget - buttonSizes[size].height) / 2);
+  const content = (
+    <ButtonContent
+      title={title}
+      variant={variant}
+      icon={icon}
+      iconPosition={iconPosition}
+      busy={busy}
+    />
+  );
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={{
         busy: !!busy,
-        disabled: !!disabled || !!busy,
-        selected,
+        disabled: inactive,
       }}
-      aria-pressed={selected}
-      disabled={disabled || busy}
-      hitSlop={compact ? (touchTarget - compactButtonSize) / 2 : undefined}
+      android_ripple={android_ripple}
+      disabled={inactive}
+      hitSlop={{ bottom: slop, top: slop }}
       onPress={onPress}
       style={[
-        styles.buttonTarget,
-        compact && {
-          minHeight: compactButtonSize,
-          minWidth: compactButtonSize,
-        },
-        (disabled || busy) && { opacity: disabledOpacity },
+        isAndroid ? visual : fullWidth && styles.buttonFill,
+        alignSelf && { alignSelf },
       ]}
     >
-      {({ pressed }) => (
-        <PressFeedback
-          pressed={pressed}
-          disabled={disabled || busy}
-          style={[
-            styles.button,
-            compact && styles.compact,
-            variant === "primary" && styles.primary,
-            variant === "ghost" && styles.ghost,
-            variant === "danger" && styles.danger,
-            selected && styles.selectedButton,
-            pressed &&
-              (variant === "ghost" ? styles.ghostPressed : styles.pressed),
-          ]}
-        >
-          {busy ? (
-            <ActivityIndicator
-              size="small"
-              color={busyIndicatorColor(colors, variant, selected)}
-            />
-          ) : (
-            <Text
-              style={[
-                styles.buttonText,
-                variant === "primary" && { color: colors.primaryText },
-                variant === "danger" && { color: colors.danger },
-                selected && { color: colors.text },
-              ]}
-            >
-              {selected ? `✓ ${title}` : title}
-            </Text>
-          )}
-        </PressFeedback>
-      )}
+      {({ pressed }) =>
+        isAndroid ? (
+          content
+        ) : (
+          <PressFeedback pressed={pressed} disabled={inactive} style={visual}>
+            {pressed && !inactive && (
+              <View
+                pointerEvents="none"
+                style={[styles.pressOverlay, pressedStyle]}
+              />
+            )}
+            {content}
+          </PressFeedback>
+        )
+      }
     </Pressable>
   );
 };
@@ -449,14 +537,38 @@ const FieldVisibilityToggle = ({
     </Pressable>
   );
 };
+const FieldInputRow = ({
+  trailing,
+  children,
+}: {
+  trailing?: React.ReactNode;
+  children: React.ReactNode;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  if (!trailing) {
+    return children;
+  }
+  return (
+    <View style={styles.fieldTrailingRow}>
+      <View style={styles.fieldTrailingInput}>{children}</View>
+      {trailing}
+    </View>
+  );
+};
+
 export const Field = ({
   label,
   style,
   containerStyle,
+  trailing,
+  ref,
   ...props
 }: TextInputProps & {
   label?: string;
   containerStyle?: StyleProp<ViewStyle>;
+  // Sits beside the input, centered on it, below the label.
+  trailing?: React.ReactNode;
+  ref?: React.Ref<TextInput>;
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -464,7 +576,15 @@ export const Field = ({
   const [passwordVisible, setPasswordVisible] = useState(false);
   const canToggleVisibility = props.secureTextEntry && !props.multiline;
   // gorhom only moves a sheet for the keyboard when its own input has focus.
-  const Input = useBottomSheetInternal(true) ? BottomSheetTextInput : TextInput;
+  const Input: React.ComponentType<
+    TextInputProps & { ref?: React.Ref<TextInput> }
+  > = useBottomSheetInternal(true)
+    ? (BottomSheetTextInput as unknown as React.ComponentType<
+        TextInputProps & { ref?: React.Ref<TextInput> }
+      >)
+    : (TextInput as unknown as React.ComponentType<
+        TextInputProps & { ref?: React.Ref<TextInput> }
+      >);
   const input = (
     <Input
       accessibilityLabel={label ?? props.placeholder}
@@ -473,6 +593,7 @@ export const Field = ({
       autoCapitalize="none"
       autoCorrect={false}
       {...props}
+      ref={ref}
       secureTextEntry={
         canToggleVisibility ? !passwordVisible : props.secureTextEntry
       }
@@ -511,7 +632,7 @@ export const Field = ({
           />
         </View>
       ) : (
-        input
+        <FieldInputRow trailing={trailing}>{input}</FieldInputRow>
       )}
     </View>
   );
@@ -574,7 +695,7 @@ export const ErrorNotice = ({
   return (
     <View accessibilityRole="alert" style={styles.error}>
       <BodyText style={{ color: colors.danger, flex: 1 }}>{error}</BodyText>
-      {onRetry && <Button title="Retry" compact onPress={onRetry} />}
+      {onRetry && <Button title="Retry" size="compact" onPress={onRetry} />}
     </View>
   );
 };
@@ -585,27 +706,31 @@ export const Busy = () => {
 type UiStyles = ReturnType<typeof createStyles>;
 
 const renderSheetHeader = ({
+  fit,
   onClose,
-  showHeader,
   styles,
   title,
 }: {
+  fit: boolean;
   onClose: () => void;
-  showHeader: boolean;
   styles: UiStyles;
   title: string;
 }) =>
-  showHeader ? (
-    <View style={[styles.sheetHeader, styles.betaSheetHeader]}>
-      <BodyText accessibilityRole="header" style={styles.betaSheetTitle}>
-        {title}
-      </BodyText>
-      <Button title="Done" compact onPress={onClose} />
-    </View>
-  ) : (
+  fit ? (
     <BodyText accessibilityRole="header" style={styles.hiddenHeading}>
       {title}
     </BodyText>
+  ) : (
+    <View style={styles.sheetHeader}>
+      <BackButton accessibilityLabel={`Close ${title}`} onPress={onClose} />
+      <BodyText
+        accessibilityRole="header"
+        numberOfLines={1}
+        style={styles.sheetTitle}
+      >
+        {title}
+      </BodyText>
+    </View>
   );
 
 const renderSheetBody = ({
@@ -624,11 +749,8 @@ const renderSheetBody = ({
       style={styles.sheetScroll}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-      contentContainerStyle={[
-        styles.sheetContent,
-        styles.betaSheetContent,
-        contentStyle,
-      ]}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={[styles.sheetContent, contentStyle]}
     >
       {children}
     </ScrollView>
@@ -637,8 +759,93 @@ const renderSheetBody = ({
   );
 
 const fitSheetMaxWidth = 680;
-const fitSheetMaxHeight = 0.85;
-const fitSheetBackdropOpacity = 0.44;
+
+interface FitSheetChrome {
+  header: React.ReactNode;
+  title: string;
+}
+
+interface FitSheetChromeStore {
+  get: () => FitSheetChrome | null;
+  set: (next: FitSheetChrome) => void;
+  subscribe: (listener: () => void) => () => void;
+}
+
+const createChromeStore = (): FitSheetChromeStore => {
+  let value: FitSheetChrome | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set: (next) => {
+      value = next;
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+};
+
+// gorhom remounts a handle or backdrop whenever its component identity
+// changes, and a remount during a close animation resets the sheet's layout
+// so the close never finishes. These components keep one identity for the
+// life of the sheet and read their changing content from the store.
+const createFitSheetChrome = (store: FitSheetChromeStore) => {
+  // gorhom's BottomSheetBackdrop passes a dependency array to
+  // useAnimatedStyle, which Reanimated warns about on every sheet open.
+  const Backdrop = ({ animatedIndex, style }: BottomSheetBackdropProps) => {
+    const { colors } = useTheme();
+    const { close } = useBottomSheet();
+    const chrome = useSyncExternalStore(store.subscribe, store.get);
+    const fade = useAnimatedStyle(() => ({
+      opacity: interpolate(
+        animatedIndex.get(),
+        [-1, 0],
+        [0, 1],
+        Extrapolation.CLAMP
+      ),
+    }));
+    return (
+      <Animated.View style={[style, { backgroundColor: colors.scrim }, fade]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Close ${chrome?.title ?? ""}`}
+          onPress={() => close()}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+    );
+  };
+  const Handle = (props: BottomSheetHandleProps) => {
+    const styles = useThemedStyles(createStyles);
+    const insets = useSafeAreaInsets();
+    const chrome = useSyncExternalStore(store.subscribe, store.get);
+    return (
+      <BottomSheetHandle
+        {...props}
+        accessible={false}
+        indicatorStyle={styles.fitSheetHandle}
+        style={[
+          styles.fitSheetHandleRow,
+          { paddingLeft: insets.left, paddingRight: insets.right },
+        ]}
+      >
+        {chrome?.header}
+      </BottomSheetHandle>
+    );
+  };
+  return { Backdrop, Handle };
+};
+
+const createFitSheetParts = () => {
+  const chrome = createChromeStore();
+  return { chrome, ...createFitSheetChrome(chrome) };
+};
 
 const FitSheet = ({
   visible,
@@ -647,6 +854,7 @@ const FitSheet = ({
   children,
   contentStyle,
   scroll,
+  dragByHandle,
   onPresentedChange,
   onDismiss,
 }: {
@@ -656,15 +864,23 @@ const FitSheet = ({
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   scroll: boolean;
+  dragByHandle: boolean;
   onPresentedChange: (presented: boolean) => void;
   onDismiss: () => void;
 }) => {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
+  const sheetShadow = elevation(scheme).overlay;
+  const scrollEdges = useScrollEdges("y");
   const styles = useThemedStyles(createStyles);
   const reduced = useMotionPreference();
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const modal = useRef<BottomSheetModal>(null);
+  const { chrome, Backdrop, Handle } = useMemo(() => createFitSheetParts(), []);
+  const animationConfigs = useBottomSheetTimingConfigs({
+    duration: fitSheetDuration,
+    easing: fitSheetEasing,
+  });
   // gorhom leaves a never-presented or already-dismissed modal stuck in its
   // dismissing state if dismiss() is called on it, so track presentation here.
   const presented = useRef(false);
@@ -709,63 +925,57 @@ const FitSheet = ({
     onPresentedChange(false);
     onDismiss();
   }, [onPresentedChange, onDismiss]);
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...props}
-        accessibilityLabel={`Close ${title}`}
-        accessibilityHint={null}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        opacity={fitSheetBackdropOpacity}
-        pressBehavior="close"
-      />
-    ),
-    [title]
-  );
-  const sideInsets = { paddingLeft: insets.left, paddingRight: insets.right };
-  const renderHandle = (props: BottomSheetHandleProps) => (
-    <BottomSheetHandle
-      {...props}
-      accessible={false}
-      indicatorStyle={styles.fitSheetHandle}
-      style={sideInsets}
-    >
-      {header}
-    </BottomSheetHandle>
-  );
-  const contentInsets = { ...sideInsets, paddingBottom: insets.bottom };
+  useLayoutEffect(() => {
+    chrome.set({ header, title });
+  }, [chrome, header, title]);
+  const contentInsets = {
+    paddingBottom: Math.max(fitSheetMinInset, insets.bottom),
+    paddingLeft: Math.max(fitSheetMinInset, insets.left),
+    paddingRight: Math.max(fitSheetMinInset, insets.right),
+  };
   return (
     <BottomSheetModal
       ref={modal}
       stackBehavior="push"
+      enableContentPanningGesture={!dragByHandle}
       enableDynamicSizing
-      maxDynamicContentSize={height * fitSheetMaxHeight}
+      animationConfigs={animationConfigs}
+      maxDynamicContentSize={Math.min(
+        height * fitSheetMaxHeight,
+        height - insets.top - fitSheetTopGap
+      )}
       topInset={insets.top}
       overrideReduceMotion={reduced ? ReduceMotion.Always : ReduceMotion.Never}
       keyboardBlurBehavior="restore"
-      backdropComponent={renderBackdrop}
-      handleComponent={renderHandle}
-      backgroundStyle={[styles.fitSheet, { backgroundColor: colors.bg }]}
+      backdropComponent={Backdrop}
+      handleComponent={Handle}
+      backgroundStyle={[
+        styles.fitSheet,
+        { backgroundColor: colors.frame, boxShadow: sheetShadow },
+      ]}
       style={{
         marginHorizontal: Math.max(0, (width - fitSheetMaxWidth) / 2),
       }}
       onDismiss={handleDismiss}
     >
       {scroll ? (
-        <BottomSheetScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={contentInsets}
-        >
-          <View
-            style={[styles.sheetContent, styles.betaSheetContent, contentStyle]}
+        <View style={styles.fitSheetScrollArea}>
+          <BottomSheetScrollView
+            {...scrollEdges.handlers}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={contentInsets}
           >
-            {children}
-          </View>
-        </BottomSheetScrollView>
+            <View style={[styles.fitSheetContent, contentStyle]}>
+              {children}
+            </View>
+          </BottomSheetScrollView>
+          {scrollEdges.start && <EdgeFade side="top" color={colors.frame} />}
+          {scrollEdges.end && <EdgeFade side="bottom" color={colors.frame} />}
+        </View>
       ) : (
         <BottomSheetView style={contentInsets}>
-          <View style={contentStyle}>{children}</View>
+          <View style={[styles.fitSheetContent, contentStyle]}>{children}</View>
         </BottomSheetView>
       )}
     </BottomSheetModal>
@@ -781,7 +991,7 @@ export const Sheet = ({
   scroll = true,
   allowDuringRecovery = false,
   fitContent = false,
-  showHeader = true,
+  dragByHandle = false,
   contentStyle,
 }: {
   visible: boolean;
@@ -792,7 +1002,9 @@ export const Sheet = ({
   scroll?: boolean;
   allowDuringRecovery?: boolean;
   fitContent?: boolean;
-  showHeader?: boolean;
+  // For a fit sheet whose content holds its own vertical list: only the handle
+  // drags the sheet, so the list scrolls instead of moving the sheet.
+  dragByHandle?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
 }) => {
   const { colors } = useTheme();
@@ -886,7 +1098,7 @@ export const Sheet = ({
   }, [modalVisible, fitContent, notifyDismissed]);
   const header = (
     <>
-      {renderSheetHeader({ onClose, showHeader, styles, title })}
+      {renderSheetHeader({ fit: fitContent, onClose, styles, title })}
       {recoveryPending && !allowDuringRecovery && (
         <BodyText accessibilityRole="alert" style={styles.recoveryNotice}>
           Close this panel to open the connection wizard.
@@ -902,6 +1114,7 @@ export const Sheet = ({
         header={header}
         contentStyle={contentStyle}
         scroll={scroll}
+        dragByHandle={dragByHandle}
         onPresentedChange={setFitPresented}
         onDismiss={handleFitDismissed}
       >
@@ -935,27 +1148,6 @@ export const Sheet = ({
     </Modal>
   );
 };
-export const confirmAction = async (
-  title: string,
-  message: string,
-  options: { confirmLabel?: string; destructive?: boolean } = {}
-): Promise<boolean> => {
-  const { promise, resolve } = Promise.withResolvers<boolean>();
-  Alert.alert(
-    title,
-    message,
-    [
-      { onPress: () => resolve(false), style: "cancel", text: "Cancel" },
-      {
-        onPress: () => resolve(true),
-        style: options.destructive === false ? "default" : "destructive",
-        text: options.confirmLabel || "Continue",
-      },
-    ],
-    { cancelable: true, onDismiss: () => resolve(false) }
-  );
-  return await promise;
-};
 export const JsonView = ({ value }: { value: unknown }) => {
   const { colors } = useTheme();
   return (
@@ -987,6 +1179,7 @@ export const Disclosure = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { android_ripple, pressedStyle } = usePressFeedback();
   const openMessageActions = useContext(MessageActionsContext);
   const disclosures = useContext(MessageDisclosureContext);
   const initialOpen = disclosureKey
@@ -1023,11 +1216,12 @@ export const Disclosure = ({
             )
           }
           onLongPress={Platform.OS === "web" ? undefined : openMessageActions}
+          android_ripple={android_ripple}
           style={({ pressed }) => [
             styles.disclosureHeader,
             variant === "embedded" && styles.disclosureEmbeddedHeader,
             !!headerAction && styles.disclosureHeaderWithAction,
-            pressed && styles.ghostPressed,
+            pressed && pressedStyle,
           ]}
         >
           <BodyText style={{ flex: 1, fontWeight: "500" }}>{title}</BodyText>

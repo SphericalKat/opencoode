@@ -1,18 +1,21 @@
 import type { SessionInfo } from "@opencode/client";
-import { View } from "react-native";
 
-import {
-  Button,
-  confirmAction,
-  Disclosure,
-  ErrorNotice,
-  Field,
-  JsonView,
-  BodyText,
-  Sheet,
-} from "../../components/ui";
-import { PanelLink } from "./controls";
+import { promptText } from "../../components/dialog";
+import { SheetGroup, SheetRow } from "../../components/list-sheet";
+import { useUndoableRemoval } from "../../components/snackbar";
+import { BodyText, ErrorNotice, Sheet } from "../../components/ui";
+import { sessionLabel } from "../../lib/session-title";
+import { agentLabel, modelSummary } from "./labels";
 import type { ChatController } from "./use-chat-controller";
+
+const SHEET_CONTENT_STYLE = { gap: 12, paddingTop: 4 } as const;
+
+const TITLE_STYLE = {
+  fontSize: 15,
+  fontWeight: "500",
+  lineHeight: 22,
+  paddingHorizontal: 14,
+} as const;
 
 type ToolLinksProps = Pick<
   ChatController,
@@ -39,49 +42,51 @@ export const ToolLinks = ({
     capabilities.background ||
     capabilities.children ||
     capabilities.sideQuestion) && (
-    <>
-      <BodyText muted>Tools</BodyText>
-      <View>
-        {capabilities.diff && (
-          <PanelLink
-            title="File changes"
-            onPress={() => {
-              void inspect("diff");
-            }}
-          />
-        )}
-        {capabilities.background && (
-          <PanelLink
-            title="Background commands"
-            onPress={() => {
-              setBackgroundShellID(undefined);
-              setBackgroundDirectory(undefined);
-              setPanel("background");
-            }}
-          />
-        )}
-        {capabilities.children && (
-          <PanelLink
-            title="Child sessions"
-            onPress={() => setPanel("children")}
-          />
-        )}
-        {capabilities.sideQuestion && (
-          <PanelLink
-            title="Side question · /btw"
-            onPress={() => {
-              setSideQuestion(undefined);
-              setPanel("btw");
-            }}
-          />
-        )}
-      </View>
-    </>
+    <SheetGroup variant="menu" title="Tools">
+      {capabilities.diff && (
+        <SheetRow
+          label="File changes"
+          trailing="chevron"
+          onPress={() => {
+            void inspect("diff");
+          }}
+        />
+      )}
+      {capabilities.background && (
+        <SheetRow
+          label="Background commands"
+          trailing="chevron"
+          onPress={() => {
+            setBackgroundShellID(undefined);
+            setBackgroundDirectory(undefined);
+            setPanel("background");
+          }}
+        />
+      )}
+      {capabilities.children && (
+        <SheetRow
+          label="Child sessions"
+          trailing="chevron"
+          onPress={() => setPanel("children")}
+        />
+      )}
+      {capabilities.sideQuestion && (
+        <SheetRow
+          label="Side question"
+          value="/btw"
+          trailing="chevron"
+          onPress={() => {
+            setSideQuestion(undefined);
+            setPanel("btw");
+          }}
+        />
+      )}
+    </SheetGroup>
   );
 
 interface ConfigureLinksProps extends Pick<
   ChatController,
-  "agents" | "capabilities" | "opencodeClient" | "setPanel"
+  "agents" | "capabilities" | "currentModel" | "opencodeClient" | "setPanel"
 > {
   session: SessionInfo;
 }
@@ -89,31 +94,34 @@ interface ConfigureLinksProps extends Pick<
 export const ConfigureLinks = ({
   agents,
   capabilities,
+  currentModel,
   opencodeClient,
   session,
   setPanel,
 }: ConfigureLinksProps) => (
-  <>
-    <BodyText muted>Configure</BodyText>
-    <View>
-      {opencodeClient && capabilities.agents && (
-        <PanelLink
-          title={`Agent · ${agents.find((agent) => agent.id === session.agent)?.name || session.agent || "Server default"}`}
-          onPress={() => setPanel("agents")}
-        />
-      )}
-      <PanelLink title="Model" onPress={() => setPanel("models")} />
-      {opencodeClient && capabilities.instructions && (
-        <PanelLink
-          title="Instructions"
-          onPress={() => setPanel("instructions")}
-        />
-      )}
-      {opencodeClient && capabilities.schedules && (
-        <PanelLink title="Schedules" onPress={() => setPanel("schedules")} />
-      )}
-    </View>
-  </>
+  <SheetGroup variant="menu" title="Configure">
+    <SheetRow label="Agent" value={agentLabel(agents, session)} />
+    <SheetRow
+      label="Model"
+      value={modelSummary(session, currentModel)}
+      trailing="chevron"
+      onPress={() => setPanel("models")}
+    />
+    {opencodeClient && capabilities.instructions && (
+      <SheetRow
+        label="Instructions"
+        trailing="chevron"
+        onPress={() => setPanel("instructions")}
+      />
+    )}
+    {opencodeClient && capabilities.schedules && (
+      <SheetRow
+        label="Schedules"
+        trailing="chevron"
+        onPress={() => setPanel("schedules")}
+      />
+    )}
+  </SheetGroup>
 );
 
 type DetailLinksProps = Pick<
@@ -127,37 +135,39 @@ export const DetailLinks = ({
   inspect,
   opencodeClient,
   setPanel,
-}: DetailLinksProps) =>
-  (capabilities.statistics ||
-    (opencodeClient && (capabilities.context || capabilities.export))) && (
-    <>
-      <BodyText muted>Details</BodyText>
-      <View>
-        {capabilities.statistics && (
-          <PanelLink
-            title="Session statistics"
-            onPress={() => setPanel("stats")}
-          />
-        )}
-        {opencodeClient && capabilities.context && (
-          <PanelLink
-            title="Agent context"
-            onPress={() => {
-              void inspect("context");
-            }}
-          />
-        )}
-        {opencodeClient && capabilities.export && (
-          <PanelLink
-            title="Export session"
-            onPress={() => {
-              void exportSession();
-            }}
-          />
-        )}
-      </View>
-    </>
-  );
+}: DetailLinksProps) => (
+  <SheetGroup variant="menu" title="Details">
+    {capabilities.statistics && (
+      <SheetRow
+        label="Session statistics"
+        trailing="chevron"
+        onPress={() => setPanel("stats")}
+      />
+    )}
+    {opencodeClient && capabilities.context && (
+      <SheetRow
+        label="Agent context"
+        trailing="chevron"
+        onPress={() => {
+          void inspect("context");
+        }}
+      />
+    )}
+    {opencodeClient && capabilities.export && (
+      <SheetRow
+        label="Export session"
+        onPress={() => {
+          void exportSession();
+        }}
+      />
+    )}
+    <SheetRow
+      label="Raw session details"
+      trailing="chevron"
+      onPress={() => setPanel("raw")}
+    />
+  </SheetGroup>
+);
 
 interface ManageSessionProps extends Pick<
   ChatController,
@@ -165,16 +175,12 @@ interface ManageSessionProps extends Pick<
   | "capabilities"
   | "client"
   | "delivery"
-  | "moveDirectory"
   | "onOpenSession"
   | "opencodeClient"
   | "pending"
   | "run"
   | "sessionID"
-  | "setMoveDirectory"
   | "setPanel"
-  | "setTitle"
-  | "title"
 > {
   session: SessionInfo;
 }
@@ -184,150 +190,161 @@ export const ManageSession = ({
   capabilities,
   client,
   delivery,
-  moveDirectory,
   onOpenSession,
   opencodeClient,
   pending,
   run,
   session,
   sessionID,
-  setMoveDirectory,
   setPanel,
-  setTitle,
-  title,
-}: ManageSessionProps) => (
-  <Disclosure title="Manage session">
-    {capabilities.rename && (
-      <>
-        <Field label="Session title" value={title} onChangeText={setTitle} />
-        <Button
-          title="Rename"
-          disabled={!title.trim()}
-          busy={pending}
+}: ManageSessionProps) => {
+  const removal = useUndoableRemoval<string>("sessions");
+  const renameSession = async () => {
+    const next = await promptText("Rename session", {
+      confirmLabel: "Rename",
+      field: {
+        defaultValue: sessionLabel(session),
+        isValid: (value) => !!value.trim() && value.trim() !== session.title,
+        label: "Title",
+        returnKeyType: "done",
+      },
+    });
+    if (next !== null) {
+      await run(() => client.session.update({ sessionID, title: next }), true);
+    }
+  };
+  const moveSession = async () => {
+    if (!opencodeClient) {
+      return;
+    }
+    const directory = await promptText("Move session", {
+      confirmLabel: "Move",
+      field: {
+        autoCapitalize: "none",
+        isValid: (value) => value.trim().startsWith("/"),
+        keyboardType: "url",
+        label: "Server directory",
+        placeholder: "/path/to/project",
+        returnKeyType: "go",
+      },
+    });
+    if (directory !== null) {
+      await run(
+        () => opencodeClient.session.move({ delivery, directory, sessionID }),
+        true
+      );
+    }
+  };
+  const deleteSession = () => {
+    if (!opencodeClient) {
+      return;
+    }
+    setPanel(null);
+    onOpenSession("");
+    removal.remove(sessionID, {
+      commit: async () => {
+        await opencodeClient.session.remove({ sessionID });
+      },
+      message: "Session deleted",
+      onUndo: () => onOpenSession(sessionID),
+    });
+  };
+  const sourceID = session.parentID || session.fork?.sessionID;
+  return (
+    <SheetGroup variant="menu" title="Manage">
+      {capabilities.rename && (
+        <SheetRow
+          label="Rename…"
+          disabled={pending}
+          onPress={() => {
+            void renameSession();
+          }}
+        />
+      )}
+      {opencodeClient && capabilities.move && (
+        <SheetRow
+          label="Move to directory…"
+          disabled={pending}
+          onPress={() => {
+            void moveSession();
+          }}
+        />
+      )}
+      {capabilities.forkSession && (
+        <SheetRow
+          label="Fork session"
+          disabled={pending}
+          onPress={() => {
+            void run(async () => {
+              const next = await client.session.fork({ sessionID });
+              onOpenSession(next.id);
+            }, true);
+          }}
+        />
+      )}
+      {capabilities.compact && (
+        <SheetRow
+          label="Compact context"
+          disabled={pending}
           onPress={() => {
             void run(
-              () =>
-                client.session.update({
-                  sessionID,
-                  title: title.trim(),
-                }),
+              () => client.session.compact({ delivery: "queue", sessionID }),
               true
             );
           }}
         />
-      </>
-    )}
-    {opencodeClient && capabilities.move && (
-      <>
-        <Field
-          label="Move to server directory"
-          placeholder="/path/to/project"
-          value={moveDirectory}
-          onChangeText={setMoveDirectory}
-        />
-        <Button
-          title="Move session"
-          disabled={!moveDirectory.startsWith("/") || pending}
+      )}
+      {opencodeClient && capabilities.background && active && (
+        <SheetRow
+          label="Background blocking tools"
+          disabled={pending}
           onPress={() => {
             void run(
-              () =>
-                opencodeClient.session.move({
-                  delivery,
-                  directory: moveDirectory,
-                  sessionID,
-                }),
+              () => opencodeClient.session.background({ sessionID }),
               true
             );
           }}
         />
-      </>
-    )}
-    {capabilities.forkSession && (
-      <Button
-        title="Fork session"
-        disabled={pending}
-        onPress={() => {
-          void run(async () => {
-            const next = await client.session.fork({ sessionID });
-            onOpenSession(next.id);
-          }, true);
-        }}
-      />
-    )}
-    {capabilities.compact && (
-      <Button
-        title="Compact context"
-        disabled={pending}
-        onPress={() => {
-          void run(
-            () => client.session.compact({ delivery: "queue", sessionID }),
-            true
-          );
-        }}
-      />
-    )}
-    {opencodeClient && capabilities.background && active && (
-      <Button
-        title="Background blocking tools"
-        disabled={pending}
-        onPress={() => {
-          void run(
-            () => opencodeClient.session.background({ sessionID }),
-            true
-          );
-        }}
-      />
-    )}
-    {(session.parentID || session.fork?.sessionID) && (
-      <Button
-        title="Open source session"
-        onPress={() => {
-          setPanel(null);
-          const target = session.parentID || session.fork?.sessionID;
-          if (target) {
-            onOpenSession(target);
+      )}
+      {sourceID && (
+        <SheetRow
+          label="Open source session"
+          disabled={pending}
+          onPress={() => {
+            setPanel(null);
+            onOpenSession(sourceID);
+          }}
+        />
+      )}
+      {opencodeClient && capabilities.archive && (
+        <SheetRow
+          label={
+            session.time.archived ? "Unarchive session" : "Archive session"
           }
-        }}
-      />
-    )}
-    {opencodeClient && capabilities.archive && (
-      <Button
-        title={session.time.archived ? "Unarchive session" : "Archive session"}
-        disabled={pending}
-        onPress={() => {
-          void run(
-            () =>
-              opencodeClient.session.update({
-                archived: !session.time.archived,
-                sessionID,
-              }),
-            true
-          );
-        }}
-      />
-    )}
-    {opencodeClient && capabilities.remove && (
-      <Button
-        title="Delete session"
-        variant="danger"
-        disabled={pending}
-        onPress={() => {
-          void run(async () => {
-            if (
-              await confirmAction(
-                "Delete this session?",
-                "This permanently deletes this session and its messages."
-              )
-            ) {
-              await opencodeClient.session.remove({ sessionID });
-              onOpenSession("");
-            }
-          }, true);
-        }}
-      />
-    )}
-  </Disclosure>
-);
+          disabled={pending}
+          onPress={() => {
+            void run(
+              () =>
+                opencodeClient.session.update({
+                  archived: !session.time.archived,
+                  sessionID,
+                }),
+              true
+            );
+          }}
+        />
+      )}
+      {opencodeClient && capabilities.remove && (
+        <SheetRow
+          label="Delete session"
+          destructive
+          disabled={pending}
+          onPress={deleteSession}
+        />
+      )}
+    </SheetGroup>
+  );
+};
 
 interface ActionsSheetProps extends Pick<
   ChatController,
@@ -335,11 +352,11 @@ interface ActionsSheetProps extends Pick<
   | "agents"
   | "capabilities"
   | "client"
+  | "currentModel"
   | "delivery"
   | "error"
   | "exportSession"
   | "inspect"
-  | "moveDirectory"
   | "onOpenSession"
   | "opencodeClient"
   | "panel"
@@ -348,11 +365,8 @@ interface ActionsSheetProps extends Pick<
   | "sessionID"
   | "setBackgroundDirectory"
   | "setBackgroundShellID"
-  | "setMoveDirectory"
   | "setPanel"
   | "setSideQuestion"
-  | "setTitle"
-  | "title"
 > {
   session: SessionInfo;
 }
@@ -362,11 +376,11 @@ export const ActionsSheet = ({
   agents,
   capabilities,
   client,
+  currentModel,
   delivery,
   error,
   exportSession,
   inspect,
-  moveDirectory,
   onOpenSession,
   opencodeClient,
   panel,
@@ -376,19 +390,18 @@ export const ActionsSheet = ({
   sessionID,
   setBackgroundDirectory,
   setBackgroundShellID,
-  setMoveDirectory,
   setPanel,
   setSideQuestion,
-  setTitle,
-  title,
 }: ActionsSheetProps) => (
   <Sheet
     visible={panel === "actions"}
     title="Session"
+    fitContent
+    contentStyle={SHEET_CONTENT_STYLE}
     onClose={() => setPanel(null)}
   >
-    <BodyText selectable style={{ fontSize: 19, lineHeight: 26 }}>
-      {session.title || "New session"}
+    <BodyText numberOfLines={2} selectable style={TITLE_STYLE}>
+      {sessionLabel(session)}
     </BodyText>
     <ErrorNotice error={error} />
     <ToolLinks
@@ -403,6 +416,7 @@ export const ActionsSheet = ({
     <ConfigureLinks
       agents={agents}
       capabilities={capabilities}
+      currentModel={currentModel}
       opencodeClient={opencodeClient}
       setPanel={setPanel}
       session={session}
@@ -419,20 +433,13 @@ export const ActionsSheet = ({
       capabilities={capabilities}
       client={client}
       delivery={delivery}
-      moveDirectory={moveDirectory}
       onOpenSession={onOpenSession}
       opencodeClient={opencodeClient}
       pending={pending}
       run={run}
       sessionID={sessionID}
-      setMoveDirectory={setMoveDirectory}
       setPanel={setPanel}
-      setTitle={setTitle}
-      title={title}
       session={session}
     />
-    <Disclosure title="Raw session details">
-      <JsonView value={session} />
-    </Disclosure>
   </Sheet>
 );

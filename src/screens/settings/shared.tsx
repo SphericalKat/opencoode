@@ -10,7 +10,7 @@ import React, {
 } from "react";
 import { ScrollView, View } from "react-native";
 
-import { BodyText, Button, Busy, ErrorNotice, Row } from "../../components/ui";
+import { BodyText, Busy, ErrorNotice, Row } from "../../components/ui";
 import { errorMessage } from "../../lib/client";
 import { withSettingsRequest } from "../../lib/settings";
 import { useThemedStyles } from "../../lib/theme";
@@ -20,6 +20,29 @@ export type HeaderRefresh = { refresh?: () => void; loading?: boolean } | null;
 export const HeaderRefreshContext = createContext<React.Dispatch<
   React.SetStateAction<HeaderRefresh>
 > | null>(null);
+
+export type SectionHeader = { title: string; description: string } | null;
+export const SectionHeaderContext = createContext<SectionHeader>(null);
+
+export const SectionPageHeader = ({
+  description,
+  title,
+}: {
+  description: string;
+  title: string;
+}) => {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.pageHeader}>
+      <BodyText accessibilityRole="header" style={styles.pageTitle}>
+        {title}
+      </BodyText>
+      <BodyText muted style={styles.pageDescription}>
+        {description}
+      </BodyText>
+    </View>
+  );
+};
 
 export const runBusy = async (
   setBusy: (busy: boolean) => void,
@@ -123,6 +146,7 @@ export const Page = ({
 }) => {
   const styles = useThemedStyles(createStyles);
   const setHeaderRefresh = useContext(HeaderRefreshContext);
+  const header = useContext(SectionHeaderContext);
   useEffect(() => {
     setHeaderRefresh?.({ loading, refresh });
     return () => setHeaderRefresh?.(null);
@@ -130,24 +154,17 @@ export const Page = ({
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={styles.page}
+      showsVerticalScrollIndicator={false}
     >
-      {!setHeaderRefresh && refresh && (
-        <Row style={{ justifyContent: "flex-end" }}>
-          <Button
-            title="Refresh"
-            compact
-            variant="ghost"
-            onPress={() => refresh()}
-          />
-        </Row>
-      )}
-      <ErrorNotice
-        error={error}
-        onRetry={refresh ? () => refresh() : undefined}
-      />
-      {loading && <Busy />}
-      {children}
+      {header && <SectionPageHeader {...header} />}
+      <View style={styles.page}>
+        <ErrorNotice
+          error={error}
+          onRetry={refresh ? () => refresh() : undefined}
+        />
+        {loading && <Busy />}
+        {children}
+      </View>
     </ScrollView>
   );
 };

@@ -15,6 +15,7 @@ interface UseSendMessageOptions {
   alive: Alive;
   capabilities: Capabilities;
   client: CoreClient;
+  commitModel: () => Promise<void>;
   draftKey: string;
   jumpToLatest: () => void;
   opencodeClient: OpenCodeClient;
@@ -32,6 +33,7 @@ export const useSendMessage = ({
   alive,
   capabilities,
   client,
+  commitModel,
   draftKey,
   jumpToLatest,
   opencodeClient,
@@ -64,7 +66,7 @@ export const useSendMessage = ({
   const [sending, setSending] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [stopReady, setStopReady] = useState(false);
-  const send = async () => {
+  const send = async (options?: { delivery?: "steer" | "queue" }) => {
     if (!draftLoaded) {
       return;
     }
@@ -140,7 +142,7 @@ export const useSendMessage = ({
           } else {
             const common = {
               agents: sentAgentIDs.map((name) => ({ name })),
-              delivery,
+              delivery: options?.delivery ?? delivery,
               files: sentAttachments,
               sessionID,
               skills: sentSkillIDs.map((id) => ({ id })),
@@ -149,12 +151,14 @@ export const useSendMessage = ({
               if (!opencodeClient || !capabilities.commands) {
                 throw new Error("Commands are unavailable for this connection");
               }
+              await commitModel();
               await opencodeClient.session.command({
                 ...common,
                 name: submission.name,
                 text: submission.text,
               });
             } else {
+              await commitModel();
               await client.session.prompt({ ...common, text: submission.text });
             }
           }

@@ -12,8 +12,12 @@ import type { TranscriptItem } from "../../components/assistant-turn";
 import { sessionActivity } from "../../lib/activity";
 import type { AgentActivity } from "../../lib/activity";
 import { withoutReverted } from "../../lib/chat";
+import type { Rect } from "../../lib/menu-position";
+import { isInterruptedError } from "../../lib/transcript";
+import type { MessageMenuContext } from "./message-menu-entries";
 import { MessageRow } from "./message-rows";
 import type { OpenCodeClient } from "./session-sync";
+import type { SetPanel } from "./types";
 import type { SessionState } from "./use-session-state";
 
 const createTranscriptGrouper = () => {
@@ -28,11 +32,15 @@ interface UseTranscriptViewOptions {
   awayFromLatest: boolean;
   followingLatest: boolean;
   foreground: boolean;
+  menu: MessageMenuContext;
+  openMessageMenu: (id: string, anchor: Rect) => void;
+  onOpenSettings?: (section: "Models" | "Accounts") => void;
   opencodeClient: OpenCodeClient;
   screenReader: boolean;
-  selectMessage: (id: string) => void;
   selectedMessageID: string | null;
+  setSelectedMessageID: (id: string) => void;
   sessionID: string;
+  setPanel: SetPanel;
   stopping: boolean;
   visible: boolean;
   sync: SessionState;
@@ -42,11 +50,15 @@ export const useTranscriptView = ({
   awayFromLatest,
   followingLatest,
   foreground,
+  menu,
+  openMessageMenu,
+  onOpenSettings,
   opencodeClient,
   screenReader,
-  selectMessage,
   selectedMessageID,
   sessionID,
+  setPanel,
+  setSelectedMessageID,
   stopping,
   visible,
   sync,
@@ -60,7 +72,37 @@ export const useTranscriptView = ({
     sessionStatus,
     streamStatus,
     backendWaiting,
+    models,
+    providers,
   } = sync;
+  const modelNames = useMemo(
+    () =>
+      new Map(
+        models.map((model) => [`${model.providerID}/${model.id}`, model.name])
+      ),
+    [models]
+  );
+  const providerNames = useMemo(
+    () => new Map(providers.map((provider) => [provider.id, provider.name])),
+    [providers]
+  );
+  const providerName = useCallback(
+    (message: SessionMessageInfo) =>
+      message.type === "assistant" && message.error
+        ? (providerNames.get(message.model.providerID) ??
+          message.model.providerID)
+        : undefined,
+    [providerNames]
+  );
+  const errorActions = useMemo(
+    () => ({
+      onChangeModel: () => setPanel("models"),
+      onOpenAccounts: onOpenSettings
+        ? () => onOpenSettings("Accounts")
+        : undefined,
+    }),
+    [setPanel, onOpenSettings]
+  );
   const revertMessageID = session?.revert?.messageID;
   const messages = useMemo(
     () => withoutReverted(loadedMessages, revertMessageID),
@@ -107,6 +149,16 @@ export const useTranscriptView = ({
     !latestStep.error
       ? latestStep.id
       : undefined;
+  const failedMessageID = useMemo(() => {
+    const newest = messages.findLast(
+      (message) => message.type === "assistant" || message.type === "user"
+    );
+    return newest?.type === "assistant" &&
+      newest.error &&
+      !isInterruptedError(newest.error)
+      ? newest.id
+      : undefined;
+  }, [messages]);
   const messageDirectory = session?.location.directory || "";
   const groupTranscript = useMemo(() => createTranscriptGrouper(), []);
   const transcriptMessages = useMemo(
@@ -123,22 +175,31 @@ export const useTranscriptView = ({
         key={sourceKey}
         sourceKey={sourceKey}
         message={message}
-        onSelect={selectMessage}
+        menu={menu}
+        onMenu={openMessageMenu}
+        onSelect={setSelectedMessageID}
         selected={message.id === selectedMessageID}
         selectionActive={!!selectedMessageID}
         screenReader={screenReader}
         client={opencodeClient}
         directory={messageDirectory}
+        providerName={providerName(message)}
+        errorActions={message.id === failedMessageID ? errorActions : undefined}
       >
         {content}
       </MessageRow>
     ),
     [
-      selectMessage,
+      menu,
+      openMessageMenu,
+      setSelectedMessageID,
       selectedMessageID,
       screenReader,
       opencodeClient,
       messageDirectory,
+      providerName,
+      failedMessageID,
+      errorActions,
     ]
   );
   const renderMessage = useCallback(
@@ -158,17 +219,34 @@ export const useTranscriptView = ({
         <MessageRow
           message={item.message}
           animate={visible && foreground && streamStatus === "Live"}
-          onSelect={selectMessage}
+          menu={menu}
+          onMenu={openMessageMenu}
+          onSelect={setSelectedMessageID}
           selected={item.id === selectedMessageID}
           selectionActive={!!selectedMessageID}
           screenReader={screenReader}
           client={opencodeClient}
           directory={messageDirectory}
+          providerName={providerName(item.message)}
+          errorActions={item.id === failedMessageID ? errorActions : undefined}
+          modelName={
+            item.message.type === "model-switched"
+              ? modelNames.get(
+                  `${item.message.model.providerID}/${item.message.model.id}`
+                )
+              : undefined
+          }
         />
       ),
     [
+      modelNames,
+      providerName,
+      failedMessageID,
+      errorActions,
       renderSource,
-      selectMessage,
+      menu,
+      openMessageMenu,
+      setSelectedMessageID,
       selectedMessageID,
       screenReader,
       opencodeClient,

@@ -1,7 +1,11 @@
-import { confirmAction } from "../components/ui";
+import { useUndoableRemoval } from "../components/snackbar";
 import { errorMessage } from "../lib/client";
 import type { Connection } from "../lib/client";
-import { saveActiveConnectionId, saveConnections } from "../lib/storage";
+import {
+  loadConnections,
+  saveActiveConnectionId,
+  saveConnections,
+} from "../lib/storage";
 import { attempt } from "./connection-utils";
 import type { ConfirmNavigation, ServerClient } from "./types";
 import type { MobileState } from "./use-app-state";
@@ -20,7 +24,6 @@ export const useWorkspaceActions = (
   const {
     active,
     activeRef,
-    connections,
     directory,
     directoryRef,
     epochRef,
@@ -32,7 +35,6 @@ export const useWorkspaceActions = (
     setAttachmentContext,
     setAttachmentPath,
     setBetaHome,
-    setConnectionError,
     setConnections,
     setDirectory,
     setError,
@@ -45,6 +47,8 @@ export const useWorkspaceActions = (
   } = model;
   const { changeDirectory, client, confirmNavigation, syncSelectedLocation } =
     deps;
+  const { hidden: hiddenConnections, remove: removeServer } =
+    useUndoableRemoval("servers");
   const openDirectory = async (nextDirectory = newDirectory) => {
     if (!client) {
       return;
@@ -95,33 +99,27 @@ export const useWorkspaceActions = (
     ) {
       return;
     }
-    if (
-      !(await confirmAction(
-        "Remove server?",
-        `Remove the saved connection to ${connection.name}?`
-      ))
-    ) {
-      return;
-    }
-    try {
-      const next = connections.filter((item) => item.id !== connection.id);
-      await saveConnections(next);
-      if (activeRef.current?.id === connection.id) {
-        epochRef.current += 1;
-        await saveActiveConnectionId(null);
-        selectedSessionRef.current = null;
-        directoryRef.current = "";
-        setActive(null);
-        setSessionID(null);
-        setDirectory("");
-        setAttachmentPath(undefined);
-        setAttachmentContext(undefined);
-        setPendingLocation(null);
-      }
-      setConnections(next);
-    } catch (error_) {
-      setConnectionError(errorMessage(error_));
-    }
+    removeServer(connection.id, {
+      commit: async () => {
+        const saved = await loadConnections();
+        const next = saved.filter((item) => item.id !== connection.id);
+        await saveConnections(next);
+        if (activeRef.current?.id === connection.id) {
+          epochRef.current += 1;
+          await saveActiveConnectionId(null);
+          selectedSessionRef.current = null;
+          directoryRef.current = "";
+          setActive(null);
+          setSessionID(null);
+          setDirectory("");
+          setAttachmentPath(undefined);
+          setAttachmentContext(undefined);
+          setPendingLocation(null);
+        }
+        setConnections(next);
+      },
+      message: "Server removed",
+    });
   };
 
   const attachFile = async (
@@ -188,6 +186,7 @@ export const useWorkspaceActions = (
   };
   return {
     attachFile,
+    hiddenConnections,
     openDirectory,
     removeConnection,
   };

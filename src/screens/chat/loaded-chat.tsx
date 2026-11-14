@@ -4,15 +4,11 @@ import { View } from "react-native";
 import { ActionsSheet } from "./actions-sheet";
 import { ErrorBanners, RevertBanner } from "./banners";
 import { Composer } from "./composer";
-import {
-  AgentsSheet,
-  ToolsSheet,
-  CommandsSheet,
-  MentionsSheet,
-} from "./composer-sheets";
+import { CommandsSheet, MentionsSheet } from "./composer-sheets";
 import { ChatKeyboardView } from "./controls";
 import { SelectionBar } from "./header";
-import { MessageSheet, SelectTextSheet } from "./message-sheets";
+import { MessageMenu } from "./message-menu";
+import { SelectTextSheet } from "./message-sheets";
 import { VariantsSheet, ModelsSheet } from "./model-sheets";
 import {
   DiffSheet,
@@ -22,6 +18,7 @@ import {
   BackgroundSheet,
   ChildrenSheet,
   StatsSheet,
+  RawSessionSheet,
   SideQuestionSheet,
   ResourcesSheet,
 } from "./panel-sheets";
@@ -35,10 +32,9 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     activity,
     activityNotice,
     agents,
+    attachDevice,
     attachments,
-    backend,
     beginUserScroll,
-    canCopySelected,
     capabilities,
     catalogError,
     client,
@@ -72,12 +68,15 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     loadingOlder,
     maintainPosition,
     maximumComposerHeight,
+    menuContext,
     minimumComposerHeight,
     onOpenSession,
     opencodeClient,
+    panel,
     pending,
     permissions,
     providerLabel,
+    selectedVariant,
     refresh,
     renderMessage,
     restoredSkillIDs,
@@ -115,19 +114,13 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     <SelectionBar
       visible={visible}
       actionMessage={actionMessage}
-      active={active}
-      backend={backend}
-      canCopySelected={canCopySelected}
-      capabilities={capabilities}
       client={client}
       copySelected={copySelected}
-      draftLoaded={draftLoaded}
       editMessage={editMessage}
+      menuContext={menuContext}
       onOpenSession={onOpenSession}
-      pending={pending}
       run={run}
       sessionID={sessionID}
-      setPanel={setPanel}
       setSelectedMessageID={setSelectedMessageID}
       styles={styles}
     />
@@ -193,6 +186,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         active={active}
         activity={activity}
         agents={agents}
+        attachDevice={attachDevice}
         attachments={attachments}
         capabilities={capabilities}
         colors={colors}
@@ -207,13 +201,18 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         jumpToLatest={jumpToLatest}
         maximumComposerHeight={maximumComposerHeight}
         minimumComposerHeight={minimumComposerHeight}
+        opencodeClient={opencodeClient}
+        panel={panel}
         pending={pending}
         providerLabel={providerLabel}
+        selectedVariant={selectedVariant}
         restoredSkillIDs={restoredSkillIDs}
+        run={run}
         selectedAgentIDs={selectedAgentIDs}
         selectedSkills={selectedSkills}
         send={send}
         sending={sending}
+        sessionID={sessionID}
         setAttachments={setAttachments}
         setDraft={setDraft}
         setPanel={setPanel}
@@ -242,42 +241,31 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     catalogError,
     chooseModel,
     client,
-    colors,
     currentModel,
     delivery,
-    draftLoaded,
     enabledModels,
     error,
     exportSession,
-    filteredModels,
     inspect,
-    modelFilter,
+    modelGroups,
     modelPreferences,
     modelSearch,
-    moveDirectory,
     onOpenNavigation,
     onOpenSession,
+    onOpenSettings,
     opencodeClient,
     panel,
     pending,
-    queueDevicePicker,
     run,
-    scopedModels,
+    selectedVariant,
     serverID,
     sessionID,
     setBackgroundDirectory,
     setBackgroundShellID,
     setCatalogRevision,
-    setDelivery,
-    setModelFilter,
     setModelSearch,
-    setMoveDirectory,
     setPanel,
     setSideQuestion,
-    setTitle,
-    styles,
-    title,
-    toolsDismissed,
   } = chat;
   return (
     <>
@@ -286,11 +274,11 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         agents={agents}
         capabilities={capabilities}
         client={client}
+        currentModel={currentModel}
         delivery={delivery}
         error={error}
         exportSession={exportSession}
         inspect={inspect}
-        moveDirectory={moveDirectory}
         onOpenSession={onOpenSession}
         opencodeClient={opencodeClient}
         panel={panel}
@@ -299,11 +287,8 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         sessionID={sessionID}
         setBackgroundDirectory={setBackgroundDirectory}
         setBackgroundShellID={setBackgroundShellID}
-        setMoveDirectory={setMoveDirectory}
         setPanel={setPanel}
         setSideQuestion={setSideQuestion}
-        setTitle={setTitle}
-        title={title}
         session={session}
       />
       <VariantsSheet
@@ -313,58 +298,26 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         error={error}
         panel={panel}
         pending={pending}
+        selectedVariant={selectedVariant}
         setPanel={setPanel}
-        session={session}
       />
       <ModelsSheet
-        capabilities={capabilities}
         catalogError={catalogError}
         chooseModel={chooseModel}
-        colors={colors}
         currentModel={currentModel}
         enabledModels={enabledModels}
         error={error}
-        filteredModels={filteredModels}
-        modelFilter={modelFilter}
+        modelGroups={modelGroups}
         modelPreferences={modelPreferences}
         modelSearch={modelSearch}
         onOpenNavigation={onOpenNavigation}
+        onOpenSettings={onOpenSettings}
         panel={panel}
         pending={pending}
-        scopedModels={scopedModels}
         serverID={serverID}
         setCatalogRevision={setCatalogRevision}
-        setModelFilter={setModelFilter}
         setModelSearch={setModelSearch}
         setPanel={setPanel}
-        styles={styles}
-        session={session}
-      />
-      <AgentsSheet
-        agents={agents}
-        capabilities={capabilities}
-        error={error}
-        opencodeClient={opencodeClient}
-        panel={panel}
-        pending={pending}
-        run={run}
-        sessionID={sessionID}
-        setPanel={setPanel}
-        session={session}
-      />
-      <ToolsSheet
-        agents={agents}
-        capabilities={capabilities}
-        delivery={delivery}
-        draftLoaded={draftLoaded}
-        opencodeClient={opencodeClient}
-        panel={panel}
-        queueDevicePicker={queueDevicePicker}
-        setDelivery={setDelivery}
-        setPanel={setPanel}
-        setSideQuestion={setSideQuestion}
-        toolsDismissed={toolsDismissed}
-        session={session}
       />
     </>
   );
@@ -372,28 +325,23 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
 
 const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
   const {
-    actionMessage,
-    active,
     agents,
-    alive,
-    backend,
     capabilities,
+    closeMessageMenu,
     client,
     commands,
     draftLoaded,
     editMessage,
-    error,
     fileQuery,
     fileResults,
     fileSearchBusy,
+    menuContext,
+    messageMenuTarget,
     messages,
     onOpenSession,
     opencodeClient,
     panel,
-    pending,
-    queuedMessagePanelRef,
     run,
-    selectedMessageID,
     sessionID,
     setAttachments,
     setBackgroundDirectory,
@@ -401,6 +349,7 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
     setDraft,
     setFileQuery,
     setPanel,
+    setSelectedMessageID,
     setSelectedAgentIDs,
     setSelectedSkills,
     setTextSelectionMessage,
@@ -410,31 +359,24 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
   } = chat;
   return (
     <>
-      <MessageSheet
-        actionMessage={actionMessage}
-        active={active}
-        alive={alive}
-        backend={backend}
-        capabilities={capabilities}
+      <MessageMenu
         client={client}
-        draftLoaded={draftLoaded}
+        closeMessageMenu={closeMessageMenu}
         editMessage={editMessage}
-        error={error}
+        menuContext={menuContext}
+        messageMenuTarget={messageMenuTarget}
         messages={messages}
         onOpenSession={onOpenSession}
         opencodeClient={opencodeClient}
-        panel={panel}
-        pending={pending}
-        queuedMessagePanelRef={queuedMessagePanelRef}
         run={run}
-        selectedMessageID={selectedMessageID}
+        session={session}
         sessionID={sessionID}
         setBackgroundDirectory={setBackgroundDirectory}
         setBackgroundShellID={setBackgroundShellID}
         setPanel={setPanel}
+        setSelectedMessageID={setSelectedMessageID}
         setTextSelectionMessage={setTextSelectionMessage}
         showError={showError}
-        session={session}
       />
       <SelectTextSheet
         opencodeClient={opencodeClient}
@@ -455,6 +397,8 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
       />
       <MentionsSheet
         agents={agents}
+        capabilities={capabilities}
+        opencodeClient={opencodeClient}
         fileQuery={fileQuery}
         fileResults={fileResults}
         fileSearchBusy={fileSearchBusy}
@@ -472,11 +416,13 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
 const renderPanelSheets = (chat: ChatController, session: SessionInfo) => {
   const {
     active,
+    agents,
     backgroundDirectory,
     backgroundShellID,
     capabilities,
     colors,
     context,
+    currentModel,
     diffs,
     onOpenSession,
     opencodeClient,
@@ -539,11 +485,14 @@ const renderPanelSheets = (chat: ChatController, session: SessionInfo) => {
       />
       <StatsSheet
         active={active}
+        agents={agents}
         capabilities={capabilities}
+        currentModel={currentModel}
         panel={panel}
         setPanel={setPanel}
         session={session}
       />
+      <RawSessionSheet panel={panel} setPanel={setPanel} session={session} />
       <SideQuestionSheet
         capabilities={capabilities}
         opencodeClient={opencodeClient}

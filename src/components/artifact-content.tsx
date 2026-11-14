@@ -375,7 +375,7 @@ const Artifact = ({ content, client, directory, thumbnail }: Props) => {
             {!busy && (
               <Button
                 title="Retry image"
-                compact
+                size="compact"
                 onPress={() => {
                   void perform("preview");
                 }}
@@ -383,7 +383,7 @@ const Artifact = ({ content, client, directory, thumbnail }: Props) => {
             )}
             <Button
               title={Platform.OS === "web" ? "Download" : "Save or share"}
-              compact
+              size="compact"
               disabled={busy}
               onPress={() => {
                 void perform("save");
@@ -454,7 +454,7 @@ const Artifact = ({ content, client, directory, thumbnail }: Props) => {
             {image && !preview && (
               <Button
                 title="Show image"
-                compact
+                size="compact"
                 disabled={busy}
                 onPress={() => {
                   void perform("preview");
@@ -463,7 +463,7 @@ const Artifact = ({ content, client, directory, thumbnail }: Props) => {
             )}
             <Button
               title={Platform.OS === "web" ? "Download" : "Save or share"}
-              compact
+              size="compact"
               busy={busy}
               onPress={() => {
                 void perform("save");

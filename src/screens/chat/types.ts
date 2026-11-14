@@ -15,6 +15,7 @@ export interface Props {
   draftKey?: string;
   visible?: boolean;
   onOpenNavigation?: () => void;
+  onOpenSettings?: (section: "Models" | "Accounts") => void;
   serverID?: string;
   onSelectionChange?: (selected: boolean) => void;
   onSessionInfo?: (session: SessionInfo) => void;
@@ -29,11 +30,8 @@ export type Panel =
   | "actions"
   | "variants"
   | "models"
-  | "agents"
   | "commands"
   | "mentions"
-  | "tools"
-  | "message"
   | "selectText"
   | "diff"
   | "context"
@@ -44,6 +42,7 @@ export type Panel =
   | "stats"
   | "btw"
   | "resources"
+  | "raw"
   | null;
 export type SyncScope = "metadata" | "history" | "inbox" | "requests";
 

@@ -4,17 +4,16 @@ import { AppState, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { sessionStatus } from "../lib/session-status";
 import { useTheme } from "../lib/theme";
-import {
-  Button,
-  Busy,
-  Card,
-  Empty,
-  ErrorNotice,
-  BodyText,
-  Row,
-  confirmAction,
-} from "./ui";
+import { confirmAction } from "./dialog";
+import { SegmentedControl } from "./segmented-control";
+import { Button, Busy, Card, Empty, ErrorNotice, BodyText, Row } from "./ui";
+
+const childListOptions = [
+  { label: "Current", value: "current" },
+  { label: "Archived", value: "archived" },
+] as const;
 
 const ignore = () => null;
 
@@ -70,22 +69,6 @@ type ChildSessionEvent =
 
 const retryDelay = (attempts: number) =>
   Math.min(1000 * 2 ** Math.min(attempts, 4), 15_000);
-
-const childStatus = (isActive: boolean, outcome: SessionInfo["outcome"]) => {
-  if (isActive) {
-    return "Running";
-  }
-  if (outcome === "succeeded") {
-    return "Completed";
-  }
-  if (outcome === "failed") {
-    return "Failed";
-  }
-  if (outcome === "interrupted") {
-    return "Stopped";
-  }
-  return "Idle";
-};
 
 const childStatusColor = (
   isActive: boolean,
@@ -265,7 +248,8 @@ export const ChildSessions = ({
         if (
           !(await confirmAction(
             "Stop this child session?",
-            "This interrupts its current execution."
+            "This interrupts its current execution.",
+            { confirmLabel: "Stop" }
           ))
         ) {
           return;
@@ -427,21 +411,16 @@ export const ChildSessions = ({
   return (
     <View style={{ gap: 14 }}>
       <Row>
-        <Button
-          title="Current"
-          compact
-          selected={!archived}
-          onPress={() => setArchived(false)}
-        />
-        <Button
-          title="Archived"
-          compact
-          selected={archived}
-          onPress={() => setArchived(true)}
+        <SegmentedControl
+          accessibilityLabel="Child session list"
+          fullWidth={false}
+          options={childListOptions}
+          value={archived ? "archived" : "current"}
+          onChange={(next) => setArchived(next === "archived")}
         />
         <Button
           title="Refresh"
-          compact
+          size="compact"
           disabled={!foreground || loading}
           onPress={() => refreshRef.current()}
         />
@@ -460,7 +439,7 @@ export const ChildSessions = ({
       )}
       {items.map((item) => {
         const isActive = activeIDs.has(item.id);
-        const status = childStatus(isActive, item.outcome);
+        const status = sessionStatus(isActive, item.outcome);
         return (
           <Card key={item.id}>
             <Row style={{ justifyContent: "space-between" }}>
@@ -489,13 +468,13 @@ export const ChildSessions = ({
             <Row>
               <Button
                 title="Open session"
-                compact
+                size="compact"
                 onPress={() => onOpenSession(item.id)}
               />
               {isActive && (
                 <Button
                   title="Stop"
-                  compact
+                  size="compact"
                   variant="danger"
                   busy={stoppingID === item.id}
                   disabled={!!stoppingID}
