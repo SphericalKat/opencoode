@@ -27,7 +27,7 @@ export const useModelSelection = ({
   sessionID,
   sync,
 }: UseModelSelectionOptions) => {
-  const { session, models, providers } = sync;
+  const { session, models, providers, setSession } = sync;
   const [modelSearch, setModelSearch] = useState("");
   const [modelFilter, setModelFilter] = useState<
     "all" | "favorites" | "recent"
@@ -78,17 +78,38 @@ export const useModelSelection = ({
     variant?: string,
     closePanel = false
   ) =>
-    run(async () => {
-      await client.session.switchModel({
-        model: {
+    // The server event and the optimistic update below keep the session in sync.
+    // A full refresh would reload the message history on every model change.
+    run(
+      async () => {
+        const previousModel = session?.model;
+        const nextModel = {
           id: model.id,
           providerID: model.providerID,
           ...(variant === undefined ? {} : { variant }),
-        },
-        sessionID,
-      });
-      await modelPreferences.recordRecent(model.providerID, model.id);
-    }, closePanel);
+        };
+        setSession((current) =>
+          current ? { ...current, model: nextModel } : current
+        );
+        try {
+          await client.session.switchModel({
+            model: nextModel,
+            sessionID,
+          });
+        } catch (error) {
+          setSession((current) =>
+            current?.model?.id === nextModel.id &&
+            current.model.providerID === nextModel.providerID
+              ? { ...current, model: previousModel }
+              : current
+          );
+          throw error;
+        }
+        await modelPreferences.recordRecent(model.providerID, model.id);
+      },
+      closePanel,
+      false
+    );
   return {
     chooseModel,
     currentModel,

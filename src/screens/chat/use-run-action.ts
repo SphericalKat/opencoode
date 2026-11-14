@@ -5,7 +5,8 @@ import type { Alive, SetPanel } from "./types";
 
 export type RunAction = (
   action: () => Promise<unknown>,
-  closePanel?: boolean
+  closePanel?: boolean,
+  refreshAfter?: boolean
 ) => Promise<void>;
 
 interface UseRunActionOptions {
@@ -28,7 +29,11 @@ export const useRunAction = ({
   const [pending, setPending] = useState(false);
   const submitting = useRef(false);
   const run = useCallback(
-    async (action: () => Promise<unknown>, closePanel = false) => {
+    async (
+      action: () => Promise<unknown>,
+      closePanel = false,
+      refreshAfter = true
+    ) => {
       if (submitting.current) {
         return;
       }
@@ -42,7 +47,9 @@ export const useRunAction = ({
             if (closePanel) {
               setPanel(null);
             }
-            void refresh().catch(showError);
+            if (refreshAfter) {
+              void refresh().catch(showError);
+            }
             onSessionChanged();
           }
         },

@@ -218,7 +218,6 @@ export const SCOPE_ROUTES = new Map<string, SyncScope[]>([
   ["session.inbox.cancelled", ["inbox"]],
   ["session.inbox.delivery.changed", ["inbox"]],
   ["session.agent.selected", ["metadata", "history"]],
-  ["session.model.selected", ["metadata", "history"]],
   ["session.renamed", ["metadata"]],
   ["session.metadata.updated", ["metadata"]],
   ["session.permissions", ["metadata"]],
@@ -276,6 +275,13 @@ export const routeSessionEvent = (event: OpenCodeEvent, ctx: LiveContext) => {
     const { cost, tokens } = event.data;
     ctx.setSession((previous) =>
       previous ? { ...previous, cost, tokens } : previous
+    );
+    return;
+  }
+  if (event.type === "session.model.selected") {
+    const { model } = event.data;
+    ctx.setSession((previous) =>
+      previous ? { ...previous, model } : previous
     );
     return;
   }
