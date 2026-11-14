@@ -1,34 +1,34 @@
-import type { SessionInfo } from "@opencode/client";
+import type { Project, SessionInfo } from "@opencode/client";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useEffect, useRef, useState } from "react";
 import { FlatList, Keyboard, Platform, View } from "react-native";
 
+import { useMenuAnchor } from "../components/anchored-menu";
 import type { Rect } from "../components/anchored-menu";
-import { confirmAction } from "../components/dialog";
+import { confirmAction, promptText } from "../components/dialog";
 import { useUndoableRemoval } from "../components/snackbar";
 import { settle, withCleanup } from "../lib/async";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { sessionLabel } from "../lib/session-title";
 import { useNativePresentation } from "../lib/sheets";
-import { useTheme, useThemedStyles } from "../lib/theme";
-import { ActionsSheet } from "./sessions/actions-sheet";
-import type { ActionsMode } from "./sessions/actions-sheet";
+import { useThemedStyles } from "../lib/theme";
 import {
   betaGroupLabel,
   isTranscript,
+  isUnread,
   projectName,
   projectSelectorLabel,
 } from "./sessions/format";
-import { promptHistoryChoice } from "./sessions/history-choice";
 import {
   BetaGroupHeader,
   SessionsEmpty,
   SessionsFooter,
 } from "./sessions/list-parts";
-import { ProjectsSheet } from "./sessions/projects-sheet";
+import { ProjectsDropdown } from "./sessions/projects-dropdown";
+import type { ProjectActions } from "./sessions/projects-dropdown";
 import { scopeKeyChanged } from "./sessions/scope";
 import type { Scope } from "./sessions/scope";
 import { SessionMenu } from "./sessions/session-menu";
@@ -61,7 +61,6 @@ export const SessionsScreen = ({
   onNewSession,
 }: Props) => {
   const withNativePresentation = useNativePresentation();
-  const { scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const {
     loadProjects,
@@ -73,8 +72,8 @@ export const SessionsScreen = ({
     setProjectDirectory,
     setProjectsOpen,
   } = useProjects({ client, projectScope });
-  const pendingDirectoryPicker = useRef(false);
-  const pendingListActions = useRef(false);
+  const projectAnchor = useMenuAnchor();
+  const [projectsAnchor, setProjectsAnchor] = useState<Rect | null>(null);
   const listDirectory = projectDirectory;
   const creationDirectory = projectDirectory ?? directory;
   const [width, setWidth] = useState(360);
@@ -82,14 +81,7 @@ export const SessionsScreen = ({
   const [archived, setArchived] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [actions, setActions] = useState<ActionsMode | null>(null);
-  const [lastActions, setLastActions] = useState<ActionsMode>("menu");
-  if (actions && actions !== lastActions) {
-    setLastActions(actions);
-  }
-  const displayedActions = actions ?? lastActions;
   const [creating, setCreating] = useState(false);
-  const [title, setTitle] = useState("");
   const [menu, setMenu] = useState<{
     anchor: Rect;
     session: SessionInfo;
@@ -99,7 +91,6 @@ export const SessionsScreen = ({
   const [renameSaving, setRenameSaving] = useState(false);
   const afterMenuClosed = useRef<(() => void) | null>(null);
   const { hidden, remove } = useUndoableRemoval<string>("sessions");
-  const [sheetError, setSheetError] = useState<string>();
   const mounted = useMounted();
   const scope = useRef<Scope>({
     client,
@@ -107,7 +98,6 @@ export const SessionsScreen = ({
     listDirectory,
   });
   const operationPending = useRef(false);
-  const pendingImport = useRef<(() => void) | null>(null);
   const compactHeader = width < 340;
   const {
     active,
@@ -132,28 +122,18 @@ export const SessionsScreen = ({
     setMenu(null);
     setMenuVisible(false);
     setRenamingID(undefined);
-    setActions(null);
-    setSheetError(undefined);
   }
 
   useEffect(() => {
     scope.current = { client, directory: creationDirectory, listDirectory };
-    pendingImport.current = null;
   }, [client, creationDirectory, listDirectory]);
-
-  useEffect(
-    () => () => {
-      pendingImport.current = null;
-    },
-    []
-  );
 
   const openConversation = (id: string) => {
     Keyboard.dismiss();
     onOpenSession(id);
   };
 
-  const run = async (operation: () => Promise<void>, inSheet = false) => {
+  const run = async (operation: () => Promise<void>) => {
     if (operationPending.current) {
       return;
     }
@@ -161,17 +141,11 @@ export const SessionsScreen = ({
     const owner = scope.current;
     setBusy(true);
     setError(undefined);
-    setSheetError(undefined);
     await settle(operation, (failure) => {
       if (!mounted.current || owner !== scope.current) {
         return;
       }
-      const message = errorMessage(failure);
-      if (inSheet) {
-        setSheetError(message);
-      } else {
-        setError(message);
-      }
+      setError(errorMessage(failure));
     });
     operationPending.current = false;
     if (mounted.current) {
@@ -179,15 +153,15 @@ export const SessionsScreen = ({
     }
   };
 
-  const createSession = () =>
+  const createSession = (title: string, targetDirectory: string) =>
     run(async () => {
       const owner = scope.current;
       setCreating(true);
       await withCleanup(
         async () => {
           const created = await client.session.create({
-            location: { directory: creationDirectory },
-            title: title.trim() || undefined,
+            location: { directory: targetDirectory },
+            title,
           });
           if (
             scope.current.client !== owner.client ||
@@ -196,8 +170,6 @@ export const SessionsScreen = ({
           ) {
             return;
           }
-          setActions(null);
-          setTitle("");
           if (archived) {
             setArchived(false);
           }
@@ -212,7 +184,7 @@ export const SessionsScreen = ({
           }
         }
       );
-    }, true);
+    });
 
   const startSession = () => {
     Keyboard.dismiss();
@@ -270,7 +242,7 @@ export const SessionsScreen = ({
       }
     });
 
-  const importSession = () =>
+  const importSession = (targetDirectory: string) =>
     run(async () => {
       const owner = scope.current;
       const picked = await withNativePresentation(() =>
@@ -302,7 +274,7 @@ export const SessionsScreen = ({
       if (
         !(await confirmAction(
           "Import session?",
-          `Import this transcript into ${creationDirectory}? The server validates its contents.`,
+          `Import this transcript into ${targetDirectory}? The server validates its contents.`,
           { confirmLabel: "Import", destructive: false }
         ))
       ) {
@@ -317,7 +289,7 @@ export const SessionsScreen = ({
       }
       const imported = await client.experimental.session.import({
         info: transcript.info,
-        location: { directory: creationDirectory },
+        location: { directory: targetDirectory },
         messages: transcript.messages,
       });
       if (
@@ -330,45 +302,6 @@ export const SessionsScreen = ({
       await refresh();
       openConversation(imported.id);
     });
-
-  const queueImport = () => {
-    if (operationPending.current || pendingImport.current) {
-      return;
-    }
-    const owner = scope.current;
-    pendingImport.current = () => {
-      if (mounted.current && scope.current === owner) {
-        void importSession();
-      }
-    };
-    Keyboard.dismiss();
-    setActions(null);
-  };
-
-  const finishActionsDismissal = () => {
-    const action = pendingImport.current;
-    pendingImport.current = null;
-    action?.();
-  };
-
-  const chooseHistory = () => {
-    if (Platform.OS === "web") {
-      setActions("filter");
-      return;
-    }
-    const owner = scope.current;
-    void withNativePresentation(() =>
-      promptHistoryChoice(scheme, (value) => {
-        if (mounted.current && scope.current === owner) {
-          setArchived(value);
-        }
-      })
-    ).catch((error_) => {
-      if (mounted.current && scope.current === owner) {
-        setError(errorMessage(error_));
-      }
-    });
-  };
 
   const renameSession = async (session: SessionInfo, value: string) => {
     const nextTitle = value.trim();
@@ -443,65 +376,64 @@ export const SessionsScreen = ({
     },
   };
 
-  const openProjects = () => {
+  const openProjects = async () => {
     Keyboard.dismiss();
+    const anchor = await projectAnchor.measure().catch(() => null);
+    if (!(anchor && mounted.current)) {
+      return;
+    }
+    setProjectsAnchor(anchor);
     setProjectsOpen(true);
     void loadProjects();
   };
 
-  const closeProjects = () => {
-    pendingDirectoryPicker.current = false;
-    pendingListActions.current = false;
-    setProjectsOpen(false);
-  };
-
-  const dismissProjects = () => {
-    if (pendingDirectoryPicker.current) {
-      pendingDirectoryPicker.current = false;
-      onChooseDirectory?.();
-    } else if (pendingListActions.current) {
-      pendingListActions.current = false;
-      setSheetError(undefined);
-      setActions("menu");
-    }
-  };
+  const closeProjects = () => setProjectsOpen(false);
 
   const selectProject = (next: string | undefined) => {
     setProjectDirectory(next);
-    setProjectsOpen(false);
   };
 
-  const showListActionsAfterProjects = () => {
-    pendingListActions.current = true;
-    setProjectsOpen(false);
+  const clearNotifications = (project: Project) => {
+    void run(async () => {
+      await Promise.allSettled(
+        sessions
+          .filter((item) => item.projectID === project.id && isUnread(item))
+          .map((item) =>
+            client.session.view({
+              idle: item.time.idle ?? 0,
+              sessionID: item.id,
+            })
+          )
+      );
+      await refresh(undefined, true);
+    });
   };
 
-  const chooseFolderAfterProjects = () => {
-    pendingDirectoryPicker.current = true;
-    setProjectsOpen(false);
+  const projectActions: ProjectActions = {
+    clearNotifications,
+    importSession: (target) => {
+      void importSession(target);
+    },
+    newNamedSession: (target) => {
+      void (async () => {
+        const created = await promptText("New session", {
+          confirmLabel: "Create",
+          field: { label: "Title", returnKeyType: "done" },
+        });
+        if (created) {
+          await createSession(created, target);
+        }
+      })();
+    },
+    newSession: (target) => {
+      Keyboard.dismiss();
+      onNewSession(target);
+    },
   };
 
-  const openCreateForm = () => {
-    setTitle("");
-    setSheetError(undefined);
-    setActions("create");
-  };
-
-  const refreshFromMenu = () => {
-    setActions(null);
-    void refresh();
-  };
-
-  const selectHistory = (value: boolean) => {
-    setArchived(value);
-    setActions(null);
-  };
-
-  const closeActions = () => {
-    if (!creating) {
-      setActions(null);
-    }
-  };
+  const unreadProjectIDs = new Set(
+    sessions.filter(isUnread).map((item) => item.projectID)
+  );
 
   const visibleSessions = sessions.filter((item) => !hidden.has(item.id));
   const showFooter = sessions.length > 0 && loading && !!nextCursor;
@@ -517,12 +449,15 @@ export const SessionsScreen = ({
         error={error}
         listError={listError}
         onChangeSearch={setSearch}
-        onChooseHistory={chooseHistory}
-        onOpenProjects={openProjects}
+        hasProject={!!projectDirectory}
+        onOpenProjects={() => {
+          void openProjects();
+        }}
         onRefresh={() => {
           void refresh();
         }}
         projectLabel={projectSelectorLabel(projects, projectDirectory)}
+        projectTriggerRef={projectAnchor.ref}
         projectsOpen={projectsOpen}
         search={search}
         statusError={statusError}
@@ -580,43 +515,23 @@ export const SessionsScreen = ({
           />
         )}
       />
-      <ProjectsSheet
-        onChooseFolder={
-          onChooseDirectory ? chooseFolderAfterProjects : undefined
-        }
+      <ProjectsDropdown
+        actions={projectActions}
+        anchor={projectsAnchor}
+        archived={archived}
+        onChooseDirectory={onChooseDirectory}
         onClose={closeProjects}
-        onDismiss={dismissProjects}
-        onListActions={showListActionsAfterProjects}
         onRetry={() => {
           void loadProjects();
         }}
         onSelect={selectProject}
+        onToggleArchived={() => setArchived((value) => !value)}
         projectDirectory={projectDirectory}
         projects={projects}
         projectsError={projectsError}
         projectsLoading={projectsLoading}
+        unreadProjectIDs={unreadProjectIDs}
         visible={projectsOpen}
-      />
-      <ActionsSheet
-        archived={archived}
-        busy={busy}
-        creating={creating}
-        creationDirectory={creationDirectory}
-        displayed={displayedActions}
-        loading={loading}
-        onClose={closeActions}
-        onCreate={() => {
-          void createSession();
-        }}
-        onDismiss={finishActionsDismissal}
-        onImport={queueImport}
-        onOpenCreate={openCreateForm}
-        onRefresh={refreshFromMenu}
-        onSelectHistory={selectHistory}
-        onTitleChange={setTitle}
-        sheetError={sheetError}
-        title={title}
-        visible={actions !== null}
       />
       <SessionMenu
         actions={menuActions}

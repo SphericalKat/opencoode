@@ -116,13 +116,6 @@ export const emptyDetail = (
     : "Create a session to work with OpenCode in this directory.";
 };
 
-export const actionsTitle = (actions: "menu" | "filter" | "create"): string => {
-  if (actions === "create") {
-    return "Name a new session";
-  }
-  return actions === "filter" ? "Session history" : "Session list actions";
-};
-
 export const projectName = (projects: Project[], item: SessionInfo): string =>
   projects.find((project) => project.id === item.projectID)?.name ||
   directoryName(

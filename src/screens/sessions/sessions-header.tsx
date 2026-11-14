@@ -1,6 +1,8 @@
-import { Platform, Pressable, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
+import type { ComponentRef, Ref } from "react";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 
+import { ProjectAvatar } from "../../components/project-avatar";
+import { SelectTrigger } from "../../components/select";
 import { ShellIcon } from "../../components/shell-icon";
 import { BodyText, Button, ErrorNotice, Field, Row } from "../../components/ui";
 import { useTheme, useThemedStyles } from "../../lib/theme";
@@ -9,43 +11,51 @@ import { createStyles } from "./styles";
 
 interface ProjectSelectorProps {
   expanded: boolean;
+  hasProject: boolean;
   label: string;
   onPress: () => void;
+  triggerRef: Ref<ComponentRef<typeof View>>;
 }
+
+const selectorStyles = StyleSheet.create({
+  content: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexGrow: 1,
+    flexShrink: 1,
+    gap: 8,
+    minWidth: 0,
+  },
+  label: { flexShrink: 1, fontSize: 13, fontWeight: "500", lineHeight: 16 },
+});
 
 const ProjectSelector = ({
   expanded,
+  hasProject,
   label,
   onPress,
+  triggerRef,
 }: ProjectSelectorProps) => {
-  const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Select project"
-      accessibilityState={{ expanded }}
+    <SelectTrigger
+      ref={triggerRef}
+      value={label}
+      accessibilityLabel="Projects"
+      expanded={expanded}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.projectSelector,
-        pressed && styles.pressed,
-      ]}
     >
-      <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
-        <Path
-          d="M3 5h6l2 3h10v12H3V5Z"
-          stroke={colors.muted}
-          strokeWidth={1.5}
-          strokeLinejoin="round"
-        />
-      </Svg>
-      <BodyText numberOfLines={1} style={styles.projectSelectorLabel}>
-        {label}
-      </BodyText>
-      <View style={styles.projectChevron}>
-        <ShellIcon name="chevron" color={colors.faint} size={10} />
+      <View style={selectorStyles.content}>
+        {hasProject ? (
+          <ProjectAvatar name={label} ringColor={colors.bg} />
+        ) : (
+          <ShellIcon name="folder" color={colors.muted} size={16} />
+        )}
+        <BodyText numberOfLines={1} style={selectorStyles.label}>
+          {label}
+        </BodyText>
       </View>
-    </Pressable>
+    </SelectTrigger>
   );
 };
 
@@ -95,12 +105,7 @@ const AndroidSearch = ({ archived, onChangeSearch, search }: SearchProps) => {
   );
 };
 
-const NativeSearchRow = ({
-  archived,
-  onChangeSearch,
-  onChooseHistory,
-  search,
-}: SearchProps & { onChooseHistory: () => void }) => {
+const NativeSearchRow = ({ archived, onChangeSearch, search }: SearchProps) => {
   const styles = useThemedStyles(createStyles);
   return (
     <Row style={styles.searchRow}>
@@ -114,7 +119,7 @@ const NativeSearchRow = ({
           style={styles.search}
         />
       </View>
-      {search ? (
+      {!!search && (
         <Button
           title="Clear"
           accessibilityLabel="Clear session search"
@@ -122,17 +127,6 @@ const NativeSearchRow = ({
           variant="ghost"
           onPress={() => onChangeSearch("")}
         />
-      ) : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Session history: ${archived ? "Archived" : "Recent"}`}
-          onPress={onChooseHistory}
-          style={styles.filter}
-        >
-          <BodyText muted style={styles.filterText}>
-            {archived ? "Archived" : "Recent"} ⌄
-          </BodyText>
-        </Pressable>
       )}
     </Row>
   );
@@ -144,11 +138,12 @@ interface SessionsHeaderProps {
   error: string | undefined;
   listError: string | undefined;
   onChangeSearch: (value: string) => void;
-  onChooseHistory: () => void;
   onOpenProjects: () => void;
   onRefresh: () => void;
   projectLabel: string;
   projectsOpen: boolean;
+  projectTriggerRef: Ref<ComponentRef<typeof View>>;
+  hasProject: boolean;
   search: string;
   statusError: string | undefined;
   streamError: string | undefined;
@@ -160,11 +155,12 @@ export const SessionsHeader = ({
   error,
   listError,
   onChangeSearch,
-  onChooseHistory,
   onOpenProjects,
   onRefresh,
+  hasProject,
   projectLabel,
   projectsOpen,
+  projectTriggerRef,
   search,
   statusError,
   streamError,
@@ -180,8 +176,10 @@ export const SessionsHeader = ({
     >
       <ProjectSelector
         expanded={projectsOpen}
+        hasProject={hasProject}
         label={projectLabel}
         onPress={onOpenProjects}
+        triggerRef={projectTriggerRef}
       />
       {Platform.OS === "android" ? (
         <AndroidSearch
@@ -193,7 +191,6 @@ export const SessionsHeader = ({
         <NativeSearchRow
           archived={archived}
           onChangeSearch={onChangeSearch}
-          onChooseHistory={onChooseHistory}
           search={search}
         />
       )}

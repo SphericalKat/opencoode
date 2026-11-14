@@ -202,7 +202,9 @@ export const MenuRow = ({
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityRole={accessibilityRole}
+      accessibilityRole={
+        accessibilityRole === "menuitemradio" ? "radio" : accessibilityRole
+      }
       accessibilityState={{ checked, disabled: !!disabled, selected }}
       android_ripple={android_ripple}
       disabled={disabled}
