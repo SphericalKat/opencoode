@@ -15,6 +15,7 @@ import React, {
 } from "react";
 import { Platform, useColorScheme } from "react-native";
 
+import { withAlpha } from "./color";
 import upstreamThemes from "./upstreamThemes.json";
 
 export type Appearance = "system" | "light" | "dark";
@@ -50,9 +51,43 @@ export interface ThemeColors {
   syntaxProperty: string;
   syntaxType: string;
   syntaxConstant: string;
+  layer02: string;
+  borderMuted: string;
+  borderStrong: string;
+  pressedOverlay: string;
+  scrim: string;
+  buttonNeutral: string;
+  switchTrackOff: string;
+  switchTrackOn: string;
+  avatar: string;
+  onAvatar: string;
+  codePath: string;
+  codeBackground: string;
+  diffAddedBackground: string;
+  diffAddedAccent: string;
+  diffRemovedBackground: string;
+  diffRemovedAccent: string;
+  diffSeparatorBackground: string;
 }
 
 export const darkColors: ThemeColors = {
+  avatar: "#5c5c5c",
+  borderMuted: "#ffffff14",
+  borderStrong: "#ffffff33",
+  buttonNeutral: "#ffffff0f",
+  codeBackground: "#151515",
+  codePath: "#c3d4fd",
+  diffAddedAccent: "#96e3a6",
+  diffAddedBackground: "#198b431a",
+  diffRemovedAccent: "#f17471",
+  diffRemovedBackground: "#f1484f1a",
+  diffSeparatorBackground: "#212121",
+  layer02: "#2e2e2e",
+  onAvatar: "#ffffff",
+  pressedOverlay: "#ffffff1a",
+  scrim: "#00000099",
+  switchTrackOff: "#5c5c5c",
+  switchTrackOn: "#3b5cf6",
   accent: "#a2bcff",
   accentText: "#ffffff",
   bg: "#171717",
@@ -87,6 +122,23 @@ export const darkColors: ThemeColors = {
 };
 
 export const lightColors: ThemeColors = {
+  avatar: "#5c5c5c",
+  borderMuted: "#00000014",
+  borderStrong: "#00000033",
+  buttonNeutral: "#ffffff",
+  codeBackground: "#fcfcfc",
+  codePath: "#2c47c8",
+  diffAddedAccent: "#1d783c",
+  diffAddedBackground: "#49c9700d",
+  diffRemovedAccent: "#b82d35",
+  diffRemovedBackground: "#f1484f0d",
+  diffSeparatorBackground: "#f7f7f7",
+  layer02: "#f2f2f2",
+  onAvatar: "#ffffff",
+  pressedOverlay: "#00000014",
+  scrim: "#00000066",
+  switchTrackOff: "#dbdbdb",
+  switchTrackOn: "#3b5cf6",
   accent: "#3b5cf6",
   accentText: "#ffffff",
   bg: "#fafafa",
@@ -165,14 +217,39 @@ const betaLightColors: ThemeColors = {
   selected: "#f2f2f2",
 };
 
+const plainHex = /^#[0-9a-f]{6}$/iu;
+
 const mapPreset = (
   t: Record<string, string>,
-  fallback: ThemeColors
+  fallback: ThemeColors,
+  scheme: "light" | "dark"
 ): ThemeColors => {
   const color = (key: string, otherwise: string) =>
     t[key]?.startsWith("#") ? t[key] : otherwise;
+  const tint = (accent: string, otherwise: string) =>
+    plainHex.test(accent)
+      ? withAlpha(accent, scheme === "light" ? 0.05 : 0.1)
+      : otherwise;
+  const bg = color("background-base", fallback.bg);
+  const raised = color("surface-raised-stronger-non-alpha", fallback.raised);
+  const diffAddedAccent = color("text-diff-add-base", fallback.diffAddedAccent);
+  const diffRemovedAccent = color(
+    "text-diff-delete-base",
+    fallback.diffRemovedAccent
+  );
   return {
     ...fallback,
+    codeBackground: bg,
+    codePath: color("text-interactive-base", fallback.codePath),
+    diffAddedAccent,
+    diffAddedBackground: tint(diffAddedAccent, fallback.diffAddedBackground),
+    diffRemovedAccent,
+    diffRemovedBackground: tint(
+      diffRemovedAccent,
+      fallback.diffRemovedBackground
+    ),
+    diffSeparatorBackground: raised,
+    switchTrackOn: color("text-interactive-base", fallback.switchTrackOn),
     accent: color("text-interactive-base", fallback.accent),
     accentText: color("text-on-interactive-base", fallback.accentText),
     bg: color("background-base", fallback.bg),
@@ -191,7 +268,7 @@ const mapPreset = (
     panel: color("surface-base", fallback.panel),
     primary: color("button-primary-base", fallback.primary),
     primaryText: color("background-base", fallback.primaryText),
-    raised: color("surface-raised-stronger-non-alpha", fallback.raised),
+    raised,
     selected: color("surface-interactive-weak", fallback.selected),
     success: color("text-diff-add-base", fallback.success),
     successBackground: color(
@@ -214,6 +291,15 @@ const dynamicColors = (
   fallback: ThemeColors
 ): ThemeColors => ({
   ...fallback,
+  borderMuted: t.outlineVariant,
+  borderStrong: t.outline,
+  buttonNeutral: t.surface,
+  codeBackground: t.surfaceContainerLow,
+  codePath: t.primary,
+  diffSeparatorBackground: t.surfaceContainerHigh,
+  layer02: t.surfaceContainerHigh,
+  switchTrackOff: t.surfaceContainerHighest,
+  switchTrackOn: t.primary,
   accent: t.primary,
   accentText: t.onPrimary,
   bg: t.background,
@@ -340,7 +426,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const colors = useMemo(() => {
     const preset = upstreamThemes.find((item) => item.id === paletteState);
     if (preset) {
-      return mapPreset(preset[scheme], fallback);
+      return mapPreset(preset[scheme], fallback, scheme);
     }
     if (paletteState === "dynamic" && isDynamicThemeSupported) {
       return dynamicColors(materialTheme[scheme], fallback);
