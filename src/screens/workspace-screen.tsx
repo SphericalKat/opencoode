@@ -22,6 +22,7 @@ import {
 
 import { confirmAction } from "../components/dialog";
 import { Patch } from "../components/patch";
+import { useUndoableRemoval } from "../components/snackbar";
 import { TerminalPanel } from "../components/terminal-panel";
 import {
   Busy,
@@ -1394,6 +1395,8 @@ const Worktrees = ({
   const styles = useThemedStyles(createStyles);
   const [location, setLocation] = useState<LocationPublicInfo | null>(null);
   const [trees, setTrees] = useState<WorktreeDirectory[]>([]);
+  const { hidden, remove: removeTree } = useUndoableRemoval("worktrees");
+  const visibleTrees = trees.filter((tree) => !hidden.has(tree.directory));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1468,31 +1471,21 @@ const Worktrees = ({
       }
     });
   };
-  const remove = async (tree: WorktreeDirectory) => {
-    if (
-      !location ||
-      tree.directory === location.project.directory ||
-      !(await confirmAction(
-        "Remove this worktree?",
-        `The server will remove ${tree.directory}. Removal stops if the worktree has uncommitted changes.`,
-        { confirmLabel: "Remove" }
-      ))
-    ) {
+  const remove = (tree: WorktreeDirectory) => {
+    if (!location || tree.directory === location.project.directory) {
       return;
     }
-    setError(null);
     const projectID = location.project.id;
-    await runWithFlag(setBusy, async () => {
-      try {
+    removeTree(tree.directory, {
+      commit: async () => {
         await client.worktree.remove({
           directory: tree.directory,
           force: false,
           projectID,
         });
         setRevision((value) => value + 1);
-      } catch (error_) {
-        setError(errorMessage(error_));
-      }
+      },
+      message: "Worktree removed",
     });
   };
   return (
@@ -1541,13 +1534,13 @@ const Worktrees = ({
               />
             </Card>
           )}
-          {!error && trees.length === 0 && (
+          {!error && visibleTrees.length === 0 && (
             <Empty
               title="No worktrees"
               detail="Create a worktree to keep a separate branch and set of files."
             />
           )}
-          {trees.map((tree) => (
+          {visibleTrees.map((tree) => (
             <Card key={tree.directory}>
               <BodyText style={{ fontWeight: "600" }}>
                 {fileName(tree.directory)}
@@ -1576,7 +1569,7 @@ const Worktrees = ({
                   }
                   busy={busy}
                   onPress={() => {
-                    void remove(tree);
+                    remove(tree);
                   }}
                 />
               </Row>

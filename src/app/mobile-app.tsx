@@ -120,21 +120,21 @@ export const MobileApp = () => {
     resumeSheets,
     showNavigationSheet,
   });
-  const { attachFile, openDirectory, removeConnection } = useWorkspaceActions(
-    state,
-    {
+  const { attachFile, hiddenConnections, openDirectory, removeConnection } =
+    useWorkspaceActions(state, {
       changeDirectory,
       client,
       confirmNavigation,
       syncSelectedLocation,
-    }
-  );
+    });
 
   const serverForm = (
     <ConnectionFlow
       key={flowRevision}
       form={form}
-      connections={connections}
+      connections={connections.filter(
+        (connection) => !hiddenConnections.has(connection.id)
+      )}
       activeID={active?.id}
       unavailableID={unavailableID ?? undefined}
       connecting={connecting}

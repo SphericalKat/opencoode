@@ -1,7 +1,7 @@
 import type { CredentialEntry, IntegrationInfo } from "@opencode/client";
 import { useState } from "react";
 
-import { confirmAction } from "../../components/dialog";
+import { useUndoableRemoval } from "../../components/snackbar";
 import {
   Button,
   Card,
@@ -39,6 +39,7 @@ export const Accounts = ({
       return { credentials, integrations: integrations.data };
     }
   );
+  const { hidden, remove: removeAccount } = useUndoableRemoval("accounts");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<IntegrationInfo>();
   const [limit, setLimit] = useState(40);
@@ -48,6 +49,9 @@ export const Accounts = ({
     }
     setQuery(next);
   };
+  const visibleCredentials = data?.credentials.filter(
+    (item) => !hidden.has(item.id)
+  );
   const [credential, setCredential] = useState<CredentialEntry>();
   const [label, setLabel] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -87,10 +91,10 @@ export const Accounts = ({
         )}
       </Row>
       <ErrorNotice error={actionError} />
-      {!!data?.credentials.length && (
+      {!!visibleCredentials?.length && (
         <BodyText style={styles.sectionLabel}>SAVED ACCOUNTS</BodyText>
       )}
-      {data?.credentials.map((item) => (
+      {visibleCredentials?.map((item) => (
         <Card key={item.id} style={styles.card}>
           <SettingsCardHeader
             action={
@@ -231,19 +235,14 @@ export const Accounts = ({
               return;
             }
             const credentialID = credential.id;
-            void confirmAction(
-              "Remove account?",
-              "This removes the saved credential from your OpenCode server.",
-              { confirmLabel: "Remove" }
-            ).then((confirmed) => {
-              if (confirmed) {
-                void run(async (signal) => {
+            setCredential(undefined);
+            removeAccount(credentialID, {
+              commit: () =>
+                withSettingsRequest(async (signal) => {
                   await client.credential.remove({ credentialID }, { signal });
-                  signal.throwIfAborted();
-                  setCredential(undefined);
-                });
-              }
-              return confirmed;
+                  await refresh(signal);
+                }),
+              message: "Account removed",
             });
           }}
         />

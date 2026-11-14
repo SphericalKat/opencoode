@@ -1,7 +1,7 @@
 import type { PermissionSavedInfo } from "@opencode/client";
 import { useState } from "react";
 
-import { confirmAction } from "../../components/dialog";
+import { useUndoableRemoval } from "../../components/snackbar";
 import {
   Button,
   Card,
@@ -41,6 +41,8 @@ export const Permissions = ({
       );
     }
   );
+  const { hidden, remove: removeApproval } = useUndoableRemoval("approvals");
+  const visible = data?.filter((item) => !hidden.has(item.id));
   const [selected, setSelected] = useState<PermissionSavedInfo>();
   const [action, setAction] = useState("");
   const [resource, setResource] = useState("");
@@ -62,7 +64,7 @@ export const Permissions = ({
         project.
       </BodyText>
       <ErrorNotice error={errorAction} />
-      {data?.map((item) => (
+      {visible?.map((item) => (
         <Card key={item.id}>
           <BodyText style={styles.name}>{item.action}</BodyText>
           <BodyText style={{ fontFamily: mono }}>{item.resource}</BodyText>
@@ -84,27 +86,23 @@ export const Permissions = ({
               size="compact"
               busy={busy}
               onPress={() => {
-                void confirmAction(
-                  "Revoke saved approval?",
-                  "OpenCode will ask again when this action requires permission.",
-                  { confirmLabel: "Revoke" }
-                ).then((confirmed) => {
-                  if (confirmed) {
-                    void run(async (signal) => {
+                removeApproval(item.id, {
+                  commit: () =>
+                    withSettingsRequest(async (signal) => {
                       await client.permission.saved.remove(
                         { id: item.id },
                         { signal }
                       );
-                    });
-                  }
-                  return confirmed;
+                      await refresh(signal);
+                    }),
+                  message: "Approval revoked",
                 });
               }}
             />
           </Row>
         </Card>
       ))}
-      {data && !data.length && (
+      {visible && !visible.length && (
         <Empty
           title="No saved approvals"
           detail="OpenCode will ask you before protected actions."

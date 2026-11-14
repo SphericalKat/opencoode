@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-import { confirmAction } from "../../components/dialog";
 import { GlobalForms } from "../../components/global-forms";
+import { useUndoableRemoval } from "../../components/snackbar";
 import {
   Button,
   Card,
@@ -39,6 +39,8 @@ export const Mcp = ({
       return response.data;
     }
   );
+  const { hidden, remove: removeServer } = useUndoableRemoval("mcp");
+  const visible = data?.filter((item) => !hidden.has(item.name));
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<"remote" | "local">("remote");
@@ -85,7 +87,7 @@ export const Mcp = ({
         />
       </Row>
       <ErrorNotice error={errorAction} />
-      {data?.map((item) => (
+      {visible?.map((item) => (
         <Card key={item.name} style={styles.card}>
           <SettingsCardHeader
             action={
@@ -128,26 +130,22 @@ export const Mcp = ({
             size="compact"
             busy={busy}
             onPress={() => {
-              void confirmAction(
-                "Remove MCP server?",
-                `This removes ${item.name} from the project configuration.`,
-                { confirmLabel: "Remove" }
-              ).then((confirmed) => {
-                if (confirmed) {
-                  void run(async (signal) => {
+              removeServer(item.name, {
+                commit: () =>
+                  withSettingsRequest(async (signal) => {
                     await client.experimental.mcp.remove(
                       { location: { directory }, server: item.name },
                       { signal }
                     );
-                  });
-                }
-                return confirmed;
+                    await refresh(signal);
+                  }),
+                message: "MCP server removed",
               });
             }}
           />
         </Card>
       ))}
-      {data && !data.length && (
+      {visible && !visible.length && (
         <Empty
           title="No MCP servers"
           detail="Connect tools and resources from your own servers."

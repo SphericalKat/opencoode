@@ -6,7 +6,7 @@ import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { prepareSchedule } from "../lib/schedules";
 import type { ScheduleDraft } from "../lib/schedules";
-import { confirmAction } from "./dialog";
+import { useUndoableRemoval } from "./snackbar";
 import { Button, Busy, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
 const emptyDraft: ScheduleDraft = {
@@ -81,6 +81,7 @@ export const Schedules = ({
   client: Client;
   sessionID: string;
 }) => {
+  const { hidden, remove: removeSchedule } = useUndoableRemoval("schedules");
   const [items, setItems] = useState<ScheduleInfo[]>([]);
   const [draft, setDraft] = useState<ScheduleDraft>(emptyDraft);
   const [adding, setAdding] = useState(false);
@@ -186,6 +187,7 @@ export const Schedules = ({
   };
   const change = (field: keyof ScheduleDraft, value: string) =>
     setDraft((previous) => ({ ...previous, [field]: value }));
+  const visibleItems = items.filter((item) => !hidden.has(item.id));
   const repeating = draft.mode === "every" || draft.mode === "cron";
 
   return (
@@ -217,7 +219,7 @@ export const Schedules = ({
         }}
       />
       {loading && <Busy />}
-      {!loading && !error && items.length === 0 && (
+      {!loading && !error && visibleItems.length === 0 && (
         <BodyText muted>No schedules for this session</BodyText>
       )}
       {adding && (
@@ -310,7 +312,7 @@ export const Schedules = ({
           />
         </Card>
       )}
-      {items.map((item) => (
+      {visibleItems.map((item) => (
         <Card key={item.id}>
           <BodyText style={{ fontSize: 17, fontWeight: "600" }}>
             {item.name || "Scheduled prompt"}
@@ -373,23 +375,14 @@ export const Schedules = ({
               variant="danger"
               disabled={busy}
               onPress={() => {
-                void run(async () => {
-                  const owner = scope.current;
-                  if (
-                    (await confirmAction(
-                      "Delete schedule?",
-                      `Delete ${item.name || "this scheduled prompt"}?`,
-                      { confirmLabel: "Delete" }
-                    )) &&
-                    owner === scope.current &&
-                    mounted.current
-                  ) {
-                    await mutate(() =>
+                removeSchedule(item.id, {
+                  commit: () =>
+                    mutate(() =>
                       client.experimental.schedule.delete({
                         scheduleID: item.id,
                       })
-                    );
-                  }
+                    ),
+                  message: "Schedule deleted",
                 });
               }}
             />
