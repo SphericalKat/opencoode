@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
-    "@opencode/client": "2.2.7",
+    "@opencode/client": "2.3.0",
     "@pchmn/expo-material3-theme": "^1.4.0",
     "@react-navigation/elements": "^2.9.45",
     "@react-navigation/native": "^7.5.1",
