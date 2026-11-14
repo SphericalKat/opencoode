@@ -3,6 +3,7 @@ import type { Token } from "markdown-it";
 import React, {
   createContext,
   memo,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -30,9 +31,10 @@ import { highlightSegments } from "../lib/syntax";
 import type { SyntaxSegment } from "../lib/syntax";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import { inlineCodeKind } from "../lib/transcript";
+import { inlineCodeKind, tableColumnWidths } from "../lib/transcript";
 import { FadeSpan } from "./fade-span";
 import { IconButton } from "./icon-button";
+import { elevation } from "./surface";
 import { mono, monoMedium, sans } from "./ui";
 import { useStreamReveal } from "./use-stream-reveal";
 
@@ -44,17 +46,11 @@ const parser = new MarkdownIt({
 });
 const SelectionContext = createContext(true);
 
+const MEASURE_WIDTH = 10_000;
+
 const createStyles = (colors: ThemeColors) => ({
   ...StyleSheet.create({
     bold: { fontWeight: "700" },
-    cell: {
-      borderBottomWidth: 1,
-      borderColor: colors.border,
-      borderRightWidth: 1,
-      flexShrink: 0,
-      minWidth: 0,
-      padding: 10,
-    },
     code: {
       backgroundColor: colors.codeBackground,
       borderColor: colors.border,
@@ -117,22 +113,41 @@ const createStyles = (colors: ThemeColors) => ({
     root: { flexShrink: 1, gap: 12, maxWidth: "100%", minWidth: 0 },
     rule: { backgroundColor: colors.border, height: 1, marginVertical: 4 },
     strike: { textDecorationLine: "line-through" },
-    table: {
-      borderColor: colors.border,
-      borderLeftWidth: 1,
-      borderTopWidth: 1,
-    },
+    tableBody: { borderRadius: 4, backgroundColor: colors.bg },
+    tableCell: { flexShrink: 0, minWidth: 0, paddingHorizontal: 12 },
+    tableCellBody: { paddingVertical: 10 },
+    tableCellHeader: { paddingVertical: 8 },
     tableContainer: { minWidth: 0, width: "100%" },
-    tableHeader: { backgroundColor: colors.raised },
-    tableHint: {
-      color: colors.muted,
-      fontFamily: sans,
-      fontSize: 13,
-      lineHeight: 19,
-      paddingTop: 4,
+    tableFrame: {
+      backgroundColor: colors.panel,
+      borderColor: colors.borderMuted,
+      borderRadius: 6,
+      borderWidth: StyleSheet.hairlineWidth,
+      minWidth: 0,
+      padding: 2,
+      width: "100%",
+    },
+    tableMeasure: {
+      left: 0,
+      opacity: 0,
+      position: "absolute",
+      top: 0,
+      width: MEASURE_WIDTH,
     },
     tableRow: { alignItems: "stretch", flexDirection: "row" },
+    tableRowDivider: {
+      borderBottomColor: colors.borderMuted,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
     tableScroll: { minWidth: 0, width: "100%" },
+    tableText: {
+      fontFamily: sans,
+      fontSize: 13,
+      fontVariant: ["tabular-nums"],
+      lineHeight: 18,
+    },
+    tableTextBody: { color: colors.text, fontWeight: "400" },
+    tableTextHeader: { color: colors.muted, fontWeight: "500" },
     text: {
       color: colors.text,
       flexShrink: 1,
@@ -617,84 +632,221 @@ const tableTextAlign = (
   return "left";
 };
 
-const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
-  const styles = useMarkdownStyles();
-  const selectable = useContext(SelectionContext);
-  const selectMessage = useContext(MessageActionsContext);
-  const [availableWidth, setAvailableWidth] = useState(0);
-  const rows = node.children.flatMap((section) => section.children);
-  const columnCount = Math.max(1, ...rows.map((row) => row.children.length));
-  const columnWidth = Math.max(
-    120,
-    Math.floor(((availableWidth || columnCount * 120 + 1) - 1) / columnCount)
+const tokenSeparator = /[\s/-]+/u;
+const CELL_PADDING = 24;
+const MIN_COLUMN_WIDTH = 48;
+const FRAME_INSET = 4;
+
+const plainText = (nodes: Node[]): string =>
+  nodes
+    .map((node) =>
+      node.children.length ? plainText(node.children) : node.token.content
+    )
+    .join("");
+
+const cellInline = (cell: Node) =>
+  cell.children.flatMap((child) => child.children);
+
+const minContentWidth = (text: string, maxContent: number) => {
+  const longest = Math.max(
+    0,
+    ...text.split(tokenSeparator).map((token) => token.length)
   );
-  const contentWidth = columnWidth * columnCount + 1;
-  const renderRow = (row: Node, rowIndex: number) => (
-    <View key={rowIndex} style={styles.tableRow}>
-      {row.children.map((cell, cellIndex) => {
-        const isHeader = cell.token.type === "th_open";
-        const textAlign = tableTextAlign(cell.token.attrGet("style"));
-        return (
-          <View
-            key={cellIndex}
-            style={[
-              styles.cell,
-              { width: columnWidth },
-              isHeader && styles.tableHeader,
-            ]}
-          >
-            <Text
-              selectable={selectable}
-              style={[
-                styles.text,
-                muted && styles.muted,
-                { textAlign },
-                isHeader && styles.bold,
-              ]}
-            >
-              <Inline
-                nodes={cell.children.flatMap((child) => child.children)}
-                codeSize={TABLE_CODE_SIZE}
-              />
-            </Text>
-          </View>
-        );
-      })}
+  const estimate =
+    Math.ceil((maxContent * longest) / Math.max(1, text.length)) + CELL_PADDING;
+  return Math.min(Math.max(estimate, MIN_COLUMN_WIDTH), maxContent);
+};
+
+interface TableCell {
+  key: string;
+  column: number;
+  header: boolean;
+  align: "center" | "left" | "right";
+  inline: Node[];
+  text: string;
+}
+
+const tableRows = (node: Node): TableCell[][] =>
+  node.children.flatMap((section, sectionIndex) =>
+    section.children.map((row, rowIndex) =>
+      row.children.map((cell, column) => ({
+        align: tableTextAlign(cell.token.attrGet("style")),
+        column,
+        header: cell.token.type === "th_open",
+        inline: cellInline(cell),
+        key: `${sectionIndex}:${rowIndex}:${column}`,
+        text: plainText(cellInline(cell)),
+      }))
+    )
+  );
+
+const TableCellView = ({
+  cell,
+  muted,
+  selectable,
+  width,
+  onLayoutWidth,
+}: {
+  cell: TableCell;
+  muted?: boolean;
+  selectable: boolean;
+  width?: number;
+  onLayoutWidth?: (key: string, width: number) => void;
+}) => {
+  const styles = useMarkdownStyles();
+  return (
+    <View
+      onLayout={
+        onLayoutWidth
+          ? (event) => onLayoutWidth(cell.key, event.nativeEvent.layout.width)
+          : undefined
+      }
+      style={[
+        styles.tableCell,
+        cell.header ? styles.tableCellHeader : styles.tableCellBody,
+        width === undefined ? { alignSelf: "flex-start" } : { width },
+      ]}
+    >
+      <Text
+        selectable={selectable}
+        style={[
+          styles.tableText,
+          cell.header ? styles.tableTextHeader : styles.tableTextBody,
+          muted && styles.muted,
+          { textAlign: cell.align },
+        ]}
+      >
+        <Inline nodes={cell.inline} codeSize={TABLE_CODE_SIZE} />
+      </Text>
     </View>
   );
+};
+
+const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
+  const styles = useMarkdownStyles();
+  const { scheme } = useTheme();
+  const selectable = useContext(SelectionContext);
+  const selectMessage = useContext(MessageActionsContext);
+  const [frameWidth, setFrameWidth] = useState(0);
+  const [measured, setMeasured] = useState<Record<string, number>>({});
+  const rows = useMemo(() => tableRows(node), [node]);
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const available = Math.max(
+    0,
+    frameWidth - FRAME_INSET - StyleSheet.hairlineWidth * 2
+  );
+
+  const recordWidth = useCallback((key: string, layoutWidth: number) => {
+    // Layout widths are fractional. Rounding down leaves a cell a fraction
+    // narrower than its text, which wraps the last character.
+    const width = Math.ceil(layoutWidth);
+    setMeasured((previous) =>
+      previous[key] === width ? previous : { ...previous, [key]: width }
+    );
+  }, []);
+
+  const layout = useMemo(() => {
+    const maxContent = Array.from({ length: columnCount }, () => 0);
+    const minContent = Array.from({ length: columnCount }, () => 0);
+    for (const row of rows) {
+      for (const cell of row) {
+        const cellMax = measured[cell.key];
+        if (cellMax === undefined) {
+          return;
+        }
+        maxContent[cell.column] = Math.max(maxContent[cell.column], cellMax);
+        minContent[cell.column] = Math.max(
+          minContent[cell.column],
+          minContentWidth(cell.text, cellMax)
+        );
+      }
+    }
+    if (available <= 0) {
+      return;
+    }
+    return tableColumnWidths({ available, maxContent, minContent });
+  }, [available, columnCount, measured, rows]);
+
+  const widths = layout?.widths;
+  const contentWidth = widths
+    ? widths.reduce((total, width) => total + width, 0)
+    : undefined;
+  const headerRows = rows.filter((row) => row[0]?.header);
+  const bodyRows = rows.filter((row) => !row[0]?.header);
+
+  const renderRow = (row: TableCell[], divider: boolean, key: string) => (
+    <View
+      key={key}
+      style={[styles.tableRow, divider && styles.tableRowDivider]}
+    >
+      {row.map((cell) => (
+        <TableCellView
+          key={cell.key}
+          cell={cell}
+          muted={muted}
+          selectable={selectable}
+          width={widths?.[cell.column]}
+        />
+      ))}
+    </View>
+  );
+
   return (
     <View
       style={styles.tableContainer}
-      onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)}
+      onLayout={(event) => setFrameWidth(event.nativeEvent.layout.width)}
     >
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        directionalLockEnabled
-        persistentScrollbar
-        showsHorizontalScrollIndicator
-        contentContainerStyle={{ width: contentWidth }}
-        style={styles.tableScroll}
+      <View
+        importantForAccessibility="no-hide-descendants"
+        pointerEvents="none"
+        style={styles.tableMeasure}
       >
-        {/* The table claims the JS responder so the message row does not.
+        {rows.flat().map((cell) => (
+          <TableCellView
+            key={cell.key}
+            cell={cell}
+            muted={muted}
+            selectable={false}
+            onLayoutWidth={recordWidth}
+          />
+        ))}
+      </View>
+      <View style={[styles.tableFrame, !layout && { opacity: 0 }]}>
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          directionalLockEnabled
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ width: contentWidth }}
+          style={styles.tableScroll}
+        >
+          {/* The table claims the JS responder so the message row does not.
             On Android the row would otherwise intercept every move, and this
             ScrollView could never start a drag. */}
-        <Pressable
-          accessible={false}
-          importantForAccessibility="no"
-          focusable={false}
-          disabled={!selectMessage || Platform.OS === "web"}
-          onLongPress={selectMessage}
-          style={[styles.table, { width: contentWidth }]}
-        >
-          {rows.map(renderRow)}
-        </Pressable>
-      </ScrollView>
-      {contentWidth > availableWidth && availableWidth > 0 && (
-        <Text style={[styles.tableHint, muted && styles.muted]}>
-          Swipe to see more columns
-        </Text>
-      )}
+          <Pressable
+            accessible={false}
+            importantForAccessibility="no"
+            focusable={false}
+            disabled={!selectMessage || Platform.OS === "web"}
+            onLongPress={selectMessage}
+            style={{ width: contentWidth }}
+          >
+            {headerRows.map((row, index) =>
+              renderRow(row, false, `head-${index}`)
+            )}
+            <View
+              style={[
+                styles.tableBody,
+                { boxShadow: elevation(scheme).raised },
+              ]}
+            >
+              {bodyRows.map((row, index) =>
+                renderRow(row, index < bodyRows.length - 1, `body-${index}`)
+              )}
+            </View>
+          </Pressable>
+        </ScrollView>
+      </View>
     </View>
   );
 };
