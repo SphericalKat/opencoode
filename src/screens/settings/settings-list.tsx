@@ -7,12 +7,8 @@ import type { ThemeColors } from "../../lib/theme";
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    control: {
-      flexDirection: "row",
-      justifyContent: "flex-end",
-      width: "100%",
-    },
-    copy: { gap: 4 },
+    control: { flexShrink: 0 },
+    copy: { flex: 1, gap: 4, minWidth: 0 },
     description: {
       color: colors.muted,
       fontFamily: sans,
@@ -21,8 +17,9 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     row: {
+      alignItems: "center",
       backgroundColor: colors.panel,
-      flexDirection: "column",
+      flexDirection: "row",
       gap: 16,
       paddingHorizontal: 16,
       paddingVertical: 20,
