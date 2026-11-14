@@ -1,6 +1,5 @@
 import MarkdownIt from "markdown-it";
 import type { Token } from "markdown-it";
-import Prism from "prismjs";
 import React, {
   createContext,
   memo,
@@ -24,27 +23,9 @@ import type { TextStyle } from "react-native";
 import { copyText } from "../lib/clipboard";
 import { MessageActionsContext } from "../lib/message-actions";
 import { splitReveal } from "../lib/stream-reveal";
-import "prismjs/components/prism-clike";
-import "prismjs/components/prism-javascript";
-import "prismjs/components/prism-typescript";
-import "prismjs/components/prism-jsx";
-import "prismjs/components/prism-tsx";
-import "prismjs/components/prism-json";
-import "prismjs/components/prism-bash";
-import "prismjs/components/prism-python";
-import "prismjs/components/prism-java";
-import "prismjs/components/prism-kotlin";
-import "prismjs/components/prism-c";
-import "prismjs/components/prism-cpp";
-import "prismjs/components/prism-csharp";
-import "prismjs/components/prism-go";
-import "prismjs/components/prism-rust";
-import "prismjs/components/prism-sql";
-import "prismjs/components/prism-yaml";
-import "prismjs/components/prism-css";
-import "prismjs/components/prism-markup";
-
 import type { RevealChunk } from "../lib/stream-reveal";
+import { highlightSegments } from "../lib/syntax";
+import type { SyntaxSegment } from "../lib/syntax";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { FadeSpan } from "./fade-span";
@@ -468,110 +449,35 @@ const Inline = memo(
     previous.reveal === next.reveal && sameNodes(previous.nodes, next.nodes)
 );
 
-const supportedLanguages: Record<string, string> = {
-  bash: "bash",
-  c: "c",
-  "c#": "csharp",
-  "c++": "cpp",
-  cpp: "cpp",
-  csharp: "csharp",
-  css: "css",
-  go: "go",
-  html: "markup",
-  java: "java",
-  javascript: "javascript",
-  js: "javascript",
-  json: "json",
-  jsx: "jsx",
-  kotlin: "kotlin",
-  kt: "kotlin",
-  py: "python",
-  python: "python",
-  rs: "rust",
-  rust: "rust",
-  sh: "bash",
-  shell: "bash",
-  sql: "sql",
-  ts: "typescript",
-  tsx: "tsx",
-  typescript: "typescript",
-  xml: "markup",
-  yaml: "yaml",
-  yml: "yaml",
-};
-
-type SyntaxColorKey =
-  | "syntaxComment"
-  | "syntaxConstant"
-  | "syntaxKeyword"
-  | "syntaxNumber"
-  | "syntaxProperty"
-  | "syntaxString"
-  | "syntaxType";
-
-const syntaxColorKeys = new Map<string, SyntaxColorKey>([
-  ["comment", "syntaxComment"],
-  ["prolog", "syntaxComment"],
-  ["doctype", "syntaxComment"],
-  ["string", "syntaxString"],
-  ["char", "syntaxString"],
-  ["attr-value", "syntaxString"],
-  ["keyword", "syntaxKeyword"],
-  ["atrule", "syntaxKeyword"],
-  ["selector", "syntaxKeyword"],
-  ["number", "syntaxNumber"],
-  ["boolean", "syntaxNumber"],
-  ["property", "syntaxProperty"],
-  ["function", "syntaxProperty"],
-  ["attr-name", "syntaxProperty"],
-  ["class-name", "syntaxType"],
-  ["builtin", "syntaxType"],
-  ["tag", "syntaxType"],
-  ["constant", "syntaxConstant"],
-  ["symbol", "syntaxConstant"],
-  ["variable", "syntaxConstant"],
-]);
-
 const highlightCode = (
   code: string,
   language: string,
   colors: ThemeColors
 ): React.ReactNode[] | null => {
-  const grammar = Prism.languages[supportedLanguages[language.toLowerCase()]];
-  if (!grammar) {
+  const segments = highlightSegments(code, language, colors);
+  if (!segments) {
     return null;
   }
-  const colorFor = (type: string) => {
-    const colorKey = syntaxColorKeys.get(type);
-    return colorKey ? colors[colorKey] : undefined;
-  };
   let key = 0;
-  const flatten = (
-    token: string | Prism.Token,
-    inherited?: string
-  ): React.ReactNode[] => {
-    if (typeof token === "string") {
-      const textKey = key;
-      key += 1;
-      return [
-        <Text
-          key={textKey}
-          style={inherited ? { color: inherited } : undefined}
-        >
-          {token}
-        </Text>,
-      ];
-    }
-    const color = colorFor(token.type) ?? inherited;
+  return segments.map((segment) => {
+    const segmentKey = key;
+    key += 1;
     return (
-      Array.isArray(token.content) ? token.content : [token.content]
-    ).flatMap((child) => flatten(child, color));
-  };
-  try {
-    return Prism.tokenize(code, grammar).flatMap((token) => flatten(token));
-  } catch {
-    return null;
+      <Text key={segmentKey} style={segmentStyle(segment)}>
+        {segment.text}
+      </Text>
+    );
+  });
+};
+
+const segmentStyle = (segment: SyntaxSegment): TextStyle | undefined => {
+  if (!segment.color && !segment.bold) {
+    return undefined;
   }
+  return {
+    ...(segment.color ? { color: segment.color } : null),
+    ...(segment.bold ? { fontWeight: "700" } : null),
+  };
 };
 
 const copyLabel = (feedback?: { failed: boolean }): string => {
