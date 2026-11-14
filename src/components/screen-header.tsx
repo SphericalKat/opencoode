@@ -1,15 +1,10 @@
 import React from "react";
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { pageInset } from "../lib/layout";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { IconButton } from "./icon-button";
 import { ShellIcon } from "./shell-icon";
 import { BodyText, usePressFeedback } from "./ui";
 
@@ -33,16 +28,44 @@ const createStyles = (colors: ThemeColors) =>
       minHeight: 56,
       paddingHorizontal: pageInset,
     },
-    menu: {
-      alignItems: "center",
-      borderRadius: 6,
-      height: Platform.OS === "android" ? 48 : 44,
-      justifyContent: "center",
-      marginEnd: -16,
-      width: Platform.OS === "android" ? 48 : 44,
-    },
+    action: { marginEnd: -16 },
     title: { flex: 1, fontSize: 18, fontWeight: "600", lineHeight: 24 },
   });
+
+export const HeaderMenuButton = ({ onPress }: { onPress: () => void }) => {
+  const { colors } = useTheme();
+  return (
+    <IconButton
+      icon="menu"
+      size={32}
+      borderless
+      color={colors.text}
+      accessibilityLabel="Open navigation"
+      onPress={onPress}
+    />
+  );
+};
+
+export const HeaderRefreshButton = ({
+  onPress,
+  busy,
+}: {
+  onPress: () => void;
+  busy?: boolean;
+}) => {
+  const { colors } = useTheme();
+  return (
+    <IconButton
+      icon="refresh"
+      size={32}
+      borderless
+      color={colors.text}
+      accessibilityLabel="Refresh"
+      busy={busy}
+      onPress={onPress}
+    />
+  );
+};
 
 export const ScreenHeader = ({
   title,
@@ -86,32 +109,14 @@ export const ScreenHeader = ({
         {title}
       </BodyText>
       {onRefresh && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Refresh"
-          accessibilityState={{ busy: refreshing, disabled: refreshing }}
-          disabled={refreshing}
-          onPress={() => onRefresh()}
-          android_ripple={android_ripple}
-          style={({ pressed }) => [styles.menu, pressed && pressedStyle]}
-        >
-          {refreshing ? (
-            <ActivityIndicator size="small" color={colors.muted} />
-          ) : (
-            <ShellIcon name="refresh" color={colors.text} />
-          )}
-        </Pressable>
+        <View style={styles.action}>
+          <HeaderRefreshButton onPress={onRefresh} busy={refreshing} />
+        </View>
       )}
       {onOpenNavigation && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open navigation"
-          onPress={onOpenNavigation}
-          android_ripple={android_ripple}
-          style={({ pressed }) => [styles.menu, pressed && pressedStyle]}
-        >
-          <ShellIcon name="menu" color={colors.text} />
-        </Pressable>
+        <View style={styles.action}>
+          <HeaderMenuButton onPress={onOpenNavigation} />
+        </View>
       )}
     </View>
   );
