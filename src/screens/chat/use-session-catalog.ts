@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from "react";
+import type { ModelInfo } from "@opencode/client";
+import { useEffect, useMemo, useState } from "react";
 
 import { errorMessage } from "../../lib/client";
 import type { CoreClient, OpenCodeClient, Capabilities } from "./session-sync";
@@ -31,6 +32,7 @@ export const useSessionCatalog = ({
     catalogRevision,
     setCatalogError,
   } = sync;
+  const [defaultModel, setDefaultModel] = useState<ModelInfo | null>(null);
   const sessionLocationDirectory = session?.location.directory;
   const catalogRequest = useMemo(
     () => ({ directory: sessionLocationDirectory, revision: catalogRevision }),
@@ -58,6 +60,14 @@ export const useSessionCatalog = ({
         .then((value) => {
           if (!controller.signal.aborted) {
             setModels(value.data);
+          }
+          return value;
+        }),
+      client.model
+        .default({ location }, { signal: controller.signal })
+        .then((value) => {
+          if (!controller.signal.aborted) {
+            setDefaultModel(value.data);
           }
           return value;
         }),
@@ -115,4 +125,5 @@ export const useSessionCatalog = ({
     setAgents,
     setCommands,
   ]);
+  return { defaultModel };
 };

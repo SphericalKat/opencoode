@@ -20,7 +20,7 @@ export interface ChatCore {
     ) => Promise<void>;
   };
   message: Pick<Client["message"], "list">;
-  model: Pick<Client["model"], "list">;
+  model: Pick<Client["model"], "list" | "default">;
   event?: Pick<Client["event"], "subscribe">;
 }
 
@@ -110,7 +110,7 @@ export const makeOpenCodeChatBackend = (client: Client): ChatBackend => ({
   core: {
     event: { subscribe: client.event.subscribe },
     message: { list: client.message.list },
-    model: { list: client.model.list },
+    model: { default: client.model.default, list: client.model.list },
     session: {
       active: client.session.active,
       compact: async (...args) => {

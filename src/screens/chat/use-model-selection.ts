@@ -3,17 +3,14 @@ import { useMemo, useState } from "react";
 
 import type { useModelPreferences } from "../../lib/model-preferences";
 import { sortByPreference } from "./labels";
+import { composerModelLabel } from "./model-label";
 import type { CoreClient } from "./session-sync";
 import type { RunAction } from "./use-run-action";
 import type { SessionState } from "./use-session-state";
 
-const providerLabels = new Map([
-  ["openai", "OpenAI"],
-  ["openai-codex", "OpenAI Codex"],
-]);
-
 interface UseModelSelectionOptions {
   client: CoreClient;
+  defaultModel: ModelInfo | null;
   modelPreferences: ReturnType<typeof useModelPreferences>;
   run: RunAction;
   sessionID: string;
@@ -22,6 +19,7 @@ interface UseModelSelectionOptions {
 
 export const useModelSelection = ({
   client,
+  defaultModel,
   modelPreferences,
   run,
   sessionID,
@@ -34,7 +32,7 @@ export const useModelSelection = ({
   >("all");
   const sessionModelID = session?.model?.id;
   const sessionProviderID = session?.model?.providerID;
-  const currentModel = useMemo(
+  const sessionModel = useMemo(
     () =>
       models.find(
         (model) =>
@@ -42,13 +40,18 @@ export const useModelSelection = ({
       ),
     [models, sessionModelID, sessionProviderID]
   );
-  const providerID = currentModel?.providerID || sessionProviderID;
-  const providerLabel =
-    providers.find((provider) => provider.id === providerID)?.name ||
-    (providerID ? providerLabels.get(providerID) : undefined) ||
-    providerID
-      ?.replaceAll(/[-_]/gu, " ")
-      .replaceAll(/\b\w/gu, (letter) => letter.toUpperCase());
+  const hasSessionModel = !!sessionModelID;
+  const currentModel =
+    sessionModel ?? (hasSessionModel ? undefined : (defaultModel ?? undefined));
+  const selectedVariant = session?.model?.variant;
+  const labelSource =
+    currentModel ??
+    (sessionModelID && sessionProviderID
+      ? { name: sessionModelID, providerID: sessionProviderID }
+      : undefined);
+  const providerLabel = labelSource
+    ? composerModelLabel(labelSource, providers).provider
+    : undefined;
   const enabledModels = useMemo(
     () => models.filter((model) => model.enabled),
     [models]
@@ -98,6 +101,7 @@ export const useModelSelection = ({
     modelSearch,
     providerLabel,
     scopedModels,
+    selectedVariant,
     setModelFilter,
     setModelSearch,
   };

@@ -5,6 +5,7 @@ import type {
 } from "@opencode/client";
 
 import { modelPreferenceID } from "../../lib/model-preferences";
+import { capitalizeFirst } from "./model-label";
 
 export const inboxItemText = (item: SessionInboxInfo) => {
   if (item.type === "user") {
@@ -87,5 +88,5 @@ export const modelSummary = (
   if (!variant) {
     return name;
   }
-  return `${name} · ${variant.charAt(0).toUpperCase()}${variant.slice(1)}`;
+  return `${name} · ${capitalizeFirst(variant)}`;
 };

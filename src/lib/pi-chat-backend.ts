@@ -636,6 +636,10 @@ export const makePiChatBackend = (
       },
     },
     model: {
+      default: async (_input, options) => {
+        const value = await load(options?.signal);
+        return { data: null, location: { directory: value.session.cwd } };
+      },
       list: async (_input, options) => {
         const [models, value] = await Promise.all([
           pi.models(options?.signal),

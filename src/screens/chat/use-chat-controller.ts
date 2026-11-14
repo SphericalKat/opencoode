@@ -141,7 +141,7 @@ export const useChatController = ({
     sync,
     visible,
   });
-  useSessionCatalog({
+  const { defaultModel } = useSessionCatalog({
     capabilities,
     client,
     foreground,
@@ -237,6 +237,7 @@ export const useChatController = ({
   });
   const modelChoice = useModelSelection({
     client,
+    defaultModel,
     modelPreferences,
     run,
     sessionID,
