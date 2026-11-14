@@ -17,7 +17,6 @@ import {
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { errorMessage } from "../lib/client";
 import type { Client, Connection } from "../lib/client";
@@ -33,6 +32,7 @@ import {
 import type { TerminalEvent } from "../lib/terminal";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { EdgeFade } from "./edge-fade";
 import { IconButton } from "./icon-button";
 import { useSnackbarInset, useUndoableRemoval } from "./snackbar";
 import { TerminalRenderer } from "./terminal-renderer";
@@ -66,7 +66,6 @@ const selectionColor = (
     : colors.selected;
 const MAX_BUFFER_LENGTH = 256;
 const SIZE_DEBOUNCE_MS = 120;
-const KEY_FADE_WIDTH = 16;
 const STRIP_PADDING = 12;
 const KEY_BAR_GAP = 4;
 const KEY_BAR_HEIGHT = 48;
@@ -105,7 +104,6 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: KEY_BAR_PADDING,
     },
     key: { flexGrow: 1, minWidth: 32 },
-    keyFade: { bottom: 0, position: "absolute", top: 0, width: KEY_FADE_WIDTH },
     keyboardInput: {
       bottom: 0,
       height: 1,
@@ -177,29 +175,6 @@ const detachSocket = (ws: WebSocket) => {
   socketListeners.delete(ws);
 };
 
-const EdgeFade = ({ side }: { side: "left" | "right" }) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const id = `key-fade-${side}`;
-  const solid = side === "left" ? 1 : 0;
-  return (
-    <View
-      pointerEvents="none"
-      style={[styles.keyFade, side === "left" ? { left: 0 } : { right: 0 }]}
-    >
-      <Svg width={KEY_FADE_WIDTH} height="100%">
-        <Defs>
-          <LinearGradient id={id} x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor={colors.bg} stopOpacity={solid} />
-            <Stop offset="1" stopColor={colors.bg} stopOpacity={1 - solid} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
-      </Svg>
-    </View>
-  );
-};
-
 const KeyBar = ({
   disabled,
   onKey,
@@ -207,6 +182,7 @@ const KeyBar = ({
   disabled: boolean;
   onKey: (data: string) => void;
 }) => {
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   useSnackbarInset(KEY_BAR_HEIGHT);
   const [viewport, setViewport] = useState(0);
@@ -253,9 +229,9 @@ const KeyBar = ({
           </View>
         ))}
       </ScrollView>
-      {overflows && offset > 1 && <EdgeFade side="left" />}
+      {overflows && offset > 1 && <EdgeFade side="left" color={colors.bg} />}
       {overflows && offset + viewport < contentWidth - 1 && (
-        <EdgeFade side="right" />
+        <EdgeFade side="right" color={colors.bg} />
       )}
     </View>
   );
