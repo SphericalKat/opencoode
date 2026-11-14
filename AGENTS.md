@@ -57,6 +57,10 @@ Ultracite runs Oxlint and Oxfmt with the `core`, `react` and `react-native` pres
 - After a lint change that touches runtime code, verify it on Android as described in "Verify on Android". Typecheck, unit tests and a browser load do not run Hermes.
 - Keep lint-only changes in their own commits, such as `refactor(chat): ...` or `chore(lint): ...`. Do not mix them with behavior changes.
 
+## Dependencies
+
+Never patch a dependency with `pnpm patch` or `patchedDependencies`. Use a library as it is published, or choose a different library.
+
 ## Android development
 
 Use the `android-cli` skill for native builds, device interaction, and screenshots. Read its `references/interact.md` before inspecting or interacting with a device. Check installed CLI flags with `--help`; they can differ from the skill's examples.
@@ -79,7 +83,7 @@ This is a mobile app. Verify runtime changes on an Android emulator or device wi
 
 1. Build or reuse a debug APK that matches the branch, install it with `android run`, and point it at Metro serving the branch.
 2. Connect it to an isolated OpenCode server. `tests/live-server.ts` shows the environment variables that isolate the server's config and data. From an emulator, the server address is `http://10.0.2.2:<port>`.
-3. Open every screen the change touches. Check `logcat` for `ReactNativeJS` errors after each step, and inspect a screenshot.
+3. Open every screen the change touches in light and dark mode. Switch with `adb -s <serial> shell cmd uimode night no` and `night yes`. Check `logcat` for `ReactNativeJS` errors after each step, and inspect a screenshot in each mode.
 4. For a refactor, repeat the same steps with Metro serving `develop`. The native APK can stay the same. Report each difference between the two runs.
 
 ### Inspect and debug

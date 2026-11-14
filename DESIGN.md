@@ -20,6 +20,10 @@
 - **Full-width pressable rows and bars use the native press feedback of the platform. On Android, use `android_ripple` with `{ alpha: 0.12, color: colors.text, foreground: true }`. On iOS and web, dim the content. Never scale a full-width row or bar on press.** On Android, buttons use `android_ripple` through `usePressFeedback` and do not scale. On iOS and web, buttons keep the scale feedback of `PressFeedback`. Why: native feedback makes a control feel native and good to tap. A full-width bar that scales looks wrong.
   <!-- 2026-11-13: "Try and use like native elements. Like it should feel really native and good to type all of that stuff" -->
 - **Confirm a destructive or irreversible action with `confirmAction` from `src/components/dialog.tsx`, and label the confirm button with a verb such as `Delete` or `Discard`. Ask for text with `promptText`. Never use `Alert`.** A removal shows a snackbar with Undo through `useUndoableRemoval` instead of a confirmation. Why: a system alert ignores the theme and looks like a different app.
+- **Every scroller that hides content fades the hidden edge 16 dp in the surface color, horizontally and vertically. Use `EdgeFade` and `useScrollEdges` from `src/components/edge-fade.tsx`, with `color` set to the background behind the scroller. Use a plain fade, never a blur.** Why: "so people can understand it's scrollable."
+  <!-- 2026-11-15: "is it scrollable if yes then make it fade out so people can understand it's scrollabnle"; "I don't see fade on te scroll edge" (model list); "never mind then fade it is" (after blur experiments) -->
+- **A long-press on a row or a message plays a haptic and opens an anchored context menu through `useContextMenu` in `src/components/anchored-menu.tsx`. Never enter selection mode on long-press. Multi-select starts only from the menu's `Select` item.**
+  <!-- 2026-11-14: Material split decision: "long-press with haptic opening a context menu"; multi-select "entered only from a Select menu item" -->
 
 ## Sheets
 
