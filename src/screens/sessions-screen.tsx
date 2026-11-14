@@ -43,7 +43,6 @@ interface Props {
   directory: string;
   onOpenSession: (id: string) => void;
   revision?: number;
-  selectedSessionID?: string;
   projectScope?: ProjectScope;
   onChooseDirectory?: () => void;
   onNewSession: (directory: string) => void;
@@ -54,7 +53,6 @@ export const SessionsScreen = ({
   directory,
   onOpenSession,
   revision,
-  selectedSessionID,
   projectScope,
   onChooseDirectory,
   onNewSession,
@@ -498,8 +496,8 @@ export const SessionsScreen = ({
             onManage={manageSession}
             onOpen={openConversation}
             search={search}
-            selected={selectedSessionID === item.id}
             sessions={sessions}
+            showProjectName={!projectDirectory}
           />
         )}
       />

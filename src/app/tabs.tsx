@@ -123,7 +123,6 @@ export const SessionsTab = ({
           projectScope={betaHomeProject}
           onChooseDirectory={onChooseDirectory}
           onNewSession={onNewSession}
-          selectedSessionID={sessionID ?? undefined}
           revision={revision}
           onOpenSession={onOpenSessionFromList}
         />

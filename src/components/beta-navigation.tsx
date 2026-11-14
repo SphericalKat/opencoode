@@ -12,6 +12,7 @@ import Svg, { Path, Rect } from "react-native-svg";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { NavIcon } from "./icons";
+import { ProjectAvatar } from "./project-avatar";
 import { ShellIcon } from "./shell-icon";
 import { BodyText, Sheet } from "./ui";
 
@@ -37,16 +38,6 @@ const stripChevronOffset = ((0.727 - 0.546) / 2) * stripTitleSize;
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     activeTab: { backgroundColor: colors.selected },
-    badge: {
-      alignItems: "center",
-      backgroundColor: colors.muted,
-      borderRadius: 3,
-      flexShrink: 0,
-      justifyContent: "center",
-      minHeight: 16,
-      minWidth: 16,
-    },
-    badgeText: { color: colors.bg, fontSize: 12, lineHeight: 15 },
     closeTab: {
       alignItems: "center",
       height: 48,
@@ -196,15 +187,9 @@ const HomeIcon = ({ color }: { color: string }) => (
 );
 
 const ProjectBadge = ({ directory }: { directory: string }) => {
-  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const name = directory.split(/[\\/]/u).findLast(Boolean) || "Project";
-  return (
-    <View style={styles.badge}>
-      <BodyText style={styles.badgeText}>
-        {name.slice(0, 1).toUpperCase()}
-      </BodyText>
-    </View>
-  );
+  return <ProjectAvatar name={name} ringColor={colors.bg} />;
 };
 
 export const BetaTabStrip = ({
