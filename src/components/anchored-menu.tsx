@@ -109,7 +109,8 @@ const createStyles = (colors: ThemeColors) =>
     },
     label: {
       color: colors.text,
-      flex: 1,
+      flexGrow: 1,
+      flexShrink: 1,
       fontFamily: sans,
       fontSize: 14,
       fontWeight: "400",
