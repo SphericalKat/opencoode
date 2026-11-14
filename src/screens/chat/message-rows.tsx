@@ -5,6 +5,7 @@ import type {
 import React, { memo, useCallback } from "react";
 import { Image, Platform, Pressable, View } from "react-native";
 
+import { useContextMenu, useMenuAnchor } from "../../components/anchored-menu";
 import { AssistantActivityPart as AssistantPart } from "../../components/assistant-turn";
 import { ResponseFooter } from "../../components/response-footer";
 import { SessionErrorNotice } from "../../components/session-error";
@@ -13,9 +14,12 @@ import { UserMessageBubble } from "../../components/user-message-bubble";
 import type { AgentActivity } from "../../lib/activity";
 import type { Client } from "../../lib/client";
 import { playHaptic } from "../../lib/haptics";
+import type { Rect } from "../../lib/menu-position";
 import { MessageActionsContext } from "../../lib/message-actions";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { CodeBlock, MessageText } from "./controls";
+import { messageMenuEntries, messageMenuInput } from "./message-menu-entries";
+import type { MessageMenuContext } from "./message-menu-entries";
 import { createStyles } from "./styles";
 
 export const CompletedAssistantFooter = ({
@@ -282,6 +286,8 @@ export interface MessageRowProps {
   live?: boolean;
   activityKind?: AgentActivity["kind"];
   animate?: boolean;
+  menu?: MessageMenuContext;
+  onMenu?: (id: string, anchor: Rect) => void;
   onSelect?: (id: string) => void;
   selected?: boolean;
   selectionActive?: boolean;
@@ -296,6 +302,8 @@ export const MessageRowBody = ({
   live,
   activityKind,
   animate,
+  menu,
+  onMenu,
   onSelect,
   selected,
   selectionActive,
@@ -305,15 +313,37 @@ export const MessageRowBody = ({
 }: MessageRowProps) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const select = useCallback(() => {
-    playHaptic("longPress");
+  const hasEntries = useCallback(
+    () =>
+      !!menu &&
+      messageMenuEntries(messageMenuInput(message, messageText(message), menu))
+        .length > 0,
+    [menu, message]
+  );
+  const contextMenu = useContextMenu({
+    canOpen: hasEntries,
+    onOpen: (anchor) => onMenu?.(message.id, anchor),
+  });
+  const { measure: measureRow, ref: rowRef } = useMenuAnchor();
+  const { measure: measureButton, ref: buttonRef } = useMenuAnchor();
+  const { onLongPress: openAtPress, openAt } = contextMenu;
+  const moveSelection = useCallback(() => {
+    playHaptic("select");
     onSelect?.(message.id);
   }, [onSelect, message.id]);
+  const openFromRow = useCallback(async () => {
+    const { x, y } = await measureRow();
+    openAt({ height: 0, width: 0, x, y });
+  }, [measureRow, openAt]);
+  const openFromButton = useCallback(async () => {
+    openAt(await measureButton());
+  }, [measureButton, openAt]);
+  const longPress = selectionActive ? moveSelection : openAtPress;
   const separateContent = screenReader || Platform.OS === "web";
   if (message.type === "idle" && !message.error) {
     return null;
   }
-  if (!onSelect) {
+  if (!onMenu) {
     return (
       children ?? (
         <MessageContent
@@ -332,9 +362,7 @@ export const MessageRowBody = ({
       accessibilityRole={separateContent ? undefined : "button"}
       accessibilityLabel={separateContent ? undefined : messagePreview(message)}
       accessibilityHint={
-        separateContent
-          ? undefined
-          : "Long press to select this message. Message actions appear in the header."
+        separateContent ? undefined : "Long press for message actions."
       }
       accessibilityState={
         separateContent ? undefined : { selected: !!selected }
@@ -343,17 +371,31 @@ export const MessageRowBody = ({
         separateContent
           ? undefined
           : [
-              { label: "Select message", name: "activate" },
-              { label: "Select message", name: "longpress" },
+              { label: "Message actions", name: "activate" },
+              { label: "Message actions", name: "longpress" },
             ]
       }
       onAccessibilityAction={
-        separateContent ? undefined : () => onSelect(message.id)
+        separateContent
+          ? undefined
+          : () => {
+              if (selectionActive) {
+                moveSelection();
+                return;
+              }
+              void openFromRow();
+            }
       }
       focusable={!screenReader}
-      onLongPress={select}
-      onPress={selectionActive ? () => onSelect(message.id) : undefined}
-      android_ripple={{ alpha: 0.12, color: colors.text, foreground: true }}
+      ref={rowRef}
+      collapsable={false}
+      onLongPress={longPress}
+      onPress={selectionActive ? moveSelection : undefined}
+      android_ripple={
+        message.type === "user"
+          ? undefined
+          : { alpha: 0.12, color: colors.text, foreground: true }
+      }
       style={styles.selectableMessage}
     >
       {selected && (
@@ -363,7 +405,7 @@ export const MessageRowBody = ({
           style={[styles.selectionMarker, { backgroundColor: colors.muted }]}
         />
       )}
-      <MessageActionsContext.Provider value={select}>
+      <MessageActionsContext.Provider value={longPress}>
         {children ?? (
           <MessageContent
             message={message}
@@ -377,13 +419,21 @@ export const MessageRowBody = ({
         )}
       </MessageActionsContext.Provider>
       {screenReader && (
-        <Button
-          title="Message actions"
-          size="compact"
-          variant="ghost"
-          accessibilityLabel={`Message actions: ${messagePreview(message)}`}
-          onPress={() => onSelect(message.id)}
-        />
+        <View ref={buttonRef} collapsable={false}>
+          <Button
+            title="Message actions"
+            size="compact"
+            variant="ghost"
+            accessibilityLabel={`Message actions: ${messagePreview(message)}`}
+            onPress={() => {
+              if (selectionActive) {
+                moveSelection();
+                return;
+              }
+              void openFromButton();
+            }}
+          />
+        </View>
       )}
     </Pressable>
   );

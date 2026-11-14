@@ -33,7 +33,6 @@ export type Panel =
   | "commands"
   | "mentions"
   | "tools"
-  | "message"
   | "selectText"
   | "diff"
   | "context"

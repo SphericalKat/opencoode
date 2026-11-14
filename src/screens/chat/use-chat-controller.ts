@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { useModelPreferences } from "../../lib/model-preferences";
 import { useNativePresentation } from "../../lib/sheets";
 import { useTheme, useThemedStyles } from "../../lib/theme";
+import type { MessageMenuContext } from "./message-menu-entries";
 import { createStyles } from "./styles";
 import type { Props } from "./types";
 import { useAttachmentHandoff } from "./use-attachment-handoff";
@@ -97,12 +98,10 @@ export const useChatController = ({
     alive,
     foreground,
     panel,
-    screenReaderEnabled,
-    setPanel,
     setSelectedMessageID,
     visible,
   });
-  const { jumpToLatest } = scroll;
+  const { closeMessageMenu, jumpToLatest, messageMenu } = scroll;
   const composer = useComposerDraft({
     draftKey,
     showError,
@@ -243,15 +242,52 @@ export const useChatController = ({
     sessionID,
     sync,
   });
+  const menuContext = useMemo<MessageMenuContext>(
+    () => ({
+      busy: pending || sync.active,
+      canFork: (message) =>
+        capabilities.forkMessage && (backend.canForkMessage?.(message) ?? true),
+      canRevert: !!opencodeClient,
+      canShowOutput: !!opencodeClient && capabilities.background,
+      draftLoaded: composer.draftLoaded,
+    }),
+    [
+      pending,
+      sync.active,
+      capabilities.forkMessage,
+      capabilities.background,
+      backend,
+      opencodeClient,
+      composer.draftLoaded,
+    ]
+  );
+  const menuMessage = messageMenu
+    ? sync.messages.find((message) => message.id === messageMenu.messageID)
+    : undefined;
+  const messageMenuTarget = useMemo(
+    () =>
+      messageMenu && menuMessage
+        ? { anchor: messageMenu.anchor, message: menuMessage }
+        : null,
+    [messageMenu, menuMessage]
+  );
+  const menuGone = !!messageMenu && !menuMessage;
+  useEffect(() => {
+    if (menuGone) {
+      closeMessageMenu();
+    }
+  }, [menuGone, closeMessageMenu]);
   const view = useTranscriptView({
     awayFromLatest: scroll.awayFromLatest,
     followingLatest: scroll.followingLatest,
     foreground,
+    menu: menuContext,
+    openMessageMenu: scroll.openMessageMenu,
     opencodeClient,
     screenReader,
-    selectMessage: scroll.selectMessage,
     selectedMessageID,
     sessionID,
+    setSelectedMessageID,
     stopping: messageSend.stopping,
     sync,
     visible,
@@ -268,7 +304,7 @@ export const useChatController = ({
     backgroundDirectory: sheets.backgroundDirectory,
     backgroundShellID: sheets.backgroundShellID,
     beginUserScroll: scroll.beginUserScroll,
-    canCopySelected: selection.canCopySelected,
+    closeMessageMenu,
     capabilities,
     catalogError: sync.catalogError,
     chooseModel: modelChoice.chooseModel,
@@ -314,6 +350,8 @@ export const useChatController = ({
     loadingOlder: older.loadingOlder,
     maintainPosition: scroll.maintainPosition,
     maximumComposerHeight: metrics.maximumComposerHeight,
+    menuContext,
+    messageMenuTarget,
     messages: sync.messages,
     minimumComposerHeight: metrics.minimumComposerHeight,
     modelFilter: modelChoice.modelFilter,
@@ -328,7 +366,6 @@ export const useChatController = ({
     permissions: sync.permissions,
     providerLabel: modelChoice.providerLabel,
     queueDevicePicker: device.queueDevicePicker,
-    queuedMessagePanelRef: sheets.queuedMessagePanelRef,
     refresh,
     renderMessage: view.renderMessage,
     restoredSkillIDs: composer.restoredSkillIDs,
@@ -359,7 +396,7 @@ export const useChatController = ({
     setSelectedMessageID: selection.setSelectedMessageID,
     setSelectedSkills: composer.setSelectedSkills,
     setSideQuestion: sheets.setSideQuestion,
-    setTextSelectionMessage: selection.setTextSelectionMessage,
+    setTextSelectionMessage: sheets.setTextSelectionMessage,
     showActivityBar: view.showActivityBar,
     showError: errors.showError,
     showLatestControl: view.showLatestControl,
@@ -370,7 +407,7 @@ export const useChatController = ({
     streamStatus: sync.streamStatus,
     styles,
     syncErrors: sync.syncErrors,
-    textSelectionMessage: selection.textSelectionMessage,
+    textSelectionMessage: sheets.textSelectionMessage,
     toolsDismissed: device.toolsDismissed,
     transcriptLayoutChanged: scroll.transcriptLayoutChanged,
     transcriptMessages: view.transcriptMessages,

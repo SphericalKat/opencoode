@@ -12,7 +12,8 @@ import {
 } from "./composer-sheets";
 import { ChatKeyboardView } from "./controls";
 import { SelectionBar } from "./header";
-import { MessageSheet, SelectTextSheet } from "./message-sheets";
+import { MessageMenu } from "./message-menu";
+import { SelectTextSheet } from "./message-sheets";
 import { VariantsSheet, ModelsSheet } from "./model-sheets";
 import {
   DiffSheet,
@@ -37,9 +38,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     activityNotice,
     agents,
     attachments,
-    backend,
     beginUserScroll,
-    canCopySelected,
     capabilities,
     catalogError,
     client,
@@ -73,6 +72,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     loadingOlder,
     maintainPosition,
     maximumComposerHeight,
+    menuContext,
     minimumComposerHeight,
     onOpenSession,
     opencodeClient,
@@ -116,19 +116,13 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     <SelectionBar
       visible={visible}
       actionMessage={actionMessage}
-      active={active}
-      backend={backend}
-      canCopySelected={canCopySelected}
-      capabilities={capabilities}
       client={client}
       copySelected={copySelected}
-      draftLoaded={draftLoaded}
       editMessage={editMessage}
+      menuContext={menuContext}
       onOpenSession={onOpenSession}
-      pending={pending}
       run={run}
       sessionID={sessionID}
-      setPanel={setPanel}
       setSelectedMessageID={setSelectedMessageID}
       styles={styles}
     />
@@ -366,28 +360,22 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
 
 const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
   const {
-    actionMessage,
-    active,
     agents,
-    alive,
-    backend,
-    capabilities,
+    closeMessageMenu,
     client,
     commands,
     draftLoaded,
     editMessage,
-    error,
     fileQuery,
     fileResults,
     fileSearchBusy,
+    menuContext,
+    messageMenuTarget,
     messages,
     onOpenSession,
     opencodeClient,
     panel,
-    pending,
-    queuedMessagePanelRef,
     run,
-    selectedMessageID,
     sessionID,
     setAttachments,
     setBackgroundDirectory,
@@ -395,6 +383,7 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
     setDraft,
     setFileQuery,
     setPanel,
+    setSelectedMessageID,
     setSelectedAgentIDs,
     setSelectedSkills,
     setTextSelectionMessage,
@@ -404,31 +393,24 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
   } = chat;
   return (
     <>
-      <MessageSheet
-        actionMessage={actionMessage}
-        active={active}
-        alive={alive}
-        backend={backend}
-        capabilities={capabilities}
+      <MessageMenu
         client={client}
-        draftLoaded={draftLoaded}
+        closeMessageMenu={closeMessageMenu}
         editMessage={editMessage}
-        error={error}
+        menuContext={menuContext}
+        messageMenuTarget={messageMenuTarget}
         messages={messages}
         onOpenSession={onOpenSession}
         opencodeClient={opencodeClient}
-        panel={panel}
-        pending={pending}
-        queuedMessagePanelRef={queuedMessagePanelRef}
         run={run}
-        selectedMessageID={selectedMessageID}
+        session={session}
         sessionID={sessionID}
         setBackgroundDirectory={setBackgroundDirectory}
         setBackgroundShellID={setBackgroundShellID}
         setPanel={setPanel}
+        setSelectedMessageID={setSelectedMessageID}
         setTextSelectionMessage={setTextSelectionMessage}
         showError={showError}
-        session={session}
       />
       <SelectTextSheet
         opencodeClient={opencodeClient}

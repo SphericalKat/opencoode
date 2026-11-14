@@ -12,6 +12,8 @@ import type { TranscriptItem } from "../../components/assistant-turn";
 import { sessionActivity } from "../../lib/activity";
 import type { AgentActivity } from "../../lib/activity";
 import { withoutReverted } from "../../lib/chat";
+import type { Rect } from "../../lib/menu-position";
+import type { MessageMenuContext } from "./message-menu-entries";
 import { MessageRow } from "./message-rows";
 import type { OpenCodeClient } from "./session-sync";
 import type { SessionState } from "./use-session-state";
@@ -28,10 +30,12 @@ interface UseTranscriptViewOptions {
   awayFromLatest: boolean;
   followingLatest: boolean;
   foreground: boolean;
+  menu: MessageMenuContext;
+  openMessageMenu: (id: string, anchor: Rect) => void;
   opencodeClient: OpenCodeClient;
   screenReader: boolean;
-  selectMessage: (id: string) => void;
   selectedMessageID: string | null;
+  setSelectedMessageID: (id: string) => void;
   sessionID: string;
   stopping: boolean;
   visible: boolean;
@@ -42,11 +46,13 @@ export const useTranscriptView = ({
   awayFromLatest,
   followingLatest,
   foreground,
+  menu,
+  openMessageMenu,
   opencodeClient,
   screenReader,
-  selectMessage,
   selectedMessageID,
   sessionID,
+  setSelectedMessageID,
   stopping,
   visible,
   sync,
@@ -123,7 +129,9 @@ export const useTranscriptView = ({
         key={sourceKey}
         sourceKey={sourceKey}
         message={message}
-        onSelect={selectMessage}
+        menu={menu}
+        onMenu={openMessageMenu}
+        onSelect={setSelectedMessageID}
         selected={message.id === selectedMessageID}
         selectionActive={!!selectedMessageID}
         screenReader={screenReader}
@@ -134,7 +142,9 @@ export const useTranscriptView = ({
       </MessageRow>
     ),
     [
-      selectMessage,
+      menu,
+      openMessageMenu,
+      setSelectedMessageID,
       selectedMessageID,
       screenReader,
       opencodeClient,
@@ -158,7 +168,9 @@ export const useTranscriptView = ({
         <MessageRow
           message={item.message}
           animate={visible && foreground && streamStatus === "Live"}
-          onSelect={selectMessage}
+          menu={menu}
+          onMenu={openMessageMenu}
+          onSelect={setSelectedMessageID}
           selected={item.id === selectedMessageID}
           selectionActive={!!selectedMessageID}
           screenReader={screenReader}
@@ -168,7 +180,9 @@ export const useTranscriptView = ({
       ),
     [
       renderSource,
-      selectMessage,
+      menu,
+      openMessageMenu,
+      setSelectedMessageID,
       selectedMessageID,
       screenReader,
       opencodeClient,
