@@ -7,6 +7,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking } from "react-native";
 
+import { SheetGroup, SheetRow } from "../../components/list-sheet";
 import { DynamicFields } from "../../components/session-forms";
 import {
   Button,
@@ -185,26 +186,29 @@ export const ConnectIntegration = ({
             Choose a connection method. Credentials stay on your OpenCode
             server.
           </BodyText>
-          {integration.methods.map((item, index) => (
-            <Button
-              key={index}
-              title={
-                item.type === "env"
-                  ? `Server environment: ${item.names.join(", ")}`
-                  : item.label || (item.type === "key" ? "API key" : item.type)
-              }
-              selected={method === item}
-              variant={method === item ? "primary" : "secondary"}
-              onPress={() => {
-                setMethod(item);
-                setError(null);
-                setFieldErrors({});
-                setValues(
-                  initialFormValues("form" in item ? (item.form ?? []) : [])
-                );
-              }}
-            />
-          ))}
+          <SheetGroup>
+            {integration.methods.map((item, index) => (
+              <SheetRow
+                key={index}
+                label={
+                  item.type === "env"
+                    ? `Server environment: ${item.names.join(", ")}`
+                    : item.label ||
+                      (item.type === "key" ? "API key" : item.type)
+                }
+                checked={method === item}
+                accessibilityRole="radio"
+                onPress={() => {
+                  setMethod(item);
+                  setError(null);
+                  setFieldErrors({});
+                  setValues(
+                    initialFormValues("form" in item ? (item.form ?? []) : [])
+                  );
+                }}
+              />
+            ))}
+          </SheetGroup>
           {method?.type === "env" && (
             <BodyText muted>
               Set these environment variables on the server, then restart

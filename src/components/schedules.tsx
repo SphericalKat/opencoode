@@ -6,6 +6,7 @@ import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { prepareSchedule } from "../lib/schedules";
 import type { ScheduleDraft } from "../lib/schedules";
+import { SelectMenu } from "./select";
 import { useUndoableRemoval } from "./snackbar";
 import { Button, Busy, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
@@ -19,11 +20,11 @@ const emptyDraft: ScheduleDraft = {
   trigger: "",
   until: "",
 };
-const modes = [
-  { id: "in", title: "After a delay" },
-  { id: "at", title: "At a time" },
-  { id: "every", title: "Repeat" },
-  { id: "cron", title: "Cron" },
+const modeOptions = [
+  { label: "After a delay", value: "in" },
+  { label: "At a time", value: "at" },
+  { label: "Repeat", value: "every" },
+  { label: "Cron", value: "cron" },
 ] as const;
 
 const triggerLabel = (item: ScheduleInfo) => {
@@ -236,23 +237,15 @@ export const Schedules = ({
             value={draft.prompt}
             onChangeText={(value) => change("prompt", value)}
           />
-          <Row>
-            {modes.map((mode) => (
-              <Button
-                key={mode.id}
-                title={mode.title}
-                size="compact"
-                variant={draft.mode === mode.id ? "primary" : "secondary"}
-                onPress={() =>
-                  setDraft((previous) => ({
-                    ...previous,
-                    mode: mode.id,
-                    trigger: "",
-                  }))
-                }
-              />
-            ))}
-          </Row>
+          <SelectMenu
+            accessibilityLabel="Schedule type"
+            appearance="outline"
+            options={modeOptions}
+            value={draft.mode}
+            onSelect={(mode) =>
+              setDraft((previous) => ({ ...previous, mode, trigger: "" }))
+            }
+          />
           <Field
             label={triggerFieldLabel(draft.mode)}
             placeholder={triggerPlaceholder(draft.mode)}

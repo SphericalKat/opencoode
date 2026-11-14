@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { GlobalForms } from "../../components/global-forms";
+import { SegmentedControl } from "../../components/segmented-control";
 import { useUndoableRemoval } from "../../components/snackbar";
 import {
   Button,
@@ -18,6 +19,11 @@ import { externalURL, withSettingsRequest } from "../../lib/settings";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { Page, SettingsCardHeader, runBusy, useResource } from "./shared";
 import { createStyles } from "./styles";
+
+const serverKindOptions = [
+  { label: "Remote", value: "remote" },
+  { label: "Local", value: "local" },
+] as const;
 
 export const Mcp = ({
   client,
@@ -176,17 +182,12 @@ export const Mcp = ({
           placeholder="my-tools"
         />
         <Row>
-          <Button
-            title="Remote URL"
+          <SegmentedControl
+            accessibilityLabel="Server type"
             disabled={busy}
-            variant={kind === "remote" ? "primary" : "secondary"}
-            onPress={() => setKind("remote")}
-          />
-          <Button
-            title="Server command"
-            disabled={busy}
-            variant={kind === "local" ? "primary" : "secondary"}
-            onPress={() => setKind("local")}
+            options={serverKindOptions}
+            value={kind}
+            onChange={setKind}
           />
         </Row>
         {kind === "remote" ? (

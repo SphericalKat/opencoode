@@ -18,6 +18,10 @@ import { copyText } from "../lib/clipboard";
 import { externalURL } from "../lib/settings";
 import { useNativePresentation } from "../lib/sheets";
 import { useTheme } from "../lib/theme";
+import { ListSheet } from "./list-sheet";
+import type { ListSheetOption } from "./list-sheet";
+import { SegmentedControl } from "./segmented-control";
+import { SelectTrigger } from "./select";
 import {
   Button,
   Busy,
@@ -29,6 +33,60 @@ import {
   Row,
   sans,
 } from "./ui";
+
+const DEFAULT_CHOICE = "default";
+const MODEL_LIMIT = 30;
+
+type ToolName = "Usage" | "Search" | "Generate";
+
+const toolOptions: readonly ListSheetOption<string>[] = [
+  { label: "Usage", value: "Usage" },
+  { label: "Search", value: "Search" },
+  { label: "Generate", value: "Generate" },
+];
+
+const generateKindOptions = [
+  { label: "Text", value: "text" },
+  { label: "Image", value: "image" },
+] as const;
+
+const modelKey = (item: ModelInfo) => `${item.providerID}/${item.id}`;
+
+const SheetSelect = ({
+  label,
+  shown,
+  value,
+  options,
+  onSelect,
+}: {
+  label: string;
+  shown: string;
+  value: string;
+  options: readonly ListSheetOption<string>[];
+  onSelect: (value: string) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ alignSelf: "flex-start", maxWidth: "100%" }}>
+      <SelectTrigger
+        appearance="outline"
+        indicator="sheet"
+        value={shown}
+        accessibilityLabel={`${label}: ${shown}`}
+        expanded={open}
+        onPress={() => setOpen(true)}
+      />
+      <ListSheet
+        visible={open}
+        title={label}
+        options={options}
+        value={value}
+        onSelect={onSelect}
+        onClose={() => setOpen(false)}
+      />
+    </View>
+  );
+};
 
 const openLink = async (url: string) => {
   await Linking.openURL(externalURL(url));
@@ -344,23 +402,21 @@ const WebSearch = ({
           }
         }}
       />
-      <Row>
-        <Button
-          title="Default provider"
-          size="compact"
-          variant={provider ? "secondary" : "primary"}
-          onPress={() => setProvider(undefined)}
-        />
-        {providers.map((item) => (
-          <Button
-            key={item.id}
-            title={item.name}
-            size="compact"
-            variant={provider === item.id ? "primary" : "secondary"}
-            onPress={() => setProvider(item.id)}
-          />
-        ))}
-      </Row>
+      <SheetSelect
+        label="Search provider"
+        shown={
+          providers.find((item) => item.id === provider)?.name ??
+          "Default provider"
+        }
+        value={provider ?? DEFAULT_CHOICE}
+        options={[
+          { label: "Default provider", value: DEFAULT_CHOICE },
+          ...providers.map((item) => ({ label: item.name, value: item.id })),
+        ]}
+        onSelect={(next) =>
+          setProvider(next === DEFAULT_CHOICE ? undefined : next)
+        }
+      />
       <Button
         title="Search"
         variant="primary"
@@ -550,49 +606,35 @@ const Generate = ({
         Standalone generation uses the server global configuration. Project-only
         model settings do not apply.
       </BodyText>
-      <Row>
-        <Button
-          title="Text"
-          size="compact"
-          variant={kind === "text" ? "primary" : "secondary"}
-          disabled={busy}
-          onPress={() => {
-            setKind("text");
-            setModel(undefined);
-          }}
-        />
-        <Button
-          title="Image"
-          size="compact"
-          variant={kind === "image" ? "primary" : "secondary"}
-          disabled={busy}
-          onPress={() => {
-            setKind("image");
-            setModel(undefined);
-          }}
-        />
-      </Row>
+      <SegmentedControl
+        accessibilityLabel="Result type"
+        disabled={busy}
+        options={generateKindOptions}
+        value={kind}
+        onChange={(next) => {
+          setKind(next);
+          setModel(undefined);
+        }}
+      />
       <Field label="Find a model" value={query} onChangeText={setQuery} />
       <BodyText muted>{modelLabel}</BodyText>
-      <ScrollView horizontal contentContainerStyle={{ gap: 8 }}>
-        {kind === "text" && (
-          <Button
-            title="Server default"
-            size="compact"
-            variant={model ? "secondary" : "primary"}
-            onPress={() => setModel(undefined)}
-          />
-        )}
-        {matches.slice(0, 30).map((item) => (
-          <Button
-            key={`${item.providerID}/${item.id}`}
-            title={`${item.name} · ${item.providerID}`}
-            size="compact"
-            variant={model === item ? "primary" : "secondary"}
-            onPress={() => setModel(item)}
-          />
-        ))}
-      </ScrollView>
+      <SheetSelect
+        label="Model"
+        shown={modelLabel}
+        value={model ? modelKey(model) : DEFAULT_CHOICE}
+        options={[
+          ...(kind === "text"
+            ? [{ label: "Server default", value: DEFAULT_CHOICE }]
+            : []),
+          ...matches.slice(0, MODEL_LIMIT).map((item) => ({
+            label: `${item.name} · ${item.providerID}`,
+            value: modelKey(item),
+          })),
+        ]}
+        onSelect={(next) =>
+          setModel(matches.find((item) => modelKey(item) === next))
+        }
+      />
       {kind === "image" && !available.length && (
         <BodyText muted>
           No image models are connected. Add one through Accounts or your server
@@ -692,20 +734,18 @@ export const AdvancedSettings = ({
   directory: string;
 }) => {
   useTheme();
-  const [tool, setTool] = useState<"Usage" | "Search" | "Generate">("Usage");
+  const [tool, setTool] = useState<ToolName>("Usage");
   return (
     <View style={{ flex: 1 }}>
-      <Row style={{ padding: 18 }}>
-        {(["Usage", "Search", "Generate"] as const).map((item) => (
-          <Button
-            key={item}
-            title={item}
-            size="compact"
-            variant={tool === item ? "primary" : "secondary"}
-            onPress={() => setTool(item)}
-          />
-        ))}
-      </Row>
+      <View style={{ padding: 18 }}>
+        <SheetSelect
+          label="Tool"
+          shown={tool}
+          value={tool}
+          options={toolOptions}
+          onSelect={(next) => setTool(next as ToolName)}
+        />
+      </View>
       {tool === "Usage" && <Usage client={client} directory={directory} />}
       {tool === "Search" && <WebSearch client={client} directory={directory} />}
       {tool === "Generate" && (

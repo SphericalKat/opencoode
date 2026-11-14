@@ -6,7 +6,13 @@ import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { useTheme } from "../lib/theme";
 import { confirmAction } from "./dialog";
+import { SegmentedControl } from "./segmented-control";
 import { Button, Busy, Card, Empty, ErrorNotice, BodyText, Row } from "./ui";
+
+const childListOptions = [
+  { label: "Current", value: "current" },
+  { label: "Archived", value: "archived" },
+] as const;
 
 const ignore = () => null;
 
@@ -420,17 +426,12 @@ export const ChildSessions = ({
   return (
     <View style={{ gap: 14 }}>
       <Row>
-        <Button
-          title="Current"
-          size="compact"
-          selected={!archived}
-          onPress={() => setArchived(false)}
-        />
-        <Button
-          title="Archived"
-          size="compact"
-          selected={archived}
-          onPress={() => setArchived(true)}
+        <SegmentedControl
+          accessibilityLabel="Child session list"
+          fullWidth={false}
+          options={childListOptions}
+          value={archived ? "archived" : "current"}
+          onChange={(next) => setArchived(next === "archived")}
         />
         <Button
           title="Refresh"

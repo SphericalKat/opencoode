@@ -12,6 +12,9 @@ import {
 import type { FormValues } from "../lib/forms";
 import { playHaptic } from "../lib/haptics";
 import { useTheme } from "../lib/theme";
+import { SegmentedControl } from "./segmented-control";
+import { SelectMenu } from "./select";
+import { Switch } from "./switch";
 import {
   Button,
   Card,
@@ -29,6 +32,9 @@ type BooleanField = Extract<FormField, { type: "boolean" }>;
 type MultiselectField = Extract<FormField, { type: "multiselect" }>;
 type StringField = Extract<FormField, { type: "string" }>;
 type FieldOption = NonNullable<StringField["options"]>[number];
+
+const MAX_SEGMENTS = 3;
+const MAX_SEGMENT_LABEL = 16;
 
 const noErrors: Record<string, string> = {};
 
@@ -85,11 +91,14 @@ export const DynamicFields = ({
           open(field.url);
         }}
       />
-      <Button
-        title={value === true ? "✓ Completed" : "I completed this step"}
-        variant={value === true ? "primary" : "secondary"}
-        onPress={() => change(field.key, value !== true)}
-      />
+      <Row style={{ alignItems: "center", justifyContent: "space-between" }}>
+        <BodyText>Completed</BodyText>
+        <Switch
+          accessibilityLabel="Completed"
+          value={value === true}
+          onValueChange={(next) => change(field.key, next)}
+        />
+      </Row>
     </>
   );
   const renderBoolean = (field: BooleanField, value: FieldValue) => (
@@ -183,23 +192,44 @@ export const DynamicFields = ({
       )}
     </>
   );
+  const renderChoice = (
+    field: StringField,
+    options: FieldOption[],
+    value: FieldValue
+  ) => {
+    const selected = typeof value === "string" ? value : "";
+    const compact =
+      options.length <= MAX_SEGMENTS &&
+      options.every((option) => option.label.length <= MAX_SEGMENT_LABEL);
+    if (compact) {
+      return (
+        <SegmentedControl
+          accessibilityLabel={field.title || field.key}
+          options={options}
+          value={selected}
+          onChange={(next) => change(field.key, next)}
+        />
+      );
+    }
+    const hasSelection = options.some((option) => option.value === selected);
+    return (
+      <SelectMenu
+        accessibilityLabel={field.title || field.key}
+        appearance="outline"
+        label={hasSelection ? undefined : "Select"}
+        options={options}
+        value={selected}
+        onSelect={(next) => change(field.key, next)}
+      />
+    );
+  };
   const renderOptions = (
     field: StringField,
     options: FieldOption[],
     value: FieldValue
   ) => (
     <>
-      <Row>
-        {options.map((option) => (
-          <Button
-            key={option.value}
-            title={option.label}
-            variant={value === option.value ? "primary" : "secondary"}
-            size="compact"
-            onPress={() => change(field.key, option.value)}
-          />
-        ))}
-      </Row>
+      {renderChoice(field, options, value)}
       {field.custom && (
         <Field
           label={`Custom value for ${field.title || field.key}`}
