@@ -6,6 +6,10 @@ Language for conversations with coding agents in OpenCoode.
 
 **Server**: A saved connection to an OpenCode or Pi backend. Each saved connection is a separate server choice, even when several connections point to the same physical machine. _Avoid_: Machine (when referring to a saved connection)
 
+**SSH target**: The SSH destination that a Server connects through, such as `user@host -p 2222`. The app logs in to it and finds the OpenCode server there. _Avoid_: SSH server, machine
+
+**Tunnel**: The SSH port forward that carries the app's traffic from the phone to an OpenCode server on the SSH target. _Avoid_: SSH connection (when referring to the forward)
+
 **Tool-result image**: An image returned by a tool during an agent's work, such as a captured screenshot. It is distinct from an image attached by the user to a prompt. _Avoid_: COT image
 
 ### Session sheet
