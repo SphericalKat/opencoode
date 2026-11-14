@@ -23,6 +23,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { errorMessage } from "../lib/client";
 import type { Client, Connection } from "../lib/client";
+import { withAlpha } from "../lib/color";
 import { useSheetCoordinator } from "../lib/sheets";
 import {
   persistentInputFrame,
@@ -58,6 +59,14 @@ interface Props {
 type Mode = "desktop" | "workspace";
 type ConnectionStatus = "connecting" | "connected" | "disconnected";
 type ControlMessage = object & Record<"type", unknown>;
+const sixDigitHex = /^#[0-9a-f]{6}$/iu;
+const selectionColor = (
+  colors: ThemeColors,
+  scheme: "light" | "dark"
+): string =>
+  sixDigitHex.test(colors.text)
+    ? withAlpha(colors.text, scheme === "dark" ? 0.25 : 0.2)
+    : colors.selected;
 const ModalSafeAreaRoot =
   Platform.OS === "web" ? React.Fragment : SafeAreaProvider;
 
@@ -175,7 +184,7 @@ const TerminalSession = ({
   onExit,
 }: Props & { terminal: Pty; mode: Mode; onExit: () => void }) => {
   const reducedMotion = useMotionPreference();
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { suspended, recoveryPending, presentSheet, dismissSheet } =
     useSheetCoordinator();
@@ -317,17 +326,17 @@ const TerminalSession = ({
         brightGreen: colors.success,
         brightRed: colors.danger,
         brightWhite: colors.text,
-        cursor: colors.focus,
+        cursor: colors.text,
         cursorAccent: colors.bg,
         foreground: colors.text,
         green: colors.success,
         red: colors.danger,
-        selectionBackground: colors.selected,
+        selectionBackground: selectionColor(colors, scheme),
         white: colors.muted,
       },
       type: "theme",
     });
-  }, [colors, ready]);
+  }, [colors, ready, scheme]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) =>

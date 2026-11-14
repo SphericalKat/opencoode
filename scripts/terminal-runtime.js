@@ -5,8 +5,9 @@
   let inputEnabled = true;
   const term = new Terminal({
     cursorBlink: true,
+    cursorStyle: "bar",
     fontFamily: "Menlo, Consolas, monospace",
-    fontSize: 13,
+    fontSize: 14,
     screenReaderMode: true,
     scrollback: 2000,
   });
