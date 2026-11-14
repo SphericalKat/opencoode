@@ -15,6 +15,7 @@ interface UseSendMessageOptions {
   alive: Alive;
   capabilities: Capabilities;
   client: CoreClient;
+  commitModel: () => Promise<void>;
   draftKey: string;
   jumpToLatest: () => void;
   opencodeClient: OpenCodeClient;
@@ -32,6 +33,7 @@ export const useSendMessage = ({
   alive,
   capabilities,
   client,
+  commitModel,
   draftKey,
   jumpToLatest,
   opencodeClient,
@@ -149,12 +151,14 @@ export const useSendMessage = ({
               if (!opencodeClient || !capabilities.commands) {
                 throw new Error("Commands are unavailable for this connection");
               }
+              await commitModel();
               await opencodeClient.session.command({
                 ...common,
                 name: submission.name,
                 text: submission.text,
               });
             } else {
+              await commitModel();
               await client.session.prompt({ ...common, text: submission.text });
             }
           }

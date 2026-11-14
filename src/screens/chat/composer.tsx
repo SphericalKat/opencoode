@@ -148,18 +148,16 @@ export const ModelTrigger = ({
 
 const VARIANT_CHIP_MAX_WIDTH = 220;
 
-interface VariantTriggerProps extends Pick<
+type VariantTriggerProps = Pick<
   ChatController,
-  "capabilities" | "currentModel" | "pending" | "setPanel"
-> {
-  session: SessionInfo;
-}
+  "capabilities" | "currentModel" | "pending" | "selectedVariant" | "setPanel"
+>;
 
 export const VariantTrigger = ({
   capabilities,
   currentModel,
   pending,
-  session,
+  selectedVariant,
   setPanel,
 }: VariantTriggerProps) => {
   const optionCount =
@@ -168,7 +166,7 @@ export const VariantTrigger = ({
   if (optionCount < 2) {
     return null;
   }
-  const label = capitalizeFirst(session.model?.variant ?? "default");
+  const label = capitalizeFirst(selectedVariant ?? "default");
   return (
     <SelectTrigger
       appearance="chip"
@@ -256,6 +254,7 @@ interface ComposerToolbarProps extends Pick<
   | "interrupt"
   | "pending"
   | "providerLabel"
+  | "selectedVariant"
   | "send"
   | "setPanel"
   | "stopReady"
@@ -274,6 +273,7 @@ export const ComposerToolbar = ({
   interrupt,
   pending,
   providerLabel,
+  selectedVariant,
   send,
   session,
   setPanel,
@@ -313,8 +313,8 @@ export const ComposerToolbar = ({
           capabilities={capabilities}
           currentModel={currentModel}
           pending={pending}
+          selectedVariant={selectedVariant}
           setPanel={setPanel}
-          session={session}
         />
       </ScrollView>
       <StopControls
@@ -354,6 +354,7 @@ interface ComposerBodyProps extends Pick<
   | "minimumComposerHeight"
   | "pending"
   | "providerLabel"
+  | "selectedVariant"
   | "restoredSkillIDs"
   | "selectedAgentIDs"
   | "selectedSkills"
@@ -388,6 +389,7 @@ export const ComposerBody = ({
   minimumComposerHeight,
   pending,
   providerLabel,
+  selectedVariant,
   restoredSkillIDs,
   selectedAgentIDs,
   selectedSkills,
@@ -459,6 +461,7 @@ export const ComposerBody = ({
         interrupt={interrupt}
         pending={pending}
         providerLabel={providerLabel}
+        selectedVariant={selectedVariant}
         send={send}
         setPanel={setPanel}
         stopReady={stopReady}
@@ -491,6 +494,7 @@ interface ComposerProps extends Pick<
   | "minimumComposerHeight"
   | "pending"
   | "providerLabel"
+  | "selectedVariant"
   | "restoredSkillIDs"
   | "selectedAgentIDs"
   | "selectedSkills"
@@ -534,6 +538,7 @@ export const Composer = ({
   minimumComposerHeight,
   pending,
   providerLabel,
+  selectedVariant,
   restoredSkillIDs,
   selectedAgentIDs,
   selectedSkills,
@@ -588,6 +593,7 @@ export const Composer = ({
             minimumComposerHeight={minimumComposerHeight}
             pending={pending}
             providerLabel={providerLabel}
+            selectedVariant={selectedVariant}
             restoredSkillIDs={restoredSkillIDs}
             selectedAgentIDs={selectedAgentIDs}
             selectedSkills={selectedSkills}

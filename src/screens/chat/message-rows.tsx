@@ -3,7 +3,14 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client";
 import React, { memo, useCallback } from "react";
-import { Image, Platform, Pressable, View } from "react-native";
+import {
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { useContextMenu, useMenuAnchor } from "../../components/anchored-menu";
 import { AssistantActivityPart as AssistantPart } from "../../components/assistant-turn";
@@ -17,9 +24,11 @@ import { playHaptic } from "../../lib/haptics";
 import type { Rect } from "../../lib/menu-position";
 import { MessageActionsContext } from "../../lib/message-actions";
 import { useTheme, useThemedStyles } from "../../lib/theme";
+import { agentSwitchLabel, modelSwitchLabel } from "../../lib/transcript";
 import { CodeBlock, MessageText } from "./controls";
 import { messageMenuEntries, messageMenuInput } from "./message-menu-entries";
 import type { MessageMenuContext } from "./message-menu-entries";
+import { capitalizeFirst } from "./model-label";
 import { createStyles } from "./styles";
 
 export const CompletedAssistantFooter = ({
@@ -45,7 +54,10 @@ export const CompletedAssistantFooter = ({
   );
 };
 
-export const messageText = (message: SessionMessageInfo): string => {
+export const messageText = (
+  message: SessionMessageInfo,
+  modelName?: string
+): string => {
   if ("text" in message) {
     return message.text;
   }
@@ -65,10 +77,10 @@ export const messageText = (message: SessionMessageInfo): string => {
     return "error" in message ? message.error.message : "Context compaction";
   }
   if (message.type === "agent-switched") {
-    return `Agent: ${message.agent}`;
+    return agentSwitchLabel(message.agent);
   }
   if (message.type === "model-switched") {
-    return `Model: ${message.model.id}`;
+    return modelSwitchLabel(message, modelName).label;
   }
   if (message.type === "location-switched") {
     return `Directory: ${message.location.directory}`;
@@ -84,6 +96,69 @@ export const messagePreview = (message: SessionMessageInfo): string => {
       : "Assistant message";
   }
   return messageText(message).slice(0, 240);
+};
+
+const separatorStyles = StyleSheet.create({
+  center: { alignItems: "center", flexDirection: "row", flexShrink: 1, gap: 6 },
+  dot: { borderRadius: 1.125, height: 2.25, width: 2.25 },
+  dotBox: {
+    alignItems: "center",
+    height: 6,
+    justifyContent: "center",
+    width: 6,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "400",
+    letterSpacing: -0.04,
+    lineHeight: 16,
+  },
+  line: { flex: 1, height: StyleSheet.hairlineWidth },
+  row: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 16,
+    paddingVertical: 4,
+  },
+});
+
+const SwitchSeparator = ({
+  label,
+  variant,
+}: {
+  label: string;
+  variant?: string;
+}) => {
+  const { colors } = useTheme();
+  const labelStyle = [separatorStyles.label, { color: colors.faint }];
+  return (
+    <View style={separatorStyles.row}>
+      <View
+        style={[separatorStyles.line, { backgroundColor: colors.border }]}
+      />
+      <View style={separatorStyles.center}>
+        <Text numberOfLines={1} style={[labelStyle, { flexShrink: 1 }]}>
+          {label}
+        </Text>
+        {variant && (
+          <>
+            <View style={separatorStyles.dotBox}>
+              <View
+                style={[separatorStyles.dot, { backgroundColor: colors.faint }]}
+              />
+            </View>
+            <Text numberOfLines={1} style={[labelStyle, { flexShrink: 0 }]}>
+              {capitalizeFirst(variant)}
+            </Text>
+          </>
+        )}
+      </View>
+      <View
+        style={[separatorStyles.line, { backgroundColor: colors.border }]}
+      />
+    </View>
+  );
 };
 
 export const renderAssistantMessage = ({
@@ -171,6 +246,7 @@ export const MessageContentBody = ({
   animate,
   client,
   directory,
+  modelName,
   selectable,
 }: {
   message: SessionMessageInfo;
@@ -179,6 +255,7 @@ export const MessageContentBody = ({
   animate?: boolean;
   client?: Client;
   directory: string;
+  modelName?: string;
   selectable: boolean;
 }) => {
   const styles = useThemedStyles(createStyles);
@@ -240,19 +317,10 @@ export const MessageContentBody = ({
     );
   }
   if (message.type === "agent-switched") {
-    return (
-      <BodyText muted style={styles.notice}>
-        Agent → {message.agent}
-      </BodyText>
-    );
+    return <SwitchSeparator label={agentSwitchLabel(message.agent)} />;
   }
   if (message.type === "model-switched") {
-    return (
-      <BodyText muted style={styles.notice}>
-        Model → {message.model.id}
-        {message.model.variant ? ` · ${message.model.variant}` : ""}
-      </BodyText>
-    );
+    return <SwitchSeparator {...modelSwitchLabel(message, modelName)} />;
   }
   if (message.type === "location-switched") {
     return (
@@ -294,6 +362,7 @@ export interface MessageRowProps {
   screenReader?: boolean;
   client?: Client;
   directory: string;
+  modelName?: string;
 }
 export const MessageRowBody = ({
   message,
@@ -310,15 +379,17 @@ export const MessageRowBody = ({
   screenReader,
   client,
   directory,
+  modelName,
 }: MessageRowProps) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const hasEntries = useCallback(
     () =>
       !!menu &&
-      messageMenuEntries(messageMenuInput(message, messageText(message), menu))
-        .length > 0,
-    [menu, message]
+      messageMenuEntries(
+        messageMenuInput(message, messageText(message, modelName), menu)
+      ).length > 0,
+    [menu, message, modelName]
   );
   const contextMenu = useContextMenu({
     canOpen: hasEntries,
@@ -350,6 +421,7 @@ export const MessageRowBody = ({
           message={message}
           client={client}
           directory={directory}
+          modelName={modelName}
           selectable
         />
       )
@@ -414,6 +486,7 @@ export const MessageRowBody = ({
             animate={animate}
             client={client}
             directory={directory}
+            modelName={modelName}
             selectable={false}
           />
         )}

@@ -173,10 +173,20 @@ export const useChatController = ({
     setPanel,
     showError,
   });
+  const modelChoice = useModelSelection({
+    client,
+    defaultModel,
+    modelPreferences,
+    sessionID,
+    setPanel,
+    showError,
+    sync,
+  });
   const messageSend = useSendMessage({
     alive,
     capabilities,
     client,
+    commitModel: modelChoice.commitModel,
     composer,
     draftKey,
     jumpToLatest,
@@ -233,14 +243,6 @@ export const useChatController = ({
     setPanel,
     showError,
     withNativePresentation,
-  });
-  const modelChoice = useModelSelection({
-    client,
-    defaultModel,
-    modelPreferences,
-    run,
-    sessionID,
-    sync,
   });
   const menuContext = useMemo<MessageMenuContext>(
     () => ({
@@ -374,6 +376,7 @@ export const useChatController = ({
     selectedAgentIDs: composer.selectedAgentIDs,
     selectedMessageID: selection.selectedMessageID,
     selectedSkills: composer.selectedSkills,
+    selectedVariant: modelChoice.selectedVariant,
     send: messageSend.send,
     sending: messageSend.sending,
     serverID,

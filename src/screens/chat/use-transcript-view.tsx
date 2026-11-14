@@ -66,7 +66,15 @@ export const useTranscriptView = ({
     sessionStatus,
     streamStatus,
     backendWaiting,
+    models,
   } = sync;
+  const modelNames = useMemo(
+    () =>
+      new Map(
+        models.map((model) => [`${model.providerID}/${model.id}`, model.name])
+      ),
+    [models]
+  );
   const revertMessageID = session?.revert?.messageID;
   const messages = useMemo(
     () => withoutReverted(loadedMessages, revertMessageID),
@@ -176,9 +184,17 @@ export const useTranscriptView = ({
           screenReader={screenReader}
           client={opencodeClient}
           directory={messageDirectory}
+          modelName={
+            item.message.type === "model-switched"
+              ? modelNames.get(
+                  `${item.message.model.providerID}/${item.message.model.id}`
+                )
+              : undefined
+          }
         />
       ),
     [
+      modelNames,
       renderSource,
       menu,
       openMessageMenu,

@@ -1,4 +1,4 @@
-import type { ModelInfo, SessionInfo } from "@opencode/client";
+import type { ModelInfo } from "@opencode/client";
 import { FlatList, Pressable, ScrollView, View } from "react-native";
 
 import { ListSheet } from "../../components/list-sheet";
@@ -19,7 +19,7 @@ import { emptyModelsTitle, emptyModelsDetail } from "./labels";
 import { capitalizeFirst } from "./model-label";
 import type { ChatController } from "./use-chat-controller";
 
-interface VariantsSheetProps extends Pick<
+type VariantsSheetProps = Pick<
   ChatController,
   | "capabilities"
   | "chooseModel"
@@ -27,10 +27,9 @@ interface VariantsSheetProps extends Pick<
   | "error"
   | "panel"
   | "pending"
+  | "selectedVariant"
   | "setPanel"
-> {
-  session: SessionInfo;
-}
+>;
 
 const defaultVariantValue = "default";
 
@@ -41,10 +40,10 @@ export const VariantsSheet = ({
   error,
   panel,
   pending,
-  session,
+  selectedVariant: stagedVariant,
   setPanel,
 }: VariantsSheetProps) => {
-  const selectedVariant = session.model?.variant ?? defaultVariantValue;
+  const selectedVariant = stagedVariant ?? defaultVariantValue;
   const options: ListSheetOption<string>[] = [];
   if (currentModel && capabilities.defaultVariant) {
     options.push({
@@ -143,19 +142,22 @@ export const ModelSearchBar = ({
   </View>
 );
 
-interface RenderModelVariantsProps extends Pick<
+type RenderModelVariantsProps = Pick<
   ChatController,
-  "capabilities" | "chooseModel" | "currentModel" | "pending" | "styles"
-> {
-  session: SessionInfo;
-}
+  | "capabilities"
+  | "chooseModel"
+  | "currentModel"
+  | "pending"
+  | "selectedVariant"
+  | "styles"
+>;
 
 export const renderModelVariants = ({
   capabilities,
   chooseModel,
   currentModel,
   pending,
-  session,
+  selectedVariant,
   styles,
 }: RenderModelVariantsProps) =>
   currentModel?.variants.length ? (
@@ -170,7 +172,7 @@ export const renderModelVariants = ({
           <Button
             title="Model default"
             size="compact"
-            selected={!session.model?.variant}
+            selected={!selectedVariant}
             disabled={pending}
             onPress={() => {
               void chooseModel(currentModel);
@@ -181,7 +183,7 @@ export const renderModelVariants = ({
           <Button
             key={variant.id}
             title={variant.id}
-            selected={session.model?.variant === variant.id}
+            selected={selectedVariant === variant.id}
             size="compact"
             disabled={pending}
             onPress={() => {
@@ -197,28 +199,28 @@ interface RenderModelRowProps extends Pick<
   ChatController,
   | "chooseModel"
   | "colors"
+  | "currentModel"
   | "modelPreferences"
   | "pending"
   | "serverID"
   | "styles"
 > {
-  session: SessionInfo;
   model: ModelInfo;
 }
 
 export const renderModelRow = ({
   chooseModel,
   colors,
+  currentModel,
   model,
   modelPreferences,
   pending,
   serverID,
-  session,
   styles,
 }: RenderModelRowProps) => {
   const selected =
-    session.model?.id === model.id &&
-    session.model.providerID === model.providerID;
+    currentModel?.id === model.id &&
+    currentModel.providerID === model.providerID;
   const favorite = modelPreferences.favoriteIDs.includes(
     modelPreferenceID(model.providerID, model.id)
   );
@@ -233,7 +235,7 @@ export const renderModelRow = ({
       onPress={() => {
         if (!selected) {
           playHaptic("select");
-          void chooseModel(model);
+          void chooseModel(model, undefined, true);
         }
       }}
       style={({ pressed }) => [
@@ -337,7 +339,7 @@ export const renderModelsEmpty = ({
   </View>
 );
 
-interface ModelListProps extends Pick<
+type ModelListProps = Pick<
   ChatController,
   | "capabilities"
   | "chooseModel"
@@ -351,15 +353,14 @@ interface ModelListProps extends Pick<
   | "onOpenNavigation"
   | "pending"
   | "scopedModels"
+  | "selectedVariant"
   | "serverID"
   | "setCatalogRevision"
   | "setModelFilter"
   | "setModelSearch"
   | "setPanel"
   | "styles"
-> {
-  session: SessionInfo;
-}
+>;
 
 export const ModelList = ({
   capabilities,
@@ -375,7 +376,7 @@ export const ModelList = ({
   pending,
   scopedModels,
   serverID,
-  session,
+  selectedVariant,
   setCatalogRevision,
   setModelFilter,
   setModelSearch,
@@ -397,18 +398,18 @@ export const ModelList = ({
       chooseModel,
       currentModel,
       pending,
-      session,
+      selectedVariant,
       styles,
     })}
     renderItem={({ item: model }) =>
       renderModelRow({
         chooseModel,
         colors,
+        currentModel,
         model,
         modelPreferences,
         pending,
         serverID,
-        session,
         styles,
       })
     }
@@ -426,7 +427,7 @@ export const ModelList = ({
   />
 );
 
-interface ModelPickerProps extends Pick<
+type ModelPickerProps = Pick<
   ChatController,
   | "capabilities"
   | "catalogError"
@@ -442,15 +443,14 @@ interface ModelPickerProps extends Pick<
   | "onOpenNavigation"
   | "pending"
   | "scopedModels"
+  | "selectedVariant"
   | "serverID"
   | "setCatalogRevision"
   | "setModelFilter"
   | "setModelSearch"
   | "setPanel"
   | "styles"
-> {
-  session: SessionInfo;
-}
+>;
 
 export const ModelPicker = ({
   capabilities,
@@ -468,7 +468,7 @@ export const ModelPicker = ({
   pending,
   scopedModels,
   serverID,
-  session,
+  selectedVariant,
   setCatalogRevision,
   setModelFilter,
   setModelSearch,
@@ -506,12 +506,12 @@ export const ModelPicker = ({
       setModelSearch={setModelSearch}
       setPanel={setPanel}
       styles={styles}
-      session={session}
+      selectedVariant={selectedVariant}
     />
   </View>
 );
 
-interface ModelsSheetProps extends Pick<
+type ModelsSheetProps = Pick<
   ChatController,
   | "capabilities"
   | "catalogError"
@@ -528,15 +528,14 @@ interface ModelsSheetProps extends Pick<
   | "panel"
   | "pending"
   | "scopedModels"
+  | "selectedVariant"
   | "serverID"
   | "setCatalogRevision"
   | "setModelFilter"
   | "setModelSearch"
   | "setPanel"
   | "styles"
-> {
-  session: SessionInfo;
-}
+>;
 
 export const ModelsSheet = ({
   capabilities,
@@ -555,7 +554,7 @@ export const ModelsSheet = ({
   pending,
   scopedModels,
   serverID,
-  session,
+  selectedVariant,
   setCatalogRevision,
   setModelFilter,
   setModelSearch,
@@ -590,7 +589,7 @@ export const ModelsSheet = ({
         setModelSearch={setModelSearch}
         setPanel={setPanel}
         styles={styles}
-        session={session}
+        selectedVariant={selectedVariant}
       />
     )}
   </Sheet>

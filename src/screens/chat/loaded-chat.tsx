@@ -79,6 +79,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     pending,
     permissions,
     providerLabel,
+    selectedVariant,
     refresh,
     renderMessage,
     restoredSkillIDs,
@@ -204,6 +205,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         minimumComposerHeight={minimumComposerHeight}
         pending={pending}
         providerLabel={providerLabel}
+        selectedVariant={selectedVariant}
         restoredSkillIDs={restoredSkillIDs}
         selectedAgentIDs={selectedAgentIDs}
         selectedSkills={selectedSkills}
@@ -257,6 +259,7 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     queueDevicePicker,
     run,
     scopedModels,
+    selectedVariant,
     serverID,
     sessionID,
     setBackgroundDirectory,
@@ -301,8 +304,8 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         error={error}
         panel={panel}
         pending={pending}
+        selectedVariant={selectedVariant}
         setPanel={setPanel}
-        session={session}
       />
       <ModelsSheet
         capabilities={capabilities}
@@ -325,8 +328,8 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         setModelFilter={setModelFilter}
         setModelSearch={setModelSearch}
         setPanel={setPanel}
+        selectedVariant={selectedVariant}
         styles={styles}
-        session={session}
       />
       <AgentsSheet
         agents={agents}
