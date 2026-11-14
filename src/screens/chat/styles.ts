@@ -23,7 +23,6 @@ export const createStyles = (colors: ThemeColors) =>
       paddingVertical: 10,
     },
     betaComposerToolbar: { gap: 0 },
-    betaLatestOverlay: { bottom: 12, position: "absolute", right: 16 },
     betaMessages: { flexGrow: 1, padding: 16, paddingBottom: 24 },
     betaModelName: { flex: 1, minWidth: 0 },
     betaModelTrigger: { gap: 3, minWidth: 0, paddingHorizontal: 4 },
@@ -138,6 +137,13 @@ export const createStyles = (colors: ThemeColors) =>
       height: Platform.OS === "android" ? 48 : 44,
       justifyContent: "center",
       width: Platform.OS === "android" ? 48 : 44,
+    },
+    jumpToLatest: {
+      alignItems: "center",
+      bottom: 32,
+      left: 0,
+      position: "absolute",
+      right: 0,
     },
     modelList: { paddingBottom: 24, paddingHorizontal: 12 },
     modelRow: {
