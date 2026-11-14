@@ -1,10 +1,10 @@
 import {
-  BottomSheetBackdrop,
   BottomSheetHandle,
   BottomSheetModal,
   BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
+  useBottomSheet,
   useBottomSheetInternal,
   useBottomSheetTimingConfigs,
 } from "@gorhom/bottom-sheet";
@@ -18,8 +18,10 @@ import React, {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   ActivityIndicator,
@@ -41,7 +43,13 @@ import type {
   TextProps,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { Easing, ReduceMotion } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  ReduceMotion,
+  useAnimatedStyle,
+} from "react-native-reanimated";
 import {
   SafeAreaProvider,
   SafeAreaView,
@@ -740,6 +748,93 @@ const renderSheetBody = ({
 
 const fitSheetMaxWidth = 680;
 
+interface FitSheetChrome {
+  header: React.ReactNode;
+  title: string;
+}
+
+interface FitSheetChromeStore {
+  get: () => FitSheetChrome | null;
+  set: (next: FitSheetChrome) => void;
+  subscribe: (listener: () => void) => () => void;
+}
+
+const createChromeStore = (): FitSheetChromeStore => {
+  let value: FitSheetChrome | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set: (next) => {
+      value = next;
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+};
+
+// gorhom remounts a handle or backdrop whenever its component identity
+// changes, and a remount during a close animation resets the sheet's layout
+// so the close never finishes. These components keep one identity for the
+// life of the sheet and read their changing content from the store.
+const createFitSheetChrome = (store: FitSheetChromeStore) => {
+  // gorhom's BottomSheetBackdrop passes a dependency array to
+  // useAnimatedStyle, which Reanimated warns about on every sheet open.
+  const Backdrop = ({ animatedIndex, style }: BottomSheetBackdropProps) => {
+    const { colors } = useTheme();
+    const { close } = useBottomSheet();
+    const chrome = useSyncExternalStore(store.subscribe, store.get);
+    const fade = useAnimatedStyle(() => ({
+      opacity: interpolate(
+        animatedIndex.get(),
+        [-1, 0],
+        [0, 1],
+        Extrapolation.CLAMP
+      ),
+    }));
+    return (
+      <Animated.View style={[style, { backgroundColor: colors.scrim }, fade]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Close ${chrome?.title ?? ""}`}
+          onPress={() => close()}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+    );
+  };
+  const Handle = (props: BottomSheetHandleProps) => {
+    const styles = useThemedStyles(createStyles);
+    const insets = useSafeAreaInsets();
+    const chrome = useSyncExternalStore(store.subscribe, store.get);
+    return (
+      <BottomSheetHandle
+        {...props}
+        accessible={false}
+        indicatorStyle={styles.fitSheetHandle}
+        style={[
+          styles.fitSheetHandleRow,
+          { paddingLeft: insets.left, paddingRight: insets.right },
+        ]}
+      >
+        {chrome?.header}
+      </BottomSheetHandle>
+    );
+  };
+  return { Backdrop, Handle };
+};
+
+const createFitSheetParts = () => {
+  const chrome = createChromeStore();
+  return { chrome, ...createFitSheetChrome(chrome) };
+};
+
 const FitSheet = ({
   visible,
   title,
@@ -766,6 +861,7 @@ const FitSheet = ({
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const modal = useRef<BottomSheetModal>(null);
+  const { chrome, Backdrop, Handle } = useMemo(() => createFitSheetParts(), []);
   const animationConfigs = useBottomSheetTimingConfigs({
     duration: fitSheetDuration,
     easing: fitSheetEasing,
@@ -814,32 +910,9 @@ const FitSheet = ({
     onPresentedChange(false);
     onDismiss();
   }, [onPresentedChange, onDismiss]);
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...props}
-        accessibilityLabel={`Close ${title}`}
-        accessibilityHint={null}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        opacity={1}
-        style={[props.style, { backgroundColor: colors.scrim }]}
-        pressBehavior="close"
-      />
-    ),
-    [title, colors.scrim]
-  );
-  const sideInsets = { paddingLeft: insets.left, paddingRight: insets.right };
-  const renderHandle = (props: BottomSheetHandleProps) => (
-    <BottomSheetHandle
-      {...props}
-      accessible={false}
-      indicatorStyle={styles.fitSheetHandle}
-      style={[styles.fitSheetHandleRow, sideInsets]}
-    >
-      {header}
-    </BottomSheetHandle>
-  );
+  useLayoutEffect(() => {
+    chrome.set({ header, title });
+  }, [chrome, header, title]);
   const contentInsets = {
     paddingBottom: Math.max(fitSheetMinInset, insets.bottom),
     paddingLeft: Math.max(fitSheetMinInset, insets.left),
@@ -858,8 +931,8 @@ const FitSheet = ({
       topInset={insets.top}
       overrideReduceMotion={reduced ? ReduceMotion.Always : ReduceMotion.Never}
       keyboardBlurBehavior="restore"
-      backdropComponent={renderBackdrop}
-      handleComponent={renderHandle}
+      backdropComponent={Backdrop}
+      handleComponent={Handle}
       backgroundStyle={[
         styles.fitSheet,
         { backgroundColor: colors.frame, boxShadow: sheetShadow },
