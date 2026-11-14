@@ -1,7 +1,12 @@
-import { BottomSheetSectionList } from "@gorhom/bottom-sheet";
 import type { ModelInfo } from "@opencode/client";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import {
+  Pressable,
+  SectionList,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -9,6 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { AnchoredMenu, useContextMenu } from "../../components/anchored-menu";
+import { EdgeFade, useScrollEdges } from "../../components/edge-fade";
 import { IconButton } from "../../components/icon-button";
 import {
   ListSheet,
@@ -357,6 +363,7 @@ export const ModelPicker = ({
 }: ModelPickerProps) => {
   const { height } = useWindowDimensions();
   const { colors } = useTheme();
+  const listEdges = useScrollEdges("y");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
   const pressedModel = useRef<ModelInfo | null>(null);
@@ -417,57 +424,64 @@ export const ModelPicker = ({
           setCatalogRevision((value) => value + 1);
         }}
       />
-      <BottomSheetSectionList
-        sections={sections}
-        keyExtractor={(model) => `${model.providerID}/${model.id}`}
-        style={{ maxHeight: Math.min(maxListHeight, listHeightRatio * height) }}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        stickySectionHeadersEnabled
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <ModelsEmpty
-            enabledModels={enabledModels}
-            onOpenNavigation={onOpenNavigation}
-            setCatalogRevision={setCatalogRevision}
-            setPanel={setPanel}
-          />
-        }
-        renderSectionHeader={({ section }) => (
-          <SectionHeader
-            collapsed={Boolean(collapsed[section.key])}
-            disabled={searching}
-            first={section.first}
-            group={section}
-            onToggle={() =>
-              setCollapsed((value) => ({
-                ...value,
-                [section.key]: !value[section.key],
-              }))
-            }
-          />
-        )}
-        renderItem={({ item: model, index, section }) => (
-          <SheetGroupItem
-            variant="grouped"
-            first={index === 0}
-            last={index === section.data.length - 1}
-          >
-            <SheetRow
-              label={model.name}
-              checked={isCurrent(model)}
-              disabled={pending}
-              accessibilityRole="radio"
-              onPress={() => pick(model)}
-              onLongPress={(event) => {
-                pressedModel.current = model;
-                contextMenu.onLongPress(event);
-              }}
+      <View>
+        <SectionList
+          nestedScrollEnabled
+          {...listEdges.handlers}
+          sections={sections}
+          keyExtractor={(model) => `${model.providerID}/${model.id}`}
+          style={{
+            maxHeight: Math.min(maxListHeight, listHeightRatio * height),
+          }}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          stickySectionHeadersEnabled
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <ModelsEmpty
+              enabledModels={enabledModels}
+              onOpenNavigation={onOpenNavigation}
+              setCatalogRevision={setCatalogRevision}
+              setPanel={setPanel}
             />
-          </SheetGroupItem>
-        )}
-      />
+          }
+          renderSectionHeader={({ section }) => (
+            <SectionHeader
+              collapsed={Boolean(collapsed[section.key])}
+              disabled={searching}
+              first={section.first}
+              group={section}
+              onToggle={() =>
+                setCollapsed((value) => ({
+                  ...value,
+                  [section.key]: !value[section.key],
+                }))
+              }
+            />
+          )}
+          renderItem={({ item: model, index, section }) => (
+            <SheetGroupItem
+              variant="grouped"
+              first={index === 0}
+              last={index === section.data.length - 1}
+            >
+              <SheetRow
+                label={model.name}
+                checked={isCurrent(model)}
+                disabled={pending}
+                accessibilityRole="radio"
+                onPress={() => pick(model)}
+                onLongPress={(event) => {
+                  pressedModel.current = model;
+                  contextMenu.onLongPress(event);
+                }}
+              />
+            </SheetGroupItem>
+          )}
+        />
+        {listEdges.end && <EdgeFade side="bottom" color={colors.frame} />}
+      </View>
       {onOpenSettings && (
         <View style={[styles.footer, { borderTopColor: colors.border }]}>
           <SheetRow
@@ -522,6 +536,7 @@ export const ModelsSheet = ({
     title="Choose model"
     fitContent
     scroll={false}
+    dragByHandle
     onClose={() => setPanel(null)}
   >
     {panel === "models" && <ModelPicker {...picker} setPanel={setPanel} />}

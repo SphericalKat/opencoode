@@ -65,6 +65,7 @@ import { useSheetCoordinator } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { BackButton } from "./back-button";
+import { EdgeFade, useScrollEdges } from "./edge-fade";
 import {
   MotionDisclosureBody,
   MotionDisclosureChevron,
@@ -256,6 +257,7 @@ const createStyles = (colors: ThemeColors) => {
       gap: 8,
     },
     sheet: { backgroundColor: colors.panel, flex: 1 },
+    fitSheetScrollArea: { flex: 1, minHeight: 0 },
     sheetBody: { flex: 1, minHeight: 0 },
     sheetContent: { gap: 16, padding: 18, paddingBottom: 24 },
     fitSheetContent: { gap: 8 },
@@ -852,6 +854,7 @@ const FitSheet = ({
   children,
   contentStyle,
   scroll,
+  dragByHandle,
   onPresentedChange,
   onDismiss,
 }: {
@@ -861,11 +864,13 @@ const FitSheet = ({
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   scroll: boolean;
+  dragByHandle: boolean;
   onPresentedChange: (presented: boolean) => void;
   onDismiss: () => void;
 }) => {
   const { colors, scheme } = useTheme();
   const sheetShadow = elevation(scheme).overlay;
+  const scrollEdges = useScrollEdges("y");
   const styles = useThemedStyles(createStyles);
   const reduced = useMotionPreference();
   const insets = useSafeAreaInsets();
@@ -932,6 +937,7 @@ const FitSheet = ({
     <BottomSheetModal
       ref={modal}
       stackBehavior="push"
+      enableContentPanningGesture={!dragByHandle}
       enableDynamicSizing
       animationConfigs={animationConfigs}
       maxDynamicContentSize={Math.min(
@@ -953,13 +959,20 @@ const FitSheet = ({
       onDismiss={handleDismiss}
     >
       {scroll ? (
-        <BottomSheetScrollView
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={contentInsets}
-        >
-          <View style={[styles.fitSheetContent, contentStyle]}>{children}</View>
-        </BottomSheetScrollView>
+        <View style={styles.fitSheetScrollArea}>
+          <BottomSheetScrollView
+            {...scrollEdges.handlers}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={contentInsets}
+          >
+            <View style={[styles.fitSheetContent, contentStyle]}>
+              {children}
+            </View>
+          </BottomSheetScrollView>
+          {scrollEdges.start && <EdgeFade side="top" color={colors.frame} />}
+          {scrollEdges.end && <EdgeFade side="bottom" color={colors.frame} />}
+        </View>
       ) : (
         <BottomSheetView style={contentInsets}>
           <View style={[styles.fitSheetContent, contentStyle]}>{children}</View>
@@ -978,6 +991,7 @@ export const Sheet = ({
   scroll = true,
   allowDuringRecovery = false,
   fitContent = false,
+  dragByHandle = false,
   contentStyle,
 }: {
   visible: boolean;
@@ -988,6 +1002,9 @@ export const Sheet = ({
   scroll?: boolean;
   allowDuringRecovery?: boolean;
   fitContent?: boolean;
+  // For a fit sheet whose content holds its own vertical list: only the handle
+  // drags the sheet, so the list scrolls instead of moving the sheet.
+  dragByHandle?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
 }) => {
   const { colors } = useTheme();
@@ -1097,6 +1114,7 @@ export const Sheet = ({
         header={header}
         contentStyle={contentStyle}
         scroll={scroll}
+        dragByHandle={dragByHandle}
         onPresentedChange={setFitPresented}
         onDismiss={handleFitDismissed}
       >

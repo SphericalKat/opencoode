@@ -32,7 +32,7 @@ import {
 import type { TerminalEvent } from "../lib/terminal";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import { EdgeFade, useHorizontalEdges } from "./edge-fade";
+import { EdgeFade, useScrollEdges } from "./edge-fade";
 import { IconButton } from "./icon-button";
 import { useSnackbarInset, useUndoableRemoval } from "./snackbar";
 import { TerminalRenderer } from "./terminal-renderer";
@@ -1096,7 +1096,7 @@ const ShellStrip = ({
   const styles = useThemedStyles(createStyles);
   const { android_ripple, pressedStyle } = usePressFeedback();
   const scroller = useRef<React.ComponentRef<typeof ScrollView>>(null);
-  const edges = useHorizontalEdges();
+  const edges = useScrollEdges("x");
   const chipOffsets = useRef(new Map<string, number>());
   const revealChip = useCallback((key: string) => {
     const x = chipOffsets.current.get(key);
@@ -1191,8 +1191,8 @@ const ShellStrip = ({
           onPress={onCreate}
         />
       </ScrollView>
-      {edges.left && <EdgeFade side="left" color={colors.bg} />}
-      {edges.right && <EdgeFade side="right" color={colors.bg} />}
+      {edges.start && <EdgeFade side="left" color={colors.bg} />}
+      {edges.end && <EdgeFade side="right" color={colors.bg} />}
     </View>
   );
 };

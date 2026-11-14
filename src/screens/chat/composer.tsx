@@ -12,7 +12,7 @@ import {
   useMenuAnchor,
 } from "../../components/anchored-menu";
 import type { Rect } from "../../components/anchored-menu";
-import { EdgeFade, useHorizontalEdges } from "../../components/edge-fade";
+import { EdgeFade, useScrollEdges } from "../../components/edge-fade";
 import { IconButton } from "../../components/icon-button";
 import { SelectMenu, SelectTrigger } from "../../components/select";
 import { elevation } from "../../components/surface";
@@ -483,7 +483,7 @@ const ChipScroller = ({
   styles,
 }: Pick<ChatController, "styles"> & { children: React.ReactNode }) => {
   const { colors, scheme } = useTheme();
-  const { left, right, handlers } = useHorizontalEdges();
+  const { start: left, end: right, handlers } = useScrollEdges("x");
   const fade = scheme === "dark" ? colors.panel : colors.bg;
   return (
     <View style={styles.composerControlsViewport}>

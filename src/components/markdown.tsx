@@ -32,7 +32,7 @@ import type { SyntaxSegment } from "../lib/syntax";
 import { useTheme } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { inlineCodeKind, tableColumnWidths } from "../lib/transcript";
-import { EdgeFade, useHorizontalEdges } from "./edge-fade";
+import { EdgeFade, useScrollEdges } from "./edge-fade";
 import { FadeSpan } from "./fade-span";
 import { IconButton } from "./icon-button";
 import { elevation } from "./surface";
@@ -554,7 +554,7 @@ export const CodeCard = ({
     return () => clearTimeout(timer);
   }, [copyStatus]);
   const copied = copyStatus === "copied";
-  const edges = useHorizontalEdges();
+  const edges = useScrollEdges("x");
   return (
     <View style={styles.code}>
       <ScrollView
@@ -578,8 +578,8 @@ export const CodeCard = ({
           {highlighted ?? code}
         </Text>
       </ScrollView>
-      {edges.left && <EdgeFade side="left" color={colors.codeBackground} />}
-      {edges.right && <EdgeFade side="right" color={colors.codeBackground} />}
+      {edges.start && <EdgeFade side="left" color={colors.codeBackground} />}
+      {edges.end && <EdgeFade side="right" color={colors.codeBackground} />}
       <View style={styles.copyButton}>
         <IconButton
           icon={copied ? "check" : "copy"}
@@ -741,7 +741,7 @@ const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
     frameWidth - FRAME_INSET - StyleSheet.hairlineWidth * 2
   );
 
-  const tableEdges = useHorizontalEdges();
+  const tableEdges = useScrollEdges("x");
   const recordWidth = useCallback((key: string, layoutWidth: number) => {
     // Layout widths are fractional. Rounding down leaves a cell a fraction
     // narrower than its text, which wraps the last character.
@@ -853,8 +853,8 @@ const MarkdownTable = ({ node, muted }: { node: Node; muted?: boolean }) => {
             </View>
           </Pressable>
         </ScrollView>
-        {tableEdges.left && <EdgeFade side="left" color={colors.bg} />}
-        {tableEdges.right && <EdgeFade side="right" color={colors.bg} />}
+        {tableEdges.start && <EdgeFade side="left" color={colors.bg} />}
+        {tableEdges.end && <EdgeFade side="right" color={colors.bg} />}
       </View>
     </View>
   );
