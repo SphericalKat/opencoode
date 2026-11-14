@@ -1,5 +1,73 @@
 # Changelog
 
+## [1.7.0](https://github.com/SphericalKat/opencoode/compare/v1.6.0...v1.7.0) (2026-11-14)
+
+
+### Features
+
+* **changes:** add file-type icons from the upstream sprite ([a2d64b3](https://github.com/SphericalKat/opencoode/commit/a2d64b35b7ab6358c943eb455d290933b08e118d))
+* **changes:** open a changed file from its diff summary ([b3e35f0](https://github.com/SphericalKat/opencoode/commit/b3e35f085a654d73509ee1cccbc2c0d3923783f9))
+* **changes:** parse patches into numbered diff rows ([f9e7635](https://github.com/SphericalKat/opencoode/commit/f9e76357d95d10b2c92d33ee37dc0de505d3de9e))
+* **changes:** show diffs inline under each changed file ([a842614](https://github.com/SphericalKat/opencoode/commit/a842614f1697543a1dc20deb7dd933f011d1565d))
+* **chat:** add transcript logic module ([554d04a](https://github.com/SphericalKat/opencoode/commit/554d04a304dbfed4f033f11d3299723c7d4d05b6))
+* **chat:** name the provider and offer fixes on a failed turn ([ecb624f](https://github.com/SphericalKat/opencoode/commit/ecb624f0a0d58900a409f61c513ee519f359ec97))
+* **chat:** open a context menu on message long-press ([533969e](https://github.com/SphericalKat/opencoode/commit/533969e3811b4989484215ddc0f71814938e938d))
+* **composer:** pick the agent from a chip menu ([2217d3d](https://github.com/SphericalKat/opencoode/commit/2217d3de4bb5fe0d6ba79d600645f4d0cd6c5c25))
+* **composer:** replace message tools page with upstream touch bar ([ed46347](https://github.com/SphericalKat/opencoode/commit/ed463473c929f719f31b7923854c616745233b54))
+* **models:** group the model picker by provider ([28c72cc](https://github.com/SphericalKat/opencoode/commit/28c72cc88d8c801a6d53edf43fde7466cab0050e))
+* **models:** link model picker to model and provider settings ([2942462](https://github.com/SphericalKat/opencoode/commit/2942462803d8c351baf25077dba61d6c8f216f03))
+* **sessions:** open a context menu on session long-press ([ccb610a](https://github.com/SphericalKat/opencoode/commit/ccb610a8e226f4c1a560de7898f74c9b5180c78b))
+* **sessions:** replace the projects sheet with an anchored dropdown ([74ac99d](https://github.com/SphericalKat/opencoode/commit/74ac99da1cd3d519f2a0906c62d5c6476f5b6de0))
+* **sessions:** show unread as a dot on the project avatar ([1583605](https://github.com/SphericalKat/opencoode/commit/15836054e12ec85b09cd666ac01081ea18bb6b20))
+* **syntax:** highlight code by line for diffs ([c3862a8](https://github.com/SphericalKat/opencoode/commit/c3862a8c85a94f9519f75d5e584587c8cd0f1056))
+* **terminal:** show shells as closable chips with a new-shell button ([51a5fb4](https://github.com/SphericalKat/opencoode/commit/51a5fb4500181877b65cc5d18cc512b11abcbbe8))
+* **terminal:** type into the terminal directly and take control on tap ([ac2b66c](https://github.com/SphericalKat/opencoode/commit/ac2b66c5ba6f61e59f0e8f3f753957a68a960bb1))
+* **theme:** add shared surface, diff, switch and avatar tokens ([9eb9051](https://github.com/SphericalKat/opencoode/commit/9eb9051366258e82e99a6f83ee954546f342f9f4))
+* **ui:** add anchored menu with Material placement ([cc6deec](https://github.com/SphericalKat/opencoode/commit/cc6deecdee11e05aed4dd817c02fdd0e63051769))
+* **ui:** add IconButton primitive ([0a029ef](https://github.com/SphericalKat/opencoode/commit/0a029ef4c717eb41318b1ff698cc9cf7d64bcc01))
+* **ui:** add shared ShellIcon glyphs ([ba0c51a](https://github.com/SphericalKat/opencoode/commit/ba0c51a9ce9b9a4a2516c97a4cedf75e76c016f9))
+* **ui:** add switch, segmented control and select menu ([528b6c5](https://github.com/SphericalKat/opencoode/commit/528b6c5b86248ea8b34c82a00eaa56eacdeafac4))
+* **ui:** add undo snackbar primitive ([1980217](https://github.com/SphericalKat/opencoode/commit/19802174a30ee8139e65bbe507d59be80c6eed99))
+* **ui:** undo removals with a snackbar ([22efd1d](https://github.com/SphericalKat/opencoode/commit/22efd1d95fc78e239bf282c3475b24ccddf05a9c))
+
+
+### Bug Fixes
+
+* **chat:** group session details into cards with values ([3d0aae1](https://github.com/SphericalKat/opencoode/commit/3d0aae14cdf32752459c02e3b3592c51fa556990))
+* **chat:** make jump to latest a small centered chip ([fee8532](https://github.com/SphericalKat/opencoode/commit/fee8532741b5a51cf6a10ebce0950ce5978ad05d))
+* **chat:** show a failed turn's error once with a warning icon ([c9d98a5](https://github.com/SphericalKat/opencoode/commit/c9d98a5b93f9053706d33a89df5d8b75659de5e1))
+* **chat:** show model switches as separators ([ee764be](https://github.com/SphericalKat/opencoode/commit/ee764be91efd7bc02d105500881bb3b5a8bbf243))
+* **chat:** show session statistics as labeled rows ([090877d](https://github.com/SphericalKat/opencoode/commit/090877ddd5fd926c8f66aeceb851b3e8ee98a68b))
+* **chat:** show tool input and output in one wrapped card ([395abfb](https://github.com/SphericalKat/opencoode/commit/395abfbdcc499e5e373190e90a5cdbc012b148c0))
+* **chat:** show tool rows as title and faint subtitle under a rail ([71603db](https://github.com/SphericalKat/opencoode/commit/71603db2a781e0cf940535ae1d240c6e494827ee))
+* **chat:** size the model sheet to its content and fade its list ([f5a63e2](https://github.com/SphericalKat/opencoode/commit/f5a63e2907f49c99f9c81d7cedd885bb8543ad93))
+* **composer:** fade the chip row where it scrolls out of view ([9261b82](https://github.com/SphericalKat/opencoode/commit/9261b82efa41924e003d6496f850acb1e66ea8d2))
+* **composer:** match upstream composer frame, input and model chips ([5521e79](https://github.com/SphericalKat/opencoode/commit/5521e79e57fe8b17abc5071cc36269fc6089f026))
+* **composer:** move add menu and send button into the composer card ([cc8b7a5](https://github.com/SphericalKat/opencoode/commit/cc8b7a52e91e9a17ee00ce188402a012e4d3d1cd))
+* **composer:** show model variants as a grouped list ([801ef16](https://github.com/SphericalKat/opencoode/commit/801ef165bff5c76068f3524d98eb143ad4db7ea4))
+* **connection:** ask for address and password on one screen ([f623646](https://github.com/SphericalKat/opencoode/commit/f62364682628b257e43e931df81680517bc7f40e))
+* **markdown:** drop code block language label and scrollbar ([b61c7e2](https://github.com/SphericalKat/opencoode/commit/b61c7e2d2c54011cff3280e866593d5ff0af8c58))
+* **markdown:** render file paths as code links and keep inline code on the baseline ([7abdcf1](https://github.com/SphericalKat/opencoode/commit/7abdcf13dbfe5c9192b2ec2911589856ff84b0bb))
+* **markdown:** size table columns to content with upstream table styling ([6047109](https://github.com/SphericalKat/opencoode/commit/60471098dc5ca2de22ad0771e759ffda1c9aeaef))
+* **sessions:** label untitled sessions New session everywhere ([f17935d](https://github.com/SphericalKat/opencoode/commit/f17935d94fc97b6d2a5c9656fe702e19d414882a))
+* **sessions:** stop showing Load more after the last page ([964391d](https://github.com/SphericalKat/opencoode/commit/964391d52cce83ce41dca10d5dac22034506fe98))
+* **settings:** keep setting controls beside their labels ([7438283](https://github.com/SphericalKat/opencoode/commit/7438283697d67c12a6fde05f26beb79803f722cf))
+* **settings:** replace the settings index with a back bar and section menu ([8fa2f02](https://github.com/SphericalKat/opencoode/commit/8fa2f028de813014a76c51359d73fd315cf5cd1f))
+* **settings:** show Look and feel as one grouped list ([cb14736](https://github.com/SphericalKat/opencoode/commit/cb14736091ab4ce9f7356ec32d1a95b70a7a16b7))
+* **settings:** use grouped lists in every settings section ([c63f379](https://github.com/SphericalKat/opencoode/commit/c63f379d1496356307f97c5a69a3632ad39cec25))
+* **sheets:** close sheets after a theme change ([b0354d8](https://github.com/SphericalKat/opencoode/commit/b0354d8a70068de09cfe9246298d62ecd4a6b9f2))
+* **sheets:** match upstream sheet chrome and add list sheets ([ab6750d](https://github.com/SphericalKat/opencoode/commit/ab6750d8df5a4d7c13059447c8c6af9b4ebdec05))
+* **terminal:** paint rows below the grid with the theme background ([00b3096](https://github.com/SphericalKat/opencoode/commit/00b3096a5aa136bb49ba4b2850422381cd4e6595))
+* **ui:** align the app with the OpenCode web app design ([e0027c1](https://github.com/SphericalKat/opencoode/commit/e0027c118c2d961b8921999b25e4bae3ea46c9c6))
+* **ui:** fade the edges of horizontal scrollers ([c328129](https://github.com/SphericalKat/opencoode/commit/c3281295b7558ccb2ac611fd2fdc9ba39fe2a542))
+* **ui:** flatten buttons and use Android ripple ([c668fd2](https://github.com/SphericalKat/opencoode/commit/c668fd250730f5118b85366a94db06b0ead69d23))
+* **ui:** hide scroll indicators on short lists ([057a0a4](https://github.com/SphericalKat/opencoode/commit/057a0a4e1e900c5afdd167ac265a5cc6bb08cc26))
+* **ui:** line up buttons with the controls beside them ([7fc9272](https://github.com/SphericalKat/opencoode/commit/7fc927261d96b9e66ad465a65f98cab599ac36ad))
+* **ui:** replace system alerts with themed dialogs ([bcbe000](https://github.com/SphericalKat/opencoode/commit/bcbe000d2921d30ed85850d4eed32c26f833da07))
+* **ui:** show segment labels when a segmented control fits its content ([950b6df](https://github.com/SphericalKat/opencoode/commit/950b6dfdb2ee42d1e099a056c445abc71679a1fd))
+* **ui:** size menus to their longest label ([f19f683](https://github.com/SphericalKat/opencoode/commit/f19f683c5a0cf862882d294463866dd420bd33ee))
+* **workspace:** use real icons in Files and mark the current worktree ([412f3ee](https://github.com/SphericalKat/opencoode/commit/412f3ee18ceb446f438ebb5291f3c6e46b0e7803))
+
 ## [1.6.0](https://github.com/SphericalKat/opencoode/compare/v1.5.1...v1.6.0) (2026-11-13)
 
 
