@@ -1,0 +1,238 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+const sourceDir = process.argv.at(2);
+
+if (!sourceDir) {
+  throw new Error(
+    "Pass the upstream file-icons directory as the first argument, for example packages/ui/src/components/file-icons."
+  );
+}
+
+const root = path.resolve(import.meta.dirname, "..");
+const outputFile = path.resolve(root, "src/generated/file-icons.ts");
+const chooserSource = await readFile(
+  path.resolve(sourceDir, "choose-icon-name.ts"),
+  "utf-8"
+);
+const spriteSource = await readFile(
+  path.resolve(sourceDir, "sprite.svg"),
+  "utf-8"
+);
+
+const MAPS_START = "const ICON_MAPS: IconMaps = {";
+const MAPS_END = "\nconst toOpenVariant";
+const mapsStart = chooserSource.indexOf(MAPS_START);
+const mapsEnd = chooserSource.indexOf(MAPS_END);
+
+if (mapsStart === -1 || mapsEnd === -1) {
+  throw new Error(
+    "ICON_MAPS was not found in choose-icon-name.ts. Update the generator for the new upstream layout."
+  );
+}
+
+const mapsSource = chooserSource.slice(mapsStart, mapsEnd);
+
+const sectionBody = (startMarker, endMarker) => {
+  const start = mapsSource.indexOf(startMarker);
+  const end = mapsSource.indexOf(endMarker, start + startMarker.length);
+
+  if (start === -1 || end === -1) {
+    throw new Error(`Section ${startMarker} was not found in ICON_MAPS.`);
+  }
+
+  return mapsSource.slice(start, end);
+};
+
+const PAIR_PATTERN =
+  /^\s*(?:"(?<quotedKey>[^"]+)"|(?<key>[A-Za-z_]\w*)):\s*"(?<icon>[^"]+)",?\s*$/gmu;
+
+const parsePairs = (sectionSource) => {
+  const entries = [];
+
+  for (const match of sectionSource.matchAll(PAIR_PATTERN)) {
+    const { quotedKey, key, icon } = match.groups;
+    entries.push([quotedKey ?? key, icon]);
+  }
+
+  if (entries.length === 0) {
+    throw new Error(
+      "No key/value pairs were parsed from ICON_MAPS. Update the generator for the new upstream layout."
+    );
+  }
+
+  return entries;
+};
+
+const fileNameEntries = parsePairs(
+  sectionBody("fileNames: {", "fileExtensions: {")
+);
+const fileExtensionEntries = parsePairs(
+  sectionBody("fileExtensions: {", "folderNames: {")
+);
+const fallbackMatch = sectionBody("defaults: {", "\n  },").match(
+  /file:\s*"(?<icon>[^"]+)"/u
+);
+
+if (!fallbackMatch) {
+  throw new Error("The default file icon was not found in ICON_MAPS.");
+}
+
+const fallbackIcon = fallbackMatch.groups.icon;
+
+const SYMBOL_PATTERN =
+  /<symbol\b(?<attributes>[^>]*)>(?<body>[\s\S]*?)<\/symbol>/gu;
+const ATTRIBUTE_PATTERN = /(?<name>\w+)="(?<value>[^"]*)"/gu;
+const symbols = new Map();
+
+for (const match of spriteSource.matchAll(SYMBOL_PATTERN)) {
+  const attributes = Object.fromEntries(
+    [...match.groups.attributes.matchAll(ATTRIBUTE_PATTERN)].map(
+      (attribute) => [attribute.groups.name, attribute.groups.value]
+    )
+  );
+  const body = match.groups.body.replaceAll(/\s*\n\s*/gu, " ").trim();
+  symbols.set(attributes.id, { viewBox: attributes.viewBox, body });
+}
+
+const referencedIcons = new Set([
+  fallbackIcon,
+  ...fileNameEntries.map(([, icon]) => icon),
+  ...fileExtensionEntries.map(([, icon]) => icon),
+]);
+const iconNames = [...referencedIcons].toSorted();
+
+for (const iconName of iconNames) {
+  const symbol = symbols.get(iconName);
+
+  if (!symbol) {
+    throw new Error(`The sprite has no symbol for ${iconName}.`);
+  }
+
+  const definedIds = new Set(
+    [...symbol.body.matchAll(/\sid="(?<id>[^"]+)"/gu)].map(
+      (match) => match.groups.id
+    )
+  );
+  const referencedIds = [
+    ...symbol.body.matchAll(/(?:url\(#|href="#)(?<id>[^")]+)/gu),
+  ].map((match) => match.groups.id);
+
+  for (const referencedId of referencedIds) {
+    if (!definedIds.has(referencedId)) {
+      throw new Error(
+        `The ${iconName} symbol references #${referencedId}, which it does not define.`
+      );
+    }
+  }
+}
+
+const MATERIAL_ICON_THEME_LICENSE = `MIT License
+
+Copyright (c) Philipp Kief
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`;
+
+const header = `// Generated by scripts/generate-file-icons.mjs. Do not edit by hand.
+//
+// Icons and the file-name map come from Material Icon Theme
+// (https://github.com/PKief/vscode-material-icon-theme), as copied by the
+// upstream file-icons directory of the opencoode UI package.
+//
+${MATERIAL_ICON_THEME_LICENSE.split("\n")
+  .map((line) => (line ? `// ${line}` : "//"))
+  .join("\n")}
+`;
+
+const toStringLiteral = (value) => JSON.stringify(value);
+
+const mapEntries = (entries) =>
+  entries
+    .map(
+      ([key, icon]) => `  [${toStringLiteral(key)}, ${toStringLiteral(icon)}],`
+    )
+    .join("\n");
+
+const fileIconEntries = iconNames.map((iconName) => {
+  const symbol = symbols.get(iconName);
+
+  return `  ${toStringLiteral(iconName)}: { viewBox: ${toStringLiteral(symbol.viewBox)}, body: ${toStringLiteral(symbol.body)} },`;
+});
+
+const output = `${header}
+export const fileIconNames = [
+${iconNames.map((iconName) => `  ${toStringLiteral(iconName)},`).join("\n")}
+] as const;
+
+export type FileIconName = (typeof fileIconNames)[number];
+
+export const defaultFileIcon: FileIconName = ${toStringLiteral(fallbackIcon)};
+
+// Maps instead of object literals, so names such as "constructor" never match inherited keys.
+const fileNameIcons = new Map<string, FileIconName>([
+${mapEntries(fileNameEntries)}
+]);
+
+const fileExtensionIcons = new Map<string, FileIconName>([
+${mapEntries(fileExtensionEntries)}
+]);
+
+const basenameOf = (filePath: string): string =>
+  filePath.split("\\\\").join("/").split("/").filter(Boolean).pop() ?? "";
+
+// Longest first: "app.test.ts" tries "app.test.ts", then "test.ts", then "ts".
+const extensionCandidates = (lowerName: string): string[] => {
+  const candidates = new Set<string>([lowerName]);
+
+  for (let index = lowerName.indexOf("."); index !== -1; index = lowerName.indexOf(".", index + 1)) {
+    candidates.add(lowerName.slice(index + 1));
+  }
+
+  return [...candidates].sort((left, right) => right.length - left.length);
+};
+
+export const chooseFileIcon = (filePath: string): FileIconName => {
+  const lowerName = basenameOf(filePath).toLowerCase();
+  const byName = fileNameIcons.get(lowerName);
+
+  if (byName) {
+    return byName;
+  }
+
+  for (const candidate of extensionCandidates(lowerName)) {
+    const byExtension = fileExtensionIcons.get(candidate);
+
+    if (byExtension) {
+      return byExtension;
+    }
+  }
+
+  return defaultFileIcon;
+};
+
+export const fileIcons: Record<FileIconName, { viewBox: string; body: string }> = {
+${fileIconEntries.join("\n")}
+};
+`;
+
+await mkdir(path.dirname(outputFile), { recursive: true });
+await writeFile(outputFile, output);
+console.log(
+  `Wrote ${iconNames.length} icons and ${fileNameEntries.length + fileExtensionEntries.length} map entries to ${outputFile}.`
+);
