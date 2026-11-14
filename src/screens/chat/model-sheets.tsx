@@ -1,6 +1,8 @@
 import type { ModelInfo, SessionInfo } from "@opencode/client";
 import { FlatList, Pressable, ScrollView, View } from "react-native";
 
+import { ListSheet } from "../../components/list-sheet";
+import type { ListSheetOption } from "../../components/list-sheet";
 import {
   Button,
   Empty,
@@ -14,6 +16,7 @@ import { playHaptic } from "../../lib/haptics";
 import { modelPreferenceID } from "../../lib/model-preferences";
 import { ChatIconButton } from "./controls";
 import { emptyModelsTitle, emptyModelsDetail } from "./labels";
+import { capitalizeFirst } from "./model-label";
 import type { ChatController } from "./use-chat-controller";
 
 interface VariantsSheetProps extends Pick<
@@ -29,6 +32,8 @@ interface VariantsSheetProps extends Pick<
   session: SessionInfo;
 }
 
+const defaultVariantValue = "default";
+
 export const VariantsSheet = ({
   capabilities,
   chooseModel,
@@ -38,42 +43,44 @@ export const VariantsSheet = ({
   pending,
   session,
   setPanel,
-}: VariantsSheetProps) => (
-  <Sheet
-    visible={panel === "variants"}
-    title="Choose variant"
-    fitContent
-    contentStyle={{ gap: 4 }}
-    onClose={() => setPanel(null)}
-  >
-    <ErrorNotice error={error} />
-    {currentModel && (
-      <>
-        {capabilities.defaultVariant && (
-          <Button
-            title="Model default"
-            selected={!session.model?.variant}
-            disabled={pending}
-            onPress={() => {
-              void chooseModel(currentModel, undefined, true);
-            }}
-          />
-        )}
-        {currentModel.variants.map((variant) => (
-          <Button
-            key={variant.id}
-            title={variant.id}
-            selected={session.model?.variant === variant.id}
-            disabled={pending}
-            onPress={() => {
-              void chooseModel(currentModel, variant.id, true);
-            }}
-          />
-        ))}
-      </>
-    )}
-  </Sheet>
-);
+}: VariantsSheetProps) => {
+  const selectedVariant = session.model?.variant ?? defaultVariantValue;
+  const options: ListSheetOption<string>[] = [];
+  if (currentModel && capabilities.defaultVariant) {
+    options.push({
+      value: defaultVariantValue,
+      label: "Default",
+      disabled: pending,
+    });
+  }
+  for (const variant of currentModel?.variants ?? []) {
+    options.push({
+      value: variant.id,
+      label: capitalizeFirst(variant.id),
+      disabled: pending,
+    });
+  }
+  return (
+    <ListSheet
+      visible={panel === "variants"}
+      title="Choose variant"
+      variant="grouped"
+      value={selectedVariant}
+      options={options}
+      header={<ErrorNotice error={error} />}
+      onSelect={(value) => {
+        if (currentModel) {
+          void chooseModel(
+            currentModel,
+            value === defaultVariantValue ? undefined : value,
+            true
+          );
+        }
+      }}
+      onClose={() => setPanel(null)}
+    />
+  );
+};
 
 type ModelSearchBarProps = Pick<
   ChatController,
