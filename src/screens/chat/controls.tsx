@@ -10,8 +10,6 @@ import Svg, { Path } from "react-native-svg";
 
 import { CodeCard, Markdown } from "../../components/markdown";
 import { PressFeedback } from "../../components/motion";
-import { ShellIcon } from "../../components/shell-icon";
-import { BodyText } from "../../components/ui";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import { createStyles } from "./styles";
 
@@ -129,34 +127,6 @@ export const ChatIconButton = ({
           )}
         </PressFeedback>
       )}
-    </Pressable>
-  );
-};
-
-export const PanelLink = ({
-  title,
-  onPress,
-}: {
-  title: string;
-  onPress: () => void;
-}) => {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: "center",
-        flexDirection: "row",
-        gap: 12,
-        minHeight: Platform.OS === "android" ? 48 : 44,
-        opacity: pressed ? 0.6 : 1,
-        paddingVertical: 10,
-      })}
-    >
-      <BodyText style={{ flex: 1 }}>{title}</BodyText>
-      <ShellIcon name="chevron" size={16} color={colors.muted} />
     </Pressable>
   );
 };

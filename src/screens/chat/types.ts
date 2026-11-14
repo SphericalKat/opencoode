@@ -44,6 +44,7 @@ export type Panel =
   | "stats"
   | "btw"
   | "resources"
+  | "raw"
   | null;
 export type SyncScope = "metadata" | "history" | "inbox" | "requests";
 

@@ -22,6 +22,7 @@ import {
   BackgroundSheet,
   ChildrenSheet,
   StatsSheet,
+  RawSessionSheet,
   SideQuestionSheet,
   ResourcesSheet,
 } from "./panel-sheets";
@@ -254,7 +255,6 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     modelFilter,
     modelPreferences,
     modelSearch,
-    moveDirectory,
     onOpenNavigation,
     onOpenSession,
     opencodeClient,
@@ -271,12 +271,9 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     setDelivery,
     setModelFilter,
     setModelSearch,
-    setMoveDirectory,
     setPanel,
     setSideQuestion,
-    setTitle,
     styles,
-    title,
     toolsDismissed,
   } = chat;
   return (
@@ -286,11 +283,11 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         agents={agents}
         capabilities={capabilities}
         client={client}
+        currentModel={currentModel}
         delivery={delivery}
         error={error}
         exportSession={exportSession}
         inspect={inspect}
-        moveDirectory={moveDirectory}
         onOpenSession={onOpenSession}
         opencodeClient={opencodeClient}
         panel={panel}
@@ -299,11 +296,8 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         sessionID={sessionID}
         setBackgroundDirectory={setBackgroundDirectory}
         setBackgroundShellID={setBackgroundShellID}
-        setMoveDirectory={setMoveDirectory}
         setPanel={setPanel}
         setSideQuestion={setSideQuestion}
-        setTitle={setTitle}
-        title={title}
         session={session}
       />
       <VariantsSheet
@@ -544,6 +538,7 @@ const renderPanelSheets = (chat: ChatController, session: SessionInfo) => {
         setPanel={setPanel}
         session={session}
       />
+      <RawSessionSheet panel={panel} setPanel={setPanel} session={session} />
       <SideQuestionSheet
         capabilities={capabilities}
         opencodeClient={opencodeClient}

@@ -59,7 +59,7 @@ export const useChatController = ({
   const metrics = useComposerMetrics();
   const sync = useSessionState(backend);
   const sheets = useSheetState();
-  const { panel, setPanel, setSideQuestion, setTitle } = sheets;
+  const { panel, setPanel, setSideQuestion } = sheets;
   const [foreground, setForeground] = useState(
     AppState.currentState !== "background"
   );
@@ -122,7 +122,6 @@ export const useChatController = ({
     opencodeClient,
     reportConnectionFailure,
     sessionID,
-    setTitle,
     sync,
   });
   useForegroundTracking({ composer, draftKey, setForeground, showError });
@@ -319,7 +318,6 @@ export const useChatController = ({
     modelFilter: modelChoice.modelFilter,
     modelPreferences,
     modelSearch: modelChoice.modelSearch,
-    moveDirectory: sheets.moveDirectory,
     onOpenNavigation,
     onOpenSession,
     opencodeClient,
@@ -354,7 +352,6 @@ export const useChatController = ({
     setFollowing: scroll.setFollowing,
     setModelFilter: modelChoice.setModelFilter,
     setModelSearch: modelChoice.setModelSearch,
-    setMoveDirectory: sheets.setMoveDirectory,
     setPanel: sheets.setPanel,
     setRestoredSkillIDs: composer.setRestoredSkillIDs,
     setSelectedAgentIDs: composer.setSelectedAgentIDs,
@@ -362,7 +359,6 @@ export const useChatController = ({
     setSelectedSkills: composer.setSelectedSkills,
     setSideQuestion: sheets.setSideQuestion,
     setTextSelectionMessage: selection.setTextSelectionMessage,
-    setTitle: sheets.setTitle,
     showActivityBar: view.showActivityBar,
     showError: errors.showError,
     showLatestControl: view.showLatestControl,
@@ -374,7 +370,6 @@ export const useChatController = ({
     styles,
     syncErrors: sync.syncErrors,
     textSelectionMessage: selection.textSelectionMessage,
-    title: sheets.title,
     toolsDismissed: device.toolsDismissed,
     transcriptLayoutChanged: scroll.transcriptLayoutChanged,
     transcriptMessages: view.transcriptMessages,

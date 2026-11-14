@@ -1,4 +1,8 @@
-import type { ModelInfo, SessionInboxInfo } from "@opencode/client";
+import type {
+  ModelInfo,
+  SessionInboxInfo,
+  SessionInfo,
+} from "@opencode/client";
 
 import { modelPreferenceID } from "../../lib/model-preferences";
 
@@ -72,4 +76,16 @@ export const sortByPreference = (
       preferredIDs.indexOf(modelPreferenceID(b.providerID, b.id))
   );
   return sorted;
+};
+
+export const modelSummary = (
+  session: Pick<SessionInfo, "model">,
+  currentModel: Pick<ModelInfo, "name"> | undefined
+) => {
+  const name = currentModel?.name || session.model?.id || "Server default";
+  const variant = session.model?.variant;
+  if (!variant) {
+    return name;
+  }
+  return `${name} · ${variant.charAt(0).toUpperCase()}${variant.slice(1)}`;
 };
