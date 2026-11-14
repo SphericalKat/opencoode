@@ -142,6 +142,7 @@ interface WorkspaceTabProps {
   mounted: boolean;
   onAttachFile: (path: string, contextText?: string) => Promise<boolean>;
   onDirectoryChange: (directory: string) => void;
+  onSectionChange: (section: WorkspaceSection) => void;
   section: WorkspaceSection;
   sessionID: string | null;
   tab: Tab;
@@ -155,6 +156,7 @@ export const WorkspaceTab = ({
   mounted,
   onAttachFile,
   onDirectoryChange,
+  onSectionChange,
   section,
   sessionID,
   tab,
@@ -177,6 +179,7 @@ export const WorkspaceTab = ({
         section={section}
         visible={tab === "workspace"}
         onDirectoryChange={onDirectoryChange}
+        onSectionChange={onSectionChange}
         onAttachFile={onAttachFile}
       />
     </MotionScreen>

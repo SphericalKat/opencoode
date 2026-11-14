@@ -307,6 +307,7 @@ export const MobileApp = () => {
             mounted={!!visited.workspace}
             onAttachFile={attachFile}
             onDirectoryChange={changeDirectory}
+            onSectionChange={openBetaPane}
             section={workspaceSection}
             sessionID={sessionID}
             tab={tab}

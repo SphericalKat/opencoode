@@ -5,7 +5,7 @@ import type {
 } from "@opencode/client";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useEffectEvent, useState } from "react";
 import {
   FlatList,
   Image,
@@ -65,6 +65,12 @@ interface Props {
   visible?: boolean;
   sessionID?: string;
   section: WorkspaceSection;
+  onSectionChange?: (section: WorkspaceSection) => void;
+}
+
+interface FileRequest {
+  id: number;
+  path: string;
 }
 
 const createStyles = (colors: ThemeColors) =>
@@ -535,6 +541,10 @@ const FileBody = ({
   onShare: () => void;
 }) => {
   const styles = useThemedStyles(createStyles);
+  // Android scrolls a long multiline input to its end unless the caret is set.
+  const [releasedPath, setReleasedPath] = useState<string | null>(null);
+  const caretPinned = releasedPath !== file.path;
+  const releaseCaret = () => setReleasedPath(file.path);
   if (fileBusy && !file.bytes) {
     return <Busy />;
   }
@@ -565,12 +575,21 @@ const FileBody = ({
   if (file.original) {
     return (
       <Field
+        key={file.path}
         accessibilityLabel={`Edit ${file.path}`}
         multiline
         scrollEnabled
         value={file.text}
-        onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
+        selection={caretPinned ? { end: 0, start: 0 } : undefined}
+        onSelectionChange={(event) => {
+          const next = event.nativeEvent.selection;
+          if (next.start !== 0 || next.end !== 0) {
+            releaseCaret();
+          }
+          setSelection(next);
+        }}
         onChangeText={(text) => {
+          releaseCaret();
           setFile((current) => current && { ...current, text });
           setSaved(false);
           setCopied(false);
@@ -609,7 +628,10 @@ const Files = ({
   client,
   directory,
   onAttachFile,
-}: Pick<Props, "client" | "directory" | "onAttachFile">) => {
+  openRequest,
+}: Pick<Props, "client" | "directory" | "onAttachFile"> & {
+  openRequest?: FileRequest | null;
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const presentNative = useNativePresentation();
@@ -718,6 +740,21 @@ const Files = ({
     setFile(null);
     return true;
   };
+
+  const openRequested = useEffectEvent(async (requested: FileRequest) => {
+    if (await closeFile()) {
+      await openFile(requested.path);
+    }
+  });
+  useEffect(() => {
+    if (!openRequest) {
+      return;
+    }
+    const run = async () => {
+      await openRequested(openRequest);
+    };
+    void run();
+  }, [openRequest]);
 
   const save = async () => {
     const original = file?.original;
@@ -1092,7 +1129,6 @@ const Worktrees = ({
         <Button
           title="Create"
           size="compact"
-          variant="primary"
           disabled={!location}
           onPress={() => setCreateVisible(true)}
         />
@@ -1115,7 +1151,12 @@ const Worktrees = ({
               <BodyText style={{ fontWeight: "600" }}>
                 Project checkout
               </BodyText>
-              <BodyText muted style={{ fontFamily: mono, fontSize: 13 }}>
+              <BodyText
+                muted
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                style={{ fontFamily: mono, fontSize: 13 }}
+              >
                 {location.project.directory}
               </BodyText>
               <Button
@@ -1141,8 +1182,9 @@ const Worktrees = ({
                 {fileName(tree.directory)}
               </BodyText>
               <BodyText
-                selectable
                 muted
+                numberOfLines={1}
+                ellipsizeMode="middle"
                 style={{ fontFamily: mono, fontSize: 13 }}
               >
                 {tree.directory}
@@ -1220,11 +1262,17 @@ const Workspace = ({
   directory,
   onDirectoryChange,
   onAttachFile,
+  onSectionChange,
   visible = true,
   sessionID,
   section: activeTab,
 }: Props) => {
   const styles = useThemedStyles(createStyles);
+  const [fileRequest, setFileRequest] = useState<FileRequest | null>(null);
+  const openChangedFile = (path: string) => {
+    setFileRequest((previous) => ({ id: (previous?.id ?? 0) + 1, path }));
+    onSectionChange?.("Files");
+  };
   return (
     <View style={styles.screen}>
       <View
@@ -1234,6 +1282,7 @@ const Workspace = ({
           client={client}
           directory={directory}
           onAttachFile={onAttachFile}
+          openRequest={fileRequest}
         />
       </View>
       {activeTab === "Changes" && (
@@ -1242,6 +1291,7 @@ const Workspace = ({
           directory={directory}
           sessionID={sessionID}
           onAttachFile={onAttachFile}
+          onOpenFile={openChangedFile}
         />
       )}
       {activeTab === "Worktrees" && (
