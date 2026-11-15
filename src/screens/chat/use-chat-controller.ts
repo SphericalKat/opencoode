@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { settle } from "../../lib/async";
-import { errorMessage } from "../../lib/client";
-import { useLiveStore } from "../../lib/live-store";
+import { errorMessageOrNull } from "../../lib/client";
 import { useModelPreferences } from "../../lib/model-preferences";
 import { useNativePresentation } from "../../lib/sheets";
 import { useTheme, useThemedStyles } from "../../lib/theme";
+import { useLiveStore } from "../../stores/live-store";
 import type { MessageMenuContext } from "./message-menu-entries";
 import { createStyles } from "./styles";
 import type { Props, SessionState } from "./types";
@@ -106,7 +106,7 @@ export const useChatController = ({
   const { pending } = actions;
   const fetchError =
     data.queryError ??
-    (history.messagesError ? errorMessage(history.messagesError) : null) ??
+    errorMessageOrNull(history.messagesError) ??
     streamFailure;
   const loading = data.detailPending || history.messagesPending;
   const { refresh } = data;
@@ -115,6 +115,7 @@ export const useChatController = ({
     alive,
     messages: sync.messages,
     panel,
+    sessionID,
     setPanel,
     showError,
     visible,

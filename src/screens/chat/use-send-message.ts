@@ -145,17 +145,19 @@ export const useSendMessage = ({
     );
     jumpToLatest();
     const latest = draftRef.current;
-    await saveDraft(draftKey, {
-      ...latest,
-      agentIDs: latest.agentIDs.filter((id) => !sent.agentIDs.includes(id)),
-      files: latest.files.filter((file) => !sent.attachments.includes(file)),
-      skillIDs: latest.skillIDs.filter((id) => !sent.skillIDs.includes(id)),
-      text: latest.text === sent.text ? "" : latest.text,
-    }).catch((error_) =>
+    try {
+      await saveDraft(draftKey, {
+        ...latest,
+        agentIDs: latest.agentIDs.filter((id) => !sent.agentIDs.includes(id)),
+        files: latest.files.filter((file) => !sent.attachments.includes(file)),
+        skillIDs: latest.skillIDs.filter((id) => !sent.skillIDs.includes(id)),
+        text: latest.text === sent.text ? "" : latest.text,
+      });
+    } catch (error_) {
       showError(
         new Error(`Message sent. Draft save failed: ${errorMessage(error_)}`)
-      )
-    );
+      );
+    }
   };
   const [committing, setCommitting] = useState(false);
   const submit = async (sent: SentMessage) => {

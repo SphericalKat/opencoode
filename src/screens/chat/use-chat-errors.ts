@@ -7,7 +7,7 @@ import {
 } from "react";
 
 import { errorMessage, isConnectionUnauthorized } from "../../lib/client";
-import { useLiveStore } from "../../lib/live-store";
+import { useLiveStore } from "../../stores/live-store";
 import type { Alive } from "./types";
 
 interface UseChatErrorsOptions {

@@ -6,6 +6,7 @@ import {
 import type { QueryKey } from "@tanstack/react-query";
 import type React from "react";
 
+import { invalidateKeys } from "../../lib/invalidate-keys";
 import { useServerScope } from "../../lib/server-scope";
 import type { Alive, SetPanel } from "./types";
 
@@ -19,55 +20,53 @@ export interface ChatMutationContext {
 }
 
 interface ChatMutationOptions<V> {
-  // Keys that the write changes. The mutation table in the data layer spec
-  // names them for each write.
+  closePanel?: boolean;
   invalidate: (variables: V) => QueryKey[];
   mutationFn: (variables: V) => Promise<unknown>;
+  onWritten?: (variables: V) => void;
 }
 
-// Every chat write shares one mutation scope, so writes run one at a time. A
-// write that starts while another runs is dropped, as the composer expects.
+// Every chat write for a session shares one mutation scope, so writes run one
+// at a time.
 export const useChatMutation = <V = void>(
   context: ChatMutationContext,
-  { invalidate, mutationFn }: ChatMutationOptions<V>,
-  closePanel = false
+  {
+    closePanel = false,
+    invalidate,
+    mutationFn,
+    onWritten,
+  }: ChatMutationOptions<V>
 ) => {
-  const { alive, onSessionChanged, sessionID, setError, setPanel, showError } =
+  const { onSessionChanged, sessionID, setError, setPanel, showError } =
     context;
   const scope = useServerScope();
   const queryClient = useQueryClient();
-  const mutationKey = ["chat", scope, sessionID] as const;
   const mutation = useMutation({
     mutationFn,
-    mutationKey,
-    onError: (reason) => {
-      if (alive.current) {
-        showError(reason);
-      }
-    },
+    mutationKey: ["chat", scope, sessionID],
     onMutate: () => setError(null),
     onSuccess: (_result, variables) => {
-      if (!alive.current) {
-        return;
-      }
-      if (closePanel) {
-        setPanel(null);
-      }
-      for (const queryKey of invalidate(variables)) {
-        void queryClient.invalidateQueries({ queryKey });
-      }
-      onSessionChanged();
+      onWritten?.(variables);
+      void invalidateKeys(queryClient, invalidate(variables));
     },
     scope: { id: `chat:${scope}:${sessionID}` },
   });
   const { mutateAsync } = mutation;
-  const run = (variables: V): Promise<boolean> => {
-    if (queryClient.isMutating({ mutationKey }) > 0) {
-      return Promise.resolve(false);
+  const run = async (variables: V): Promise<boolean> => {
+    try {
+      await mutateAsync(variables, {
+        onError: showError,
+        onSuccess: () => {
+          if (closePanel) {
+            setPanel(null);
+          }
+          onSessionChanged();
+        },
+      });
+      return true;
+    } catch {
+      return false;
     }
-    return mutateAsync(variables)
-      .then(() => true)
-      .catch(() => false);
   };
   return { isPending: mutation.isPending, run };
 };

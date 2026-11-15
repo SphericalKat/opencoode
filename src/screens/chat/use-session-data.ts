@@ -12,7 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 
 import type { ChatBackend } from "../../lib/chat-backend";
-import { errorMessage } from "../../lib/client";
+import { errorMessageOrNull } from "../../lib/client";
 import {
   catalogAgentsOptions,
   catalogCommandsOptions,
@@ -42,10 +42,8 @@ const NO_AGENTS: AgentInfo[] = [];
 const NO_COMMANDS: CommandInfo[] = [];
 const NO_SKILLS: SkillInfo[] = [];
 
-const firstError = (...errors: unknown[]) => {
-  const failure = errors.find(Boolean);
-  return failure ? errorMessage(failure) : null;
-};
+const firstError = (...errors: unknown[]) =>
+  errorMessageOrNull(errors.find(Boolean));
 
 interface UseSessionDataOptions {
   backend: ChatBackend;

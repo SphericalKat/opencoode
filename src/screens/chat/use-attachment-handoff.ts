@@ -2,8 +2,8 @@ import { useEffect, useEffectEvent, useRef } from "react";
 
 import { serverFileUri } from "../../lib/chat";
 import {
+  useComposerActions,
   useComposerStore,
-  useComposerStoreApi,
 } from "../../stores/composer-store";
 import type { ComposerDraft } from "./use-composer-draft";
 
@@ -19,7 +19,7 @@ export const useAttachmentHandoff = ({
   composer,
 }: UseAttachmentHandoffOptions) => {
   const { setDraft, setAttachments, draftLoaded } = composer;
-  const store = useComposerStoreApi();
+  const { clearHandoff } = useComposerActions();
   const handoff = useComposerStore((state) =>
     sessionID ? state.handoffs[sessionID] : undefined
   );
@@ -42,9 +42,7 @@ export const useAttachmentHandoff = ({
       }
       consumedAttachment.current = { context: extra, path };
       if (sessionID) {
-        store.setState((state) => ({
-          handoffs: { ...state.handoffs, [sessionID]: undefined },
-        }));
+        clearHandoff(sessionID);
       }
     } catch (error_) {
       showError(error_);

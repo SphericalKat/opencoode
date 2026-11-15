@@ -21,8 +21,7 @@ const requireOpenCode = (client: ChatBackend["opencodeClient"]) => {
   return client;
 };
 
-// The session writes that the chat sheets and menus trigger. Each write
-// invalidates the keys that the data layer spec lists for it.
+// The session writes that the chat sheets and menus trigger.
 export const useChatActions = ({
   backend,
   context,
@@ -54,79 +53,57 @@ export const useChatActions = ({
     },
   });
 
-  const rename = useChatMutation(
-    context,
-    {
-      invalidate: () => [detail(), sessions()],
-      mutationFn: (title: string) => core.session.update({ sessionID, title }),
+  const rename = useChatMutation(context, {
+    closePanel: true,
+    invalidate: () => [detail(), sessions()],
+    mutationFn: (title: string) => core.session.update({ sessionID, title }),
+  });
+  const archive = useChatMutation(context, {
+    closePanel: true,
+    invalidate: () => [detail(), sessions()],
+    mutationFn: (archived: boolean) =>
+      requireOpenCode(opencodeClient).session.update({ archived, sessionID }),
+  });
+  const move = useChatMutation(context, {
+    closePanel: true,
+    invalidate: () => [
+      detail(),
+      sessions(),
+      queryKeys.session.forms(scope, sessionID),
+      queryKeys.session.permissions(scope, sessionID),
+    ],
+    mutationFn: (input: { delivery: "queue" | "steer"; directory: string }) =>
+      requireOpenCode(opencodeClient).session.move({
+        ...input,
+        sessionID,
+      }),
+  });
+  const fork = useChatMutation(context, {
+    invalidate: () => [sessions()],
+    mutationFn: async (before: string | undefined) => {
+      const next = await core.session.fork({ before, sessionID });
+      onOpenSession(next.id);
     },
-    true
-  );
-  const archive = useChatMutation(
-    context,
-    {
-      invalidate: () => [detail(), sessions()],
-      mutationFn: (archived: boolean) =>
-        requireOpenCode(opencodeClient).session.update({ archived, sessionID }),
+  });
+  const forkSession = useChatMutation(context, {
+    closePanel: true,
+    invalidate: () => [sessions()],
+    mutationFn: async () => {
+      const next = await core.session.fork({ sessionID });
+      onOpenSession(next.id);
     },
-    true
-  );
-  const move = useChatMutation(
-    context,
-    {
-      invalidate: () => [
-        detail(),
-        sessions(),
-        queryKeys.session.forms(scope, sessionID),
-        queryKeys.session.permissions(scope, sessionID),
-      ],
-      mutationFn: (input: { delivery: "queue" | "steer"; directory: string }) =>
-        requireOpenCode(opencodeClient).session.move({
-          ...input,
-          sessionID,
-        }),
-    },
-    true
-  );
-  const fork = useChatMutation(
-    context,
-    {
-      invalidate: () => [sessions()],
-      mutationFn: async (before: string | undefined) => {
-        const next = await core.session.fork({ before, sessionID });
-        onOpenSession(next.id);
-      },
-    },
-    false
-  );
-  const forkSession = useChatMutation(
-    context,
-    {
-      invalidate: () => [sessions()],
-      mutationFn: async () => {
-        const next = await core.session.fork({ sessionID });
-        onOpenSession(next.id);
-      },
-    },
-    true
-  );
-  const compact = useChatMutation(
-    context,
-    {
-      invalidate: running,
-      mutationFn: () => core.session.compact({ delivery: "queue", sessionID }),
-    },
-    true
-  );
-  const background = useChatMutation(
-    context,
-    {
-      invalidate: running,
-      mutationFn: () =>
-        requireOpenCode(opencodeClient).session.background({ sessionID }),
-    },
-    true
-  );
+  });
+  const compact = useChatMutation(context, {
+    closePanel: true,
+    invalidate: running,
+    mutationFn: () => core.session.compact({ delivery: "queue", sessionID }),
+  });
+  const background = useChatMutation(context, {
+    closePanel: true,
+    invalidate: running,
+    mutationFn: () =>
+      requireOpenCode(opencodeClient).session.background({ sessionID }),
+  });
   const interrupt = useChatMutation(context, {
     invalidate: running,
     mutationFn: () => core.session.interrupt({ sessionID }),
@@ -170,11 +147,10 @@ export const useChatActions = ({
       requireOpenCode(opencodeClient).session.revert.clear({ sessionID }),
   });
   const commitRevert = useChatMutation(context, {
-    invalidate: () => [detail(), messages()],
-    mutationFn: async () => {
-      await requireOpenCode(opencodeClient).session.revert.commit({
-        sessionID,
-      });
+    invalidate: () => [detail()],
+    mutationFn: () =>
+      requireOpenCode(opencodeClient).session.revert.commit({ sessionID }),
+    onWritten: () => {
       void resetMessages(queryClient, scope, sessionID);
     },
   });

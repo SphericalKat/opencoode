@@ -1,20 +1,58 @@
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 
-import { ServerScopeProvider } from "../../lib/server-scope";
+import type { Connection } from "../../lib/client";
+import { PiBus } from "../../lib/live/pi-bus";
+import { routes } from "../../lib/routes";
+import { ServerScopeProvider, useServerScope } from "../../lib/server-scope";
 import { PiWorkspace } from "../../screens/pi-workspace";
+import { usePiBackend } from "../../screens/use-pi-backend";
 import { useOpenServers } from "../../shell/use-open-servers";
 import { useAppLifecycleStore } from "../../stores/app-lifecycle-store";
 import {
+  useConnectionActions,
   useConnectionStore,
-  useConnectionStoreApi,
 } from "../../stores/connection-store";
+import { LiveStoreProvider } from "../../stores/live-store";
+
+interface PiShellProps {
+  active: Connection;
+  foreground: boolean;
+}
+
+const PiShell = ({ active, foreground }: PiShellProps) => {
+  const scope = useServerScope();
+  const settingsOpen = usePathname().startsWith(routes.piSettings);
+  const { markRecovering } = useConnectionActions();
+  const openServers = useOpenServers();
+  const { backend, client } = usePiBackend(active);
+  const onConnectionLost = (cause: unknown) => markRecovering(active, cause);
+
+  return (
+    <LiveStoreProvider key={`${active.id}:${active.url}`}>
+      <PiBus
+        backend={backend}
+        foreground={foreground && !settingsOpen}
+        scope={scope}
+        onConnectionLost={onConnectionLost}
+      />
+      <PiWorkspace
+        backend={backend}
+        client={client}
+        connection={active}
+        foreground={foreground}
+        onManageServers={openServers}
+        onConnectionLost={onConnectionLost}
+      >
+        <Stack screenOptions={{ animation: "none", headerShown: false }} />
+      </PiWorkspace>
+    </LiveStoreProvider>
+  );
+};
 
 const PiLayout = () => {
   const active = useConnectionStore((state) => state.active);
   const connecting = useConnectionStore((state) => state.connecting);
   const foreground = useAppLifecycleStore((state) => state.foreground);
-  const connection = useConnectionStoreApi();
-  const openServers = useOpenServers();
 
   if (active?.backend !== "pi") {
     return null;
@@ -22,16 +60,7 @@ const PiLayout = () => {
 
   return (
     <ServerScopeProvider scope={active.id}>
-      <PiWorkspace
-        connection={active}
-        foreground={foreground && !connecting}
-        onManageServers={openServers}
-        onConnectionLost={(cause) =>
-          connection.getState().recoverConnection(active, cause)
-        }
-      >
-        <Stack screenOptions={{ animation: "none", headerShown: false }} />
-      </PiWorkspace>
+      <PiShell active={active} foreground={foreground && !connecting} />
     </ServerScopeProvider>
   );
 };
