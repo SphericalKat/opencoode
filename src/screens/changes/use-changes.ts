@@ -34,6 +34,11 @@ export type ChangesState =
   | { status: "ready"; diffs: FileDiffInfo[] }
   | { status: "error"; message: string };
 
+const NO_DIFFS: FileDiffInfo[] = [];
+
+export const diffsOf = (state: ChangesState): FileDiffInfo[] =>
+  state.status === "ready" ? state.diffs : NO_DIFFS;
+
 interface DiffRequest {
   base: string;
   directory: string;

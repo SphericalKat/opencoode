@@ -29,6 +29,7 @@ import { DiffGapRow, DiffGate, DiffLineRow, TruncatedNote } from "./diff-line";
 import {
   buildChangeItems,
   changedLines,
+  diffsOf,
   emptyLabels,
   fileHighlights,
   isRenderable,
@@ -348,10 +349,7 @@ export const ChangesPane = ({
   const { state, mode } = changes;
   const handleRefresh = changes.refresh;
   const handleMenuClose = menu.close;
-  const diffs = useMemo(
-    () => (state.status === "ready" ? state.diffs : []),
-    [state]
-  );
+  const diffs = diffsOf(state);
   const [seen, setSeen] = useState(diffs);
   if (seen !== diffs) {
     setSeen(diffs);
