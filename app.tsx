@@ -4,10 +4,10 @@ import { View } from "react-native";
 import ibmPlexMonoMediumFont from "./assets/fonts/IBMPlexMono-Medium.ttf";
 import ibmPlexMonoFont from "./assets/fonts/IBMPlexMono-Text.ttf";
 import interFont from "./assets/fonts/Inter.ttf";
-import { MobileApp } from "./src/app/mobile-app";
-import { AppProviders } from "./src/app/providers";
-import { ThemedStatusBar } from "./src/app/themed-status-bar";
 import { SheetVisibilityProvider } from "./src/lib/sheet-visibility";
+import { MobileApp } from "./src/shell/mobile-app";
+import { AppProviders } from "./src/shell/providers";
+import { ThemedStatusBar } from "./src/shell/themed-status-bar";
 
 const fonts = {
   IBMPlexMono: ibmPlexMonoFont,
