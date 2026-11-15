@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
+import { settle } from "../../lib/async";
 import { errorMessage } from "../../lib/client";
+import { useLiveStore } from "../../lib/live-store";
 import { useModelPreferences } from "../../lib/model-preferences";
 import { useNativePresentation } from "../../lib/sheets";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import type { MessageMenuContext } from "./message-menu-entries";
 import { createStyles } from "./styles";
-import type { Props } from "./types";
+import type { Props, SessionState } from "./types";
 import { useAttachmentHandoff } from "./use-attachment-handoff";
 import { useChatActions } from "./use-chat-actions";
 import { useChatErrors } from "./use-chat-errors";
@@ -17,17 +19,14 @@ import { useDeviceAttachments } from "./use-device-attachments";
 import { useDraftEditing } from "./use-draft-editing";
 import { useFileSearch } from "./use-file-search";
 import { useForegroundTracking } from "./use-foreground-tracking";
-import { useLiveSession } from "./use-live-session";
 import { useMessageHistory } from "./use-message-history";
 import { useMessageSelection } from "./use-message-selection";
 import { useModelSelection } from "./use-model-selection";
-import { useOlderMessages } from "./use-older-messages";
 import { usePanelRequest } from "./use-panel-request";
 import { useResponseHaptics } from "./use-response-haptics";
 import { useScreenReader } from "./use-screen-reader";
 import { useSendMessage } from "./use-send-message";
 import { useSessionData } from "./use-session-data";
-import { useSessionState } from "./use-session-state";
 import { useSessionTools } from "./use-session-tools";
 import { useSessionViewSync } from "./use-session-view-sync";
 import { useSheetState } from "./use-sheet-state";
@@ -60,7 +59,6 @@ export const useChatController = ({
   const modelPreferences = useModelPreferences(serverID || "");
   const withNativePresentation = useNativePresentation();
   const metrics = useComposerMetrics();
-  const messageState = useSessionState(backend);
   const sheets = useSheetState();
   const { panel, setPanel, setSideQuestion } = sheets;
   const [foreground, setForeground] = useState(
@@ -68,8 +66,7 @@ export const useChatController = ({
   );
   const alive = useRef(true);
   const errors = useChatErrors({ alive, onConnectionLost });
-  const { connectionFailures, reportConnectionFailure, setError, showError } =
-    errors;
+  const { reportConnectionFailure, setError, showError } = errors;
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -85,10 +82,19 @@ export const useChatController = ({
   });
   const history = useMessageHistory({
     backend,
+    revertMessageID: data.session?.revert?.messageID,
     sessionID,
-    state: messageState,
   });
-  const sync = { ...messageState, ...data };
+  const streamStatus = useLiveStore((state) => state.status);
+  const streamFailure = useLiveStore((state) => state.failure);
+  const notice = useLiveStore((state) => state.notices[sessionID]);
+  const sync: SessionState = {
+    ...data,
+    activityNotice: notice?.activityNotice ?? backend.activityNotice,
+    backendWaiting: notice?.waiting,
+    messages: history.messages,
+    streamStatus,
+  };
   const context = {
     alive,
     onSessionChanged,
@@ -101,13 +107,12 @@ export const useChatController = ({
     backend,
     context,
     onOpenSession,
-    state: messageState,
   });
   const { pending } = actions;
   const fetchError =
     data.queryError ??
     (history.messagesError ? errorMessage(history.messagesError) : null) ??
-    messageState.streamFailure;
+    streamFailure;
   const loading = data.detailPending || history.messagesPending;
   const { refresh } = data;
   const { screenReader, screenReaderEnabled } = useScreenReader();
@@ -149,18 +154,6 @@ export const useChatController = ({
     showError,
   });
   useForegroundTracking({ composer, draftKey, setForeground, showError });
-  useLiveSession({
-    alive,
-    backend,
-    connectionFailures,
-    data,
-    foreground,
-    reportConnectionFailure,
-    sessionID,
-    showError,
-    state: messageState,
-    visible,
-  });
   useSessionViewSync({
     foreground,
     onSessionChanged,
@@ -224,13 +217,15 @@ export const useChatController = ({
     showError,
     withNativePresentation,
   });
-  const older = useOlderMessages({
-    alive,
-    client,
-    sessionID,
-    showError,
-    sync: messageState,
-  });
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = history;
+  const loadOlder = async () => {
+    if (!hasNextPage || isFetchingNextPage) {
+      return;
+    }
+    await settle(async () => {
+      await fetchNextPage({ throwOnError: true });
+    }, showError);
+  };
   const editing = useDraftEditing({
     alive,
     capabilities,
@@ -332,7 +327,6 @@ export const useChatController = ({
     context: tools.context,
     copySelected: selection.copySelected,
     currentModel: modelChoice.currentModel,
-    cursor: sync.cursor,
     delivery: composer.delivery,
     diffs: tools.diffs,
     disclosures: scroll.disclosures,
@@ -358,9 +352,10 @@ export const useChatController = ({
     jumpToLatest: scroll.jumpToLatest,
     list: scroll.list,
     listLoaded: scroll.listLoaded,
-    loadOlder: older.loadOlder,
+    hasNextPage,
+    isFetchingNextPage,
+    loadOlder,
     loading,
-    loadingOlder: older.loadingOlder,
     maintainPosition: scroll.maintainPosition,
     maximumComposerHeight: metrics.maximumComposerHeight,
     menuContext,

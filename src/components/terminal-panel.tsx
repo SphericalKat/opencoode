@@ -965,107 +965,6 @@ const TerminalSession = ({
   );
 };
 
-type ClientEvent =
-  ReturnType<Client["event"]["subscribe"]> extends AsyncIterable<infer E>
-    ? E
-    : never;
-interface InventorySync {
-  client: Client;
-  desktop: boolean;
-  directory: string;
-  refresh: () => Promise<unknown>;
-  sessionID?: string;
-}
-
-const REFRESH_DEBOUNCE_MS = 250;
-const MAX_INVENTORY_RETRY_MS = 15_000;
-const MAX_INVENTORY_BACKOFF_STEP = 4;
-
-const shouldRefreshInventory = (
-  event: ClientEvent,
-  { desktop, directory, sessionID }: InventorySync
-): boolean => {
-  if (event.type === "server.connected") {
-    return true;
-  }
-  if (
-    desktop &&
-    (event.type === "persistent-pty.added" ||
-      event.type === "persistent-pty.removed") &&
-    event.data.sessionID === sessionID
-  ) {
-    return true;
-  }
-  return (
-    (event.type === "pty.created" ||
-      event.type === "pty.updated" ||
-      event.type === "pty.deleted" ||
-      event.type === "pty.exited") &&
-    (!event.location || event.location.directory === directory)
-  );
-};
-
-const consumeInventoryEvents = async (
-  client: Client,
-  signal: AbortSignal,
-  onEvent: (event: ClientEvent) => void
-): Promise<void> => {
-  for await (const event of client.event.subscribe({ signal })) {
-    if (signal.aborted) {
-      return;
-    }
-    onEvent(event);
-  }
-};
-
-const startInventorySync = (options: InventorySync): (() => void) => {
-  const controller = new AbortController();
-  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-  let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  let attempts = 0;
-  const scheduleRefresh = () => {
-    if (refreshTimer) {
-      return;
-    }
-    refreshTimer = setTimeout(() => {
-      refreshTimer = undefined;
-      void options.refresh();
-    }, REFRESH_DEBOUNCE_MS);
-  };
-  const cycle = async (refreshFirst: boolean): Promise<void> => {
-    if (refreshFirst) {
-      await options.refresh();
-    }
-    if (controller.signal.aborted) {
-      return;
-    }
-    await consumeInventoryEvents(options.client, controller.signal, (event) => {
-      attempts = 0;
-      if (shouldRefreshInventory(event, options)) {
-        scheduleRefresh();
-      }
-    }).catch(() => null);
-    if (controller.signal.aborted) {
-      return;
-    }
-    const delay = Math.min(
-      1000 * 2 ** Math.min(attempts, MAX_INVENTORY_BACKOFF_STEP),
-      MAX_INVENTORY_RETRY_MS
-    );
-    attempts += 1;
-    retryTimer = setTimeout(() => {
-      retryTimer = undefined;
-      cycle(true).catch(() => null);
-    }, delay);
-  };
-  cycle(true).catch(() => null);
-  return () => {
-    controller.abort();
-    clearTimeout(refreshTimer);
-    clearTimeout(retryTimer);
-  };
-};
-
 const shellKey = (shell: Shell): string => `${shell.kind}:${shell.pty.id}`;
 const shellName = (shell: Shell): string =>
   shell.pty.title || shell.pty.command || "Terminal";
@@ -1204,9 +1103,9 @@ const TerminalList = ({
 }: Props & { desktop: boolean }) => {
   const styles = useThemedStyles(createStyles);
   const { hidden, remove } = useUndoableRemoval<string>("terminals");
-  const { suspended } = useSheetCoordinator();
   const scope = useServerScope();
   const queryClient = useQueryClient();
+  const { suspended } = useSheetCoordinator();
   const foreground = useForeground();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [autoFocusKey, setAutoFocusKey] = useState<string | null>(null);
@@ -1301,17 +1200,10 @@ const TerminalList = ({
   }, [create, loaded, shells.length]);
 
   useEffect(() => {
-    if (!foreground || suspended) {
-      return;
+    if (foreground && !suspended) {
+      void refetch({ cancelRefetch: false });
     }
-    return startInventorySync({
-      client,
-      desktop,
-      directory,
-      refresh: refetch,
-      sessionID,
-    });
-  }, [client, desktop, directory, sessionID, foreground, refetch, suspended]);
+  }, [foreground, refetch, suspended]);
 
   const closeShell = (shell: Shell) => {
     remove(shellKey(shell), {

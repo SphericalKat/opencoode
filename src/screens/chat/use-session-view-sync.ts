@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { queryKeys } from "../../lib/query-keys";
 import { useServerScope } from "../../lib/server-scope";
-import type { OpenCodeClient } from "./session-sync";
+import type { OpenCodeClient } from "./types";
 
 interface UseSessionViewSyncOptions {
   foreground: boolean;

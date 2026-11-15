@@ -1,5 +1,5 @@
 import type { SessionInfo } from "@opencode/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, {
   useCallback,
   useEffect,
@@ -22,6 +22,8 @@ import type { OpenSessionTab } from "../components/beta-navigation";
 import { Busy, ErrorNotice } from "../components/ui";
 import { errorMessage } from "../lib/client";
 import type { Connection } from "../lib/client";
+import { LiveStoreProvider } from "../lib/live-store";
+import { PiBus } from "../lib/live/pi-bus";
 import { makePiChatBackend } from "../lib/pi-chat-backend";
 import { createPiClient } from "../lib/pi-client";
 import type { PiClient } from "../lib/pi-client";
@@ -132,9 +134,11 @@ const PiWorkspaceSession = ({
   onConnectionLost,
 }: Props) => {
   const client = useMemo(() => createPiClient(connection), [connection]);
+  const queryClient = useQueryClient();
+  const scope = useServerScope();
   const backend = useMemo(
-    () => makePiChatBackend(connection, client),
-    [connection, client]
+    () => makePiChatBackend(connection, queryClient, scope, client),
+    [connection, queryClient, scope, client]
   );
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [tabs, setTabs] = useState<OpenSessionTab[]>([]);
@@ -345,6 +349,12 @@ const PiWorkspaceSession = ({
 
   return (
     <View style={{ flex: 1 }}>
+      <PiBus
+        backend={backend}
+        foreground={foreground && !settingsOpen}
+        scope={scope}
+        onConnectionLost={onConnectionLost}
+      />
       {!settingsOpen && !selected && (
         <BetaTabStrip
           current={currentTab}
@@ -451,6 +461,8 @@ export const PiWorkspace = (props: Props) => (
   <SheetVisibilityProvider
     key={`${props.connection.id}:${props.connection.url}`}
   >
-    <PiWorkspaceSession {...props} />
+    <LiveStoreProvider>
+      <PiWorkspaceSession {...props} />
+    </LiveStoreProvider>
   </SheetVisibilityProvider>
 );

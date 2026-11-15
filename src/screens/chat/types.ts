@@ -1,7 +1,24 @@
-import type { SessionInfo, SessionPromptInput } from "@opencode/client";
+import type {
+  SessionInfo,
+  SessionMessageInfo,
+  SessionPromptInput,
+} from "@opencode/client";
 import type React from "react";
 
 import type { ChatBackend } from "../../lib/chat-backend";
+import type { SessionData } from "./use-session-data";
+
+export type CoreClient = ChatBackend["core"];
+export type OpenCodeClient = ChatBackend["opencodeClient"];
+export type Capabilities = ChatBackend["capabilities"];
+
+// The session data queries plus the transcript and the live notices.
+export type SessionState = SessionData & {
+  activityNotice: string | undefined;
+  backendWaiting: { kind: "approval" | "question"; title: string } | undefined;
+  messages: SessionMessageInfo[];
+  streamStatus: string;
+};
 
 export interface Props {
   backend: ChatBackend;
@@ -44,7 +61,6 @@ export type Panel =
   | "resources"
   | "raw"
   | null;
-export type SyncScope = "metadata" | "history" | "inbox" | "requests";
 
 export type Alive = React.RefObject<boolean>;
 export type SetPanel = React.Dispatch<React.SetStateAction<Panel>>;

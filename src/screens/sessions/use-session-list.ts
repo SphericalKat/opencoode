@@ -4,20 +4,19 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { withCleanup } from "../../lib/async";
 import { errorMessage } from "../../lib/client";
 import type { Client } from "../../lib/client";
 import { useDebouncedValue } from "../../lib/debounce";
-import { useForeground } from "../../lib/foreground";
+import { useLiveStore } from "../../lib/live-store";
 import {
   activeSessionsOptions,
   sessionListOptions,
 } from "../../lib/queries/sessions";
 import { queryKeys } from "../../lib/query-keys";
 import { useServerScope } from "../../lib/server-scope";
-import { startLiveUpdates } from "./live-updates";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -42,9 +41,11 @@ export const useSessionList = ({
 }: SessionListOptions) => {
   const scope = useServerScope();
   const queryClient = useQueryClient();
-  const foreground = useForeground();
   const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
-  const [streamError, setStreamError] = useState<string>();
+  const liveError = useLiveStore((s) => s.streamError);
+  const streamError = liveError
+    ? `Live updates unavailable: ${liveError}`
+    : undefined;
   const [refreshing, setRefreshing] = useState(false);
   const list = useInfiniteQuery(
     sessionListOptions(scope, client, {
@@ -62,20 +63,6 @@ export const useSessionList = ({
     () => new Set(Object.keys(running.data ?? {})),
     [running.data]
   );
-  useEffect(() => {
-    if (!foreground) {
-      return;
-    }
-    return startLiveUpdates({
-      client,
-      refresh: () =>
-        queryClient.invalidateQueries(
-          { queryKey: queryKeys.sessions.all(scope) },
-          { cancelRefetch: false }
-        ),
-      setStreamError,
-    });
-  }, [client, foreground, queryClient, scope]);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = list;
   const loadMore = () => {
     if (!hasNextPage || isFetchingNextPage) {

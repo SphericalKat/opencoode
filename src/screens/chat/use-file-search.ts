@@ -5,8 +5,7 @@ import { useEffect, useState } from "react";
 import { useDebouncedValue } from "../../lib/debounce";
 import { directoryFileSearchOptions } from "../../lib/queries/panels";
 import { useServerScope } from "../../lib/server-scope";
-import type { OpenCodeClient, Capabilities } from "./session-sync";
-import type { Panel } from "./types";
+import type { Capabilities, OpenCodeClient, Panel } from "./types";
 
 const SEARCH_DEBOUNCE_MS = 250;
 const NO_RESULTS: FileSystemEntry[] = [];

@@ -234,7 +234,7 @@ interface TranscriptListProps extends Pick<
   | "beginUserScroll"
   | "capabilities"
   | "contentSizeChanged"
-  | "cursor"
+  | "hasNextPage"
   | "disclosures"
   | "draftLoaded"
   | "editInbox"
@@ -246,7 +246,7 @@ interface TranscriptListProps extends Pick<
   | "list"
   | "listLoaded"
   | "loadOlder"
-  | "loadingOlder"
+  | "isFetchingNextPage"
   | "maintainPosition"
   | "opencodeClient"
   | "pending"
@@ -270,7 +270,7 @@ export const TranscriptList = ({
   beginUserScroll,
   capabilities,
   contentSizeChanged,
-  cursor,
+  hasNextPage,
   disclosures,
   draftLoaded,
   editInbox,
@@ -282,7 +282,7 @@ export const TranscriptList = ({
   list,
   listLoaded,
   loadOlder,
-  loadingOlder,
+  isFetchingNextPage,
   maintainPosition,
   opencodeClient,
   pending,
@@ -323,12 +323,12 @@ export const TranscriptList = ({
         onMomentumScrollBegin={beginUserScroll}
         onMomentumScrollEnd={finishUserScroll}
         ListHeaderComponent={
-          cursor ? (
+          hasNextPage ? (
             <Button
               title="Load earlier messages"
               variant="ghost"
               size="compact"
-              busy={loadingOlder}
+              busy={isFetchingNextPage}
               onPress={() => {
                 setFollowing(false);
                 void loadOlder();

@@ -6,11 +6,9 @@ import { queryKeys } from "../../lib/query-keys";
 import { useServerScope } from "../../lib/server-scope";
 import { groupModels } from "./model-groups";
 import { composerModelLabel } from "./model-label";
-import type { CoreClient } from "./session-sync";
-import type { SetPanel } from "./types";
+import type { CoreClient, SetPanel, SessionState } from "./types";
 import { useChatMutation } from "./use-chat-mutation";
 import type { ChatMutationContext } from "./use-chat-mutation";
-import type { SessionState } from "./use-session-state";
 
 interface UseModelSelectionOptions {
   client: CoreClient;

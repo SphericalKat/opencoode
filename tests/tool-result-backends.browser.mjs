@@ -70,7 +70,12 @@ const verifyPiImages = async (page, failed) => {
         )
       )
     );
-    const backend = globalThis.makePiChatBackend(connection, pi);
+    const backend = globalThis.makePiChatBackend(
+      connection,
+      globalThis.createQueryClient(),
+      "server",
+      pi
+    );
     const subscription = backend.subscribe({})[Symbol.asyncIterator]();
     await subscription.next();
     const liveUpdate = await subscription.next();
@@ -80,6 +85,8 @@ const verifyPiImages = async (page, failed) => {
     await subscription.return();
     const reopened = globalThis.makePiChatBackend(
       connection,
+      globalThis.createQueryClient(),
+      "server",
       globalThis.createPiClient(connection, () =>
         Promise.resolve(
           Response.json({

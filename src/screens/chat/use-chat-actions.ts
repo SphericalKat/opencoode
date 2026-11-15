@@ -2,17 +2,16 @@ import type { SessionInboxInfo } from "@opencode/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { ChatBackend } from "../../lib/chat-backend";
+import { resetMessages } from "../../lib/queries/messages";
 import { queryKeys } from "../../lib/query-keys";
 import { useServerScope } from "../../lib/server-scope";
 import { useChatMutation, useChatPending } from "./use-chat-mutation";
 import type { ChatMutationContext } from "./use-chat-mutation";
-import type { MessageState } from "./use-session-state";
 
 interface UseChatActionsOptions {
   backend: ChatBackend;
   context: ChatMutationContext;
   onOpenSession: (id: string) => void;
-  state: MessageState;
 }
 
 const requireOpenCode = (client: ChatBackend["opencodeClient"]) => {
@@ -28,7 +27,6 @@ export const useChatActions = ({
   backend,
   context,
   onOpenSession,
-  state,
 }: UseChatActionsOptions) => {
   const scope = useServerScope();
   const { sessionID } = context;
@@ -177,7 +175,7 @@ export const useChatActions = ({
       await requireOpenCode(opencodeClient).session.revert.commit({
         sessionID,
       });
-      state.resetHistory();
+      void resetMessages(queryClient, scope, sessionID);
     },
   });
 

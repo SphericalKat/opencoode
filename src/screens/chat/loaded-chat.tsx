@@ -43,7 +43,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     contentSizeChanged,
     copySelected,
     currentModel,
-    cursor,
+    hasNextPage,
     delivery,
     disclosures,
     draft,
@@ -63,7 +63,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     list,
     listLoaded,
     loadOlder,
-    loadingOlder,
+    isFetchingNextPage,
     maintainPosition,
     maximumComposerHeight,
     menuContext,
@@ -147,7 +147,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         beginUserScroll={beginUserScroll}
         capabilities={capabilities}
         contentSizeChanged={contentSizeChanged}
-        cursor={cursor}
+        hasNextPage={hasNextPage}
         disclosures={disclosures}
         draftLoaded={draftLoaded}
         editInbox={editInbox}
@@ -159,7 +159,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         list={list}
         listLoaded={listLoaded}
         loadOlder={loadOlder}
-        loadingOlder={loadingOlder}
+        isFetchingNextPage={isFetchingNextPage}
         maintainPosition={maintainPosition}
         opencodeClient={opencodeClient}
         pending={pending}

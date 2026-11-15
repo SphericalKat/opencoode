@@ -5,8 +5,7 @@ import { settle } from "../../lib/async";
 import type { ChatBackend } from "../../lib/chat-backend";
 import type { useNativePresentation } from "../../lib/sheets";
 import { readAttachments } from "./attachments";
-import type { Capabilities } from "./session-sync";
-import type { Alive } from "./types";
+import type { Alive, Capabilities } from "./types";
 import type { ComposerDraft } from "./use-composer-draft";
 
 interface UseDeviceAttachmentsOptions {

@@ -15,8 +15,13 @@ import {
 } from "../../lib/queries/panels";
 import { useServerScope } from "../../lib/server-scope";
 import type { useNativePresentation } from "../../lib/sheets";
-import type { OpenCodeClient, Capabilities } from "./session-sync";
-import type { Alive, Panel, SetPanel } from "./types";
+import type {
+  Alive,
+  Capabilities,
+  OpenCodeClient,
+  Panel,
+  SetPanel,
+} from "./types";
 import { useChatMutation } from "./use-chat-mutation";
 import type { ChatMutationContext } from "./use-chat-mutation";
 

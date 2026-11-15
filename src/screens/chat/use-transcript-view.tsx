@@ -11,14 +11,11 @@ import {
 import type { TranscriptItem } from "../../components/assistant-turn";
 import { sessionActivity } from "../../lib/activity";
 import type { AgentActivity } from "../../lib/activity";
-import { withoutReverted } from "../../lib/chat";
 import type { Rect } from "../../lib/menu-position";
 import { isInterruptedError } from "../../lib/transcript";
 import type { MessageMenuContext } from "./message-menu-entries";
 import { MessageRow } from "./message-rows";
-import type { OpenCodeClient } from "./session-sync";
-import type { SetPanel } from "./types";
-import type { SessionState } from "./use-session-state";
+import type { OpenCodeClient, SetPanel, SessionState } from "./types";
 
 const createTranscriptGrouper = () => {
   const previous = { items: [] as TranscriptItem[] };
@@ -65,7 +62,7 @@ export const useTranscriptView = ({
 }: UseTranscriptViewOptions) => {
   const {
     session,
-    messages: loadedMessages,
+    messages,
     forms,
     permissions,
     active,
@@ -102,11 +99,6 @@ export const useTranscriptView = ({
         : undefined,
     }),
     [setPanel, onOpenSettings]
-  );
-  const revertMessageID = session?.revert?.messageID;
-  const messages = useMemo(
-    () => withoutReverted(loadedMessages, revertMessageID),
-    [loadedMessages, revertMessageID]
   );
   const activity = useMemo<AgentActivity>(
     () =>

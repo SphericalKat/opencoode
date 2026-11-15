@@ -1,7 +1,6 @@
 import { useState } from "react";
 
-import type { Capabilities } from "./session-sync";
-import type { Props, SetPanel } from "./types";
+import type { Capabilities, Props, SetPanel } from "./types";
 
 interface UsePanelRequestOptions {
   capabilities: Capabilities;

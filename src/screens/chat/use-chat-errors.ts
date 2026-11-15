@@ -1,6 +1,13 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { errorMessage, isConnectionUnauthorized } from "../../lib/client";
+import { useLiveStore } from "../../lib/live-store";
 import type { Alive } from "./types";
 
 interface UseChatErrorsOptions {
@@ -21,6 +28,12 @@ export const useChatErrors = ({
       connectionLost.current?.(reason);
     }
   }, []);
+  const streamStatus = useLiveStore((state) => state.status);
+  useEffect(() => {
+    if (streamStatus === "Live") {
+      connectionFailures.current = 0;
+    }
+  }, [streamStatus]);
   useLayoutEffect(() => {
     connectionLost.current = onConnectionLost;
   });
@@ -37,7 +50,6 @@ export const useChatErrors = ({
     [alive]
   );
   return {
-    connectionFailures,
     error,
     reportConnectionFailure,
     setError,

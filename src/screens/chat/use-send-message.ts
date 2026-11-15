@@ -6,13 +6,19 @@ import { saveDraft } from "../../lib/drafts";
 import { playHaptic } from "../../lib/haptics";
 import { queryKeys } from "../../lib/query-keys";
 import { useServerScope } from "../../lib/server-scope";
-import type { CoreClient, OpenCodeClient, Capabilities } from "./session-sync";
-import type { Alive, Attachment, SetPanel } from "./types";
+import type {
+  Alive,
+  Attachment,
+  Capabilities,
+  CoreClient,
+  OpenCodeClient,
+  SetPanel,
+  SessionState,
+} from "./types";
 import type { ChatActions } from "./use-chat-actions";
 import { useChatMutation } from "./use-chat-mutation";
 import type { ChatMutationContext } from "./use-chat-mutation";
 import type { ComposerDraft } from "./use-composer-draft";
-import type { SessionState } from "./use-session-state";
 
 interface SentMessage {
   agentIDs: string[];

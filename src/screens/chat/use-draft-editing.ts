@@ -4,12 +4,16 @@ import React from "react";
 import { confirmAction } from "../../components/dialog";
 import { queryKeys } from "../../lib/query-keys";
 import { useServerScope } from "../../lib/server-scope";
-import type { OpenCodeClient, Capabilities } from "./session-sync";
-import type { Alive, SetPanel } from "./types";
+import type {
+  Alive,
+  Capabilities,
+  OpenCodeClient,
+  SetPanel,
+  SessionState,
+} from "./types";
 import { useChatMutation } from "./use-chat-mutation";
 import type { ChatMutationContext } from "./use-chat-mutation";
 import type { ComposerDraft } from "./use-composer-draft";
-import type { SessionState } from "./use-session-state";
 
 interface UseDraftEditingOptions {
   alive: Alive;
