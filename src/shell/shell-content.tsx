@@ -7,7 +7,7 @@ import type { SessionPane } from "../components/beta-navigation";
 import { MotionScreen } from "../components/motion";
 import { routes } from "../lib/routes";
 import { useThemedStyles } from "../lib/theme";
-import { useSheetStoreApi } from "../stores/sheet-store";
+import { useSheetActions } from "../stores/sheet-store";
 import { ShellFrame } from "./shell-frame";
 import type { ShellView } from "./shell-view";
 import { createStyles } from "./styles";
@@ -81,13 +81,13 @@ export const ShellContent = ({
   onSelectPane,
   view,
 }: ShellContentProps) => {
-  const sheetApi = useSheetStoreApi();
+  const { showMore } = useSheetActions();
   return (
     <ShellFrame
       currentOpenTab={view.currentOpenTab}
       onMore={() => {
         Keyboard.dismiss();
-        sheetApi.setState({ moreOpen: true });
+        showMore();
       }}
       onOpenNavigation={onOpenNavigation}
       onProject={onChooseDirectory}

@@ -1,15 +1,18 @@
-import type { SessionPane } from "../components/beta-navigation";
-import type { WorkspaceSection } from "../stores/session-location-store";
-import type { OpenSessionTab } from "../stores/session-tabs-store";
+import type {
+  SessionPane,
+  SessionTabItem,
+} from "../components/beta-navigation";
+import type { WorkspaceSection } from "../lib/routes";
+import { workspaceSectionFromParam } from "./route-state";
 import type { Tab } from "./types";
 
 const lastPathSegment = /[^/]+(?=\/*$)/u;
 
 const findCurrentOpenTab = (
-  openTabs: OpenSessionTab[],
+  openTabs: SessionTabItem[],
   sessionID: string | null,
   directory: string
-): OpenSessionTab | undefined =>
+): SessionTabItem | undefined =>
   sessionID
     ? (openTabs.find((item) => item.id === sessionID) ?? {
         directory,
@@ -17,13 +20,6 @@ const findCurrentOpenTab = (
         title: "Session",
       })
     : undefined;
-
-const workspaceSections: Record<string, WorkspaceSection> = {
-  changes: "Changes",
-  files: "Files",
-  terminal: "Terminal",
-  worktrees: "Worktrees",
-};
 
 export interface ShellRoute {
   // False on the settings routes and the boot screen, which draw no frame.
@@ -48,12 +44,12 @@ export const parseShellRoute = (
   return {
     framed: tab !== "settings" && segments[0] !== "restoring",
     tab,
-    workspaceSection: workspaceSections[section ?? ""] ?? "Changes",
+    workspaceSection: workspaceSectionFromParam(section),
   };
 };
 
 export interface ShellView {
-  currentOpenTab: OpenSessionTab | undefined;
+  currentOpenTab: SessionTabItem | undefined;
   projectLabel: string;
   returnLabel: string;
   selectedPane: SessionPane;
@@ -62,7 +58,7 @@ export interface ShellView {
 export interface ShellViewInput {
   betaHome: boolean;
   directory: string;
-  openTabs: OpenSessionTab[];
+  openTabs: SessionTabItem[];
   sessionID: string | null;
   tab: Tab;
   workspaceSection: WorkspaceSection;

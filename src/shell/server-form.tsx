@@ -2,15 +2,15 @@ import { ConnectionFlow } from "../components/connection-flow";
 import { useUnsavedGuard } from "../lib/unsaved";
 import { useAppLifecycleStore } from "../stores/app-lifecycle-store";
 import {
+  useConnectionActions,
   useConnectionStore,
-  useConnectionStoreApi,
 } from "../stores/connection-store";
 import { flowError } from "./connection-utils";
 import { useSelectServer } from "./use-connection";
 import { useServerRemoval } from "./use-server-removal";
 
 export const ServerForm = () => {
-  const connectionApi = useConnectionStoreApi();
+  const { clearConnectionError, setForm } = useConnectionActions();
   const confirmNavigation = useUnsavedGuard();
   const { selectServer } = useSelectServer({ confirmNavigation });
   const { hiddenConnections, removeConnection } =
@@ -32,8 +32,8 @@ export const ServerForm = () => {
       unavailableID={unavailableID ?? undefined}
       connecting={connecting}
       error={flowError(connectionError, active, error)}
-      onChangeForm={(next) => connectionApi.setState({ form: next })}
-      onClearError={() => connectionApi.setState({ connectionError: null })}
+      onChangeForm={setForm}
+      onClearError={clearConnectionError}
       onConnect={(connection, alternatives) =>
         selectServer(connection, undefined, alternatives, !!form.name.trim())
       }

@@ -23,7 +23,6 @@ export type WorkspaceSnapshot =
 export interface SessionPanelRequest {
   id: number;
   panel: "stats" | "actions";
-  sessionID: string;
 }
 
 export type ConfirmNavigation = ReturnType<typeof useUnsavedGuard>;

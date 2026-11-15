@@ -16,16 +16,13 @@ export const usePanelRequest = ({
   setPanel,
   visible,
 }: UsePanelRequestOptions) => {
-  const panelRequest = useChatUiStore((state) => state.panelRequest);
+  const panelRequest = useChatUiStore(
+    (state) => state.panelRequests[sessionID]
+  );
   const [handledPanelRequest, setHandledPanelRequest] = useState<
     number | undefined
   >();
-  if (
-    visible &&
-    panelRequest &&
-    panelRequest.sessionID === sessionID &&
-    handledPanelRequest !== panelRequest.id
-  ) {
+  if (visible && panelRequest && handledPanelRequest !== panelRequest.id) {
     setHandledPanelRequest(panelRequest.id);
     if (panelRequest.panel !== "stats" || capabilities.statistics) {
       setPanel(panelRequest.panel);

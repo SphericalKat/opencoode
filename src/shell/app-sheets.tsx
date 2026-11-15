@@ -2,11 +2,15 @@ import { Linking } from "react-native";
 
 import type { SessionPane } from "../components/beta-navigation";
 import { useConnectionStore } from "../stores/connection-store";
-import { useSessionTabsStore } from "../stores/session-tabs-store";
-import { useSheetStore, useSheetStoreApi } from "../stores/sheet-store";
+import {
+  selectOpenTabs,
+  useSessionTabsStore,
+} from "../stores/session-tabs-store";
+import { useSheetActions, useSheetStore } from "../stores/sheet-store";
 import { ServerForm } from "./server-form";
 import { BetaSheets, ProjectsSheet, ServersSheet } from "./sheets";
 import type { ServerClient } from "./types";
+import { useTitledTabs } from "./use-titled-tabs";
 
 const HELP_URL = "https://opencode.ai/v2/docs/";
 
@@ -29,19 +33,14 @@ interface AppSheetsProps {
   selectedPane: SessionPane;
 }
 
-const useSheetActions = () => {
-  const sheetApi = useSheetStoreApi();
+const useSheetHandlers = () => {
+  const sheetActions = useSheetActions();
   return {
-    handleChangeProjectValue: (newDirectory: string) =>
-      sheetApi.setState({ newDirectory, projectError: null }),
-    handleCloseMore: () => sheetApi.setState({ moreOpen: false }),
-    handleCloseNavigation: () => sheetApi.setState({ navigationOpen: false }),
-    handleCloseProjects: () => sheetApi.setState({ projectsOpen: false }),
-    handleDismissMore: () => {
-      const action = sheetApi.getState().pendingAction;
-      sheetApi.setState({ pendingAction: null });
-      action?.();
-    },
+    handleChangeProjectValue: sheetActions.changeNewDirectory,
+    handleCloseMore: sheetActions.hideMore,
+    handleCloseNavigation: sheetActions.hideNavigation,
+    handleCloseProjects: sheetActions.hideProjects,
+    handleDismissMore: () => sheetActions.takePendingAction()?.(),
   };
 };
 
@@ -69,9 +68,10 @@ export const AppSheets = ({
     handleCloseNavigation,
     handleCloseProjects,
     handleDismissMore,
-  } = useSheetActions();
+  } = useSheetHandlers();
   const active = useConnectionStore((state) => state.active);
-  const openTabs = useSessionTabsStore((state) => state.openTabs);
+  const storedTabs = useSessionTabsStore(selectOpenTabs(active?.id));
+  const openTabs = useTitledTabs(active?.id, storedTabs, client);
   const newDirectory = useSheetStore((state) => state.newDirectory);
   const projectBusy = useSheetStore((state) => state.projectBusy);
   const projectError = useSheetStore((state) => state.projectError);
@@ -125,7 +125,7 @@ interface AppServersSheetProps {
 }
 
 export const AppServersSheet = ({ onResumeSheets }: AppServersSheetProps) => {
-  const sheetApi = useSheetStoreApi();
+  const { closeServers } = useSheetActions();
   const active = useConnectionStore((state) => state.active);
   const unavailableID = useConnectionStore((state) => state.unavailableID);
   const serversOpen = useSheetStore((state) => state.serversOpen);
@@ -134,12 +134,7 @@ export const AppServersSheet = ({ onResumeSheets }: AppServersSheetProps) => {
       active={active}
       open={serversOpen}
       unavailableID={unavailableID}
-      onClose={() =>
-        sheetApi.setState((state) => ({
-          serverSheetRequest: state.serverSheetRequest + 1,
-          serversOpen: false,
-        }))
-      }
+      onClose={closeServers}
       onDismiss={onResumeSheets}
     >
       <ServerForm />

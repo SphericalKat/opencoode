@@ -1,21 +1,14 @@
 import { useCallback } from "react";
 
-import {
-  emptyConnectionForm,
-  useConnectionStoreApi,
-} from "../stores/connection-store";
-import { useSheetStoreApi } from "../stores/sheet-store";
+import { useConnectionActions } from "../stores/connection-store";
+import { useSheetActions } from "../stores/sheet-store";
 
 // Opens the Servers sheet with an empty form. The sheet mounts the form on each open.
 export const useOpenServers = () => {
-  const connectionApi = useConnectionStoreApi();
-  const sheetApi = useSheetStoreApi();
+  const { resetForm } = useConnectionActions();
+  const { requestServerSheet } = useSheetActions();
   return useCallback(() => {
-    connectionApi.setState({
-      connectionError: null,
-      form: emptyConnectionForm(),
-    });
-    // Use the latest coordinator because queued tab actions retain stale navigation state.
-    sheetApi.getState().showServerSheet();
-  }, [connectionApi, sheetApi]);
+    resetForm();
+    requestServerSheet();
+  }, [requestServerSheet, resetForm]);
 };

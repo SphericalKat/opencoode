@@ -6,10 +6,13 @@ import type { StateCreator, StoreApi } from "zustand/vanilla";
 
 // A vanilla store behind a context.
 // `useSelector` subscribes. `useApi` returns the store without subscribing,
-// for `getState()` and `setState()` calls inside callbacks and effects.
-export const createStoreContext = <State,>(
+// for `getState()` calls inside callbacks and effects. `useActions` returns
+// the named actions of the store. It does not subscribe, and its result is
+// stable for the life of the provider.
+export const createStoreContext = <State, Actions extends object>(
   name: string,
-  initializer: StateCreator<State>
+  initializer: StateCreator<State>,
+  createActions: (store: StoreApi<State>) => Actions
 ) => {
   const Context = createContext<StoreApi<State> | null>(null);
 
@@ -29,5 +32,10 @@ export const createStoreContext = <State,>(
   const useSelector = <T,>(selector: (state: State) => T) =>
     useStore(useApi(), selector);
 
-  return { Provider, useApi, useSelector };
+  const useActions = () => {
+    const store = useApi();
+    return useMemo(() => createActions(store), [store]);
+  };
+
+  return { Provider, useActions, useApi, useSelector };
 };

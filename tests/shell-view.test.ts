@@ -12,7 +12,7 @@ test("the Sessions tab is the OpenCode tab root", () => {
 });
 
 test("the Workspace tab reads its pane from the section parameter", () => {
-  assert.deepEqual(parseShellRoute(["(opencode)", "workspace"], "terminal"), {
+  assert.deepEqual(parseShellRoute(["(opencode)", "workspace"], "Terminal"), {
     framed: true,
     tab: "workspace",
     workspaceSection: "Terminal",

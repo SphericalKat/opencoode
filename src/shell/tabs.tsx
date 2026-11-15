@@ -21,6 +21,7 @@ const lastPathSegment = /[^/]+(?=\/*$)/u;
 
 const ChatColumn = () => {
   const styles = useThemedStyles(createStyles);
+  const focused = useIsFocused();
   const {
     active,
     chatBackend,
@@ -44,7 +45,7 @@ const ChatColumn = () => {
           serverID={active.id}
           draftKey={`${active.id}:${sessionID}`}
           onSessionInfo={onSessionInfo}
-          visible={!betaHome}
+          visible={focused && !betaHome}
           onOpenNavigation={onOpenNavigation}
           onSessionChanged={onSessionChanged}
           onOpenSession={onOpenSession}
@@ -72,7 +73,7 @@ const useChatBackToHome = (onShowHome: () => void) => {
     useCallback(() => {
       const back = BackHandler.addEventListener("hardwareBackPress", () => {
         const { betaHome, sessionID } = location.getState();
-        if (!sessionID || betaHome || chatUi.getState().messageSelected) {
+        if (!sessionID || betaHome || chatUi.getState().selected[sessionID]) {
           return false;
         }
         onShowHome();

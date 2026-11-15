@@ -1,11 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useLayoutEffect } from "react";
 import { Keyboard } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import { projectsOptions } from "../lib/queries/sessions";
 import { useConnectionStoreApi } from "../stores/connection-store";
-import { useSheetStoreApi } from "../stores/sheet-store";
+import { useSheetActions, useSheetStoreApi } from "../stores/sheet-store";
 import { attempt } from "./connection-utils";
 import type { ServerClient, SheetCoordinator } from "./types";
 
@@ -22,10 +21,17 @@ export const useNavigationSheets = ({
 }: UseNavigationSheetsDeps) => {
   const connectionStore = useConnectionStoreApi();
   const sheetStore = useSheetStoreApi();
+  const sheetActions = useSheetActions();
   const queryClient = useQueryClient();
   const getActive = () => connectionStore.getState().active;
-  const getEpoch = () => connectionStore.getState().epoch;
-  const getSheets = () => sheetStore.getState();
+
+  const showSheet = (kind: "servers" | "projects") => {
+    if (kind === "servers") {
+      sheetActions.showServers();
+    } else {
+      sheetActions.showProjects();
+    }
+  };
 
   const showNavigationSheet = async (
     kind: "servers" | "projects",
@@ -34,46 +40,37 @@ export const useNavigationSheets = ({
     let serverRequest: number | undefined;
     if (kind === "servers") {
       if (!automatic) {
-        sheetStore.setState({ automaticServerRequest: null });
+        sheetActions.clearAutomaticServerRequest();
       }
       if (!getActive()) {
-        sheetStore.setState({
-          serverSheetRequest: getSheets().serverSheetRequest + 1,
-        });
+        sheetActions.invalidateServerRequest();
         resumeSheets();
         return;
       }
-      const request = getSheets().serverSheetRequest + 1;
+      const request = sheetActions.beginServerRequest(automatic);
       serverRequest = request;
-      sheetStore.setState({ serverSheetRequest: request });
-      if (automatic) {
-        sheetStore.setState({ automaticServerRequest: request });
-      }
       const owner = getActive();
-      const connectionEpoch = getEpoch();
       await suspendSheets();
-      if (request !== getSheets().serverSheetRequest) {
+      if (request !== sheetStore.getState().serverSheetRequest) {
         return;
       }
-      if (owner !== getActive() || connectionEpoch !== getEpoch()) {
-        sheetStore.setState({ automaticServerRequest: null });
+      if (owner !== getActive()) {
+        sheetActions.clearAutomaticServerRequest();
         resumeSheets();
         return;
       }
     }
-    if (getSheets().navigationOpen || getSheets().navigationPresented) {
-      sheetStore.setState({
-        navigationOpen: false,
-        pendingNavigationSheet: { epoch: getEpoch(), kind, serverRequest },
+    const { navigationOpen, navigationPresented } = sheetStore.getState();
+    if (navigationOpen || navigationPresented) {
+      sheetActions.deferNavigationSheet({
+        kind,
+        serverID: getActive()?.id ?? null,
+        serverRequest,
       });
       return;
     }
-    sheetStore.setState({ pendingNavigationSheet: null });
-    if (kind === "servers") {
-      sheetStore.setState({ automaticServerRequest: null, serversOpen: true });
-    } else {
-      sheetStore.setState({ projectsOpen: true });
-    }
+    sheetActions.clearPendingNavigationSheet();
+    showSheet(kind);
   };
 
   const openProjects = async () => {
@@ -81,7 +78,7 @@ export const useNavigationSheets = ({
       return;
     }
     showNavigationSheet("projects");
-    sheetStore.setState({ projectBusy: true, projectError: null });
+    sheetActions.beginProjectsLoad();
     const owner = getActive();
     const isOwner = () => getActive() === owner;
     await attempt(
@@ -91,17 +88,17 @@ export const useNavigationSheets = ({
           staleTime: 0,
         });
         if (isOwner()) {
-          sheetStore.setState({ projects: result });
+          sheetActions.setProjects(result);
         }
       },
       (error_) => {
         if (isOwner()) {
-          sheetStore.setState({ projectError: errorMessage(error_) });
+          sheetActions.setProjectError(errorMessage(error_));
         }
       },
       () => {
         if (isOwner()) {
-          sheetStore.setState({ projectBusy: false });
+          sheetActions.finishProjectsLoad();
         }
       }
     );
@@ -109,58 +106,35 @@ export const useNavigationSheets = ({
 
   const openNavigation = () => {
     Keyboard.dismiss();
-    if (getSheets().pendingNavigationSheet?.kind === "servers") {
-      sheetStore.setState({
-        automaticServerRequest: null,
-        serverSheetRequest: getSheets().serverSheetRequest + 1,
-      });
+    if (sheetStore.getState().pendingNavigationSheet?.kind === "servers") {
+      sheetActions.invalidateServerRequest();
       resumeSheets();
     }
-    sheetStore.setState({
-      navigationOpen: true,
-      navigationPresented: true,
-      pendingNavigationSheet: null,
-    });
+    sheetActions.presentNavigation();
   };
 
   const onNavigationDismissed = () => {
-    const { pendingAction, pendingNavigationSheet: pending } = getSheets();
-    sheetStore.setState({
-      navigationPresented: false,
-      pendingAction: null,
-      pendingNavigationSheet: null,
-    });
+    const { pendingAction, pendingNavigationSheet: pending } =
+      sheetActions.finishNavigationDismissal();
     if (!pending && pendingAction) {
       pendingAction();
       return;
     }
+    const active = getActive();
     if (
       !pending ||
-      pending.epoch !== getEpoch() ||
-      !getActive() ||
+      !active ||
+      pending.serverID !== active.id ||
       (pending.kind === "servers" &&
-        pending.serverRequest !== getSheets().serverSheetRequest)
+        pending.serverRequest !== sheetStore.getState().serverSheetRequest)
     ) {
       if (pending?.kind === "servers") {
         resumeSheets();
       }
       return;
     }
-    if (pending.kind === "servers") {
-      sheetStore.setState({ automaticServerRequest: null, serversOpen: true });
-    } else {
-      sheetStore.setState({ projectsOpen: true });
-    }
+    showSheet(pending.kind);
   };
-
-  // Queued actions call the latest sheet function through the store.
-  useLayoutEffect(() => {
-    sheetStore.setState({
-      showServerSheet: () => {
-        void showNavigationSheet("servers");
-      },
-    });
-  });
 
   return {
     onNavigationDismissed,

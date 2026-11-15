@@ -11,7 +11,6 @@ import Svg, { Path, Rect } from "react-native-svg";
 
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
-import type { OpenSessionTab } from "../stores/session-tabs-store";
 import { NavIcon } from "./icons";
 import { SheetGroup, SheetRow } from "./list-sheet";
 import { ProjectAvatar } from "./project-avatar";
@@ -146,7 +145,14 @@ const createStyles = (colors: ThemeColors) =>
     tabText: { fontSize: 14, lineHeight: 19 },
   });
 
-const EMPTY_TABS: OpenSessionTab[] = [];
+// An open session tab with the title shown for it.
+export interface SessionTabItem {
+  directory: string;
+  id: string;
+  title: string;
+}
+
+const EMPTY_TABS: SessionTabItem[] = [];
 
 export const SessionSurface = ({
   framed,
@@ -185,7 +191,7 @@ export const BetaTabStrip = ({
   busy,
   onOpen,
 }: {
-  current?: OpenSessionTab;
+  current?: SessionTabItem;
   busy?: boolean;
   onOpen: () => void;
 }) => {
@@ -321,13 +327,13 @@ export const BetaTabsSheet = ({
   onHelp,
 }: {
   visible: boolean;
-  tabs: OpenSessionTab[];
+  tabs: SessionTabItem[];
   selectedID?: string;
   onClose: () => void;
   onDismiss: () => void;
   serverLabel: string;
   onServer: () => void;
-  recent?: OpenSessionTab[];
+  recent?: SessionTabItem[];
   onSelect: (id: string) => void;
   onCloseTab?: (id: string) => void;
   onNew: () => void;

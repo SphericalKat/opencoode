@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { useEffect, useMemo } from "react";
 import { BackHandler } from "react-native";
 
@@ -22,13 +22,13 @@ import {
 import { useShellView } from "../../shell/use-shell-view";
 import { useWorkspaceActions } from "../../shell/use-workspace-actions";
 import { useAppLifecycleStore } from "../../stores/app-lifecycle-store";
-import { useChatUiStoreApi } from "../../stores/chat-ui-store";
+import { useChatUiActions } from "../../stores/chat-ui-store";
 import {
   useConnectionStore,
   useConnectionStoreApi,
 } from "../../stores/connection-store";
 import { useSessionLocationStore } from "../../stores/session-location-store";
-import { useSheetStoreApi } from "../../stores/sheet-store";
+import { useSheetActions } from "../../stores/sheet-store";
 
 type ChangeTab = (next: "sessions" | "settings") => Promise<void>;
 
@@ -50,12 +50,14 @@ const openSettingsSection = async (
   router.navigate(settingsSectionPath(section));
 };
 
+const settingsSectionPathname = /^\/settings\/[^/]+/u;
+
 const OpenCodeLayout = () => {
   const confirmNavigation = useUnsavedGuard();
   const { suspendSheets, resumeSheets } = useSheetCoordinator();
   const connectionApi = useConnectionStoreApi();
-  const sheetApi = useSheetStoreApi();
-  const chatUiApi = useChatUiStoreApi();
+  const sheetActions = useSheetActions();
+  const chatUiActions = useChatUiActions();
   const active = useConnectionStore((state) => state.active);
   const connecting = useConnectionStore((state) => state.connecting);
   const foreground = useAppLifecycleStore((state) => state.foreground);
@@ -78,15 +80,10 @@ const OpenCodeLayout = () => {
     showBetaHome,
     syncSelectedLocation,
   } = useSessionNavigation({ client, confirmNavigation, recordSessionInfo });
-  const {
-    onNavigationDismissed,
-    openNavigation,
-    openProjects,
-    showNavigationSheet,
-  } = useNavigationSheets({ client, resumeSheets, suspendSheets });
+  const { onNavigationDismissed, openNavigation, openProjects } =
+    useNavigationSheets({ client, resumeSheets, suspendSheets });
   const { onProbeFailure, onProbeHealthy } = useConnectionRecovery({
     resumeSheets,
-    showNavigationSheet,
   });
   const { attachFile, openDirectory } = useWorkspaceActions({
     changeDirectory,
@@ -95,8 +92,10 @@ const OpenCodeLayout = () => {
   });
 
   const currentTab = useCurrentTab();
+  const pathname = usePathname();
+  const settingsCanGoBack = settingsSectionPathname.test(pathname);
   useEffect(() => {
-    if (currentTab !== "settings") {
+    if (currentTab !== "settings" || settingsCanGoBack) {
       return;
     }
     const back = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -104,19 +103,14 @@ const OpenCodeLayout = () => {
       return true;
     });
     return () => back.remove();
-  }, [changeTab, confirmSettingsExit, currentTab]);
+  }, [changeTab, confirmSettingsExit, currentTab, settingsCanGoBack]);
 
   const afterBetaMenu = (action: () => void) => {
     const owner = connectionApi.getState().active;
-    const request = connectionApi.getState().epoch;
-    sheetApi.setState({
-      moreOpen: false,
-      pendingAction: () => {
-        const current = connectionApi.getState();
-        if (owner === current.active && request === current.epoch) {
-          action();
-        }
-      },
+    sheetActions.queueAfterMore(() => {
+      if (owner === connectionApi.getState().active) {
+        action();
+      }
     });
   };
   const requestSessionPanel = (panel: "stats" | "actions") => {
@@ -125,11 +119,7 @@ const OpenCodeLayout = () => {
     }
     afterBetaMenu(() => {
       void changeTab("sessions");
-      const panelRequestID = chatUiApi.getState().panelRequestID + 1;
-      chatUiApi.setState({
-        panelRequest: { id: panelRequestID, panel, sessionID },
-        panelRequestID,
-      });
+      chatUiActions.requestPanel(sessionID, panel);
     });
   };
 

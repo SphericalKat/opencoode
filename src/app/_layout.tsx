@@ -7,7 +7,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import ibmPlexMonoMediumFont from "../../assets/fonts/IBMPlexMono-Medium.ttf";
 import ibmPlexMonoFont from "../../assets/fonts/IBMPlexMono-Text.ttf";
 import interFont from "../../assets/fonts/Inter.ttf";
-import { LiveStoreProvider } from "../lib/live-store";
 import { ServerScopeProvider } from "../lib/server-scope";
 import { useSheetCoordinator } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
@@ -17,10 +16,11 @@ import { AppProviders } from "../shell/providers";
 import { createStyles } from "../shell/styles";
 import { ThemedStatusBar } from "../shell/themed-status-bar";
 import { useConnection } from "../shell/use-connection";
-import { useConnectionRecovery } from "../shell/use-connection-recovery";
 import { useNavigationSheets } from "../shell/use-navigation-sheets";
+import { useServerSheetEffects } from "../shell/use-server-sheet-effects";
 import { useShellRoute } from "../shell/use-shell-view";
 import { useConnectionStore } from "../stores/connection-store";
+import { LiveStoreProvider } from "../stores/live-store";
 
 const fonts = {
   IBMPlexMono: ibmPlexMonoFont,
@@ -37,15 +37,15 @@ const ShellRoot = () => {
   const active = useConnectionStore((state) => state.active);
   const booting = useConnectionStore((state) => state.booting);
 
-  // The Servers sheet and the recovery hook serve both backends, so they live
-  // here. The OpenCode layout runs its own copies of the navigation hooks.
+  // The Servers sheet serves both backends, so its effects live here. The
+  // OpenCode layout runs its own copy of the navigation hooks.
   useConnection({ confirmNavigation });
   const { showNavigationSheet } = useNavigationSheets({
     client: null,
     resumeSheets,
     suspendSheets,
   });
-  useConnectionRecovery({ resumeSheets, showNavigationSheet });
+  useServerSheetEffects(showNavigationSheet);
 
   const openCode = !!active && active.backend !== "pi";
   return (

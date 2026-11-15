@@ -6,7 +6,10 @@ import {
   BetaTabStrip,
   SessionSurface,
 } from "../components/beta-navigation";
-import type { SessionPane } from "../components/beta-navigation";
+import type {
+  SessionPane,
+  SessionTabItem,
+} from "../components/beta-navigation";
 import { ErrorNotice } from "../components/ui";
 import {
   SelectionBarOverlay,
@@ -15,7 +18,6 @@ import {
 import { useThemedStyles } from "../lib/theme";
 import { useAppLifecycleStore } from "../stores/app-lifecycle-store";
 import { useSessionLocationStore } from "../stores/session-location-store";
-import type { OpenSessionTab } from "../stores/session-tabs-store";
 import { createStyles } from "./styles";
 import { useShellRoute } from "./use-shell-view";
 
@@ -51,7 +53,7 @@ const StatusBanners = ({ onRetryLocation }: StatusBannersProps) => {
 
 interface ShellFrameProps {
   children: ReactNode;
-  currentOpenTab: OpenSessionTab | undefined;
+  currentOpenTab: SessionTabItem | undefined;
   onMore: () => void;
   onOpenNavigation: () => void;
   onProject: () => void;

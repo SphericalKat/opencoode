@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo } from "react";
 import { makeOpenCodeChatBackend } from "../lib/chat-backend";
 import { createClient } from "../lib/client";
 import { sessionDetailOptions } from "../lib/queries/sessions";
-import { sessionLabel } from "../lib/session-title";
 import {
+  useConnectionActions,
   useConnectionStore,
   useConnectionStoreApi,
 } from "../stores/connection-store";
@@ -14,14 +14,15 @@ import {
   useSessionLocationStore,
   useSessionLocationStoreApi,
 } from "../stores/session-location-store";
-import { useSessionTabsStoreApi } from "../stores/session-tabs-store";
+import { useSessionTabsActions } from "../stores/session-tabs-store";
 
 export const useClientBindings = () => {
   const active = useConnectionStore((state) => state.active);
   const sessionID = useSessionLocationStore((state) => state.sessionID);
   const connection = useConnectionStoreApi();
   const location = useSessionLocationStoreApi();
-  const tabs = useSessionTabsStoreApi();
+  const { openTab } = useSessionTabsActions();
+  const { markRecovering } = useConnectionActions();
   const client = useMemo(
     () => (active && active.backend !== "pi" ? createClient(active) : null),
     [active]
@@ -33,36 +34,23 @@ export const useClientBindings = () => {
   const onPiConnectionLost = useCallback(
     (cause: unknown) => {
       if (active?.backend === "pi") {
-        connection.getState().recoverConnection(active, cause);
+        markRecovering(active, cause);
       }
     },
-    [active, connection]
+    [active, markRecovering]
   );
   const recordSessionInfo = useCallback(
     (session: SessionInfo) => {
-      if (session.id !== location.getState().sessionID) {
+      const serverID = connection.getState().active?.id;
+      if (!serverID || session.id !== location.getState().sessionID) {
         return;
       }
-      const next = {
+      openTab(serverID, {
         directory: session.location.directory,
         id: session.id,
-        title: sessionLabel(session),
-      };
-      const { openTabs } = tabs.getState();
-      const previous = openTabs.find((item) => item.id === next.id);
-      if (
-        previous?.title === next.title &&
-        previous.directory === next.directory
-      ) {
-        return;
-      }
-      tabs.setState({
-        openTabs: previous
-          ? openTabs.map((item) => (item.id === next.id ? next : item))
-          : [...openTabs, next],
       });
     },
-    [location, tabs]
+    [connection, location, openTab]
   );
 
   const { data: detail } = useQuery(

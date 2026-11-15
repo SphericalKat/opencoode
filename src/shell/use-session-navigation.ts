@@ -7,23 +7,26 @@ import type { SessionPane } from "../components/beta-navigation";
 import { errorMessage } from "../lib/client";
 import { sessionDetailOptions } from "../lib/queries/sessions";
 import { queryKeys } from "../lib/query-keys";
-import { routes } from "../lib/routes";
-import { useAppLifecycleStoreApi } from "../stores/app-lifecycle-store";
-import { useComposerStoreApi } from "../stores/composer-store";
+import { routes, workspacePath } from "../lib/routes";
+import type { WorkspaceSection } from "../lib/routes";
+import { useAppLifecycleActions } from "../stores/app-lifecycle-store";
+import { useComposerActions } from "../stores/composer-store";
 import {
   useConnectionStore,
   useConnectionStoreApi,
 } from "../stores/connection-store";
-import { useSessionLocationStoreApi } from "../stores/session-location-store";
-import type { WorkspaceSection } from "../stores/session-location-store";
-import { useSessionTabsStoreApi } from "../stores/session-tabs-store";
-import { useSheetStoreApi } from "../stores/sheet-store";
-import { attempt } from "./connection-utils";
 import {
-  tabFromPathname,
-  workspaceParamFromSection,
-  workspaceSectionFromParam,
-} from "./route-state";
+  useSessionLocationActions,
+  useSessionLocationStoreApi,
+} from "../stores/session-location-store";
+import {
+  selectOpenTabs,
+  useSessionTabsActions,
+  useSessionTabsStoreApi,
+} from "../stores/session-tabs-store";
+import { useSheetActions } from "../stores/sheet-store";
+import { attempt } from "./connection-utils";
+import { tabFromPathname, workspaceSectionFromParam } from "./route-state";
 import type { ConfirmNavigation, ServerClient, Tab } from "./types";
 
 export const useCurrentTab = (): Tab => tabFromPathname(usePathname());
@@ -46,22 +49,31 @@ export const useSessionNavigation = ({
 }: UseSessionNavigationOptions) => {
   const active = useConnectionStore((state) => state.active);
   const connection = useConnectionStoreApi();
-  const lifecycle = useAppLifecycleStoreApi();
+  const { setError } = useAppLifecycleActions();
   const location = useSessionLocationStoreApi();
+  const locationActions = useSessionLocationActions();
   const tabs = useSessionTabsStoreApi();
+  const tabsActions = useSessionTabsActions();
   const router = useRouter();
   const currentTab = useCurrentTab();
   const currentSection = useWorkspaceSection();
   const tabRef = useRef(currentTab);
-  const sectionRef = useRef(currentSection);
   useLayoutEffect(() => {
     tabRef.current = currentTab;
     if (currentTab === "workspace") {
-      sectionRef.current = currentSection;
+      locationActions.setWorkspaceSection(currentSection);
     }
-  }, [currentSection, currentTab]);
-  const sheets = useSheetStoreApi();
-  const composer = useComposerStoreApi();
+  }, [currentSection, currentTab, locationActions]);
+  const sheetActions = useSheetActions();
+  const composerActions = useComposerActions();
+  const clearHandoff = useCallback(
+    (sessionID: string | null) => {
+      if (sessionID) {
+        composerActions.clearHandoff(sessionID);
+      }
+    },
+    [composerActions]
+  );
   const queryClient = useQueryClient();
   const scope = active?.id;
   const fetchSession = useCallback(
@@ -92,74 +104,60 @@ export const useSessionNavigation = ({
     },
   });
 
-  const setError = useCallback(
-    (error: string | null) => lifecycle.setState({ error }),
-    [lifecycle]
-  );
-  const closeNavigationSheet = useCallback(
-    () => sheets.setState({ navigationOpen: false }),
-    [sheets]
-  );
-  // Starts a new navigation. Pending async navigations compare their
-  // revision with the current one and stop when it differs.
+  const closeNavigationSheet = sheetActions.hideNavigation;
+  // Starts a new navigation and aborts the previous one. A pending async
+  // navigation stops when its signal is aborted.
+  const selectionRef = useRef<AbortController | null>(null);
   const beginSelection = useCallback(() => {
-    const selectionRevision = location.getState().selectionRevision + 1;
-    location.setState({ selectionRevision });
-    return selectionRevision;
-  }, [location]);
-  const clearAttachmentHandoffs = useCallback(
-    () => composer.setState({ handoffs: {} }),
-    [composer]
+    selectionRef.current?.abort();
+    const controller = new AbortController();
+    selectionRef.current = controller;
+    return controller.signal;
+  }, []);
+  const currentSelection = useCallback(
+    () => selectionRef.current?.signal ?? beginSelection(),
+    [beginSelection]
   );
 
   const showBetaHome = useCallback(() => {
     beginSelection();
-    location.setState({ betaHome: true, openingSession: null });
+    locationActions.showHome();
     router.navigate(routes.sessions);
     closeNavigationSheet();
-  }, [beginSelection, closeNavigationSheet, location, router]);
+  }, [beginSelection, closeNavigationSheet, locationActions, router]);
 
   const changeDirectory = useCallback(
     (nextDirectory: string) => {
       if (connection.getState().active !== active) {
         return;
       }
-      const request = connection.getState().epoch;
       const navigation = beginSelection();
       void confirmNavigation().then((leave) => {
         if (
           !leave ||
           connection.getState().active !== active ||
-          request !== connection.getState().epoch ||
-          navigation !== location.getState().selectionRevision
+          navigation.aborted
         ) {
           return null;
         }
-        location.setState({
-          betaHome: true,
-          betaHomeProject: {
-            directory: nextDirectory,
-            revision: navigation,
-          },
-          directory: nextDirectory,
-          pendingLocation: null,
-          sessionID: null,
-        });
+        clearHandoff(location.getState().sessionID);
+        locationActions.selectBetaHomeProject(nextDirectory);
         router.replace(routes.sessions);
-        sheets.setState({ newDirectory: nextDirectory, projectsOpen: false });
-        clearAttachmentHandoffs();
+        sheetActions.setNewDirectory(nextDirectory);
+        sheetActions.hideProjects();
         return null;
       });
     },
     [
       active,
       beginSelection,
-      clearAttachmentHandoffs,
+      clearHandoff,
       confirmNavigation,
       connection,
       location,
+      locationActions,
       router,
-      sheets,
+      sheetActions,
     ]
   );
 
@@ -171,12 +169,10 @@ export const useSessionNavigation = ({
     if (!id) {
       return Promise.resolve(location.getState().directory);
     }
-    const request = connection.getState().epoch;
-    const navigation = location.getState().selectionRevision;
+    const navigation = currentSelection();
     const current = () =>
       connection.getState().active === active &&
-      request === connection.getState().epoch &&
-      navigation === location.getState().selectionRevision &&
+      !navigation.aborted &&
       location.getState().sessionID === id;
     return (async () => {
       try {
@@ -186,7 +182,7 @@ export const useSessionNavigation = ({
         }
         const next = selected.location.directory;
         if (next === location.getState().directory) {
-          location.setState({ pendingLocation: null });
+          locationActions.clearPendingLocation();
           return next;
         }
         const leave = await confirmNavigation();
@@ -194,14 +190,15 @@ export const useSessionNavigation = ({
           return null;
         }
         if (!leave) {
-          location.setState({
-            pendingLocation: { directory: next, sessionID: id },
+          locationActions.setPendingLocation({
+            directory: next,
+            sessionID: id,
           });
           return null;
         }
-        location.setState({ directory: next, pendingLocation: null });
-        sheets.setState({ newDirectory: next });
-        clearAttachmentHandoffs();
+        clearHandoff(id);
+        locationActions.setDirectory(next);
+        sheetActions.setNewDirectory(next);
         return next;
       } catch (error_) {
         if (current()) {
@@ -213,13 +210,15 @@ export const useSessionNavigation = ({
   }, [
     active,
     client,
-    clearAttachmentHandoffs,
+    clearHandoff,
     confirmNavigation,
     connection,
+    currentSelection,
     fetchSession,
     location,
+    locationActions,
     setError,
-    sheets,
+    sheetActions,
   ]);
 
   const openSession = useCallback(
@@ -227,13 +226,10 @@ export const useSessionNavigation = ({
       if (!client || connection.getState().active !== active) {
         return Promise.resolve(false);
       }
-      const request = connection.getState().epoch;
       const navigation = beginSelection();
-      location.setState({ openingSession: id });
+      locationActions.setOpeningSession(id);
       const current = () =>
-        connection.getState().active === active &&
-        request === connection.getState().epoch &&
-        navigation === location.getState().selectionRevision;
+        connection.getState().active === active && !navigation.aborted;
       const closeNavigation = () => {
         if (!keepNavigation) {
           closeNavigationSheet();
@@ -246,7 +242,7 @@ export const useSessionNavigation = ({
             if (!next || !current() || location.getState().sessionID !== id) {
               return false;
             }
-            location.setState({ betaHome: false });
+            locationActions.setBetaHome(false);
             router.navigate(routes.sessions);
             closeNavigation();
             return true;
@@ -255,17 +251,15 @@ export const useSessionNavigation = ({
           if (!current() || !(await confirmNavigation()) || !current()) {
             return false;
           }
-          if (selected) {
-            location.setState({ directory: selected.location.directory });
-            sheets.setState({ newDirectory: selected.location.directory });
-          }
-          location.setState({
-            betaHome: !id,
-            pendingLocation: null,
+          clearHandoff(location.getState().sessionID);
+          locationActions.setSelection({
+            directory: selected?.location.directory,
             sessionID: id || null,
           });
+          if (selected) {
+            sheetActions.setNewDirectory(selected.location.directory);
+          }
           router.navigate(routes.sessions);
-          clearAttachmentHandoffs();
           if (selected) {
             recordSessionInfo(selected);
           }
@@ -280,7 +274,7 @@ export const useSessionNavigation = ({
         },
         () => {
           if (current()) {
-            location.setState({ openingSession: null });
+            locationActions.setOpeningSession(null);
           }
         }
       );
@@ -288,17 +282,18 @@ export const useSessionNavigation = ({
     [
       active,
       beginSelection,
-      clearAttachmentHandoffs,
       client,
+      clearHandoff,
       closeNavigationSheet,
       confirmNavigation,
       connection,
       fetchSession,
       location,
+      locationActions,
       recordSessionInfo,
       router,
       setError,
-      sheets,
+      sheetActions,
       syncSelectedLocation,
     ]
   );
@@ -309,13 +304,10 @@ export const useSessionNavigation = ({
     }
     const target = requestedTarget ?? location.getState().directory;
     const owner = connection.getState().active;
-    const request = connection.getState().epoch;
     const navigation = beginSelection();
-    location.setState({ creatingSession: true, openingSession: null });
+    locationActions.beginCreatingSession();
     const current = () =>
-      owner === connection.getState().active &&
-      request === connection.getState().epoch &&
-      navigation === location.getState().selectionRevision;
+      owner === connection.getState().active && !navigation.aborted;
     await attempt(
       async () => {
         if (!(await confirmNavigation()) || !current()) {
@@ -325,15 +317,13 @@ export const useSessionNavigation = ({
         if (!current()) {
           return;
         }
-        location.setState({
-          betaHome: false,
+        clearHandoff(location.getState().sessionID);
+        locationActions.setSelection({
           directory: created.location.directory,
-          pendingLocation: null,
           sessionID: created.id,
         });
         router.navigate(routes.sessions);
-        sheets.setState({ newDirectory: created.location.directory });
-        clearAttachmentHandoffs();
+        sheetActions.setNewDirectory(created.location.directory);
         recordSessionInfo(created);
       },
       (error_) => {
@@ -342,7 +332,7 @@ export const useSessionNavigation = ({
         }
       },
       () => {
-        location.setState({ creatingSession: false });
+        locationActions.setCreatingSession(false);
       }
     );
   };
@@ -350,70 +340,55 @@ export const useSessionNavigation = ({
   const closeBetaTab = async (id: string) => {
     if (location.getState().openingSession === id) {
       beginSelection();
-      location.setState({ openingSession: null });
+      locationActions.setOpeningSession(null);
     }
+    const serverID = active?.id;
     if (id === location.getState().sessionID) {
-      const next = tabs.getState().openTabs.find((item) => item.id !== id);
+      const next = selectOpenTabs(serverID)(tabs.getState()).find(
+        (item) => item.id !== id
+      );
       if (next) {
         const wasHome = location.getState().betaHome;
         if (!(await openSession(next.id, true))) {
           return;
         }
-        location.setState({ betaHome: wasHome });
+        locationActions.setBetaHome(wasHome);
       } else {
         const owner = connection.getState().active;
-        const request = connection.getState().epoch;
         const navigation = beginSelection();
         if (!(await confirmNavigation())) {
           return;
         }
-        if (
-          owner !== connection.getState().active ||
-          request !== connection.getState().epoch ||
-          navigation !== location.getState().selectionRevision
-        ) {
+        if (owner !== connection.getState().active || navigation.aborted) {
           return;
         }
-        location.setState({
-          betaHome: true,
-          pendingLocation: null,
-          sessionID: null,
-        });
+        clearHandoff(id);
+        locationActions.clearSelection();
         router.navigate(routes.sessions);
       }
     }
-    tabs.setState((state) => ({
-      openTabs: state.openTabs.filter((item) => item.id !== id),
-    }));
+    if (serverID) {
+      tabsActions.closeTab(serverID, id);
+    }
   };
 
   const afterBetaNavigation = (action: () => void) => {
     const owner = connection.getState().active;
-    const request = connection.getState().epoch;
-    sheets.setState({
-      navigationOpen: false,
-      pendingAction: () => {
-        if (
-          owner === connection.getState().active &&
-          request === connection.getState().epoch
-        ) {
-          action();
-        }
-      },
+    sheetActions.queueAfterNavigation(() => {
+      if (owner === connection.getState().active) {
+        action();
+      }
     });
   };
 
   const navigateToTab = (next: Tab, section?: WorkspaceSection) => {
     if (next === "workspace") {
-      const pane = workspaceParamFromSection(section ?? sectionRef.current);
+      const pane = section ?? location.getState().workspaceSection;
       if (tabRef.current === "workspace") {
         router.setParams({ section: pane });
         return;
       }
-      router.navigate({
-        pathname: routes.workspace,
-        params: { section: pane },
-      });
+      router.navigate(workspacePath(pane));
       return;
     }
     router.navigate(next === "settings" ? routes.settings : routes.sessions);
@@ -421,7 +396,7 @@ export const useSessionNavigation = ({
 
   const changeTab = async (next: Tab, section?: WorkspaceSection) => {
     const navigation = beginSelection();
-    location.setState({ openingSession: null });
+    locationActions.setOpeningSession(null);
     if (next === "sessions" || next === tabRef.current) {
       navigateToTab(next, section);
       closeNavigationSheet();
@@ -431,15 +406,10 @@ export const useSessionNavigation = ({
       return;
     }
     const owner = active;
-    const request = connection.getState().epoch;
     if (location.getState().sessionID && !(await syncSelectedLocation())) {
       return;
     }
-    if (
-      connection.getState().active !== owner ||
-      request !== connection.getState().epoch ||
-      navigation !== location.getState().selectionRevision
-    ) {
+    if (connection.getState().active !== owner || navigation.aborted) {
       return;
     }
     navigateToTab(next, section);

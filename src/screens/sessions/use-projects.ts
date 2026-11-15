@@ -2,13 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { Client } from "../../lib/client";
-import { errorMessage } from "../../lib/client";
+import { errorMessageOrNull } from "../../lib/client";
 import { projectsOptions } from "../../lib/queries/sessions";
 import { useServerScope } from "../../lib/server-scope";
 
 export interface ProjectScope {
   directory: string;
-  revision: number;
 }
 
 interface ProjectsOptions {
@@ -44,7 +43,7 @@ export const useProjects = ({ client, projectScope }: ProjectsOptions) => {
     loadProjects,
     projectDirectory,
     projects: query.data ?? [],
-    projectsError: query.error ? errorMessage(query.error) : undefined,
+    projectsError: errorMessageOrNull(query.error),
     projectsLoading: query.isFetching,
     projectsOpen,
     setProjectDirectory,

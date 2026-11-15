@@ -2,11 +2,13 @@ import type { Project } from "@opencode/client";
 import type { ReactNode } from "react";
 
 import { BetaMoreSheet, BetaTabsSheet } from "../components/beta-navigation";
-import type { SessionPane } from "../components/beta-navigation";
+import type {
+  SessionPane,
+  SessionTabItem,
+} from "../components/beta-navigation";
 import { ProjectDirectoryBrowser } from "../components/project-directory-browser";
 import { Sheet } from "../components/ui";
 import type { Connection } from "../lib/client";
-import type { OpenSessionTab } from "../stores/session-tabs-store";
 import { useSheetStore } from "../stores/sheet-store";
 import type { ServerClient } from "./types";
 
@@ -27,7 +29,7 @@ interface BetaSheetsProps {
   onSettings: () => void;
   onUsage: () => void;
   onView: (pane: SessionPane) => void;
-  openTabs: OpenSessionTab[];
+  openTabs: SessionTabItem[];
   selectedPane: SessionPane;
 }
 

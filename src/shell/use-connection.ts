@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { AppState } from "react-native";
 
+import { noop } from "../lib/async";
 import {
   clearPairingRetry,
   connect,
@@ -19,26 +19,26 @@ import {
   saveConnections,
   saveWorkspace,
 } from "../lib/storage";
-import { useAppLifecycleStoreApi } from "../stores/app-lifecycle-store";
-import { useComposerStoreApi } from "../stores/composer-store";
+import { useAppLifecycleActions } from "../stores/app-lifecycle-store";
+import { useComposerActions } from "../stores/composer-store";
 import {
-  emptyConnectionForm,
+  useConnectionActions,
   useConnectionStore,
   useConnectionStoreApi,
 } from "../stores/connection-store";
 import {
+  useSessionLocationActions,
   useSessionLocationStore,
   useSessionLocationStoreApi,
 } from "../stores/session-location-store";
-import { useSessionTabsStoreApi } from "../stores/session-tabs-store";
-import { useSheetStoreApi } from "../stores/sheet-store";
+import { useSessionTabsActions } from "../stores/session-tabs-store";
+import { useSheetActions } from "../stores/sheet-store";
 import {
   attempt,
   isSameServer,
   locateWorkspace,
   mergeMatchingConnection,
 } from "./connection-utils";
-import { noop } from "./constants";
 import type { AppliedConnection, ConfirmNavigation } from "./types";
 
 interface UseConnectionDeps {
@@ -47,17 +47,14 @@ interface UseConnectionDeps {
 
 export const useSelectServer = ({ confirmNavigation }: UseConnectionDeps) => {
   const connectionApi = useConnectionStoreApi();
-  const lifecycleApi = useAppLifecycleStoreApi();
+  const connectionActions = useConnectionActions();
+  const lifecycleActions = useAppLifecycleActions();
   const locationApi = useSessionLocationStoreApi();
-  const tabsApi = useSessionTabsStoreApi();
-  const sheetApi = useSheetStoreApi();
-  const composerApi = useComposerStoreApi();
+  const locationActions = useSessionLocationActions();
+  const tabsActions = useSessionTabsActions();
+  const sheetActions = useSheetActions();
+  const composerActions = useComposerActions();
   const queryClient = useQueryClient();
-  const setConnectionError = useCallback(
-    (connectionError: string | null) =>
-      connectionApi.setState({ connectionError }),
-    [connectionApi]
-  );
 
   const applyConnection = useCallback(
     (applied: AppliedConnection) => {
@@ -65,13 +62,7 @@ export const useSelectServer = ({ confirmNavigation }: UseConnectionDeps) => {
       clearPairingRetry();
       const refresh = !preserveWorkspace || connected.backend === "pi";
       const previous = connectionApi.getState().active;
-      connectionApi.setState({
-        active: connected,
-        connections: applied.connections,
-        form: emptyConnectionForm(),
-        recovering: null,
-        unavailableID: null,
-      });
+      connectionActions.activate(connected, applied.connections);
       if (refresh) {
         void queryClient.invalidateQueries({ queryKey: [connected.id] });
       }
@@ -83,28 +74,30 @@ export const useSelectServer = ({ confirmNavigation }: UseConnectionDeps) => {
         );
       }
       if (!preserveWorkspace) {
-        tabsApi.setState({ openTabs: [] });
-        locationApi.setState({
-          betaHome: !applied.sessionID,
-          betaHomeProject: undefined,
-          directory: applied.directory,
-          pendingLocation: null,
-          sessionID: applied.sessionID ?? null,
-        });
-        sheetApi.setState({ newDirectory: applied.directory });
-        composerApi.setState({ handoffs: {} });
+        tabsActions.clearTabs(connected.id);
+        const previousSession = locationApi.getState().sessionID;
+        if (previousSession) {
+          composerActions.clearHandoff(previousSession);
+        }
+        locationActions.restoreWorkspace(
+          applied.directory,
+          applied.sessionID ?? null
+        );
+        sheetActions.setNewDirectory(applied.directory);
       }
-      lifecycleApi.setState({ error: null });
-      sheetApi.setState({ serversOpen: false });
+      lifecycleActions.clearError();
+      sheetActions.hideServers();
     },
     [
       queryClient,
       connectionApi,
-      lifecycleApi,
+      connectionActions,
+      lifecycleActions,
       locationApi,
-      tabsApi,
-      sheetApi,
-      composerApi,
+      locationActions,
+      tabsActions,
+      sheetActions,
+      composerActions,
     ]
   );
 
@@ -118,13 +111,8 @@ export const useSelectServer = ({ confirmNavigation }: UseConnectionDeps) => {
       if (connectionApi.getState().connecting) {
         return;
       }
-      connectionApi.setState((state) => ({
-        connecting: true,
-        connectionError: null,
-        epoch: state.epoch + 1,
-      }));
-      const request = connectionApi.getState().epoch;
-      const isCurrent = () => request === connectionApi.getState().epoch;
+      connectionActions.beginConnecting();
+      const isCurrent = () => connectionApi.getState().connecting;
       await attempt(
         async () => {
           const result = await connect(connection, undefined, alternatives);
@@ -186,15 +174,17 @@ export const useSelectServer = ({ confirmNavigation }: UseConnectionDeps) => {
           if (!isCurrent()) {
             return;
           }
-          setConnectionError(connectionErrorMessage(error_, connection));
+          connectionActions.setConnectionError(
+            connectionErrorMessage(error_, connection)
+          );
           const { active: current } = connectionApi.getState();
           if (!current || current.id === connection.id) {
-            connectionApi.setState({ unavailableID: connection.id });
+            connectionActions.markUnavailable(connection.id);
           }
         },
         () => {
           if (isCurrent()) {
-            connectionApi.setState({ connecting: false });
+            connectionActions.finishConnecting();
           }
         }
       );
@@ -202,7 +192,7 @@ export const useSelectServer = ({ confirmNavigation }: UseConnectionDeps) => {
     [
       confirmNavigation,
       applyConnection,
-      setConnectionError,
+      connectionActions,
       connectionApi,
       locationApi,
     ]
@@ -211,27 +201,16 @@ export const useSelectServer = ({ confirmNavigation }: UseConnectionDeps) => {
 };
 
 export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
-  const connectionApi = useConnectionStoreApi();
-  const lifecycleApi = useAppLifecycleStoreApi();
+  const connectionActions = useConnectionActions();
+  const { setError } = useAppLifecycleActions();
   const active = useConnectionStore((state) => state.active);
   const directory = useSessionLocationStore((state) => state.directory);
   const sessionID = useSessionLocationStore((state) => state.sessionID);
   const { selectServer } = useSelectServer({ confirmNavigation });
-  const setError = useCallback(
-    (error: string | null) => lifecycleApi.setState({ error }),
-    [lifecycleApi]
-  );
   const selectServerRef = useRef(selectServer);
   useLayoutEffect(() => {
     selectServerRef.current = selectServer;
   });
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) =>
-      lifecycleApi.setState({ foreground: state === "active" })
-    );
-    return () => subscription.remove();
-  }, [lifecycleApi]);
 
   useEffect(() => {
     if (!active || active.backend === "pi" || !directory) {
@@ -253,7 +232,7 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
         if (!live) {
           return null;
         }
-        connectionApi.setState({ connections: saved });
+        connectionActions.setConnections(saved);
         const last = saved.find((item) => item.id === id);
         if (last) {
           await selectServerRef.current(last, saved);
@@ -267,13 +246,12 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
       })
       .finally(() => {
         if (live) {
-          connectionApi.setState({ booting: false });
+          connectionActions.finishBoot();
         }
       })
       .catch(noop);
     return () => {
       live = false;
-      connectionApi.setState((state) => ({ epoch: state.epoch + 1 }));
     };
-  }, [connectionApi, setError]);
+  }, [connectionActions, setError]);
 };

@@ -5,11 +5,14 @@ import { errorMessage } from "../lib/client";
 import { locationOptions } from "../lib/queries/sessions";
 import { queryKeys } from "../lib/query-keys";
 import { routes } from "../lib/routes";
-import { useAppLifecycleStoreApi } from "../stores/app-lifecycle-store";
-import { useComposerStoreApi } from "../stores/composer-store";
+import { useAppLifecycleActions } from "../stores/app-lifecycle-store";
+import { useComposerActions } from "../stores/composer-store";
 import { useConnectionStoreApi } from "../stores/connection-store";
-import { useSessionLocationStoreApi } from "../stores/session-location-store";
-import { useSheetStoreApi } from "../stores/sheet-store";
+import {
+  useSessionLocationActions,
+  useSessionLocationStoreApi,
+} from "../stores/session-location-store";
+import { useSheetActions, useSheetStoreApi } from "../stores/sheet-store";
 import { attempt } from "./connection-utils";
 import type { ServerClient } from "./types";
 
@@ -26,13 +29,14 @@ export const useWorkspaceActions = ({
 }: UseWorkspaceActionsDeps) => {
   const connectionStore = useConnectionStoreApi();
   const locationStore = useSessionLocationStoreApi();
-  const lifecycleStore = useAppLifecycleStoreApi();
+  const locationActions = useSessionLocationActions();
+  const { setError } = useAppLifecycleActions();
   const sheetStore = useSheetStoreApi();
-  const composerStore = useComposerStoreApi();
+  const sheetActions = useSheetActions();
+  const composerActions = useComposerActions();
   const queryClient = useQueryClient();
   const router = useRouter();
   const getConnection = () => connectionStore.getState();
-  const setError = (error: string | null) => lifecycleStore.setState({ error });
   const createSession = useMutation({
     mutationFn: (target: string) => {
       if (!client) {
@@ -59,16 +63,12 @@ export const useWorkspaceActions = ({
       !/^[A-Za-z]:[\\/]/u.test(target) &&
       !target.startsWith("\\\\")
     ) {
-      sheetStore.setState({
-        projectError: "Enter an absolute directory on the server",
-      });
+      sheetActions.setProjectError("Enter an absolute directory on the server");
       return;
     }
     const owner = getConnection().active;
-    const request = getConnection().epoch;
-    const isCurrent = () =>
-      getConnection().active === owner && request === getConnection().epoch;
-    sheetStore.setState({ projectBusy: true, projectError: null });
+    const isCurrent = () => getConnection().active === owner;
+    sheetActions.beginProjectsLoad();
     await attempt(
       async () => {
         if (!owner) {
@@ -85,12 +85,12 @@ export const useWorkspaceActions = ({
       },
       (error_) => {
         if (isCurrent()) {
-          sheetStore.setState({ projectError: errorMessage(error_) });
+          sheetActions.setProjectError(errorMessage(error_));
         }
       },
       () => {
         if (isCurrent()) {
-          sheetStore.setState({ projectBusy: false });
+          sheetActions.finishProjectsLoad();
         }
       }
     );
@@ -104,13 +104,11 @@ export const useWorkspaceActions = ({
       return false;
     }
     const owner = getConnection().active;
-    const request = getConnection().epoch;
-    const navigation = locationStore.getState().selectionRevision;
-    const { directory } = locationStore.getState();
+    const { directory, sessionID: startSessionID } = locationStore.getState();
     const isCurrent = () =>
       getConnection().active === owner &&
-      getConnection().epoch === request &&
-      locationStore.getState().selectionRevision === navigation;
+      locationStore.getState().directory === directory &&
+      locationStore.getState().sessionID === startSessionID;
     try {
       if (locationStore.getState().sessionID) {
         const nextDirectory = await syncSelectedLocation();
@@ -134,16 +132,8 @@ export const useWorkspaceActions = ({
       if (!isCurrent()) {
         return false;
       }
-      composerStore.setState((state) => ({
-        handoffs: {
-          ...state.handoffs,
-          [selected]: { context: contextText, path },
-        },
-      }));
-      locationStore.setState({
-        betaHome: false,
-        sessionID: selected,
-      });
+      composerActions.setHandoff(selected, { context: contextText, path });
+      locationActions.setSelection({ sessionID: selected });
       router.navigate(routes.sessions);
       return true;
     } catch (error_) {

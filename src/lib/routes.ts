@@ -1,4 +1,11 @@
-export type WorkspacePane = "changes" | "files" | "terminal" | "worktrees";
+export const workspaceSections = [
+  "Changes",
+  "Files",
+  "Terminal",
+  "Worktrees",
+] as const;
+
+export type WorkspaceSection = (typeof workspaceSections)[number];
 
 export const routes = {
   restoring: "/restoring",
@@ -10,8 +17,8 @@ export const routes = {
   piSettings: "/pi/settings",
 } as const;
 
-export const workspacePath = (pane: WorkspacePane) =>
-  ({ pathname: routes.workspace, params: { section: pane } }) as const;
+export const workspacePath = (section: WorkspaceSection) =>
+  ({ pathname: routes.workspace, params: { section } }) as const;
 
 export const settingsSectionPath = (section: string) =>
   ({
@@ -21,5 +28,3 @@ export const settingsSectionPath = (section: string) =>
 
 export const piSettingsSectionPath = (section: string) =>
   ({ pathname: "/pi/settings/[section]", params: { section } }) as const;
-
-export const WIDE_SETTINGS_WIDTH = 920;
