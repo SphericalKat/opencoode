@@ -26,7 +26,11 @@ import {
 } from "../stores/session-tabs-store";
 import { useSheetActions } from "../stores/sheet-store";
 import { attempt } from "./connection-utils";
-import { tabFromPathname, workspaceSectionFromParam } from "./route-state";
+import {
+  settingsTabHref,
+  tabFromPathname,
+  workspaceSectionFromParam,
+} from "./route-state";
 import type { ConfirmNavigation, ServerClient, Tab } from "./types";
 
 export const useCurrentTab = (): Tab => tabFromPathname(usePathname());
@@ -57,13 +61,18 @@ export const useSessionNavigation = ({
   const router = useRouter();
   const currentTab = useCurrentTab();
   const currentSection = useWorkspaceSection();
+  const settingsSection = useGlobalSearchParams<{ section?: string }>().section;
   const tabRef = useRef(currentTab);
+  const settingsSectionRef = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     tabRef.current = currentTab;
+    if (currentTab === "settings") {
+      settingsSectionRef.current = settingsSection;
+    }
     if (currentTab === "workspace") {
       locationActions.setWorkspaceSection(currentSection);
     }
-  }, [currentSection, currentTab, locationActions]);
+  }, [currentSection, currentTab, locationActions, settingsSection]);
   const sheetActions = useSheetActions();
   const composerActions = useComposerActions();
   const clearHandoff = useCallback(
@@ -391,7 +400,11 @@ export const useSessionNavigation = ({
       router.navigate(workspacePath(pane));
       return;
     }
-    router.navigate(next === "settings" ? routes.settings : routes.sessions);
+    if (next === "settings") {
+      router.navigate(settingsTabHref(settingsSectionRef.current));
+      return;
+    }
+    router.navigate(routes.sessions);
   };
 
   const changeTab = async (next: Tab, section?: WorkspaceSection) => {
