@@ -17,6 +17,7 @@ import {
 } from "../stores/connection-store";
 import {
   useSessionLocationActions,
+  useSessionLocationStore,
   useSessionLocationStoreApi,
 } from "../stores/session-location-store";
 import {
@@ -31,6 +32,7 @@ import {
   tabFromPathname,
   workspaceSectionFromParam,
 } from "./route-state";
+import type { RememberedSettingsSection } from "./route-state";
 import type { ConfirmNavigation, ServerClient, Tab } from "./types";
 
 export const useCurrentTab = (): Tab => tabFromPathname(usePathname());
@@ -63,16 +65,29 @@ export const useSessionNavigation = ({
   const currentSection = useWorkspaceSection();
   const settingsSection = useGlobalSearchParams<{ section?: string }>().section;
   const tabRef = useRef(currentTab);
-  const settingsSectionRef = useRef<string | undefined>(undefined);
+  const settingsSectionRef = useRef<RememberedSettingsSection | undefined>(
+    undefined
+  );
+  const locationDirectory = useSessionLocationStore((state) => state.directory);
+  const settingsKey = `${active?.id}:${locationDirectory}`;
   useLayoutEffect(() => {
     tabRef.current = currentTab;
     if (currentTab === "settings") {
-      settingsSectionRef.current = settingsSection;
+      settingsSectionRef.current = {
+        key: settingsKey,
+        section: settingsSection,
+      };
     }
     if (currentTab === "workspace") {
       locationActions.setWorkspaceSection(currentSection);
     }
-  }, [currentSection, currentTab, locationActions, settingsSection]);
+  }, [
+    currentSection,
+    currentTab,
+    locationActions,
+    settingsKey,
+    settingsSection,
+  ]);
   const sheetActions = useSheetActions();
   const composerActions = useComposerActions();
   const clearHandoff = useCallback(
@@ -401,7 +416,7 @@ export const useSessionNavigation = ({
       return;
     }
     if (next === "settings") {
-      router.navigate(settingsTabHref(settingsSectionRef.current));
+      router.navigate(settingsTabHref(settingsSectionRef.current, settingsKey));
       return;
     }
     router.navigate(routes.sessions);

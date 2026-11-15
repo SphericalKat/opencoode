@@ -23,9 +23,21 @@ export const workspaceSectionFromParam = (
   return value && isWorkspaceSection(value) ? value : "Changes";
 };
 
+export interface RememberedSettingsSection {
+  key: string;
+  section: string | undefined;
+}
+
 // Navigating to the settings index pops the settings stack to its first
-// screen. Re-entering settings targets the section that was last open.
-export const settingsTabHref = (section: string | undefined) => {
-  const known = allSections.find((candidate) => candidate === section);
+// screen. Re-entering settings targets the section that was last open, unless
+// the server or directory (the key) changed since then.
+export const settingsTabHref = (
+  remembered: RememberedSettingsSection | undefined,
+  key: string
+) => {
+  const known =
+    remembered?.key === key
+      ? allSections.find((candidate) => candidate === remembered.section)
+      : undefined;
   return known ? settingsSectionPath(known) : routes.settings;
 };

@@ -25,13 +25,25 @@ test("an unknown or missing pane falls back to Changes", () => {
 });
 
 test("re-entering settings targets the section that was last open", () => {
-  assert.deepEqual(settingsTabHref("Models"), {
-    pathname: "/(opencode)/settings/[section]",
-    params: { section: "Models" },
-  });
+  assert.deepEqual(
+    settingsTabHref({ key: "a:/repo", section: "Models" }, "a:/repo"),
+    {
+      pathname: "/(opencode)/settings/[section]",
+      params: { section: "Models" },
+    }
+  );
 });
 
 test("settings opens at its index without a known section", () => {
-  assert.equal(settingsTabHref(undefined), "/(opencode)/settings");
-  assert.equal(settingsTabHref("nope"), "/(opencode)/settings");
+  assert.equal(settingsTabHref(undefined, "a:/repo"), "/(opencode)/settings");
+  assert.equal(
+    settingsTabHref({ key: "a:/repo", section: "nope" }, "a:/repo"),
+    "/(opencode)/settings"
+  );
+});
+
+test("settings opens at its index after a server or directory change", () => {
+  const remembered = { key: "a:/repo", section: "Models" };
+  assert.equal(settingsTabHref(remembered, "b:/repo"), "/(opencode)/settings");
+  assert.equal(settingsTabHref(remembered, "a:/other"), "/(opencode)/settings");
 });
