@@ -3,7 +3,10 @@ import test from "node:test";
 
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 
-import { sessionDetailOptions } from "../src/lib/queries/sessions";
+import {
+  removeDeletedSessionQueries,
+  sessionDetailOptions,
+} from "../src/lib/queries/sessions";
 import { queryKeys } from "../src/lib/query-keys";
 import {
   cachedTabTitles,
@@ -103,4 +106,43 @@ test("a deleted session tab sends no detail request", async () => {
   unsubscribe();
   rebuilt();
   assert.equal(fetches, 0);
+});
+
+test("deleting a session keeps its detail and drops its other queries", async () => {
+  const queryClient = new QueryClient();
+  const { queryKey } = sessionDetailOptions(SCOPE, null, "ses_deleted");
+  let fetches = 0;
+  queryClient.setQueryDefaults(queryKey, {
+    queryFn: () => {
+      fetches += 1;
+      throw new Error("404");
+    },
+  });
+  queryClient.setQueryData(queryKey, {
+    id: "ses_deleted",
+    title: "A (fork #1)",
+  } as never);
+  queryClient.setQueryData(
+    queryKeys.session.messages(SCOPE, "ses_deleted"),
+    []
+  );
+  queryClient.setQueryData(queryKeys.session.messages(SCOPE, "ses_other"), []);
+  const unsubscribe = observeTab(queryClient, "ses_deleted");
+  removeDeletedSessionQueries(queryClient, SCOPE, "ses_deleted");
+  await queryClient.invalidateQueries({
+    queryKey: queryKeys.session.all(SCOPE, "ses_deleted"),
+  });
+  unsubscribe();
+  assert.equal(fetches, 0);
+  assert.deepEqual(cachedTabTitles(queryClient, SCOPE, tabs.slice(1)), [
+    "A (fork #1)",
+  ]);
+  assert.equal(
+    queryClient.getQueryData(queryKeys.session.messages(SCOPE, "ses_deleted")),
+    undefined
+  );
+  assert.deepEqual(
+    queryClient.getQueryData(queryKeys.session.messages(SCOPE, "ses_other")),
+    []
+  );
 });

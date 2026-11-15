@@ -3,6 +3,7 @@ import {
   queryOptions,
   skipToken,
 } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 
 import type { ChatBackend } from "../chat-backend";
 import type { Client } from "../client";
@@ -124,3 +125,17 @@ export const locationOptions = (
     refetchOnMount: true,
     staleTime: 30_000,
   });
+
+// A deleted session keeps its cached detail because its open tab reads the
+// title from it. The other queries of the session are removed.
+export const removeDeletedSessionQueries = (
+  queryClient: QueryClient,
+  scope: Scope,
+  sessionID: string
+) => {
+  const detailKey = queryKeys.session.detail(scope, sessionID);
+  queryClient.removeQueries({
+    predicate: (query) => query.queryKey[3] !== detailKey[3],
+    queryKey: queryKeys.session.all(scope, sessionID),
+  });
+};

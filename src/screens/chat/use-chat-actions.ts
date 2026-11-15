@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { ChatBackend } from "../../lib/chat-backend";
 import { resetMessages } from "../../lib/queries/messages";
+import { removeDeletedSessionQueries } from "../../lib/queries/sessions";
 import { queryKeys } from "../../lib/query-keys";
 import { useServerScope } from "../../lib/server-scope";
 import { useChatMutation, useChatPending } from "./use-chat-mutation";
@@ -46,9 +47,7 @@ export const useChatActions = ({
     mutationFn: () =>
       requireOpenCode(opencodeClient).session.remove({ sessionID }),
     onSuccess: () => {
-      queryClient.removeQueries({
-        queryKey: queryKeys.session.all(scope, sessionID),
-      });
+      removeDeletedSessionQueries(queryClient, scope, sessionID);
       return queryClient.invalidateQueries({ queryKey: sessions() });
     },
   });

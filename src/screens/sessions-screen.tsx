@@ -16,6 +16,7 @@ import { confirmAction, promptText } from "../components/dialog";
 import { useUndoableRemoval } from "../components/snackbar";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { removeDeletedSessionQueries } from "../lib/queries/sessions";
 import { queryKeys } from "../lib/query-keys";
 import { useServerScope } from "../lib/server-scope";
 import { sessionLabel } from "../lib/session-title";
@@ -257,9 +258,7 @@ export const SessionsScreen = ({
     ...mutationOptions,
     mutationFn: (sessionID: string) => client.session.remove({ sessionID }),
     onSuccess: (_result, sessionID) => {
-      queryClient.removeQueries({
-        queryKey: queryKeys.session.all(scope, sessionID),
-      });
+      removeDeletedSessionQueries(queryClient, scope, sessionID);
       return invalidateSessions();
     },
   });
