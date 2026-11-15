@@ -63,25 +63,44 @@ export const useSessionData = ({
   const scope = useServerScope();
   const queryClient = useQueryClient();
   const { capabilities, core, opencodeClient } = backend;
-  const detail = useQuery(sessionDetailOptions(scope, core.session, sessionID));
+  // A hidden chat observes nothing of its session. An event for a session
+  // that a list screen deleted must not refetch it behind the list.
+  const live = foreground && visible;
+  const detail = useQuery({
+    ...sessionDetailOptions(scope, core.session, sessionID),
+    enabled: live,
+  });
   const directory = detail.data?.location.directory;
-  const inbox = useQuery(
-    sessionInboxOptions(scope, opencodeClient, capabilities.inbox, sessionID)
-  );
-  const ownForms = useQuery(
-    sessionFormsOptions(scope, opencodeClient, capabilities.forms, sessionID)
-  );
+  const inbox = useQuery({
+    ...sessionInboxOptions(
+      scope,
+      opencodeClient,
+      capabilities.inbox,
+      sessionID
+    ),
+    enabled: live,
+  });
+  const ownForms = useQuery({
+    ...sessionFormsOptions(
+      scope,
+      opencodeClient,
+      capabilities.forms,
+      sessionID
+    ),
+    enabled: live,
+  });
   const directoryForms = useQuery(
     directoryFormsOptions(scope, opencodeClient, capabilities.forms, directory)
   );
-  const permissions = useQuery(
-    sessionPermissionsOptions(
+  const permissions = useQuery({
+    ...sessionPermissionsOptions(
       scope,
       opencodeClient,
       capabilities.permissions,
       sessionID
-    )
-  );
+    ),
+    enabled: live,
+  });
   const active = useQuery({
     ...activeSessionsOptions(scope, core.session),
     select: (running) => !!running[sessionID],
@@ -89,18 +108,17 @@ export const useSessionData = ({
   const status = useQuery(
     sessionStatusOptions(queryClient, scope, core, sessionID)
   );
-  const catalogLive = foreground && visible;
   const models = useQuery({
     ...catalogModelsOptions(scope, core, directory),
-    enabled: catalogLive,
+    enabled: live,
   });
   const defaultModel = useQuery({
     ...catalogDefaultModelOptions(scope, core, directory),
-    enabled: catalogLive,
+    enabled: live,
   });
   const providers = useQuery({
     ...catalogProvidersOptions(scope, opencodeClient, directory),
-    enabled: catalogLive,
+    enabled: live,
   });
   const agents = useQuery({
     ...catalogAgentsOptions(
@@ -109,7 +127,7 @@ export const useSessionData = ({
       capabilities.agents,
       directory
     ),
-    enabled: catalogLive,
+    enabled: live,
   });
   const commands = useQuery({
     ...catalogCommandsOptions(
@@ -118,7 +136,7 @@ export const useSessionData = ({
       capabilities.commands,
       directory
     ),
-    enabled: catalogLive,
+    enabled: live,
   });
   const skills = useQuery({
     ...catalogSkillsOptions(
@@ -127,7 +145,7 @@ export const useSessionData = ({
       capabilities.skills,
       directory
     ),
-    enabled: catalogLive,
+    enabled: live,
   });
   const forms = useMemo(
     () => [

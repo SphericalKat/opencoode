@@ -8,9 +8,9 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 import type { SessionTabItem } from "../components/beta-navigation";
 import { sessionDetailOptions } from "../lib/queries/sessions";
+import { queryKeys } from "../lib/query-keys";
 import { sessionLabel } from "../lib/session-title";
 import type { OpenSessionTab } from "../stores/session-tabs-store";
-import type { ServerClient } from "./types";
 
 const FALLBACK_TITLE = "Session";
 
@@ -27,25 +27,30 @@ export const cachedTabTitles = (
     return detail ? sessionLabel(detail) : FALLBACK_TITLE;
   });
 
-// Adds a title to each open tab from the cache. With a client, it also fetches
-// the detail of tabs that miss it and keeps it fresh. Without a client, it
-// only reads the cache. A query without a client must not observe the key: its
-// `skipToken` replaces the query function of the observers that have a client,
-// and an invalidation then fetches with `skipToken`. The cache notifies while
-// a component renders, so the listener goes through the notify manager.
+// Observes the detail of a tab without a query function and without fetching.
+// The observer keeps the cached detail from garbage collection. Invalidation
+// skips a disabled observer, so a deleted session sends no request. An
+// observer with its own query function would also replace the one of the chat
+// that observes the same key.
+export const tabDetailObserverOptions = (scope: string, sessionID: string) => ({
+  enabled: false,
+  queryKey: queryKeys.session.detail(scope, sessionID),
+  staleTime: Number.POSITIVE_INFINITY,
+});
+
+// Adds a title to each open tab from the cache. A chat fetches the detail when
+// it opens, and live events keep it fresh while the chat is open. The cache
+// notifies while a component renders, so the listener goes through the notify
+// manager.
 export const useTitledTabs = (
   serverID: string | undefined,
-  tabs: OpenSessionTab[],
-  client: ServerClient | null
+  tabs: OpenSessionTab[]
 ): SessionTabItem[] => {
   const queryClient = useQueryClient();
   useQueries({
-    queries:
-      client && serverID
-        ? tabs.map((tab) =>
-            sessionDetailOptions(serverID, client.session, tab.id)
-          )
-        : [],
+    queries: serverID
+      ? tabs.map((tab) => tabDetailObserverOptions(serverID, tab.id))
+      : [],
   });
   const subscribe = useCallback(
     (onChange: () => void) =>

@@ -71,7 +71,7 @@ export const AppSheets = ({
   } = useSheetHandlers();
   const active = useConnectionStore((state) => state.active);
   const storedTabs = useSessionTabsStore(selectOpenTabs(active?.id));
-  const openTabs = useTitledTabs(active?.id, storedTabs, client);
+  const openTabs = useTitledTabs(active?.id, storedTabs);
   const newDirectory = useSheetStore((state) => state.newDirectory);
   const projectBusy = useSheetStore((state) => state.projectBusy);
   const projectError = useSheetStore((state) => state.projectError);

@@ -23,7 +23,7 @@ export const useShellView = (): ShellView => {
   const sessionID = useSessionLocationStore((state) => state.sessionID);
   const serverID = useConnectionStore((state) => state.active?.id);
   const storedTabs = useSessionTabsStore(selectOpenTabs(serverID));
-  const openTabs = useTitledTabs(serverID, storedTabs, null);
+  const openTabs = useTitledTabs(serverID, storedTabs);
   return deriveShellView({
     betaHome,
     directory,

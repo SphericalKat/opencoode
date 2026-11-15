@@ -11,6 +11,7 @@ import { useServerScope } from "../../lib/server-scope";
 
 interface UseMessageHistoryOptions {
   backend: ChatBackend;
+  live: boolean;
   revertMessageID: string | undefined;
   sessionID: string;
 }
@@ -21,6 +22,7 @@ const NO_MESSAGES: ReturnType<typeof flattenMessages> = [];
 // write into its first page, and `select` removes the reverted range.
 export const useMessageHistory = ({
   backend,
+  live,
   revertMessageID,
   sessionID,
 }: UseMessageHistoryOptions) => {
@@ -31,6 +33,7 @@ export const useMessageHistory = ({
   );
   const page = useInfiniteQuery({
     ...sessionMessagesOptions(scope, backend.core, sessionID),
+    enabled: live,
     select,
   });
   return {

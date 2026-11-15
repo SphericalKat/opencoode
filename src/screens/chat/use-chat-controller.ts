@@ -77,6 +77,7 @@ export const useChatController = ({
   });
   const history = useMessageHistory({
     backend,
+    live: foreground && visible,
     revertMessageID: data.session?.revert?.messageID,
     sessionID,
   });

@@ -1,5 +1,5 @@
 import type { SessionInfo } from "@opencode/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 
 import { makeOpenCodeChatBackend } from "../lib/chat-backend";
@@ -53,18 +53,31 @@ export const useClientBindings = () => {
     [connection, location, openTab]
   );
 
-  const { data: detail } = useQuery(
-    sessionDetailOptions(
-      active?.id ?? "",
-      sessionID ? (client?.session ?? null) : null,
-      sessionID ?? ""
-    )
-  );
+  const queryClient = useQueryClient();
+  // Reads the detail once for the opened session. An observer would refetch it
+  // after the session is deleted while its chat is hidden.
   useEffect(() => {
-    if (detail) {
-      recordSessionInfo(detail);
+    if (!(client && active && sessionID)) {
+      return;
     }
-  }, [detail, recordSessionInfo]);
+    let current = true;
+    const record = async () => {
+      try {
+        const detail = await queryClient.ensureQueryData(
+          sessionDetailOptions(active.id, client.session, sessionID)
+        );
+        if (current) {
+          recordSessionInfo(detail);
+        }
+      } catch {
+        // The chat reports a failed detail request.
+      }
+    };
+    void record();
+    return () => {
+      current = false;
+    };
+  }, [active, client, queryClient, recordSessionInfo, sessionID]);
   return {
     chatBackend,
     client,
