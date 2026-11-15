@@ -1,6 +1,6 @@
 import "../lib/install-fetch";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -22,6 +22,19 @@ import { useShellRoute } from "../shell/use-shell-view";
 import { useConnectionStore } from "../stores/connection-store";
 import { LiveStoreProvider } from "../stores/live-store";
 
+const transparent = "transparent";
+
+const navigationThemes = {
+  dark: {
+    ...DarkTheme,
+    colors: { ...DarkTheme.colors, background: transparent },
+  },
+  light: {
+    ...DefaultTheme,
+    colors: { ...DefaultTheme.colors, background: transparent },
+  },
+};
+
 const fonts = {
   IBMPlexMono: ibmPlexMonoFont,
   "IBMPlexMono-Medium": ibmPlexMonoMediumFont,
@@ -29,7 +42,7 @@ const fonts = {
 };
 
 const ShellRoot = () => {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useThemedStyles(createStyles);
   const confirmNavigation = useUnsavedGuard();
   const { suspendSheets, resumeSheets } = useSheetCoordinator();
@@ -55,20 +68,22 @@ const ShellRoot = () => {
           style={[styles.safe, framed && { backgroundColor: colors.frame }]}
           edges={["top", "left", "right", "bottom"]}
         >
-          <Stack screenOptions={{ animation: "none", headerShown: false }}>
-            <Stack.Protected guard={booting}>
-              <Stack.Screen name="restoring" />
-            </Stack.Protected>
-            <Stack.Protected guard={!booting && !active}>
-              <Stack.Screen name="welcome" />
-            </Stack.Protected>
-            <Stack.Protected guard={!booting && openCode}>
-              <Stack.Screen name="(opencode)" />
-            </Stack.Protected>
-            <Stack.Protected guard={!booting && active?.backend === "pi"}>
-              <Stack.Screen name="pi" />
-            </Stack.Protected>
-          </Stack>
+          <ThemeProvider value={navigationThemes[scheme]}>
+            <Stack screenOptions={{ animation: "none", headerShown: false }}>
+              <Stack.Protected guard={booting}>
+                <Stack.Screen name="restoring" />
+              </Stack.Protected>
+              <Stack.Protected guard={!booting && !active}>
+                <Stack.Screen name="welcome" />
+              </Stack.Protected>
+              <Stack.Protected guard={!booting && openCode}>
+                <Stack.Screen name="(opencode)" />
+              </Stack.Protected>
+              <Stack.Protected guard={!booting && active?.backend === "pi"}>
+                <Stack.Screen name="pi" />
+              </Stack.Protected>
+            </Stack>
+          </ThemeProvider>
           <AppServersSheet onResumeSheets={resumeSheets} />
         </SafeAreaView>
       </LiveStoreProvider>
