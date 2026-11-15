@@ -138,14 +138,9 @@ export const SessionsScreen = ({
         queryKey: queryKeys.sessions.all(scope),
       }),
     ]);
-  const showFailure = (failure: unknown) => {
-    if (mounted.current) {
-      setError(errorMessage(failure));
-    }
-  };
+  const showFailure = (failure: unknown) => setError(errorMessage(failure));
   const mutationOptions = {
     mutationKey: SESSIONS_MUTATION_KEY,
-    onError: showFailure,
     scope: { id: `sessions:${scope}` },
   };
 
@@ -156,14 +151,7 @@ export const SessionsScreen = ({
         location: { directory: input.directory },
         title: input.title,
       }),
-    onSuccess: async (created) => {
-      if (!mounted.current) {
-        return;
-      }
-      if (archived) {
-        setArchived(false);
-      }
-      openConversation(created.id);
+    onSuccess: async () => {
       await invalidateSessions();
     },
   });
@@ -246,9 +234,6 @@ export const SessionsScreen = ({
         return;
       }
       await invalidateSessions();
-      if (mounted.current) {
-        openConversation(imported.id);
-      }
     },
   });
   const updateMutation = useMutation({
@@ -287,7 +272,18 @@ export const SessionsScreen = ({
       return;
     }
     setError(undefined);
-    createMutation.mutate({ directory: targetDirectory, title });
+    createMutation.mutate(
+      { directory: targetDirectory, title },
+      {
+        onError: showFailure,
+        onSuccess: (created) => {
+          if (archived) {
+            setArchived(false);
+          }
+          openConversation(created.id);
+        },
+      }
+    );
   };
 
   const startSession = () => {
@@ -311,14 +307,16 @@ export const SessionsScreen = ({
   };
 
   const runMutation = <T,>(
-    mutation: { mutate: (value: T) => void },
+    mutation: {
+      mutate: (value: T, options: { onError: (error: Error) => void }) => void;
+    },
     value: T
   ) => {
     if (busy) {
       return;
     }
     setError(undefined);
-    mutation.mutate(value);
+    mutation.mutate(value, { onError: showFailure });
   };
 
   const renameSession = (session: SessionInfo, value: string) => {
@@ -330,7 +328,7 @@ export const SessionsScreen = ({
     setError(undefined);
     updateMutation.mutate(
       { sessionID: session.id, title: nextTitle },
-      { onSettled: () => setRenamingID(undefined) }
+      { onError: showFailure, onSettled: () => setRenamingID(undefined) }
     );
   };
 
@@ -391,7 +389,17 @@ export const SessionsScreen = ({
   const projectActions: ProjectActions = {
     clearNotifications,
     importSession: (target) => {
-      runMutation(importMutation, target);
+      setError(undefined);
+      if (!busy) {
+        importMutation.mutate(target, {
+          onError: showFailure,
+          onSuccess: (imported) => {
+            if (imported) {
+              openConversation(imported.id);
+            }
+          },
+        });
+      }
     },
     newNamedSession: (target) => {
       void (async () => {

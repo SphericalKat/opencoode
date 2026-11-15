@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { FlatList, Keyboard, Pressable, StyleSheet, View } from "react-native";
 
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client } from "../lib/client";
 import { folderListOptions, vcsStatusOptions } from "../lib/queries/panels";
 import { locationOptions } from "../lib/queries/sessions";
@@ -431,8 +431,7 @@ const ProjectDirectoryBrowser = ({
     [listing.data?.entries]
   );
   const loading = listing.isFetching;
-  const browseError =
-    pathError ?? (listing.error ? errorMessage(listing.error) : null);
+  const browseError = pathError ?? errorMessageOrNull(listing.error);
   const initializeGit = useMutation({
     mutationFn: async () => {
       const location = await queryClient.fetchQuery({

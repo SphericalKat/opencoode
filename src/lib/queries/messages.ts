@@ -16,26 +16,23 @@ export const MESSAGE_PAGE_SIZE = 80;
 
 type Core = ChatBackend["core"];
 export type MessagePage = Awaited<ReturnType<Core["message"]["list"]>>;
-export type MessagesData = InfiniteData<MessagePage, string | undefined>;
+// `liveIDs` lists the assistant messages in `pages[0]` that a live event wrote.
+// A snapshot that is fetched later must not replace one of them with older
+// text. The list travels with the cache data, so copies of the data keep it.
+export type MessagesData = InfiniteData<MessagePage, string | undefined> & {
+  liveIDs?: string[];
+};
 
-// A short page means there is no older history.
-export const nextCursor = (page: MessagePage) =>
-  page.data.length === MESSAGE_PAGE_SIZE
-    ? (page.cursor.next ?? undefined)
-    : undefined;
-
-// Assistant messages that a live event wrote into the cache. A snapshot that is
-// fetched later must not replace one of them with older text. The cache itself
-// is the live state, so this set marks which cached messages came from events.
-const liveMessages = new WeakSet<SessionMessageInfo>();
+export const nextCursor = (page: MessagePage) => page.cursor.next ?? undefined;
 
 const isLiveAssistant = (
-  message: SessionMessageInfo | undefined
+  message: SessionMessageInfo | undefined,
+  liveIDs: ReadonlySet<string>
 ): message is SessionMessageAssistant =>
-  message?.type === "assistant" && liveMessages.has(message);
+  message?.type === "assistant" && liveIDs.has(message.id);
 
-// The old rule of `liveMessagesRef`: a snapshot wins only when both copies are
-// complete and the snapshot completed no earlier than the live copy.
+// A snapshot wins only when both copies are complete and the snapshot
+// completed no earlier than the live copy.
 const snapshotSupersedes = (
   snapshot: SessionMessageInfo,
   live: SessionMessageAssistant
@@ -47,30 +44,41 @@ const snapshotSupersedes = (
 
 const mergeHeadPage = (
   previous: MessagePage,
-  next: MessagePage
-): MessagePage => {
+  next: MessagePage,
+  previousLive: ReadonlySet<string>,
+  nextLive: ReadonlySet<string>
+): { liveIDs: string[]; page: MessagePage } => {
   const previousById = new Map(
     previous.data.map((message) => [message.id, message])
   );
   const nextIds = new Set(next.data.map((message) => message.id));
+  const liveIDs = new Set<string>();
   const data: SessionMessageInfo[] = next.data.map((message) => {
     const live = previousById.get(message.id);
-    if (liveMessages.has(message) || !isLiveAssistant(live)) {
+    if (nextLive.has(message.id)) {
+      liveIDs.add(message.id);
       return message;
     }
-    return snapshotSupersedes(message, live) ? message : live;
+    if (!isLiveAssistant(live, previousLive)) {
+      return message;
+    }
+    if (snapshotSupersedes(message, live)) {
+      return message;
+    }
+    liveIDs.add(message.id);
+    return live;
   });
   for (const message of previous.data) {
-    if (isLiveAssistant(message) && !nextIds.has(message.id)) {
+    if (isLiveAssistant(message, previousLive) && !nextIds.has(message.id)) {
       data.push(message);
+      liveIDs.add(message.id);
     }
   }
-  return { ...next, data };
+  return { liveIDs: [...liveIDs], page: { ...next, data } };
 };
 
 // Keeps live assistant messages in `pages[0]` when a head snapshot arrives.
-// It replaces the `liveMessagesRef` rule. Older pages never hold live
-// messages, so they pass through unchanged.
+// Older pages never hold live messages, so they pass through unchanged.
 export const mergeMessagesData = (
   previous: unknown,
   next: unknown
@@ -82,9 +90,16 @@ export const mergeMessagesData = (
   if (!before || !after || !head || !nextHead) {
     return next;
   }
+  const merged = mergeHeadPage(
+    head,
+    nextHead,
+    new Set(before.liveIDs),
+    new Set(after.liveIDs)
+  );
   return {
     ...after,
-    pages: [mergeHeadPage(head, nextHead), ...after.pages.slice(1)],
+    liveIDs: merged.liveIDs,
+    pages: [merged.page, ...after.pages.slice(1)],
   } satisfies MessagesData;
 };
 
@@ -124,21 +139,6 @@ export const sessionMessagesOptions = (
     structuralSharing: mergeMessagesData,
   });
 
-const updateHead = (
-  queryClient: QueryClient,
-  scope: Scope,
-  sessionID: string,
-  update: (head: MessagePage) => MessagePage
-) => {
-  const queryKey = queryKeys.session.messages(scope, sessionID);
-  queryClient.setQueryData<MessagesData>(queryKey, (current) => {
-    const head = current?.pages[0];
-    return current && head
-      ? { ...current, pages: [update(head), ...current.pages.slice(1)] }
-      : current;
-  });
-};
-
 // Applies streamed events to `pages[0]` of an open transcript. A session whose
 // transcript is not in the cache is ignored.
 export const applyLiveMessageEvents = (
@@ -149,10 +149,14 @@ export const applyLiveMessageEvents = (
 ) => {
   const queryKey = queryKeys.session.messages(scope, sessionID);
   void queryClient.cancelQueries({ exact: true, queryKey }, { revert: false });
-  updateHead(queryClient, scope, sessionID, (head) => {
+  queryClient.setQueryData<MessagesData>(queryKey, (current) => {
+    const head = current?.pages[0];
+    if (!current || !head) {
+      return current;
+    }
     const data = projectLiveEvents(head.data, events, sessionID);
     if (data === head.data) {
-      return head;
+      return current;
     }
     const touched = new Set<string>();
     for (const event of events) {
@@ -161,12 +165,17 @@ export const applyLiveMessageEvents = (
         touched.add(assistantMessageID);
       }
     }
+    const liveIDs = new Set(current.liveIDs);
     for (const message of data) {
       if (message.type === "assistant" && touched.has(message.id)) {
-        liveMessages.add(message);
+        liveIDs.add(message.id);
       }
     }
-    return { ...head, data };
+    return {
+      ...current,
+      liveIDs: [...liveIDs],
+      pages: [{ ...head, data }, ...current.pages.slice(1)],
+    };
   });
 };
 
@@ -184,15 +193,39 @@ export const refreshMessagesHead = async (
     await queryClient.invalidateQueries({ queryKey });
     return;
   }
-  const head = await core.message.list({
-    limit: MESSAGE_PAGE_SIZE,
-    order: "desc",
-    sessionID,
-  });
+  const head = await withDeadline(undefined, (signal) =>
+    core.message.list(
+      { limit: MESSAGE_PAGE_SIZE, order: "desc", sessionID },
+      { signal }
+    )
+  );
+  void queryClient.cancelQueries({ exact: true, queryKey }, { revert: false });
   queryClient.setQueryData<MessagesData>(queryKey, (current) =>
     current?.pages[0]
-      ? { ...current, pages: [head, ...current.pages.slice(1)] }
+      ? {
+          pageParams: current.pageParams,
+          pages: [head, ...current.pages.slice(1)],
+        }
       : current
+  );
+};
+
+// Keeps only page 0 without marking the query stale. The merge in
+// `structuralSharing` restores the live message list.
+export const trimMessagesToHead = (
+  queryClient: QueryClient,
+  scope: Scope,
+  sessionID: string
+) => {
+  queryClient.setQueryData<MessagesData>(
+    queryKeys.session.messages(scope, sessionID),
+    (current) =>
+      current
+        ? {
+            pageParams: current.pageParams.slice(0, 1),
+            pages: current.pages.slice(0, 1),
+          }
+        : current
   );
 };
 
@@ -203,16 +236,10 @@ export const resetMessages = async (
   scope: Scope,
   sessionID: string
 ) => {
-  const queryKey = queryKeys.session.messages(scope, sessionID);
-  queryClient.setQueryData<MessagesData>(queryKey, (current) =>
-    current
-      ? {
-          pageParams: current.pageParams.slice(0, 1),
-          pages: current.pages.slice(0, 1),
-        }
-      : current
-  );
-  await queryClient.invalidateQueries({ queryKey });
+  trimMessagesToHead(queryClient, scope, sessionID);
+  await queryClient.invalidateQueries({
+    queryKey: queryKeys.session.messages(scope, sessionID),
+  });
 };
 
 // Pi sends whole snapshots. A snapshot replaces the cache with one page,

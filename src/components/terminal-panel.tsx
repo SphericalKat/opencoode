@@ -19,10 +19,9 @@ import {
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client, Connection } from "../lib/client";
 import { withAlpha } from "../lib/color";
-import { useForeground } from "../lib/foreground";
 import {
   persistentPtySupportOptions,
   ptyListOptions,
@@ -41,6 +40,7 @@ import {
 import type { TerminalEvent } from "../lib/terminal";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { useForeground } from "../stores/app-lifecycle-store";
 import { EdgeFade, useScrollEdges } from "./edge-fade";
 import { IconButton } from "./icon-button";
 import { useSnackbarInset, useUndoableRemoval } from "./snackbar";
@@ -1177,7 +1177,7 @@ const TerminalList = ({
   const busy = createShell.isPending;
   const { mutate: mutateCreate, reset: resetCreate } = createShell;
   const failure = createShell.error ?? list.error;
-  const error = failure ? errorMessage(failure) : null;
+  const error = errorMessageOrNull(failure);
 
   const create = useCallback(() => {
     mutateCreate(undefined, {
@@ -1298,7 +1298,7 @@ const Terminals = (props: Props) => {
     enabled: !suspended,
   });
   const persistent = support.data ?? null;
-  const error = support.error ? errorMessage(support.error) : null;
+  const error = errorMessageOrNull(support.error);
   const { refetch } = support;
 
   return (

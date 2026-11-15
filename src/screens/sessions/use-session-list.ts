@@ -7,16 +7,16 @@ import {
 import { useMemo, useState } from "react";
 
 import { withCleanup } from "../../lib/async";
-import { errorMessage } from "../../lib/client";
+import { errorMessage, errorMessageOrNull } from "../../lib/client";
 import type { Client } from "../../lib/client";
 import { useDebouncedValue } from "../../lib/debounce";
-import { useLiveStore } from "../../lib/live-store";
 import {
   activeSessionsOptions,
   sessionListOptions,
 } from "../../lib/queries/sessions";
 import { queryKeys } from "../../lib/query-keys";
 import { useServerScope } from "../../lib/server-scope";
+import { useLiveStore } from "../../stores/live-store";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -82,7 +82,7 @@ export const useSessionList = ({
   };
   return {
     active,
-    listError: list.error ? errorMessage(list.error) : undefined,
+    listError: errorMessageOrNull(list.error),
     listUnavailable: list.isError,
     loadMore,
     loading:

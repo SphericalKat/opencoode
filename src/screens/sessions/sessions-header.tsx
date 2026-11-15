@@ -136,7 +136,7 @@ interface SessionsHeaderProps {
   archived: boolean;
   compactHeader: boolean;
   error: string | undefined;
-  listError: string | undefined;
+  listError: string | null;
   onChangeSearch: (value: string) => void;
   onOpenProjects: () => void;
   onRefresh: () => void;

@@ -8,10 +8,8 @@ import {
 import React, { useMemo, useState } from "react";
 import { View } from "react-native";
 
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client } from "../lib/client";
-import { useForeground } from "../lib/foreground";
-import { useLiveStore } from "../lib/live-store";
 import {
   activeSessionsOptions,
   childSessionsOptions,
@@ -20,6 +18,8 @@ import { queryKeys } from "../lib/query-keys";
 import { useServerScope } from "../lib/server-scope";
 import { sessionStatus } from "../lib/session-status";
 import { useTheme } from "../lib/theme";
+import { useForeground } from "../stores/app-lifecycle-store";
+import { useLiveStore } from "../stores/live-store";
 import { confirmAction } from "./dialog";
 import { SegmentedControl } from "./segmented-control";
 import { Button, Busy, Card, Empty, ErrorNotice, BodyText, Row } from "./ui";
@@ -91,8 +91,8 @@ export const ChildSessions = ({
   const error =
     actionError ??
     streamError ??
-    (list.error ? errorMessage(list.error) : undefined) ??
-    (activeQuery.error ? errorMessage(activeQuery.error) : undefined);
+    errorMessageOrNull(list.error) ??
+    errorMessageOrNull(activeQuery.error);
   const { fetchNextPage, refetch: refetchList } = list;
   const { refetch: refetchActive } = activeQuery;
   const refresh = () => {

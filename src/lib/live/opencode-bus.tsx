@@ -2,11 +2,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
+import { useLiveActions } from "../../stores/live-store";
 import { settle } from "../async";
 import { makeOpenCodeChatBackend } from "../chat-backend";
 import { errorMessage, isConnectionUnauthorized } from "../client";
 import type { Client } from "../client";
-import { useLiveActions } from "../live-store";
 import type { Scope } from "../query-keys";
 import { retryDelay } from "./backoff";
 import { createOpenCodeRouter } from "./opencode-router";

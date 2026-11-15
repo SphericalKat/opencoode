@@ -295,7 +295,7 @@ export const persistentPtySupportOptions = (scope: Scope, client: Client) =>
       const info = await client.server.info({ signal });
       return info.capabilities?.persistentPty === true;
     },
-    queryKey: [...queryKeys.server.info(scope), "persistent-pty"] as const,
+    queryKey: queryKeys.server.persistentPty(scope),
     refetchOnMount: true,
     staleTime: 0,
   });

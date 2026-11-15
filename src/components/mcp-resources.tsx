@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { Text, View } from "react-native";
 
-import { errorMessage } from "../lib/client";
+import { errorMessageOrNull } from "../lib/client";
 import type { Client } from "../lib/client";
 import { mcpResourcesOptions } from "../lib/queries/panels";
 import { useServerScope } from "../lib/server-scope";
@@ -133,7 +133,7 @@ export const McpResources = ({ client, location, onAttachContext }: Props) => {
   const resources = useQuery(mcpResourcesOptions(scope, client, directory));
   const catalog = resources.data;
   const loading = resources.isFetching;
-  const error = resources.error ? errorMessage(resources.error) : null;
+  const error = errorMessageOrNull(resources.error);
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(15);
   const { refetch } = resources;

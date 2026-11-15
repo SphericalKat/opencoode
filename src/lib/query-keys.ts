@@ -48,10 +48,8 @@ export const queryKeys = {
       [...dirKey(scope, directory), "mcp-resources"] as const,
     pty: (scope: Scope, directory: string) =>
       [...dirKey(scope, directory), "pty"] as const,
-    settings: (scope: Scope, directory: string, kind?: SettingsKind) =>
-      kind
-        ? ([...dirKey(scope, directory), "settings", kind] as const)
-        : ([...dirKey(scope, directory), "settings"] as const),
+    settings: (scope: Scope, directory: string, kind: SettingsKind) =>
+      [...dirKey(scope, directory), "settings", kind] as const,
     shellOutput: (
       scope: Scope,
       directory: string,
@@ -87,6 +85,8 @@ export const queryKeys = {
   projects: (scope: Scope) => [scope, "projects"] as const,
   server: {
     info: (scope: Scope) => [scope, "server", "info"] as const,
+    persistentPty: (scope: Scope) =>
+      [scope, "server", "persistent-pty"] as const,
   },
   session: {
     all: sessionKey,

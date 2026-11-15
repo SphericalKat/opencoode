@@ -167,7 +167,6 @@ const SESSION_ROWS: Row[] = [
     ],
   },
   {
-    // Old scope "metadata".
     applies: types(
       "session.renamed",
       "session.metadata.updated",
@@ -183,7 +182,7 @@ const SESSION_ROWS: Row[] = [
     ],
   },
   {
-    // Old scope "history": a head refresh, never a plain invalidation.
+    // A head refresh, never a plain invalidation.
     applies: types(
       "session.inbox.delivered",
       "session.agent.selected",
@@ -200,7 +199,6 @@ const SESSION_ROWS: Row[] = [
     plan: (_event, sessionID) => [{ kind: "refreshHead", sessionID }],
   },
   {
-    // Old scope "inbox".
     applies: types(
       "session.inbox.delivered",
       "session.inbox.enqueued",
@@ -212,7 +210,6 @@ const SESSION_ROWS: Row[] = [
     ],
   },
   {
-    // Old scope "requests".
     applies: types(
       "permission.asked",
       "permission.replied",

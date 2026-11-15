@@ -3,10 +3,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
+import { useLiveActions } from "../../stores/live-store";
 import { settle } from "../async";
 import type { ChatBackend, ChatBackendSnapshot } from "../chat-backend";
 import { errorMessage, isConnectionUnauthorized } from "../client";
-import { useLiveActions } from "../live-store";
 import { writeMessagesSnapshot } from "../queries/messages";
 import { queryKeys } from "../query-keys";
 import type { Scope } from "../query-keys";

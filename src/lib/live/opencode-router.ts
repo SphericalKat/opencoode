@@ -12,16 +12,17 @@ import {
   applyLiveMessageEvents,
   refreshMessagesHead,
   resetMessages,
+  trimMessagesToHead,
 } from "../queries/messages";
 import type { SessionPage } from "../queries/sessions";
 import { queryKeys } from "../query-keys";
 import type { Scope } from "../query-keys";
 import { createStreamBatch } from "../stream-batch";
-import { createKeyedDebounce } from "./debounce";
+import { createKeyedTimer } from "./keyed-timer";
 import { isDeltaEvent, planEvent, sessionIDOf } from "./opencode-event-table";
 import type { CacheOperation, DirTail } from "./opencode-event-table";
 
-const INVALIDATE_DEBOUNCE_MS = 250;
+const INVALIDATE_DELAY_MS = 250;
 
 interface RouterOptions {
   core: ChatBackend["core"];
@@ -48,7 +49,7 @@ export const createOpenCodeRouter = ({
   queryClient,
   scope,
 }: RouterOptions) => {
-  const debounce = createKeyedDebounce(INVALIDATE_DEBOUNCE_MS);
+  const timers = createKeyedTimer(INVALIDATE_DELAY_MS);
 
   const batch = createStreamBatch<OpenCodeEvent>(
     (events) => {
@@ -70,12 +71,12 @@ export const createOpenCodeRouter = ({
   );
 
   const invalidate = (queryKey: readonly unknown[]) =>
-    debounce.schedule(JSON.stringify(queryKey), () => {
+    timers.schedule(JSON.stringify(queryKey), () => {
       void queryClient.invalidateQueries({ queryKey });
     });
 
   const invalidateDirs = (tail: DirTail) =>
-    debounce.schedule(`dirs:${tail}`, () => {
+    timers.schedule(`dirs:${tail}`, () => {
       void queryClient.invalidateQueries({
         predicate: (query) =>
           isDirQuery(query.queryKey, scope) && query.queryKey[3] === tail,
@@ -87,7 +88,7 @@ export const createOpenCodeRouter = ({
       invalidate(queryKeys.sessions.children(scope, parentID));
       return;
     }
-    debounce.schedule("children", () => {
+    timers.schedule("children", () => {
       void queryClient.invalidateQueries({
         predicate: ({ queryKey }) =>
           queryKey[0] === scope &&
@@ -98,7 +99,7 @@ export const createOpenCodeRouter = ({
   };
 
   const refreshHead = (sessionID: string) =>
-    debounce.schedule(`head:${sessionID}`, () => {
+    timers.schedule(`head:${sessionID}`, () => {
       refreshMessagesHead(queryClient, scope, core, sessionID).catch(() => {
         // The next event or the reconnect refreshes the transcript again.
       });
@@ -247,7 +248,7 @@ export const createOpenCodeRouter = ({
     for (const { queryKey } of cached) {
       const sessionID = String(queryKey[2]);
       if (queryKey[3] === "messages") {
-        void resetMessages(queryClient, scope, sessionID);
+        trimMessagesToHead(queryClient, scope, sessionID);
       } else if (queryKey[3] === "status") {
         queryClient.setQueryData(queryKey, null);
       }
@@ -284,7 +285,7 @@ export const createOpenCodeRouter = ({
   return {
     dispose() {
       batch.clear();
-      debounce.clear();
+      timers.clear();
     },
     flush: batch.flush,
     handle,

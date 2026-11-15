@@ -4,14 +4,14 @@ import React, { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { withCleanup } from "../lib/async";
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client } from "../lib/client";
-import { useForeground } from "../lib/foreground";
 import { objectKey } from "../lib/object-key";
 import { shellListOptions, shellOutputOptions } from "../lib/queries/panels";
 import { queryKeys } from "../lib/query-keys";
 import { useServerScope } from "../lib/server-scope";
 import { useTheme } from "../lib/theme";
+import { useForeground } from "../stores/app-lifecycle-store";
 import { confirmAction } from "./dialog";
 import { SheetGroup, SheetRow } from "./list-sheet";
 import {
@@ -67,7 +67,7 @@ interface SelectedCommandView {
   selected: Command | undefined;
   page: Output | undefined;
   outputBusy: boolean;
-  outputError: string | undefined;
+  outputError: string | null | undefined;
   stopping: boolean;
   goToOutput: (start: number) => void;
   refreshOutput: () => void;
@@ -362,9 +362,8 @@ const Commands = ({
       () => setManualBusy(false)
     );
   };
-  const error = shells.error ? errorMessage(shells.error) : undefined;
-  const outputError =
-    removeError ?? (output.error ? errorMessage(output.error) : undefined);
+  const error = errorMessageOrNull(shells.error);
+  const outputError = removeError ?? errorMessageOrNull(output.error);
   const showLoading = (shells.isPending || manualBusy) && foreground;
   const showOutputBusy = (output.isPending && !!selectedID) || manualBusy;
   const selectCommand = (id: string) => {

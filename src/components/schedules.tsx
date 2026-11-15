@@ -8,7 +8,7 @@ import {
 import React, { useState } from "react";
 import { View } from "react-native";
 
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client } from "../lib/client";
 import { sessionSchedulesOptions } from "../lib/queries/panels";
 import { queryKeys } from "../lib/query-keys";
@@ -146,8 +146,7 @@ export const Schedules = ({
   });
   const busy = useIsMutating({ mutationKey: SCHEDULE_MUTATION_KEY }) > 0;
   const loading = query.isFetching;
-  const error =
-    actionError ?? (query.error ? errorMessage(query.error) : undefined);
+  const error = actionError ?? errorMessageOrNull(query.error);
   const { refetch } = query;
   const refresh = () => {
     setActionError(undefined);

@@ -609,11 +609,14 @@ export const makePiChatBackend = (
       );
     }
     await pi.command(bound, signal);
-    await queryClient.invalidateQueries({
-      exact: true,
-      queryKey: snapshotKey,
-      refetchType: "none",
-    });
+    await Promise.all([
+      queryClient.invalidateQueries({ exact: true, queryKey: snapshotKey }),
+      value.type === "new" || value.type === "switch"
+        ? queryClient.invalidateQueries({
+            queryKey: queryKeys.pi.sessions(scope),
+          })
+        : undefined,
+    ]);
   };
 
   const core: ChatCore = {

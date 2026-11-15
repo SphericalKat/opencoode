@@ -1,6 +1,6 @@
 // Runs one callback for each key after a quiet period. A key that is already
 // waiting keeps its timer, so a burst of events causes one run.
-export const createKeyedDebounce = (delayMs: number) => {
+export const createKeyedTimer = (delayMs: number) => {
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   return {
     clear() {

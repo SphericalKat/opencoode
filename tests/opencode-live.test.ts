@@ -6,7 +6,7 @@ import type { OpenCodeEvent } from "@opencode/client";
 import { QueryClient } from "@tanstack/react-query";
 
 import { retryDelay } from "../src/lib/live/backoff";
-import { createKeyedDebounce } from "../src/lib/live/debounce";
+import { createKeyedTimer } from "../src/lib/live/keyed-timer";
 import { planEvent } from "../src/lib/live/opencode-event-table";
 import { createOpenCodeRouter } from "../src/lib/live/opencode-router";
 import { queryKeys } from "../src/lib/query-keys";
@@ -24,7 +24,7 @@ test("retry delay doubles and stops at 15 seconds", () => {
 });
 
 test("a debounce key runs once for a burst", async () => {
-  const debounce = createKeyedDebounce(10);
+  const debounce = createKeyedTimer(10);
   const calls: string[] = [];
   debounce.schedule("a", () => calls.push("a"));
   debounce.schedule("a", () => calls.push("a"));

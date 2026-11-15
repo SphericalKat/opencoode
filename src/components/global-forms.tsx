@@ -3,12 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { View } from "react-native";
 
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client } from "../lib/client";
-import { useForeground } from "../lib/foreground";
-import { useLiveStore } from "../lib/live-store";
 import { directoryFormsOptions } from "../lib/queries/chat";
 import { useServerScope } from "../lib/server-scope";
+import { useForeground } from "../stores/app-lifecycle-store";
+import { useLiveStore } from "../stores/live-store";
 import { SessionForms } from "./session-forms";
 import { Button, Busy, ErrorNotice, BodyText, Row } from "./ui";
 
@@ -35,7 +35,7 @@ export const GlobalForms = ({
   const error =
     actionError ??
     (liveError ? `Pending request updates unavailable: ${liveError}` : null) ??
-    (formsQuery.error ? errorMessage(formsQuery.error) : null);
+    errorMessageOrNull(formsQuery.error);
   const loading = formsQuery.isFetching;
 
   return (

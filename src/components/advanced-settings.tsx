@@ -15,7 +15,7 @@ import React, {
 } from "react";
 import { Image, Linking, Platform, ScrollView, Text, View } from "react-native";
 
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client } from "../lib/client";
 import { copyText } from "../lib/clipboard";
 import {
@@ -202,10 +202,7 @@ const Usage = ({
   const usage = useQuery(usageLimitsOptions(scope, client, directory));
   const [linkError, setLinkError] = useState<string | null>(null);
   const { data: info, isFetching: loading, refetch } = usage;
-  let error = linkError;
-  if (usage.error) {
-    error = errorMessage(usage.error);
-  }
+  const error = errorMessageOrNull(usage.error) ?? linkError;
   const load = async () => {
     setLinkError(null);
     await refetch();
@@ -316,12 +313,10 @@ const WebSearch = ({
   });
   const { isPending: busy, data: results } = searchWeb;
   const [linkError, setLinkError] = useState<string | null>(null);
-  let error = linkError;
-  if (searchWeb.error) {
-    error = errorMessage(searchWeb.error);
-  } else if (providerList.error) {
-    error = errorMessage(providerList.error);
-  }
+  const error =
+    errorMessageOrNull(searchWeb.error) ??
+    errorMessageOrNull(providerList.error) ??
+    linkError;
   useEffect(() => () => request.current?.abort(), []);
   const search = () => {
     const abort = new AbortController();
@@ -498,7 +493,7 @@ const useGenerateModels = (client: Client, directory: string) => {
   const scope = useServerScope();
   const list = useQuery(generateModelsOptions(scope, client, directory));
   return {
-    error: list.error ? errorMessage(list.error) : null,
+    error: errorMessageOrNull(list.error),
     models: list.data ?? [],
   };
 };

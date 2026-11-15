@@ -30,7 +30,7 @@ import {
   Row,
   Sheet,
 } from "../components/ui";
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client, Connection } from "../lib/client";
 import { copyText } from "../lib/clipboard";
 import { useDebouncedValue } from "../lib/debounce";
@@ -42,6 +42,7 @@ import {
   directoryWorktreesOptions,
 } from "../lib/queries/workspace";
 import { queryKeys } from "../lib/query-keys";
+import type { WorkspaceSection } from "../lib/routes";
 import { useServerScope } from "../lib/server-scope";
 import { useNativePresentation } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
@@ -56,7 +57,6 @@ import {
   saveEditableFile,
   serverFilePath,
 } from "../lib/workspace";
-import type { WorkspaceSection } from "../stores/session-location-store";
 import { ChangesPane } from "./changes/changes-pane";
 
 interface Props {
@@ -589,7 +589,7 @@ const useDirectoryEntries = (
   });
   return {
     entries: files.isError ? NO_ENTRIES : (files.data ?? NO_ENTRIES),
-    error: files.isError ? errorMessage(files.error) : null,
+    error: errorMessageOrNull(files.isError ? files.error : null),
     loading: files.isFetching || !searchSettled,
     refresh: () => {
       void files.refetch();
@@ -616,13 +616,17 @@ const useOpenFileQuery = ({
     enabled: !!file,
   });
   const waiting = !!file && !file.bytes && !file.error;
-  if (file && waiting && !reloading && !fileQuery.isFetching) {
-    if (fileQuery.isError) {
-      setFile({ ...file, error: errorMessage(fileQuery.error) });
-    } else if (fileQuery.data) {
-      setFile(loadedFile(file.path, fileQuery.data));
+  const { data, error, isError, isFetching } = fileQuery;
+  useEffect(() => {
+    if (!file || !waiting || reloading || isFetching) {
+      return;
     }
-  }
+    if (isError) {
+      setFile({ ...file, error: errorMessage(error) });
+    } else if (data) {
+      setFile(loadedFile(file.path, data));
+    }
+  }, [data, error, file, isError, isFetching, reloading, setFile, waiting]);
   return fileQuery;
 };
 
@@ -1094,7 +1098,7 @@ const Worktrees = ({
     (locationQuery.isSuccess && treesQuery.isPending);
   const queryError = locationQuery.error ?? treesQuery.error;
   const failure = queryError ?? createTree.error;
-  const error = failure ? errorMessage(failure) : null;
+  const error = errorMessageOrNull(failure);
   const refresh = () => {
     createTree.reset();
     void locationQuery.refetch();
