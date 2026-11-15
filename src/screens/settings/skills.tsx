@@ -11,7 +11,7 @@ import {
   Sheet,
   mono,
 } from "../../components/ui";
-import { errorMessage } from "../../lib/client";
+import { errorMessageOrNull } from "../../lib/client";
 import type { Client } from "../../lib/client";
 import {
   catalogCommandListOptions,
@@ -32,7 +32,7 @@ const useSkillsData = (client: Client, directory: string) => {
       ? { commands: commandList.data, skills: skillList.data }
       : undefined;
   const failure = skillList.error ?? commandList.error;
-  const error = failure ? errorMessage(failure) : null;
+  const error = errorMessageOrNull(failure);
   const loading = skillList.isFetching || commandList.isFetching;
   const { refetch: refetchSkills } = skillList;
   const { refetch: refetchCommands } = commandList;

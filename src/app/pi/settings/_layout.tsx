@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { Busy } from "../../../components/ui";
-import { piSettingsSectionPath } from "../../../lib/routes";
+import { piSettingsSectionPath, routes } from "../../../lib/routes";
 import { usePiWorkspace } from "../../../screens/pi-workspace";
 import {
   SettingsHostContext,
@@ -35,7 +35,11 @@ const PiSettingsLayout = () => {
 
   return (
     <SettingsHostContext.Provider value={host}>
-      <SettingsRoutesLayout sectionPath={sectionPath} sections={sections} />
+      <SettingsRoutesLayout
+        indexPath={routes.piSettings}
+        sectionPath={sectionPath}
+        sections={sections}
+      />
     </SettingsHostContext.Provider>
   );
 };

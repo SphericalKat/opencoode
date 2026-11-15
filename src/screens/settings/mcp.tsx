@@ -16,7 +16,7 @@ import {
   Row,
   Sheet,
 } from "../../components/ui";
-import { errorMessage } from "../../lib/client";
+import { errorMessageOrNull } from "../../lib/client";
 import type { Client } from "../../lib/client";
 import { mcpResourcesOptions } from "../../lib/queries/panels";
 import { mcpServersOptions } from "../../lib/queries/settings";
@@ -223,10 +223,7 @@ export const Mcp = ({
       <GlobalForms client={client} directory={directory} />
       <ErrorNotice
         error={
-          selected
-            ? null
-            : (errorAction ??
-              (resources.error ? errorMessage(resources.error) : null))
+          selected ? null : (errorAction ?? errorMessageOrNull(resources.error))
         }
       />
       {visible && visible.length > 0 && (

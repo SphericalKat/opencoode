@@ -12,7 +12,7 @@ import {
   BodyText,
   Sheet,
 } from "../../components/ui";
-import { errorMessage } from "../../lib/client";
+import { errorMessageOrNull } from "../../lib/client";
 import type { Client } from "../../lib/client";
 import {
   credentialsOptions,
@@ -48,7 +48,7 @@ const useAccountsData = (client: Client, directory: string) => {
         }
       : undefined;
   const failure = integrationList.error ?? credentialList.error;
-  const error = failure ? errorMessage(failure) : null;
+  const error = errorMessageOrNull(failure);
   const loading = integrationList.isFetching || credentialList.isFetching;
   const { refetch: refetchIntegrations } = integrationList;
   const { refetch: refetchCredentials } = credentialList;

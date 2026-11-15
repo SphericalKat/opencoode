@@ -1,10 +1,10 @@
-import { Stack, useRouter } from "expo-router";
+import { useMutation } from "@tanstack/react-query";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -12,7 +12,7 @@ import {
 import { Dimensions, View } from "react-native";
 
 import type { Client } from "../lib/client";
-import { WIDE_SETTINGS_WIDTH } from "../lib/routes";
+import { useServerScope } from "../lib/server-scope";
 import { useThemedStyles } from "../lib/theme";
 import { useUnsavedGuard } from "../lib/unsaved";
 import { SettingsTopBar } from "./settings/navigation";
@@ -31,6 +31,8 @@ import {
 } from "./settings/shared";
 import type { HeaderRefresh } from "./settings/shared";
 import { createStyles } from "./settings/styles";
+
+const WIDE_SETTINGS_WIDTH = 920;
 
 // What the shell around the settings routes supplies.
 export interface SettingsHost {
@@ -58,10 +60,17 @@ interface SettingsRouteConfig {
   sections: Section[];
 }
 
-const SettingsRouteConfigContext = createContext<SettingsRouteConfig>({
-  sectionPath: () => "/",
-  sections: allSections,
-});
+const SettingsRouteConfigContext = createContext<SettingsRouteConfig | null>(
+  null
+);
+
+const useSettingsRouteConfig = () => {
+  const config = useContext(SettingsRouteConfigContext);
+  if (!config) {
+    throw new Error("Settings routes are used outside a settings layout");
+  }
+  return config;
+};
 
 // Advanced renders its own scroll views, so Page cannot carry its header.
 const headerInPage = (section: Section) => section !== "Advanced";
@@ -88,7 +97,6 @@ export const SettingsLayout = ({
   const styles = useThemedStyles(createStyles);
   const [headerRefresh, setHeaderRefresh] = useState<HeaderRefresh>(null);
   const confirmNavigation = useUnsavedGuard(`configuration:${directory}`);
-  const mounted = useRef(true);
   const hasClient = !!client;
   const hasModelCatalog = !!modelCatalog;
   const availableSections = useMemo(
@@ -96,23 +104,24 @@ export const SettingsLayout = ({
     [hasClient, hasModelCatalog, sections]
   );
   const selected = resolveSelected(section, availableSections);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  const { mutate: confirmSection } = useMutation({
+    mutationFn: (_next: Section) => confirmNavigation(),
+    networkMode: "always",
+  });
   const changeSection = useCallback(
-    async (next: Section) => {
+    (next: Section) => {
       if (!availableSections.includes(next) || next === selected) {
         return;
       }
-      if (!(await confirmNavigation()) || !mounted.current) {
-        return;
-      }
-      onSelectSection(next);
+      confirmSection(next, {
+        onSuccess: (confirmed) => {
+          if (confirmed) {
+            onSelectSection(next);
+          }
+        },
+      });
     },
-    [availableSections, selected, confirmNavigation, onSelectSection]
+    [availableSections, selected, confirmSection, onSelectSection]
   );
   const header = useMemo(
     () =>
@@ -122,9 +131,6 @@ export const SettingsLayout = ({
     [selected]
   );
   const pageHeader = selected && headerInPage(selected) ? header : null;
-  const handleSelectSection = (next: Section) => {
-    void changeSection(next);
-  };
   return (
     <View style={styles.screen}>
       <SettingsTopBar
@@ -134,7 +140,7 @@ export const SettingsLayout = ({
         onBack={onBack}
         onManageServers={onManageServers}
         onOpenNavigation={onOpenNavigation}
-        onSelectSection={handleSelectSection}
+        onSelectSection={changeSection}
         selected={selected}
       />
       {header && !pageHeader && <SectionPageHeader {...header} />}
@@ -157,14 +163,14 @@ export const SettingsLayout = ({
 };
 
 const isSection = (value: string | undefined): value is Section =>
-  allSections.includes(value as Section);
+  allSections.some((candidate) => candidate === value);
 
 // Route screen for `index` (no section) and `[section]`. A section change
 // from `[section]` stays inside one route, so a dirty Config editor is
 // never removed by the switch.
 export const SettingsRouteScreen = ({ section }: { section?: string }) => {
   const router = useRouter();
-  const { sectionPath, sections } = useContext(SettingsRouteConfigContext);
+  const { sectionPath, sections } = useSettingsRouteConfig();
   const current = isSection(section) ? section : null;
   const handleSelect = useCallback(
     (next: Section) => {
@@ -196,12 +202,34 @@ const InlineSettings = ({ sections }: { sections: Section[] }) => {
   );
 };
 
+// The settings stack stays mounted while other tabs have focus. When the
+// server or directory changes, the next focus returns it to its index route.
+const useResetOnLocationChange = (indexPath: Href) => {
+  const router = useRouter();
+  const scope = useServerScope();
+  const { directory } = useSettingsHost();
+  const key = `${scope}:${directory}`;
+  const applied = useRef(key);
+  useFocusEffect(
+    useCallback(() => {
+      if (applied.current === key) {
+        return;
+      }
+      applied.current = key;
+      router.dismissTo(indexPath);
+    }, [indexPath, key, router])
+  );
+  return key;
+};
+
 // The width choice is fixed at mount, so a rotation cannot swap the layout
 // and drop the state of the open section.
 export const SettingsRoutesLayout = ({
+  indexPath,
   sectionPath,
   sections,
 }: {
+  indexPath: Href;
   sectionPath: (section: Section) => Href;
   sections: Section[];
 }) => {
@@ -213,8 +241,9 @@ export const SettingsRoutesLayout = ({
     () => ({ sectionPath, sections }),
     [sectionPath, sections]
   );
+  const resetKey = useResetOnLocationChange(indexPath);
   if (wide) {
-    return <InlineSettings sections={sections} />;
+    return <InlineSettings key={resetKey} sections={sections} />;
   }
   return (
     <SettingsRouteConfigContext.Provider value={config}>

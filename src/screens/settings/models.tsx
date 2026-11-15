@@ -14,7 +14,7 @@ import {
   BodyText,
   Sheet,
 } from "../../components/ui";
-import { errorMessage } from "../../lib/client";
+import { errorMessageOrNull } from "../../lib/client";
 import type { Client } from "../../lib/client";
 import {
   catalogAllModelsOptions,
@@ -197,7 +197,7 @@ export const Models = ({
     ? { models: modelList.data, providers: providerList.data }
     : undefined;
   const failure = modelList.error ?? providerList.error;
-  const error = failure ? errorMessage(failure) : null;
+  const error = errorMessageOrNull(failure);
   const loading = modelList.isFetching || providerList.isFetching;
   const { refetch: refetchModels } = modelList;
   const { refetch: refetchProviders } = providerList;

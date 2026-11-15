@@ -39,9 +39,7 @@ type ConfigAction =
 
 interface ConfigRun {
   action: ConfigAction;
-  // Set when the write changes server configuration, so every query for the
-  // directory refetches before `done` runs.
-  changesConfig?: boolean;
+  // Runs after every query for the directory refetches.
   done?: () => void;
   task: (signal: AbortSignal) => Promise<void>;
 }
@@ -299,18 +297,16 @@ export const Configuration = ({
     "Configuration editor",
     dirty
   );
-  usePreventRemove(dirty, ({ repeat }) => {
-    void confirmAction(
+  usePreventRemove(dirty, async ({ repeat }) => {
+    const ok = await confirmAction(
       "Leave this view?",
       "Configuration editor contains unsaved changes. Continue?",
       { confirmLabel: "Leave" }
-    ).then((ok) => {
-      if (ok) {
-        setEditing(undefined);
-        repeat();
-      }
-      return ok;
-    });
+    );
+    if (ok) {
+      setEditing(undefined);
+      repeat();
+    }
   });
   const [viewing, setViewing] = useState<{
     info: unknown;
@@ -321,12 +317,10 @@ export const Configuration = ({
   const configWrite = useMutation({
     mutationFn: ({ task }: ConfigRun) => withDeadline(undefined, task),
     onError: (reason) => setErrorAction(errorMessage(reason)),
-    onSuccess: async (_result, { changesConfig, done }) => {
-      if (changesConfig) {
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.dir.all(scope, directory),
-        });
-      }
+    onSuccess: async (_result, { done }) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.dir.all(scope, directory),
+      });
       done?.();
     },
     scope: { id: `configuration:${scope}:${directory}` },
@@ -386,7 +380,6 @@ export const Configuration = ({
           onPress={() => {
             startConfigTask({
               action: { kind: "reload" },
-              changesConfig: true,
               done: () => setNotice("I reloaded the server configuration."),
               task: async (signal) => {
                 await client.location.reload({ signal });
@@ -478,7 +471,6 @@ export const Configuration = ({
         onSelectDefault={() => {
           startConfigTask({
             action: { kind: "shell", path: null },
-            changesConfig: true,
             done: () => setNotice("I set the shell to the system default."),
             task: async (signal) => {
               await client.experimental.config.update(
@@ -491,7 +483,6 @@ export const Configuration = ({
         onSelectShell={(shellPath, shellName) => {
           startConfigTask({
             action: { kind: "shell", path: shellPath },
-            changesConfig: true,
             done: () => setNotice(`I selected ${shellName}.`),
             task: async (signal) => {
               await client.experimental.config.update(
@@ -546,7 +537,6 @@ export const Configuration = ({
           }
           startConfigTask({
             action: { kind: "save" },
-            changesConfig: true,
             done: () => {
               setEditing(undefined);
               setNotice("I saved and reloaded the configuration.");

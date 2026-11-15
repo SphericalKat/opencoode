@@ -20,9 +20,8 @@ import {
   mono,
   Sheet,
 } from "../../components/ui";
-import { errorMessage } from "../../lib/client";
+import { errorMessage, errorMessageOrNull } from "../../lib/client";
 import type { Client } from "../../lib/client";
-import { useForeground } from "../../lib/foreground";
 import { initialFormValues, prepareFormAnswer } from "../../lib/forms";
 import type { FormValues } from "../../lib/forms";
 import { integrationAttemptOptions } from "../../lib/queries/settings";
@@ -30,6 +29,7 @@ import { queryKeys } from "../../lib/query-keys";
 import { useServerScope } from "../../lib/server-scope";
 import { externalURL } from "../../lib/settings";
 import { useThemedStyles } from "../../lib/theme";
+import { useForeground } from "../../stores/app-lifecycle-store";
 import { useSettingsBusy, useSettingsMutation } from "./shared";
 import { createStyles } from "./styles";
 
@@ -265,9 +265,7 @@ const useAttemptStatus = ({
   const status = attempt ? (attemptStatus.data?.status ?? "pending") : "";
   const failureMessage =
     attemptStatus.data?.status === "failed" ? attemptStatus.data.message : null;
-  const statusError = attemptStatus.error
-    ? errorMessage(attemptStatus.error)
-    : null;
+  const statusError = errorMessageOrNull(attemptStatus.error);
   const { refetch: checkStatus } = attemptStatus;
   useEffect(() => {
     if (status === "complete") {

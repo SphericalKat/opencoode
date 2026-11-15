@@ -8,7 +8,8 @@ import React, { createContext, useContext, useEffect } from "react";
 import { ScrollView, View } from "react-native";
 
 import { BodyText, Busy, ErrorNotice, Row } from "../../components/ui";
-import { errorMessage } from "../../lib/client";
+import { errorMessage, errorMessageOrNull } from "../../lib/client";
+import { invalidateKeys } from "../../lib/invalidate-keys";
 import { withDeadline } from "../../lib/request";
 import { useThemedStyles } from "../../lib/theme";
 import { createStyles } from "./styles";
@@ -43,7 +44,7 @@ export const SectionPageHeader = ({
 
 export const resourceOf = <T,>(query: UseQueryResult<T, Error>) => ({
   data: query.data,
-  error: query.error ? errorMessage(query.error) : null,
+  error: errorMessageOrNull(query.error),
   loading: query.isFetching,
   refresh: () => {
     void query.refetch();
@@ -74,13 +75,8 @@ export const useSettingsMutation = <V = void,>({
       withDeadline(undefined, (signal) => mutationFn(variables, signal)),
     mutationKey: SETTINGS_MUTATION_KEY,
     onError: (reason) => onError(errorMessage(reason)),
-    onSuccess: async (_result, variables) => {
-      await Promise.all(
-        invalidate(variables).map((queryKey) =>
-          queryClient.invalidateQueries({ queryKey })
-        )
-      );
-    },
+    onSuccess: (_result, variables) =>
+      invalidateKeys(queryClient, invalidate(variables)),
   });
 };
 
