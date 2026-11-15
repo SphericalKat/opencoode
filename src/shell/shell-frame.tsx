@@ -6,33 +6,29 @@ import {
   BetaTabStrip,
   SessionSurface,
 } from "../components/beta-navigation";
-import type {
-  OpenSessionTab,
-  SessionPane,
-} from "../components/beta-navigation";
+import type { SessionPane } from "../components/beta-navigation";
 import { ErrorNotice } from "../components/ui";
 import {
   SelectionBarOverlay,
   SelectionBarProvider,
 } from "../lib/selection-bar";
 import { useThemedStyles } from "../lib/theme";
+import { useAppLifecycleStore } from "../stores/app-lifecycle-store";
+import { useSessionLocationStore } from "../stores/session-location-store";
+import type { OpenSessionTab } from "../stores/session-tabs-store";
 import { createStyles } from "./styles";
-import type { Tab } from "./types";
 
 interface StatusBannersProps {
-  error: string | null;
   onRetryLocation: () => void;
-  pendingLocation: { directory: string; sessionID: string } | null;
-  sessionID: string | null;
 }
 
-const StatusBanners = ({
-  error,
-  onRetryLocation,
-  pendingLocation,
-  sessionID,
-}: StatusBannersProps) => {
+const StatusBanners = ({ onRetryLocation }: StatusBannersProps) => {
   const styles = useThemedStyles(createStyles);
+  const error = useAppLifecycleStore((state) => state.error);
+  const pendingLocation = useSessionLocationStore(
+    (state) => state.pendingLocation
+  );
+  const sessionID = useSessionLocationStore((state) => state.sessionID);
   return (
     <>
       {error && (
@@ -53,40 +49,33 @@ const StatusBanners = ({
 };
 
 interface ShellFrameProps {
-  betaHome: boolean;
   children: ReactNode;
-  creatingSession: boolean;
   currentOpenTab: OpenSessionTab | undefined;
-  directory: string;
-  error: string | null;
   onMore: () => void;
   onOpenNavigation: () => void;
   onProject: () => void;
   onRetryLocation: () => void;
   onSelectPane: (pane: SessionPane) => void;
-  pendingLocation: { directory: string; sessionID: string } | null;
   selectedPane: SessionPane;
-  sessionID: string | null;
-  tab: Tab;
 }
 
 export const ShellFrame = ({
-  betaHome,
   children,
-  creatingSession,
   currentOpenTab,
-  directory,
-  error,
   onMore,
   onOpenNavigation,
   onProject,
   onRetryLocation,
   onSelectPane,
-  pendingLocation,
   selectedPane,
-  sessionID,
-  tab,
 }: ShellFrameProps) => {
+  const betaHome = useSessionLocationStore((state) => state.betaHome);
+  const creatingSession = useSessionLocationStore(
+    (state) => state.creatingSession
+  );
+  const directory = useSessionLocationStore((state) => state.directory);
+  const sessionID = useSessionLocationStore((state) => state.sessionID);
+  const tab = useSessionLocationStore((state) => state.tab);
   const styles = useThemedStyles(createStyles);
   const framed = tab !== "settings";
   const showSessionNavigation = framed && !betaHome && !!sessionID;
@@ -104,12 +93,7 @@ export const ShellFrame = ({
               <SelectionBarOverlay />
             </View>
           )}
-          <StatusBanners
-            error={error}
-            onRetryLocation={onRetryLocation}
-            pendingLocation={pendingLocation}
-            sessionID={sessionID}
-          />
+          <StatusBanners onRetryLocation={onRetryLocation} />
           <SessionSurface style={styles.body} framed={framed}>
             {showSessionNavigation && (
               <BetaSessionNavigation

@@ -1,5 +1,4 @@
 import { isLocationNotFoundError } from "@opencode/client";
-import { AppState } from "react-native";
 
 import { createClient, withServerDeadline } from "../lib/client";
 import type { Connection } from "../lib/client";
@@ -89,10 +88,6 @@ export const locateWorkspace = async (
   );
   return { directory: location.directory, sessionID };
 };
-
-export const isAppForeground = () =>
-  AppState.currentState !== "background" &&
-  AppState.currentState !== "inactive";
 
 export const flowError = (
   connectionError: string | null,

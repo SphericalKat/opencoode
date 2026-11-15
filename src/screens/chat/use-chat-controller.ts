@@ -39,17 +39,12 @@ export const useChatController = ({
   sessionID,
   onSessionChanged,
   onOpenSession,
-  attachmentPath,
-  attachmentContext,
-  onAttachmentConsumed,
   draftKey = sessionID,
   visible = true,
   onOpenNavigation,
   onOpenSettings,
   serverID,
-  onSelectionChange,
   onSessionInfo,
-  sessionPanelRequest,
 }: Props) => {
   const client = backend.core;
   const { opencodeClient } = backend;
@@ -119,7 +114,6 @@ export const useChatController = ({
   const selection = useMessageSelection({
     alive,
     messages: sync.messages,
-    onSelectionChange,
     panel,
     setPanel,
     showError,
@@ -129,7 +123,6 @@ export const useChatController = ({
   usePanelRequest({
     capabilities,
     sessionID,
-    sessionPanelRequest,
     setPanel,
     visible,
   });
@@ -164,13 +157,7 @@ export const useChatController = ({
     showError,
     visible,
   });
-  useAttachmentHandoff({
-    attachmentContext,
-    attachmentPath,
-    composer,
-    onAttachmentConsumed,
-    showError,
-  });
+  useAttachmentHandoff({ composer, sessionID, showError });
   const modelChoice = useModelSelection({
     client,
     context,

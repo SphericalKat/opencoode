@@ -20,6 +20,7 @@ import { playHaptic } from "../lib/haptics";
 import { parsePairingPayload } from "../lib/pairing";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import type { ConnectionForm } from "../stores/connection-store";
 import { BackButton } from "./back-button";
 import { MotionContent } from "./motion";
 import { OpenCodeLogo } from "./open-code-logo";
@@ -40,13 +41,6 @@ import {
 
 type InputInstance = React.ComponentRef<typeof TextInput>;
 
-export interface ConnectionForm {
-  id: string;
-  name: string;
-  url: string;
-  token: string;
-  username?: string;
-}
 type Step = "servers" | "home" | "pair" | "password" | "scan";
 interface Props {
   form: ConnectionForm;

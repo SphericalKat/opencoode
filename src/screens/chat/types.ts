@@ -26,21 +26,12 @@ export interface Props {
   sessionID: string;
   onSessionChanged: () => void;
   onOpenSession: (id: string) => void;
-  attachmentPath?: string;
-  attachmentContext?: string;
-  onAttachmentConsumed?: () => void;
   draftKey?: string;
   visible?: boolean;
   onOpenNavigation?: () => void;
   onOpenSettings?: (section: "Models" | "Accounts") => void;
   serverID?: string;
-  onSelectionChange?: (selected: boolean) => void;
   onSessionInfo?: (session: SessionInfo) => void;
-  sessionPanelRequest?: {
-    id: number;
-    sessionID: string;
-    panel: "stats" | "actions";
-  };
 }
 export type Attachment = NonNullable<SessionPromptInput["files"]>[number];
 export type Panel =

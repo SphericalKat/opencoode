@@ -12,6 +12,7 @@ import { createQueryClient } from "../lib/query-client";
 import { SheetCoordinatorProvider } from "../lib/sheets";
 import { ThemeProvider } from "../lib/theme";
 import { UnsavedProvider } from "../lib/unsaved";
+import { AppStoresProvider } from "../stores/app-stores-provider";
 
 interface AppProvidersProps {
   children: ReactNode;
@@ -36,7 +37,7 @@ export const AppProviders = ({ children }: AppProvidersProps) => (
                 <DialogProvider>
                   <SnackbarProvider>
                     <BottomSheetModalProvider>
-                      {children}
+                      <AppStoresProvider>{children}</AppStoresProvider>
                     </BottomSheetModalProvider>
                   </SnackbarProvider>
                 </DialogProvider>

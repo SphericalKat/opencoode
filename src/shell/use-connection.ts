@@ -18,6 +18,19 @@ import {
   saveConnections,
   saveWorkspace,
 } from "../lib/storage";
+import { useAppLifecycleStoreApi } from "../stores/app-lifecycle-store";
+import { useComposerStoreApi } from "../stores/composer-store";
+import {
+  emptyConnectionForm,
+  useConnectionStore,
+  useConnectionStoreApi,
+} from "../stores/connection-store";
+import {
+  useSessionLocationStore,
+  useSessionLocationStoreApi,
+} from "../stores/session-location-store";
+import { useSessionTabsStoreApi } from "../stores/session-tabs-store";
+import { useSheetStoreApi } from "../stores/sheet-store";
 import {
   attempt,
   isSameServer,
@@ -26,103 +39,74 @@ import {
 } from "./connection-utils";
 import { noop } from "./constants";
 import type { AppliedConnection, ConfirmNavigation } from "./types";
-import type { MobileState } from "./use-app-state";
 
 interface UseConnectionDeps {
   confirmNavigation: ConfirmNavigation;
 }
 
-export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
-  const {
-    active,
-    activeRef,
-    connectingRef,
-    connections,
-    directory,
-    directoryRef,
-    epochRef,
-    recoveringConnectionRef,
-    selectedSessionRef,
-    sessionID,
-    setActive,
-    setAttachmentContext,
-    setAttachmentPath,
-    setBetaHome,
-    setBetaHomeProject,
-    setBooting,
-    setConnecting,
-    setConnectionError,
-    setConnectionRevision,
-    setConnections,
-    setDirectory,
-    setError,
-    setFlowRevision,
-    setForeground,
-    setForm,
-    setNewDirectory,
-    setOpenTabs,
-    setPairingLink,
-    setPendingLocation,
-    setServersOpen,
-    setSessionID,
-    setTab,
-    setUnavailableID,
-    showServerSheetRef,
-  } = model;
-  const { confirmNavigation } = deps;
+export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
+  const connectionApi = useConnectionStoreApi();
+  const lifecycleApi = useAppLifecycleStoreApi();
+  const locationApi = useSessionLocationStoreApi();
+  const tabsApi = useSessionTabsStoreApi();
+  const sheetApi = useSheetStoreApi();
+  const composerApi = useComposerStoreApi();
   const queryClient = useQueryClient();
+  const active = useConnectionStore((state) => state.active);
+  const directory = useSessionLocationStore((state) => state.directory);
+  const sessionID = useSessionLocationStore((state) => state.sessionID);
+  const setError = useCallback(
+    (error: string | null) => lifecycleApi.setState({ error }),
+    [lifecycleApi]
+  );
+  const setConnectionError = useCallback(
+    (connectionError: string | null) =>
+      connectionApi.setState({ connectionError }),
+    [connectionApi]
+  );
+
   const applyConnection = useCallback(
     (applied: AppliedConnection) => {
       const { connected, preserveWorkspace } = applied;
       clearPairingRetry();
-      setConnections(applied.connections);
-      setActive(connected);
-      setUnavailableID(null);
-      recoveringConnectionRef.current = null;
-      if (!preserveWorkspace || connected.backend === "pi") {
-        setConnectionRevision((value) => value + 1);
+      const refresh = !preserveWorkspace || connected.backend === "pi";
+      connectionApi.setState((state) => ({
+        active: connected,
+        connectionRevision: refresh
+          ? state.connectionRevision + 1
+          : state.connectionRevision,
+        connections: applied.connections,
+        form: emptyConnectionForm(),
+        recovering: null,
+        unavailableID: null,
+      }));
+      if (refresh) {
         void queryClient.invalidateQueries({ queryKey: [connected.id] });
       }
       if (!preserveWorkspace) {
-        setOpenTabs([]);
-        setBetaHomeProject(undefined);
-        setBetaHome(!applied.sessionID);
-        setDirectory(applied.directory);
-        directoryRef.current = applied.directory;
-        setNewDirectory(applied.directory);
-        setSessionID(applied.sessionID ?? null);
-        selectedSessionRef.current = applied.sessionID ?? null;
-        setPendingLocation(null);
-        setAttachmentPath(undefined);
-        setAttachmentContext(undefined);
-        setTab("sessions");
+        tabsApi.setState({ openTabs: [] });
+        locationApi.setState({
+          betaHome: !applied.sessionID,
+          betaHomeProject: undefined,
+          directory: applied.directory,
+          pendingLocation: null,
+          sessionID: applied.sessionID ?? null,
+          tab: "sessions",
+        });
+        sheetApi.setState({ newDirectory: applied.directory });
+        composerApi.setState({ handoffs: {} });
       }
-      setError(null);
-      setServersOpen(false);
-      setForm({ id: "", name: "", token: "", url: "" });
+      lifecycleApi.setState({ error: null });
+      sheetApi.setState({ serversOpen: false });
     },
     [
       queryClient,
-      setDirectory,
-      setConnections,
-      setActive,
-      setError,
-      selectedSessionRef,
-      setNewDirectory,
-      setSessionID,
-      setConnectionRevision,
-      setServersOpen,
-      setUnavailableID,
-      recoveringConnectionRef,
-      setPendingLocation,
-      setOpenTabs,
-      setBetaHome,
-      setAttachmentContext,
-      setAttachmentPath,
-      setForm,
-      directoryRef,
-      setBetaHomeProject,
-      setTab,
+      connectionApi,
+      lifecycleApi,
+      locationApi,
+      tabsApi,
+      sheetApi,
+      composerApi,
     ]
   );
 
@@ -133,30 +117,34 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
       alternatives?: Connection[],
       explicitName = false
     ) => {
-      if (connectingRef.current) {
+      if (connectionApi.getState().connecting) {
         return;
       }
-      connectingRef.current = true;
-      epochRef.current += 1;
-      const request = epochRef.current;
-      const isCurrent = () => request === epochRef.current;
-      setConnecting(true);
-      setConnectionError(null);
+      connectionApi.setState((state) => ({
+        connecting: true,
+        connectionError: null,
+        epoch: state.epoch + 1,
+      }));
+      const request = connectionApi.getState().epoch;
+      const isCurrent = () => request === connectionApi.getState().epoch;
       await attempt(
         async () => {
           const result = await connect(connection, undefined, alternatives);
-          const current = existing ?? connections;
+          const current = existing ?? connectionApi.getState().connections;
           const connected = mergeMatchingConnection(
             result.connection,
             connection,
             current,
             explicitName
           );
-          const sameServer = isSameServer(activeRef.current, connected);
+          const sameServer = isSameServer(
+            connectionApi.getState().active,
+            connected
+          );
           const workspace = sameServer
             ? {
-                directory: directoryRef.current,
-                sessionID: selectedSessionRef.current ?? undefined,
+                directory: locationApi.getState().directory,
+                sessionID: locationApi.getState().sessionID ?? undefined,
               }
             : await loadWorkspace(connected.id);
           const location = await locateWorkspace(result, connected, workspace);
@@ -164,9 +152,10 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
             return;
           }
           const preserveWorkspace =
-            sameServer && location.directory === directoryRef.current;
+            sameServer &&
+            location.directory === locationApi.getState().directory;
           const restoredSessionID = preserveWorkspace
-            ? (selectedSessionRef.current ?? undefined)
+            ? (locationApi.getState().sessionID ?? undefined)
             : location.sessionID;
           if (!preserveWorkspace && !(await confirmNavigation())) {
             return;
@@ -200,30 +189,24 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
             return;
           }
           setConnectionError(connectionErrorMessage(error_, connection));
-          if (!activeRef.current || activeRef.current.id === connection.id) {
-            setUnavailableID(connection.id);
+          const { active: current } = connectionApi.getState();
+          if (!current || current.id === connection.id) {
+            connectionApi.setState({ unavailableID: connection.id });
           }
         },
         () => {
-          connectingRef.current = false;
           if (isCurrent()) {
-            setConnecting(false);
+            connectionApi.setState({ connecting: false });
           }
         }
       );
     },
     [
-      connections,
       confirmNavigation,
       applyConnection,
       setConnectionError,
-      selectedSessionRef,
-      setConnecting,
-      setUnavailableID,
-      connectingRef,
-      activeRef,
-      directoryRef,
-      epochRef,
+      connectionApi,
+      locationApi,
     ]
   );
   const selectServerRef = useRef(selectServer);
@@ -233,10 +216,10 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) =>
-      setForeground(state === "active")
+      lifecycleApi.setState({ foreground: state === "active" })
     );
     return () => subscription.remove();
-  }, [setForeground]);
+  }, [lifecycleApi]);
 
   useEffect(() => {
     if (!active || active.backend === "pi" || !directory) {
@@ -258,7 +241,7 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
         if (!live) {
           return null;
         }
-        setConnections(saved);
+        connectionApi.setState({ connections: saved });
         const last = saved.find((item) => item.id === id);
         if (last) {
           await selectServerRef.current(last, saved);
@@ -272,15 +255,15 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
       })
       .finally(() => {
         if (live) {
-          setBooting(false);
+          connectionApi.setState({ booting: false });
         }
       })
       .catch(noop);
     return () => {
       live = false;
-      epochRef.current += 1;
+      connectionApi.setState((state) => ({ epoch: state.epoch + 1 }));
     };
-  }, [epochRef, setConnections, setError, setBooting]);
+  }, [connectionApi, setError]);
 
   useEffect(() => {
     const acceptLink = (url: string | null | undefined) => {
@@ -304,10 +287,12 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
         }
         normalizeConnection({ name: "", url: server });
         setConnectionError(null);
-        setForm({ id: "", name: "", token: "", url: server });
-        setPairingLink(server);
-        setFlowRevision((value) => value + 1);
-        showServerSheetRef.current();
+        connectionApi.setState((state) => ({
+          flowRevision: state.flowRevision + 1,
+          form: { ...emptyConnectionForm(), url: server },
+          pairingLink: server,
+        }));
+        sheetApi.getState().showServerSheet();
       } catch {
         setError("The connection link is invalid");
       }
@@ -317,14 +302,7 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
       acceptLink(event.url)
     );
     return () => subscription.remove();
-  }, [
-    setError,
-    setPairingLink,
-    setConnectionError,
-    setForm,
-    showServerSheetRef,
-    setFlowRevision,
-  ]);
+  }, [connectionApi, sheetApi, setConnectionError, setError]);
   return {
     selectServer,
   };

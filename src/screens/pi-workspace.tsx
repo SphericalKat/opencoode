@@ -18,7 +18,6 @@ import {
   BetaTabStrip,
   SessionSurface,
 } from "../components/beta-navigation";
-import type { OpenSessionTab } from "../components/beta-navigation";
 import { Busy, ErrorNotice } from "../components/ui";
 import { errorMessage } from "../lib/client";
 import type { Connection } from "../lib/client";
@@ -29,12 +28,10 @@ import { createPiClient } from "../lib/pi-client";
 import type { PiClient } from "../lib/pi-client";
 import { piSessionsOptions } from "../lib/queries/pi";
 import { useServerScope } from "../lib/server-scope";
-import {
-  SheetVisibilityProvider,
-  useSheetVisibility,
-  useSheetVisibilityActions,
-} from "../lib/sheet-visibility";
 import { useUnsavedGuard } from "../lib/unsaved";
+import { useChatUiStore, useChatUiStoreApi } from "../stores/chat-ui-store";
+import type { OpenSessionTab } from "../stores/session-tabs-store";
+import { useSheetStore, useSheetStoreApi } from "../stores/sheet-store";
 import { ChatScreen } from "./chat-screen";
 import { SettingsScreen } from "./settings-screen";
 import type { Section } from "./settings-screen";
@@ -78,9 +75,9 @@ const PiSheets = ({
   serverLabel,
   tabs,
 }: PiSheetsProps) => {
-  const navigationOpen = useSheetVisibility((state) => state.navigationOpen);
-  const moreOpen = useSheetVisibility((state) => state.moreOpen);
-  const { setMoreOpen, setNavigationOpen } = useSheetVisibilityActions();
+  const navigationOpen = useSheetStore((state) => state.navigationOpen);
+  const moreOpen = useSheetStore((state) => state.moreOpen);
+  const sheets = useSheetStoreApi();
   const scope = useServerScope();
   const sessions = useQuery(
     piSessionsOptions(scope, client, foreground && navigationOpen)
@@ -105,7 +102,7 @@ const PiSheets = ({
     <>
       <BetaMoreSheet
         visible={moreOpen}
-        onClose={() => setMoreOpen(false)}
+        onClose={() => sheets.setState({ moreOpen: false })}
         onDismiss={onDismiss}
         onDetails={onDetails}
       />
@@ -116,7 +113,7 @@ const PiSheets = ({
         selectedID={selectedID}
         serverLabel={serverLabel}
         onServer={onServer}
-        onClose={() => setNavigationOpen(false)}
+        onClose={() => sheets.setState({ navigationOpen: false })}
         onDismiss={onDismiss}
         onSelect={onSelect}
         onNew={onNew}
@@ -142,21 +139,24 @@ const PiWorkspaceSession = ({
   );
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [tabs, setTabs] = useState<OpenSessionTab[]>([]);
-  const { setMoreOpen, setNavigationOpen } = useSheetVisibilityActions();
+  const sheets = useSheetStoreApi();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [selected, setSelected] = useState(false);
+  const chatUi = useChatUiStoreApi();
+  const selected = useChatUiStore((state) => state.messageSelected);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [panelRequest, setPanelRequest] = useState<{
-    id: number;
-    sessionID: string;
-    panel: "actions";
-  }>();
+  useLayoutEffect(() => {
+    // The sheet store is global, so reset the flags to keep them from leaking between shells.
+    sheets.setState({ moreOpen: false, navigationOpen: false });
+    return () => {
+      sheets.setState({ moreOpen: false, navigationOpen: false });
+      chatUi.setState({ messageSelected: false, panelRequest: undefined });
+    };
+  }, [sheets, chatUi]);
   const alive = useRef(true);
   const sessionRef = useRef(session);
   const pendingNavigation = useRef<(() => void) | null>(null);
   const operation = useRef(false);
-  const requestID = useRef(0);
   const settingsCanGoBack = useRef(false);
   const lostConnection = useRef(onConnectionLost);
   useLayoutEffect(() => {
@@ -312,7 +312,7 @@ const PiWorkspaceSession = ({
   };
   const afterNavigation = (action: () => void) => {
     pendingNavigation.current = action;
-    setNavigationOpen(false);
+    sheets.setState({ navigationOpen: false });
   };
   const onNavigationDismissed = () => {
     const action = pendingNavigation.current;
@@ -324,17 +324,16 @@ const PiWorkspaceSession = ({
   const showDetails = () => {
     const { current } = sessionRef;
     if (current) {
-      requestID.current += 1;
-      setPanelRequest({
-        id: requestID.current,
-        panel: "actions",
-        sessionID: current.id,
+      const id = chatUi.getState().panelRequestID + 1;
+      chatUi.setState({
+        panelRequest: { id, panel: "actions", sessionID: current.id },
+        panelRequestID: id,
       });
     }
   };
   const afterMenu = (action: () => void) => {
     pendingNavigation.current = action;
-    setMoreOpen(false);
+    sheets.setState({ moreOpen: false });
   };
   const onSettingsBackState = useCallback((value: boolean) => {
     settingsCanGoBack.current = value;
@@ -359,7 +358,7 @@ const PiWorkspaceSession = ({
         <BetaTabStrip
           current={currentTab}
           busy={busy || !session}
-          onOpen={() => setNavigationOpen(true)}
+          onOpen={() => sheets.setState({ navigationOpen: true })}
         />
       )}
       {error && (
@@ -384,7 +383,7 @@ const PiWorkspaceSession = ({
             onSelect={() => setSettingsOpen(false)}
             onMore={() => {
               Keyboard.dismiss();
-              setMoreOpen(true);
+              sheets.setState({ moreOpen: true });
             }}
           />
         )}
@@ -397,8 +396,9 @@ const PiWorkspaceSession = ({
                 draftKey={`pi:${connection.id}:${session.id}`}
                 serverID={connection.id}
                 visible={foreground && !settingsOpen}
-                onOpenNavigation={() => setNavigationOpen(true)}
-                onSelectionChange={setSelected}
+                onOpenNavigation={() =>
+                  sheets.setState({ navigationOpen: true })
+                }
                 onSessionInfo={recordSession}
                 onSessionChanged={() => {
                   void refreshSession().catch((error_) => {
@@ -409,7 +409,6 @@ const PiWorkspaceSession = ({
                 }}
                 onOpenSession={openChatSession}
                 onConnectionLost={onConnectionLost}
-                sessionPanelRequest={panelRequest}
               />
             </View>
             {settingsOpen && (
@@ -458,11 +457,7 @@ const PiWorkspaceSession = ({
 };
 
 export const PiWorkspace = (props: Props) => (
-  <SheetVisibilityProvider
-    key={`${props.connection.id}:${props.connection.url}`}
-  >
-    <LiveStoreProvider>
-      <PiWorkspaceSession {...props} />
-    </LiveStoreProvider>
-  </SheetVisibilityProvider>
+  <LiveStoreProvider key={`${props.connection.id}:${props.connection.url}`}>
+    <PiWorkspaceSession {...props} />
+  </LiveStoreProvider>
 );

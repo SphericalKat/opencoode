@@ -1,24 +1,30 @@
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import { serverFileUri } from "../../lib/chat";
+import {
+  useComposerStore,
+  useComposerStoreApi,
+} from "../../stores/composer-store";
 import type { ComposerDraft } from "./use-composer-draft";
 
 interface UseAttachmentHandoffOptions {
-  attachmentContext: string | undefined;
-  attachmentPath: string | undefined;
-  onAttachmentConsumed: (() => void) | undefined;
+  sessionID: string | null;
   showError: (reason: unknown) => void;
   composer: ComposerDraft;
 }
 
 export const useAttachmentHandoff = ({
-  attachmentContext,
-  attachmentPath,
-  onAttachmentConsumed,
+  sessionID,
   showError,
   composer,
 }: UseAttachmentHandoffOptions) => {
   const { setDraft, setAttachments, draftLoaded } = composer;
+  const store = useComposerStoreApi();
+  const handoff = useComposerStore((state) =>
+    sessionID ? state.handoffs[sessionID] : undefined
+  );
+  const attachmentPath = handoff?.path;
+  const attachmentContext = handoff?.context;
   const consumedAttachment = useRef<{ path: string; context?: string } | null>(
     null
   );
@@ -35,7 +41,11 @@ export const useAttachmentHandoff = ({
         setDraft((current) => (current ? `${current}\n\n${extra}` : extra));
       }
       consumedAttachment.current = { context: extra, path };
-      onAttachmentConsumed?.();
+      if (sessionID) {
+        store.setState((state) => ({
+          handoffs: { ...state.handoffs, [sessionID]: undefined },
+        }));
+      }
     } catch (error_) {
       showError(error_);
     }

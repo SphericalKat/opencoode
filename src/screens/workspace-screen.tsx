@@ -56,9 +56,8 @@ import {
   saveEditableFile,
   serverFilePath,
 } from "../lib/workspace";
+import type { WorkspaceSection } from "../stores/session-location-store";
 import { ChangesPane } from "./changes/changes-pane";
-
-export type WorkspaceSection = "Files" | "Changes" | "Worktrees" | "Terminal";
 
 interface Props {
   client: Client;

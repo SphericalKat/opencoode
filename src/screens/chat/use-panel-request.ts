@@ -1,11 +1,11 @@
 import { useState } from "react";
 
-import type { Capabilities, Props, SetPanel } from "./types";
+import { useChatUiStore } from "../../stores/chat-ui-store";
+import type { Capabilities, SetPanel } from "./types";
 
 interface UsePanelRequestOptions {
   capabilities: Capabilities;
   sessionID: string;
-  sessionPanelRequest: Props["sessionPanelRequest"];
   setPanel: SetPanel;
   visible: boolean;
 }
@@ -13,22 +13,22 @@ interface UsePanelRequestOptions {
 export const usePanelRequest = ({
   capabilities,
   sessionID,
-  sessionPanelRequest,
   setPanel,
   visible,
 }: UsePanelRequestOptions) => {
+  const panelRequest = useChatUiStore((state) => state.panelRequest);
   const [handledPanelRequest, setHandledPanelRequest] = useState<
     number | undefined
   >();
   if (
     visible &&
-    sessionPanelRequest &&
-    sessionPanelRequest.sessionID === sessionID &&
-    handledPanelRequest !== sessionPanelRequest.id
+    panelRequest &&
+    panelRequest.sessionID === sessionID &&
+    handledPanelRequest !== panelRequest.id
   ) {
-    setHandledPanelRequest(sessionPanelRequest.id);
-    if (sessionPanelRequest.panel !== "stats" || capabilities.statistics) {
-      setPanel(sessionPanelRequest.panel);
+    setHandledPanelRequest(panelRequest.id);
+    if (panelRequest.panel !== "stats" || capabilities.statistics) {
+      setPanel(panelRequest.panel);
     }
   }
 };

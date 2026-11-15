@@ -10,9 +10,13 @@ import {
   saveActiveConnectionId,
   saveConnections,
 } from "../lib/storage";
+import { useAppLifecycleStoreApi } from "../stores/app-lifecycle-store";
+import { useComposerStoreApi } from "../stores/composer-store";
+import { useConnectionStoreApi } from "../stores/connection-store";
+import { useSessionLocationStoreApi } from "../stores/session-location-store";
+import { useSheetStoreApi } from "../stores/sheet-store";
 import { attempt } from "./connection-utils";
 import type { ConfirmNavigation, ServerClient } from "./types";
-import type { MobileState } from "./use-app-state";
 
 interface UseWorkspaceActionsDeps {
   changeDirectory: (directory: string) => void;
@@ -21,38 +25,22 @@ interface UseWorkspaceActionsDeps {
   syncSelectedLocation: () => Promise<string | null>;
 }
 
-export const useWorkspaceActions = (
-  model: MobileState,
-  deps: UseWorkspaceActionsDeps
-) => {
-  const {
-    active,
-    activeRef,
-    directory,
-    directoryRef,
-    epochRef,
-    newDirectory,
-    selectedSessionRef,
-    selectionRef,
-    sessionID,
-    setActive,
-    setAttachmentContext,
-    setAttachmentPath,
-    setBetaHome,
-    setConnections,
-    setDirectory,
-    setError,
-    setPendingLocation,
-    setProjectBusy,
-    setProjectError,
-    setSessionID,
-    setTab,
-  } = model;
-  const { changeDirectory, client, confirmNavigation, syncSelectedLocation } =
-    deps;
+export const useWorkspaceActions = ({
+  changeDirectory,
+  client,
+  confirmNavigation,
+  syncSelectedLocation,
+}: UseWorkspaceActionsDeps) => {
+  const connectionStore = useConnectionStoreApi();
+  const locationStore = useSessionLocationStoreApi();
+  const lifecycleStore = useAppLifecycleStoreApi();
+  const sheetStore = useSheetStoreApi();
+  const composerStore = useComposerStoreApi();
   const { hidden: hiddenConnections, remove: removeServer } =
     useUndoableRemoval("servers");
   const queryClient = useQueryClient();
+  const getConnection = () => connectionStore.getState();
+  const setError = (error: string | null) => lifecycleStore.setState({ error });
   const createSession = useMutation({
     mutationFn: (target: string) => {
       if (!client) {
@@ -61,6 +49,7 @@ export const useWorkspaceActions = (
       return client.session.create({ location: { directory: target } });
     },
     onSuccess: () => {
+      const { active } = getConnection();
       if (active) {
         return queryClient.invalidateQueries({
           queryKey: queryKeys.sessions.all(active.id),
@@ -68,25 +57,26 @@ export const useWorkspaceActions = (
       }
     },
   });
-  const openDirectory = async (nextDirectory = newDirectory) => {
+  const openDirectory = async (nextDirectory?: string) => {
     if (!client) {
       return;
     }
-    const target = nextDirectory.trim();
+    const target = (nextDirectory ?? sheetStore.getState().newDirectory).trim();
     if (
       !target.startsWith("/") &&
       !/^[A-Za-z]:[\\/]/u.test(target) &&
       !target.startsWith("\\\\")
     ) {
-      setProjectError("Enter an absolute directory on the server");
+      sheetStore.setState({
+        projectError: "Enter an absolute directory on the server",
+      });
       return;
     }
-    const owner = active;
-    const request = epochRef.current;
+    const owner = getConnection().active;
+    const request = getConnection().epoch;
     const isCurrent = () =>
-      activeRef.current === owner && request === epochRef.current;
-    setProjectBusy(true);
-    setProjectError(null);
+      getConnection().active === owner && request === getConnection().epoch;
+    sheetStore.setState({ projectBusy: true, projectError: null });
     await attempt(
       async () => {
         if (!owner) {
@@ -103,12 +93,12 @@ export const useWorkspaceActions = (
       },
       (error_) => {
         if (isCurrent()) {
-          setProjectError(errorMessage(error_));
+          sheetStore.setState({ projectError: errorMessage(error_) });
         }
       },
       () => {
         if (isCurrent()) {
-          setProjectBusy(false);
+          sheetStore.setState({ projectBusy: false });
         }
       }
     );
@@ -116,7 +106,7 @@ export const useWorkspaceActions = (
 
   const removeConnection = async (connection: Connection) => {
     if (
-      activeRef.current?.id === connection.id &&
+      getConnection().active?.id === connection.id &&
       !(await confirmNavigation())
     ) {
       return;
@@ -126,20 +116,24 @@ export const useWorkspaceActions = (
         const saved = await loadConnections();
         const next = saved.filter((item) => item.id !== connection.id);
         await saveConnections(next);
-        if (activeRef.current?.id === connection.id) {
-          epochRef.current += 1;
+        if (getConnection().active?.id === connection.id) {
+          connectionStore.setState((state) => ({ epoch: state.epoch + 1 }));
           await saveActiveConnectionId(null);
-          selectedSessionRef.current = null;
-          directoryRef.current = "";
-          setActive(null);
-          setSessionID(null);
-          setDirectory("");
-          setAttachmentPath(undefined);
-          setAttachmentContext(undefined);
-          setPendingLocation(null);
+          connectionStore.setState({ active: null });
+          const { sessionID: removedSession } = locationStore.getState();
+          locationStore.setState({
+            directory: "",
+            pendingLocation: null,
+            sessionID: null,
+          });
+          if (removedSession) {
+            composerStore.setState((state) => ({
+              handoffs: { ...state.handoffs, [removedSession]: undefined },
+            }));
+          }
         }
         queryClient.removeQueries({ queryKey: [connection.id] });
-        setConnections(next);
+        connectionStore.setState({ connections: next });
       },
       message: "Server removed",
     });
@@ -152,21 +146,22 @@ export const useWorkspaceActions = (
     if (!client) {
       return false;
     }
-    const owner = activeRef.current;
-    const request = epochRef.current;
-    const navigation = selectionRef.current;
+    const owner = getConnection().active;
+    const request = getConnection().epoch;
+    const navigation = locationStore.getState().selectionRevision;
+    const { directory } = locationStore.getState();
+    const isCurrent = () =>
+      getConnection().active === owner &&
+      getConnection().epoch === request &&
+      locationStore.getState().selectionRevision === navigation;
     try {
-      if (selectedSessionRef.current) {
+      if (locationStore.getState().sessionID) {
         const nextDirectory = await syncSelectedLocation();
         if (!nextDirectory) {
           return false;
         }
         if (nextDirectory !== directory) {
-          if (
-            activeRef.current === owner &&
-            epochRef.current === request &&
-            selectionRef.current === navigation
-          ) {
+          if (isCurrent()) {
             setError(
               "The session moved to another directory. Choose the file again in its current workspace."
             );
@@ -174,31 +169,28 @@ export const useWorkspaceActions = (
           return false;
         }
       }
-      let selected = sessionID;
+      let selected = locationStore.getState().sessionID;
       if (!selected) {
         const created = await createSession.mutateAsync(directory);
         selected = created.id;
       }
-      if (
-        activeRef.current !== owner ||
-        epochRef.current !== request ||
-        selectionRef.current !== navigation
-      ) {
+      if (!isCurrent()) {
         return false;
       }
-      selectedSessionRef.current = selected;
-      setSessionID(selected);
-      setBetaHome(false);
-      setAttachmentContext(contextText);
-      setAttachmentPath(path);
-      setTab("sessions");
+      composerStore.setState((state) => ({
+        handoffs: {
+          ...state.handoffs,
+          [selected]: { context: contextText, path },
+        },
+      }));
+      locationStore.setState({
+        betaHome: false,
+        sessionID: selected,
+        tab: "sessions",
+      });
       return true;
     } catch (error_) {
-      if (
-        activeRef.current === owner &&
-        epochRef.current === request &&
-        selectionRef.current === navigation
-      ) {
+      if (isCurrent()) {
         setError(errorMessage(error_));
       }
       return false;

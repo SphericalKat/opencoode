@@ -1,4 +1,5 @@
 import type { SessionInfo } from "@opencode/client";
+import { useCallback } from "react";
 import { View } from "react-native";
 
 import { MotionScreen } from "../components/motion";
@@ -11,55 +12,43 @@ import { ChatScreen } from "../screens/chat-screen";
 import { SessionsScreen } from "../screens/sessions-screen";
 import { SettingsScreen } from "../screens/settings-screen";
 import { WorkspaceScreen } from "../screens/workspace-screen";
-import type { WorkspaceSection } from "../screens/workspace-screen";
+import {
+  useSessionLocationStore,
+  useSessionLocationStoreApi,
+} from "../stores/session-location-store";
+import type { WorkspaceSection } from "../stores/session-location-store";
 import { createStyles } from "./styles";
-import type {
-  ServerClient,
-  SessionPanelRequest,
-  SettingsSectionRequest,
-  Tab,
-} from "./types";
+import type { ServerClient, SettingsSectionRequest } from "./types";
 
 interface ChatColumnProps {
   active: Connection;
-  attachmentContext: string | undefined;
-  attachmentPath: string | undefined;
   betaHome: boolean;
   chatBackend: ChatBackend | null;
   connectionRevision: number;
-  onAttachmentConsumed: () => void;
   onOpenNavigation: () => void;
   onOpenSession: (id: string) => void;
   onOpenSettings: (section: "Models" | "Accounts") => void;
-  onSelectionChange: (selected: boolean) => void;
   onSessionChanged: () => void;
   onSessionInfo: (session: SessionInfo) => void;
   projectLabel: string;
   sessionID: string | null;
-  sessionPanelRequest: SessionPanelRequest | undefined;
-  tab: Tab;
 }
 
 const ChatColumn = ({
   active,
-  attachmentContext,
-  attachmentPath,
   betaHome,
   chatBackend,
   connectionRevision,
-  onAttachmentConsumed,
   onOpenNavigation,
   onOpenSession,
   onOpenSettings,
-  onSelectionChange,
   onSessionChanged,
   onSessionInfo,
   projectLabel,
   sessionID,
-  sessionPanelRequest,
-  tab,
 }: ChatColumnProps) => {
   const styles = useThemedStyles(createStyles);
+  const tab = useSessionLocationStore((state) => state.tab);
   return (
     <View style={[styles.full, betaHome && styles.hidden]}>
       {sessionID && chatBackend ? (
@@ -69,17 +58,12 @@ const ChatColumn = ({
           sessionID={sessionID}
           serverID={active.id}
           draftKey={`${active.id}:${sessionID}`}
-          onSelectionChange={onSelectionChange}
           onSessionInfo={onSessionInfo}
-          sessionPanelRequest={sessionPanelRequest}
           visible={tab === "sessions" && !betaHome}
           onOpenNavigation={onOpenNavigation}
           onSessionChanged={onSessionChanged}
           onOpenSession={onOpenSession}
           onOpenSettings={onOpenSettings}
-          attachmentPath={attachmentPath}
-          attachmentContext={attachmentContext}
-          onAttachmentConsumed={onAttachmentConsumed}
         />
       ) : (
         <View style={styles.welcome}>
@@ -114,7 +98,8 @@ export const SessionsTab = ({
   ...chat
 }: SessionsTabProps) => {
   const styles = useThemedStyles(createStyles);
-  const { active, betaHome, connectionRevision, sessionID, tab } = chat;
+  const { active, betaHome, connectionRevision, sessionID } = chat;
+  const tab = useSessionLocationStore((state) => state.tab);
   const listHidden = !betaHome && !!sessionID;
   return (
     <MotionScreen
@@ -144,13 +129,10 @@ interface WorkspaceTabProps {
   client: ServerClient;
   connectionRevision: number;
   directory: string;
-  mounted: boolean;
   onAttachFile: (path: string, contextText?: string) => Promise<boolean>;
   onDirectoryChange: (directory: string) => void;
   onSectionChange: (section: WorkspaceSection) => void;
-  section: WorkspaceSection;
   sessionID: string | null;
-  tab: Tab;
 }
 
 export const WorkspaceTab = ({
@@ -158,15 +140,15 @@ export const WorkspaceTab = ({
   client,
   connectionRevision,
   directory,
-  mounted,
   onAttachFile,
   onDirectoryChange,
   onSectionChange,
-  section,
   sessionID,
-  tab,
 }: WorkspaceTabProps) => {
   const styles = useThemedStyles(createStyles);
+  const tab = useSessionLocationStore((state) => state.tab);
+  const section = useSessionLocationStore((state) => state.workspaceSection);
+  const mounted = useSessionLocationStore((state) => !!state.visited.workspace);
   if (!mounted) {
     return null;
   }
@@ -197,13 +179,10 @@ interface SettingsTabProps {
   client: ServerClient;
   connectionRevision: number;
   directory: string;
-  mounted: boolean;
   onBack: () => void;
-  onBackStateChange: (canGoBack: boolean) => void;
   onManageServers: () => void;
   onOpenNavigation: () => void;
   sectionRequest: SettingsSectionRequest | undefined;
-  tab: Tab;
 }
 
 export const SettingsTab = ({
@@ -212,15 +191,19 @@ export const SettingsTab = ({
   client,
   connectionRevision,
   directory,
-  mounted,
   onBack,
-  onBackStateChange,
   onManageServers,
   onOpenNavigation,
   sectionRequest,
-  tab,
 }: SettingsTabProps) => {
   const styles = useThemedStyles(createStyles);
+  const locationApi = useSessionLocationStoreApi();
+  const tab = useSessionLocationStore((state) => state.tab);
+  const mounted = useSessionLocationStore((state) => !!state.visited.settings);
+  const onBackStateChange = useCallback(
+    (settingsCanGoBack: boolean) => locationApi.setState({ settingsCanGoBack }),
+    [locationApi]
+  );
   if (!mounted) {
     return null;
   }

@@ -11,17 +11,13 @@ import Svg, { Path, Rect } from "react-native-svg";
 
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import type { OpenSessionTab } from "../stores/session-tabs-store";
 import { NavIcon } from "./icons";
 import { SheetGroup, SheetRow } from "./list-sheet";
 import { ProjectAvatar } from "./project-avatar";
 import { ShellIcon } from "./shell-icon";
 import { BodyText, Sheet } from "./ui";
 
-export interface OpenSessionTab {
-  id: string;
-  title: string;
-  directory: string;
-}
 export type SessionPane =
   | "Session"
   | "Changes"

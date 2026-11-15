@@ -1,8 +1,6 @@
-import type {
-  OpenSessionTab,
-  SessionPane,
-} from "../components/beta-navigation";
-import type { WorkspaceSection } from "../screens/workspace-screen";
+import type { SessionPane } from "../components/beta-navigation";
+import type { WorkspaceSection } from "../stores/session-location-store";
+import type { OpenSessionTab } from "../stores/session-tabs-store";
 import type { Tab } from "./types";
 
 const lastPathSegment = /[^/]+(?=\/*$)/u;

@@ -2,8 +2,12 @@ import { useCallback, useLayoutEffect } from "react";
 
 import { isConnectionUnauthorized } from "../lib/client";
 import type { Connection } from "../lib/client";
+import {
+  emptyConnectionForm,
+  useConnectionStoreApi,
+} from "../stores/connection-store";
+import { useSheetStoreApi } from "../stores/sheet-store";
 import type { SheetCoordinator } from "./types";
-import type { MobileState } from "./use-app-state";
 
 interface UseConnectionRecoveryDeps {
   resumeSheets: SheetCoordinator["resumeSheets"];
@@ -13,98 +17,87 @@ interface UseConnectionRecoveryDeps {
   ) => Promise<void>;
 }
 
-export const useConnectionRecovery = (
-  model: MobileState,
-  deps: UseConnectionRecoveryDeps
-) => {
-  const {
-    activeRef,
-    automaticServerRequestRef,
-    connectingRef,
-    pendingNavigationSheetRef,
-    recoverConnectionRef,
-    recoveringConnectionRef,
-    serverSheetRequestRef,
-    serversOpen,
-    setConnectionError,
-    setFlowRevision,
-    setForm,
-    setPairingLink,
-    setUnavailableID,
-    showServerSheetRef,
-  } = model;
-  const { resumeSheets, showNavigationSheet } = deps;
-  const recoverActiveConnection = (connection: Connection, cause: unknown) => {
-    if (
-      activeRef.current !== connection ||
-      connectingRef.current ||
-      recoveringConnectionRef.current?.connection === connection
-    ) {
-      return;
-    }
-    const message = isConnectionUnauthorized(cause)
-      ? `${connection.name} rejected the saved password. Pair again or update its saved connection.`
-      : `${connection.name} is not responding. Retry it or connect to another server.`;
-    recoveringConnectionRef.current = { connection, message };
-    setUnavailableID(connection.id);
-    setConnectionError(message);
-    if (!serversOpen) {
-      setForm({ id: "", name: "", token: "", url: "" });
-      setPairingLink(null);
-      setFlowRevision((value) => value + 1);
-      void showNavigationSheet("servers", true);
-    }
-  };
+export const useConnectionRecovery = ({
+  resumeSheets,
+  showNavigationSheet,
+}: UseConnectionRecoveryDeps) => {
+  const connectionApi = useConnectionStoreApi();
+  const sheetApi = useSheetStoreApi();
 
   useLayoutEffect(() => {
-    showServerSheetRef.current = () => {
-      void showNavigationSheet("servers");
+    const recoverActiveConnection = (
+      connection: Connection,
+      cause: unknown
+    ) => {
+      const { active, connecting, recovering } = connectionApi.getState();
+      if (
+        active !== connection ||
+        connecting ||
+        recovering?.connection === connection
+      ) {
+        return;
+      }
+      const message = isConnectionUnauthorized(cause)
+        ? `${connection.name} rejected the saved password. Pair again or update its saved connection.`
+        : `${connection.name} is not responding. Retry it or connect to another server.`;
+      connectionApi.setState({
+        connectionError: message,
+        recovering: { connection, message },
+        unavailableID: connection.id,
+      });
+      if (!sheetApi.getState().serversOpen) {
+        connectionApi.setState((state) => ({
+          flowRevision: state.flowRevision + 1,
+          form: emptyConnectionForm(),
+          pairingLink: null,
+        }));
+        void showNavigationSheet("servers", true);
+      }
     };
-    recoverConnectionRef.current = recoverActiveConnection;
-  });
+    connectionApi.setState({ recoverConnection: recoverActiveConnection });
+  }, [connectionApi, sheetApi, showNavigationSheet]);
 
   const onProbeHealthy = useCallback(
     (owner: Connection) => {
-      const recovery = recoveringConnectionRef.current;
-      if (recovery?.connection !== owner) {
+      const { recovering } = connectionApi.getState();
+      if (recovering?.connection !== owner) {
         return;
       }
-      recoveringConnectionRef.current = null;
-      const automaticRequest = automaticServerRequestRef.current;
+      connectionApi.setState({ recovering: null });
+      const { automaticServerRequest, serverSheetRequest } =
+        sheetApi.getState();
       if (
-        automaticRequest !== null &&
-        automaticRequest === serverSheetRequestRef.current
+        automaticServerRequest !== null &&
+        automaticServerRequest === serverSheetRequest
       ) {
-        automaticServerRequestRef.current = null;
-        serverSheetRequestRef.current += 1;
-        if (
-          pendingNavigationSheetRef.current?.kind === "servers" &&
-          pendingNavigationSheetRef.current.serverRequest === automaticRequest
-        ) {
-          pendingNavigationSheetRef.current = null;
-        }
+        const { pendingNavigationSheet } = sheetApi.getState();
+        sheetApi.setState({
+          automaticServerRequest: null,
+          pendingNavigationSheet:
+            pendingNavigationSheet?.kind === "servers" &&
+            pendingNavigationSheet.serverRequest === automaticServerRequest
+              ? null
+              : pendingNavigationSheet,
+          serverSheetRequest: serverSheetRequest + 1,
+        });
         resumeSheets();
       }
-      setUnavailableID((value) => (value === owner.id ? null : value));
-      setConnectionError((value) =>
-        value === recovery.message ? null : value
-      );
+      connectionApi.setState((state) => ({
+        connectionError:
+          state.connectionError === recovering.message
+            ? null
+            : state.connectionError,
+        unavailableID:
+          state.unavailableID === owner.id ? null : state.unavailableID,
+      }));
     },
-    [
-      resumeSheets,
-      setConnectionError,
-      serverSheetRequestRef,
-      pendingNavigationSheetRef,
-      automaticServerRequestRef,
-      setUnavailableID,
-      recoveringConnectionRef,
-    ]
+    [resumeSheets, connectionApi, sheetApi]
   );
   const onProbeFailure = useCallback(
     (owner: Connection, cause: unknown) => {
-      recoverConnectionRef.current(owner, cause);
+      connectionApi.getState().recoverConnection(owner, cause);
     },
-    [recoverConnectionRef]
+    [connectionApi]
   );
   return {
     onProbeFailure,

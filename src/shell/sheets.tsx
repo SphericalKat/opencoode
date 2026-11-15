@@ -2,14 +2,12 @@ import type { Project } from "@opencode/client";
 import type { ReactNode } from "react";
 
 import { BetaMoreSheet, BetaTabsSheet } from "../components/beta-navigation";
-import type {
-  OpenSessionTab,
-  SessionPane,
-} from "../components/beta-navigation";
+import type { SessionPane } from "../components/beta-navigation";
 import { ProjectDirectoryBrowser } from "../components/project-directory-browser";
 import { Sheet } from "../components/ui";
 import type { Connection } from "../lib/client";
-import { useSheetVisibility } from "../lib/sheet-visibility";
+import type { OpenSessionTab } from "../stores/session-tabs-store";
+import { useSheetStore } from "../stores/sheet-store";
 import type { ServerClient } from "./types";
 
 interface BetaSheetsProps {
@@ -53,8 +51,8 @@ export const BetaSheets = ({
   openTabs,
   selectedPane,
 }: BetaSheetsProps) => {
-  const navigationOpen = useSheetVisibility((state) => state.navigationOpen);
-  const moreOpen = useSheetVisibility((state) => state.moreOpen);
+  const navigationOpen = useSheetStore((state) => state.navigationOpen);
+  const moreOpen = useSheetStore((state) => state.moreOpen);
   return (
     <>
       {active && (
