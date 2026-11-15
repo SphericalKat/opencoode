@@ -1,24 +1,37 @@
 import type { SessionInfo } from "@opencode/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect } from "react";
-import { BackHandler } from "react-native";
+import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
+import { useCallback, useLayoutEffect, useRef } from "react";
 
 import type { SessionPane } from "../components/beta-navigation";
 import { errorMessage } from "../lib/client";
 import { sessionDetailOptions } from "../lib/queries/sessions";
 import { queryKeys } from "../lib/query-keys";
+import { routes } from "../lib/routes";
 import { useAppLifecycleStoreApi } from "../stores/app-lifecycle-store";
-import { useChatUiStoreApi } from "../stores/chat-ui-store";
 import { useComposerStoreApi } from "../stores/composer-store";
 import {
   useConnectionStore,
   useConnectionStoreApi,
 } from "../stores/connection-store";
 import { useSessionLocationStoreApi } from "../stores/session-location-store";
+import type { WorkspaceSection } from "../stores/session-location-store";
 import { useSessionTabsStoreApi } from "../stores/session-tabs-store";
 import { useSheetStoreApi } from "../stores/sheet-store";
 import { attempt } from "./connection-utils";
+import {
+  tabFromPathname,
+  workspaceParamFromSection,
+  workspaceSectionFromParam,
+} from "./route-state";
 import type { ConfirmNavigation, ServerClient, Tab } from "./types";
+
+export const useCurrentTab = (): Tab => tabFromPathname(usePathname());
+
+export const useWorkspaceSection = () =>
+  workspaceSectionFromParam(
+    useGlobalSearchParams<{ section?: string }>().section
+  );
 
 interface UseSessionNavigationOptions {
   client: ServerClient | null;
@@ -36,7 +49,17 @@ export const useSessionNavigation = ({
   const lifecycle = useAppLifecycleStoreApi();
   const location = useSessionLocationStoreApi();
   const tabs = useSessionTabsStoreApi();
-  const chatUi = useChatUiStoreApi();
+  const router = useRouter();
+  const currentTab = useCurrentTab();
+  const currentSection = useWorkspaceSection();
+  const tabRef = useRef(currentTab);
+  const sectionRef = useRef(currentSection);
+  useLayoutEffect(() => {
+    tabRef.current = currentTab;
+    if (currentTab === "workspace") {
+      sectionRef.current = currentSection;
+    }
+  }, [currentSection, currentTab]);
   const sheets = useSheetStoreApi();
   const composer = useComposerStoreApi();
   const queryClient = useQueryClient();
@@ -91,47 +114,10 @@ export const useSessionNavigation = ({
 
   const showBetaHome = useCallback(() => {
     beginSelection();
-    location.setState({
-      betaHome: true,
-      openingSession: null,
-      tab: "sessions",
-    });
+    location.setState({ betaHome: true, openingSession: null });
+    router.navigate(routes.sessions);
     closeNavigationSheet();
-  }, [beginSelection, closeNavigationSheet, location]);
-
-  useEffect(() => {
-    const back = BackHandler.addEventListener("hardwareBackPress", () => {
-      const { backend } = connection.getState().active ?? {};
-      if (backend === "pi") {
-        return false;
-      }
-      const { betaHome, sessionID, settingsCanGoBack, tab } =
-        location.getState();
-      if (tab === "settings" && settingsCanGoBack) {
-        return false;
-      }
-      if (
-        chatUi.getState().messageSelected &&
-        !betaHome &&
-        tab === "sessions"
-      ) {
-        return false;
-      }
-      if (sessionID && tab === "sessions") {
-        if (!betaHome) {
-          showBetaHome();
-          return true;
-        }
-        return false;
-      }
-      if (tab !== "sessions") {
-        location.setState({ tab: "sessions" });
-        return true;
-      }
-      return false;
-    });
-    return () => back.remove();
-  }, [chatUi, connection, location, showBetaHome]);
+  }, [beginSelection, closeNavigationSheet, location, router]);
 
   const changeDirectory = useCallback(
     (nextDirectory: string) => {
@@ -158,8 +144,8 @@ export const useSessionNavigation = ({
           directory: nextDirectory,
           pendingLocation: null,
           sessionID: null,
-          tab: "sessions",
         });
+        router.replace(routes.sessions);
         sheets.setState({ newDirectory: nextDirectory, projectsOpen: false });
         clearAttachmentHandoffs();
         return null;
@@ -172,6 +158,7 @@ export const useSessionNavigation = ({
       confirmNavigation,
       connection,
       location,
+      router,
       sheets,
     ]
   );
@@ -259,7 +246,8 @@ export const useSessionNavigation = ({
             if (!next || !current() || location.getState().sessionID !== id) {
               return false;
             }
-            location.setState({ betaHome: false, tab: "sessions" });
+            location.setState({ betaHome: false });
+            router.navigate(routes.sessions);
             closeNavigation();
             return true;
           }
@@ -275,8 +263,8 @@ export const useSessionNavigation = ({
             betaHome: !id,
             pendingLocation: null,
             sessionID: id || null,
-            tab: "sessions",
           });
+          router.navigate(routes.sessions);
           clearAttachmentHandoffs();
           if (selected) {
             recordSessionInfo(selected);
@@ -308,6 +296,7 @@ export const useSessionNavigation = ({
       fetchSession,
       location,
       recordSessionInfo,
+      router,
       setError,
       sheets,
       syncSelectedLocation,
@@ -341,8 +330,8 @@ export const useSessionNavigation = ({
           directory: created.location.directory,
           pendingLocation: null,
           sessionID: created.id,
-          tab: "sessions",
         });
+        router.navigate(routes.sessions);
         sheets.setState({ newDirectory: created.location.directory });
         clearAttachmentHandoffs();
         recordSessionInfo(created);
@@ -389,8 +378,8 @@ export const useSessionNavigation = ({
           betaHome: true,
           pendingLocation: null,
           sessionID: null,
-          tab: "sessions",
         });
+        router.navigate(routes.sessions);
       }
     }
     tabs.setState((state) => ({
@@ -414,11 +403,27 @@ export const useSessionNavigation = ({
     });
   };
 
-  const changeTab = async (next: Tab) => {
+  const navigateToTab = (next: Tab, section?: WorkspaceSection) => {
+    if (next === "workspace") {
+      const pane = workspaceParamFromSection(section ?? sectionRef.current);
+      if (tabRef.current === "workspace") {
+        router.setParams({ section: pane });
+        return;
+      }
+      router.navigate({
+        pathname: routes.workspace,
+        params: { section: pane },
+      });
+      return;
+    }
+    router.navigate(next === "settings" ? routes.settings : routes.sessions);
+  };
+
+  const changeTab = async (next: Tab, section?: WorkspaceSection) => {
     const navigation = beginSelection();
     location.setState({ openingSession: null });
-    if (next === "sessions" || next === location.getState().tab) {
-      location.setState({ tab: next });
+    if (next === "sessions" || next === tabRef.current) {
+      navigateToTab(next, section);
       closeNavigationSheet();
       if (next === "sessions" && location.getState().sessionID) {
         void syncSelectedLocation();
@@ -437,10 +442,7 @@ export const useSessionNavigation = ({
     ) {
       return;
     }
-    location.setState((state) => ({
-      tab: next,
-      visited: { ...state.visited, [next]: true },
-    }));
+    navigateToTab(next, section);
     closeNavigationSheet();
   };
 
@@ -449,8 +451,7 @@ export const useSessionNavigation = ({
       void changeTab("sessions");
       return;
     }
-    location.setState({ workspaceSection: pane });
-    void changeTab("workspace");
+    void changeTab("workspace", pane);
   };
   return {
     afterBetaNavigation,

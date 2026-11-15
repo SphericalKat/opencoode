@@ -1,10 +1,10 @@
-import type { ReactNode } from "react";
 import { Linking } from "react-native";
 
 import type { SessionPane } from "../components/beta-navigation";
 import { useConnectionStore } from "../stores/connection-store";
 import { useSessionTabsStore } from "../stores/session-tabs-store";
 import { useSheetStore, useSheetStoreApi } from "../stores/sheet-store";
+import { ServerForm } from "./server-form";
 import { BetaSheets, ProjectsSheet, ServersSheet } from "./sheets";
 import type { ServerClient } from "./types";
 
@@ -24,11 +24,9 @@ interface AppSheetsProps {
   onOpenSession: (id: string) => void;
   onOpenSettings: () => void;
   onRequestPanel: (panel: "stats" | "actions") => void;
-  onResumeSheets: () => void;
   onShowHome: () => void;
   onView: (pane: SessionPane) => void;
   selectedPane: SessionPane;
-  serverForm: ReactNode;
 }
 
 const useSheetActions = () => {
@@ -39,11 +37,6 @@ const useSheetActions = () => {
     handleCloseMore: () => sheetApi.setState({ moreOpen: false }),
     handleCloseNavigation: () => sheetApi.setState({ navigationOpen: false }),
     handleCloseProjects: () => sheetApi.setState({ projectsOpen: false }),
-    handleCloseServers: () =>
-      sheetApi.setState((state) => ({
-        serverSheetRequest: state.serverSheetRequest + 1,
-        serversOpen: false,
-      })),
     handleDismissMore: () => {
       const action = sheetApi.getState().pendingAction;
       sheetApi.setState({ pendingAction: null });
@@ -66,32 +59,24 @@ export const AppSheets = ({
   onOpenSession,
   onOpenSettings,
   onRequestPanel,
-  onResumeSheets,
   onShowHome,
   onView,
   selectedPane,
-  serverForm,
 }: AppSheetsProps) => {
   const {
     handleChangeProjectValue,
     handleCloseMore,
     handleCloseNavigation,
     handleCloseProjects,
-    handleCloseServers,
     handleDismissMore,
   } = useSheetActions();
   const active = useConnectionStore((state) => state.active);
-  const connectionRevision = useConnectionStore(
-    (state) => state.connectionRevision
-  );
-  const unavailableID = useConnectionStore((state) => state.unavailableID);
   const openTabs = useSessionTabsStore((state) => state.openTabs);
   const newDirectory = useSheetStore((state) => state.newDirectory);
   const projectBusy = useSheetStore((state) => state.projectBusy);
   const projectError = useSheetStore((state) => state.projectError);
   const projects = useSheetStore((state) => state.projects);
   const projectsOpen = useSheetStore((state) => state.projectsOpen);
-  const serversOpen = useSheetStore((state) => state.serversOpen);
   return (
     <>
       <BetaSheets
@@ -118,20 +103,10 @@ export const AppSheets = ({
         openTabs={openTabs}
         selectedPane={selectedPane}
       />
-      <ServersSheet
-        active={active}
-        open={serversOpen}
-        unavailableID={unavailableID}
-        onClose={handleCloseServers}
-        onDismiss={onResumeSheets}
-      >
-        {serverForm}
-      </ServersSheet>
       <ProjectsSheet
         active={active}
         busy={projectBusy}
         client={client}
-        connectionRevision={connectionRevision}
         directory={directory}
         error={projectError}
         onChangeValue={handleChangeProjectValue}
@@ -142,5 +117,32 @@ export const AppSheets = ({
         value={newDirectory}
       />
     </>
+  );
+};
+
+interface AppServersSheetProps {
+  onResumeSheets: () => void;
+}
+
+export const AppServersSheet = ({ onResumeSheets }: AppServersSheetProps) => {
+  const sheetApi = useSheetStoreApi();
+  const active = useConnectionStore((state) => state.active);
+  const unavailableID = useConnectionStore((state) => state.unavailableID);
+  const serversOpen = useSheetStore((state) => state.serversOpen);
+  return (
+    <ServersSheet
+      active={active}
+      open={serversOpen}
+      unavailableID={unavailableID}
+      onClose={() =>
+        sheetApi.setState((state) => ({
+          serverSheetRequest: state.serverSheetRequest + 1,
+          serversOpen: false,
+        }))
+      }
+      onDismiss={onResumeSheets}
+    >
+      <ServerForm />
+    </ServersSheet>
   );
 };

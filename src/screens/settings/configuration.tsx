@@ -1,5 +1,6 @@
 import { isFileNotFoundError } from "@opencode/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePreventRemove } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
@@ -292,11 +293,25 @@ export const Configuration = ({
     original: string | null;
   }>();
   const [text, setText] = useState("");
+  const dirty = Boolean(editing && text !== editing.original);
   useUnsavedChanges(
     `configuration:${directory}`,
     "Configuration editor",
-    Boolean(editing && text !== editing.original)
+    dirty
   );
+  usePreventRemove(dirty, ({ repeat }) => {
+    void confirmAction(
+      "Leave this view?",
+      "Configuration editor contains unsaved changes. Continue?",
+      { confirmLabel: "Leave" }
+    ).then((ok) => {
+      if (ok) {
+        setEditing(undefined);
+        repeat();
+      }
+      return ok;
+    });
+  });
   const [viewing, setViewing] = useState<{
     info: unknown;
     path?: string | null;

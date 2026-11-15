@@ -46,11 +46,10 @@ export const useConnectionRecovery = ({
         unavailableID: connection.id,
       });
       if (!sheetApi.getState().serversOpen) {
-        connectionApi.setState((state) => ({
-          flowRevision: state.flowRevision + 1,
+        connectionApi.setState({
           form: emptyConnectionForm(),
           pairingLink: null,
-        }));
+        });
         void showNavigationSheet("servers", true);
       }
     };

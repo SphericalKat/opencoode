@@ -1,7 +1,6 @@
 import type { Connection, connect, createClient } from "../lib/client";
 import type { useSheetCoordinator } from "../lib/sheets";
 import type { useUnsavedGuard } from "../lib/unsaved";
-import type { Section } from "../screens/settings-screen";
 
 export type Tab = "sessions" | "workspace" | "settings";
 
@@ -25,11 +24,6 @@ export interface SessionPanelRequest {
   id: number;
   panel: "stats" | "actions";
   sessionID: string;
-}
-
-export interface SettingsSectionRequest {
-  id: number;
-  section: Section;
 }
 
 export type ConfirmNavigation = ReturnType<typeof useUnsavedGuard>;

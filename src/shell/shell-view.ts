@@ -18,6 +18,40 @@ const findCurrentOpenTab = (
       })
     : undefined;
 
+const workspaceSections: Record<string, WorkspaceSection> = {
+  changes: "Changes",
+  files: "Files",
+  terminal: "Terminal",
+  worktrees: "Worktrees",
+};
+
+export interface ShellRoute {
+  // False on the settings routes and the boot screen, which draw no frame.
+  framed: boolean;
+  tab: Tab;
+  workspaceSection: WorkspaceSection;
+}
+
+// Reads the selected tab and workspace pane from the route segments and the
+// `section` search parameter of the focused route.
+export const parseShellRoute = (
+  segments: readonly string[],
+  section: string | undefined
+): ShellRoute => {
+  const inOpenCode = segments[0] === "(opencode)";
+  let tab: Tab = "sessions";
+  if (inOpenCode && segments[1] === "workspace") {
+    tab = "workspace";
+  } else if (inOpenCode && segments[1] === "settings") {
+    tab = "settings";
+  }
+  return {
+    framed: tab !== "settings" && segments[0] !== "restoring",
+    tab,
+    workspaceSection: workspaceSections[section ?? ""] ?? "Changes",
+  };
+};
+
 export interface ShellView {
   currentOpenTab: OpenSessionTab | undefined;
   projectLabel: string;

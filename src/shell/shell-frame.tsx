@@ -17,6 +17,7 @@ import { useAppLifecycleStore } from "../stores/app-lifecycle-store";
 import { useSessionLocationStore } from "../stores/session-location-store";
 import type { OpenSessionTab } from "../stores/session-tabs-store";
 import { createStyles } from "./styles";
+import { useShellRoute } from "./use-shell-view";
 
 interface StatusBannersProps {
   onRetryLocation: () => void;
@@ -75,9 +76,8 @@ export const ShellFrame = ({
   );
   const directory = useSessionLocationStore((state) => state.directory);
   const sessionID = useSessionLocationStore((state) => state.sessionID);
-  const tab = useSessionLocationStore((state) => state.tab);
   const styles = useThemedStyles(createStyles);
-  const framed = tab !== "settings";
+  const { framed } = useShellRoute();
   const showSessionNavigation = framed && !betaHome && !!sessionID;
   return (
     <SelectionBarProvider>

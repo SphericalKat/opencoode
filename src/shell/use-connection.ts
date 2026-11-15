@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { AppState, Linking } from "react-native";
 
@@ -10,6 +11,7 @@ import {
   normalizeConnection,
 } from "../lib/client";
 import type { Connection } from "../lib/client";
+import { routes } from "../lib/routes";
 import {
   loadActiveConnectionId,
   loadConnections,
@@ -44,7 +46,7 @@ interface UseConnectionDeps {
   confirmNavigation: ConfirmNavigation;
 }
 
-export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
+export const useSelectServer = ({ confirmNavigation }: UseConnectionDeps) => {
   const connectionApi = useConnectionStoreApi();
   const lifecycleApi = useAppLifecycleStoreApi();
   const locationApi = useSessionLocationStoreApi();
@@ -52,13 +54,6 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
   const sheetApi = useSheetStoreApi();
   const composerApi = useComposerStoreApi();
   const queryClient = useQueryClient();
-  const active = useConnectionStore((state) => state.active);
-  const directory = useSessionLocationStore((state) => state.directory);
-  const sessionID = useSessionLocationStore((state) => state.sessionID);
-  const setError = useCallback(
-    (error: string | null) => lifecycleApi.setState({ error }),
-    [lifecycleApi]
-  );
   const setConnectionError = useCallback(
     (connectionError: string | null) =>
       connectionApi.setState({ connectionError }),
@@ -70,18 +65,23 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
       const { connected, preserveWorkspace } = applied;
       clearPairingRetry();
       const refresh = !preserveWorkspace || connected.backend === "pi";
-      connectionApi.setState((state) => ({
+      const previous = connectionApi.getState().active;
+      connectionApi.setState({
         active: connected,
-        connectionRevision: refresh
-          ? state.connectionRevision + 1
-          : state.connectionRevision,
         connections: applied.connections,
         form: emptyConnectionForm(),
         recovering: null,
         unavailableID: null,
-      }));
+      });
       if (refresh) {
         void queryClient.invalidateQueries({ queryKey: [connected.id] });
+      }
+      // A change of backend flips the `Stack.Protected` guards, which move the
+      // router to the new shell. Only a change inside one shell needs a replace.
+      if (refresh && previous?.backend === connected.backend) {
+        router.replace(
+          connected.backend === "pi" ? routes.piChat : routes.sessions
+        );
       }
       if (!preserveWorkspace) {
         tabsApi.setState({ openTabs: [] });
@@ -91,7 +91,6 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
           directory: applied.directory,
           pendingLocation: null,
           sessionID: applied.sessionID ?? null,
-          tab: "sessions",
         });
         sheetApi.setState({ newDirectory: applied.directory });
         composerApi.setState({ handoffs: {} });
@@ -209,6 +208,26 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
       locationApi,
     ]
   );
+  return { selectServer };
+};
+
+export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
+  const connectionApi = useConnectionStoreApi();
+  const lifecycleApi = useAppLifecycleStoreApi();
+  const sheetApi = useSheetStoreApi();
+  const active = useConnectionStore((state) => state.active);
+  const directory = useSessionLocationStore((state) => state.directory);
+  const sessionID = useSessionLocationStore((state) => state.sessionID);
+  const { selectServer } = useSelectServer({ confirmNavigation });
+  const setError = useCallback(
+    (error: string | null) => lifecycleApi.setState({ error }),
+    [lifecycleApi]
+  );
+  const setConnectionError = useCallback(
+    (connectionError: string | null) =>
+      connectionApi.setState({ connectionError }),
+    [connectionApi]
+  );
   const selectServerRef = useRef(selectServer);
   useLayoutEffect(() => {
     selectServerRef.current = selectServer;
@@ -287,11 +306,10 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
         }
         normalizeConnection({ name: "", url: server });
         setConnectionError(null);
-        connectionApi.setState((state) => ({
-          flowRevision: state.flowRevision + 1,
+        connectionApi.setState({
           form: { ...emptyConnectionForm(), url: server },
           pairingLink: server,
-        }));
+        });
         sheetApi.getState().showServerSheet();
       } catch {
         setError("The connection link is invalid");
@@ -303,7 +321,4 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
     );
     return () => subscription.remove();
   }, [connectionApi, sheetApi, setConnectionError, setError]);
-  return {
-    selectServer,
-  };
 };

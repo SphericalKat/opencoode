@@ -26,11 +26,9 @@ export interface ConnectionState {
   booting: boolean;
   connecting: boolean;
   connectionError: string | null;
-  connectionRevision: number;
   connections: Connection[];
   // Increments when a connection change must cancel deferred actions.
   epoch: number;
-  flowRevision: number;
   form: ConnectionForm;
   // Pairing link from a deep link. Step 6 removes it with the deep-link flow.
   pairingLink: string | null;
@@ -49,10 +47,8 @@ export const {
   booting: true,
   connecting: false,
   connectionError: null,
-  connectionRevision: 0,
   connections: [],
   epoch: 0,
-  flowRevision: 0,
   form: emptyConnectionForm(),
   pairingLink: null,
   recovering: null,

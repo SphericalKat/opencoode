@@ -117,7 +117,6 @@ interface ProjectsSheetProps {
   active: Connection | null;
   busy: boolean;
   client: ServerClient | null;
-  connectionRevision: number;
   directory: string;
   error: string | null;
   onChangeValue: (value: string) => void;
@@ -132,7 +131,6 @@ export const ProjectsSheet = ({
   active,
   busy,
   client,
-  connectionRevision,
   directory,
   error,
   onChangeValue,
@@ -145,7 +143,7 @@ export const ProjectsSheet = ({
   <Sheet visible={open} title="Open a project" scroll={false} onClose={onClose}>
     {open && client && active && (
       <ProjectDirectoryBrowser
-        key={`${active.id}:${connectionRevision}:${directory}`}
+        key={`${active.id}:${directory}`}
         client={client}
         directory={directory}
         value={value}

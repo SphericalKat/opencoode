@@ -1,4 +1,3 @@
-import type { Tab } from "../shell/types";
 import { createStoreContext } from "./create-store-context";
 
 export type WorkspaceSection = "Files" | "Changes" | "Worktrees" | "Terminal";
@@ -8,8 +7,6 @@ export interface PendingLocation {
   sessionID: string;
 }
 
-// Holds the selected location. Step 5 moves `tab`, `visited` and
-// `workspaceSection` to routes and deletes them from this store.
 export interface SessionLocationState {
   betaHome: boolean;
   betaHomeProject: { directory: string; revision: number } | undefined;
@@ -19,10 +16,6 @@ export interface SessionLocationState {
   pendingLocation: PendingLocation | null;
   selectionRevision: number;
   sessionID: string | null;
-  settingsCanGoBack: boolean;
-  tab: Tab;
-  visited: Partial<Record<Tab, boolean>>;
-  workspaceSection: WorkspaceSection;
 }
 
 export const {
@@ -38,8 +31,4 @@ export const {
   pendingLocation: null,
   selectionRevision: 0,
   sessionID: null,
-  settingsCanGoBack: false,
-  tab: "sessions",
-  visited: { sessions: true },
-  workspaceSection: "Changes",
 }));

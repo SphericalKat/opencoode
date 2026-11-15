@@ -1,14 +1,18 @@
 import type { SessionInfo } from "@opencode/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter, usePathname } from "expo-router";
 import React, {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { BackHandler, Keyboard, Linking, View } from "react-native";
+import type { ReactNode } from "react";
+import { Keyboard, Linking, View } from "react-native";
 
 import type { PiCommand } from "../../packages/pi-mobile/protocol";
 import {
@@ -27,22 +31,51 @@ import { makePiChatBackend } from "../lib/pi-chat-backend";
 import { createPiClient } from "../lib/pi-client";
 import type { PiClient } from "../lib/pi-client";
 import { piSessionsOptions } from "../lib/queries/pi";
+import { routes } from "../lib/routes";
 import { useServerScope } from "../lib/server-scope";
 import { useUnsavedGuard } from "../lib/unsaved";
 import { useChatUiStore, useChatUiStoreApi } from "../stores/chat-ui-store";
 import type { OpenSessionTab } from "../stores/session-tabs-store";
 import { useSheetStore, useSheetStoreApi } from "../stores/sheet-store";
 import { ChatScreen } from "./chat-screen";
-import { SettingsScreen } from "./settings-screen";
-import type { Section } from "./settings-screen";
 
 interface Props {
+  children: ReactNode;
   connection: Connection;
   onManageServers: () => void;
   onConnectionLost: (error: unknown) => void;
   foreground: boolean;
 }
-const settingsSections: Section[] = ["Look and feel", "Models"];
+
+interface PiWorkspaceValue {
+  backend: ReturnType<typeof makePiChatBackend>;
+  busy: boolean;
+  connection: Connection;
+  error: string | null;
+  foreground: boolean;
+  onBack: () => void;
+  onConnectionLost: (error: unknown) => void;
+  onManageServers: () => void;
+  onOpenNavigation: () => void;
+  onOpenMore: () => void;
+  onRetry: () => void;
+  onSessionChanged: () => void;
+  onSessionInfo: (session: SessionInfo) => void;
+  onOpenSession: (id: string) => void;
+  session: SessionInfo | null;
+  settingsOpen: boolean;
+}
+
+const PiWorkspaceContext = createContext<PiWorkspaceValue | null>(null);
+
+// Shared by the chat route and the settings routes under the Pi layout.
+export const usePiWorkspace = (): PiWorkspaceValue => {
+  const value = useContext(PiWorkspaceContext);
+  if (!value) {
+    throw new Error("Pi workspace is used outside the Pi layout");
+  }
+  return value;
+};
 
 interface PiSheetsProps {
   client: PiClient;
@@ -129,7 +162,10 @@ const PiWorkspaceSession = ({
   foreground,
   onManageServers,
   onConnectionLost,
+  children,
 }: Props) => {
+  const router = useRouter();
+  const settingsOpen = usePathname().startsWith(routes.piSettings);
   const client = useMemo(() => createPiClient(connection), [connection]);
   const queryClient = useQueryClient();
   const scope = useServerScope();
@@ -140,9 +176,7 @@ const PiWorkspaceSession = ({
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [tabs, setTabs] = useState<OpenSessionTab[]>([]);
   const sheets = useSheetStoreApi();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const chatUi = useChatUiStoreApi();
-  const selected = useChatUiStore((state) => state.messageSelected);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useLayoutEffect(() => {
@@ -157,7 +191,6 @@ const PiWorkspaceSession = ({
   const sessionRef = useRef(session);
   const pendingNavigation = useRef<(() => void) | null>(null);
   const operation = useRef(false);
-  const settingsCanGoBack = useRef(false);
   const lostConnection = useRef(onConnectionLost);
   useLayoutEffect(() => {
     sessionRef.current = session;
@@ -231,23 +264,6 @@ const PiWorkspaceSession = ({
     });
     return () => controller.abort();
   }, [foreground, session, refreshSession]);
-
-  useEffect(() => {
-    if (!settingsOpen) {
-      return;
-    }
-    const subscription = BackHandler.addEventListener(
-      "hardwareBackPress",
-      () => {
-        if (settingsCanGoBack.current) {
-          return false;
-        }
-        setSettingsOpen(false);
-        return true;
-      }
-    );
-    return () => subscription.remove();
-  }, [settingsOpen]);
 
   const changeSession = async (
     command: Extract<PiCommand, { type: "new" | "switch" }>
@@ -335,9 +351,159 @@ const PiWorkspaceSession = ({
     pendingNavigation.current = action;
     sheets.setState({ moreOpen: false });
   };
-  const onSettingsBackState = useCallback((value: boolean) => {
-    settingsCanGoBack.current = value;
-  }, []);
+  const onSessionChanged = () => {
+    void refreshSession().catch((error_) => {
+      if (alive.current) {
+        setError(errorMessage(error_));
+      }
+    });
+  };
+  const onRetry = () => {
+    setError(null);
+    void refreshSession().catch((error_) => setError(errorMessage(error_)));
+  };
+  const latest = useRef({ onRetry, onSessionChanged, openChatSession });
+  useLayoutEffect(() => {
+    latest.current = { onRetry, onSessionChanged, openChatSession };
+  });
+  const onOpenSession = useCallback(
+    (id: string) => latest.current.openChatSession(id),
+    []
+  );
+  const onRetryStable = useCallback(() => latest.current.onRetry(), []);
+  const onSessionChangedStable = useCallback(
+    () => latest.current.onSessionChanged(),
+    []
+  );
+  const onOpenMore = useCallback(() => {
+    Keyboard.dismiss();
+    sheets.setState({ moreOpen: true });
+  }, [sheets]);
+  const onOpenNavigation = useCallback(
+    () => sheets.setState({ navigationOpen: true }),
+    [sheets]
+  );
+  const onBack = useCallback(() => router.back(), [router]);
+  const value = useMemo<PiWorkspaceValue>(
+    () => ({
+      backend,
+      busy,
+      connection,
+      error,
+      foreground,
+      onBack,
+      onConnectionLost,
+      onManageServers,
+      onOpenMore,
+      onOpenNavigation,
+      onOpenSession,
+      onRetry: onRetryStable,
+      onSessionChanged: onSessionChangedStable,
+      onSessionInfo: recordSession,
+      session,
+      settingsOpen,
+    }),
+    [
+      backend,
+      busy,
+      connection,
+      error,
+      foreground,
+      onBack,
+      onConnectionLost,
+      onManageServers,
+      onOpenMore,
+      onOpenNavigation,
+      onOpenSession,
+      onRetryStable,
+      onSessionChangedStable,
+      recordSession,
+      session,
+      settingsOpen,
+    ]
+  );
+
+  return (
+    <PiWorkspaceContext.Provider value={value}>
+      <View style={{ flex: 1 }}>
+        <PiBus
+          backend={backend}
+          foreground={foreground && !settingsOpen}
+          scope={scope}
+          onConnectionLost={onConnectionLost}
+        />
+        {children}
+        <PiSheets
+          client={client}
+          foreground={foreground}
+          onDetails={() => afterMenu(showDetails)}
+          onDismiss={onNavigationDismissed}
+          onError={setError}
+          onHelp={() =>
+            afterNavigation(() => {
+              void Linking.openURL("https://pi.dev/docs/latest/");
+            })
+          }
+          onNew={() =>
+            afterNavigation(() => {
+              void changeSession({ type: "new" });
+            })
+          }
+          onSelect={(id) => afterNavigation(() => openSession(id))}
+          onServer={() => afterNavigation(onManageServers)}
+          onSettings={() =>
+            afterNavigation(() => router.push(routes.piSettings))
+          }
+          selectedID={session?.id}
+          serverLabel={connection.name}
+          tabs={tabs}
+        />
+      </View>
+    </PiWorkspaceContext.Provider>
+  );
+};
+
+const generations = new WeakMap<Connection, number>();
+let nextGeneration = 0;
+
+// Each applied connection is a new object, so a reconnect to the same server
+// resets the Pi state, as the old `connectionRevision` key did.
+const generationOf = (connection: Connection) => {
+  let generation = generations.get(connection);
+  if (generation === undefined) {
+    nextGeneration += 1;
+    generation = nextGeneration;
+    generations.set(connection, generation);
+  }
+  return generation;
+};
+
+export const PiWorkspace = (props: Props) => (
+  <LiveStoreProvider
+    key={`${props.connection.id}:${props.connection.url}:${generationOf(props.connection)}`}
+  >
+    <PiWorkspaceSession {...props} />
+  </LiveStoreProvider>
+);
+
+export const PiChat = () => {
+  const {
+    backend,
+    busy,
+    connection,
+    error,
+    foreground,
+    onConnectionLost,
+    onOpenMore,
+    onOpenNavigation,
+    onOpenSession,
+    onRetry,
+    onSessionChanged,
+    onSessionInfo,
+    session,
+    settingsOpen,
+  } = usePiWorkspace();
+  const selected = useChatUiStore((state) => state.messageSelected);
   const currentTab = session
     ? {
         directory: session.location.directory,
@@ -348,116 +514,45 @@ const PiWorkspaceSession = ({
 
   return (
     <View style={{ flex: 1 }}>
-      <PiBus
-        backend={backend}
-        foreground={foreground && !settingsOpen}
-        scope={scope}
-        onConnectionLost={onConnectionLost}
-      />
-      {!settingsOpen && !selected && (
+      {!selected && (
         <BetaTabStrip
           current={currentTab}
           busy={busy || !session}
-          onOpen={() => sheets.setState({ navigationOpen: true })}
+          onOpen={onOpenNavigation}
         />
       )}
       {error && (
         <View style={{ paddingBottom: 8, paddingHorizontal: 12 }}>
-          <ErrorNotice
-            error={error}
-            onRetry={() => {
-              setError(null);
-              void refreshSession().catch((error_) =>
-                setError(errorMessage(error_))
-              );
-            }}
-          />
+          <ErrorNotice error={error} onRetry={onRetry} />
         </View>
       )}
-      <SessionSurface framed={!settingsOpen && !selected}>
-        {!settingsOpen && !selected && session && (
+      <SessionSurface framed={!selected}>
+        {!selected && session && (
           <BetaSessionNavigation
             pane="Session"
             directory={session.location.directory}
             changes={false}
-            onSelect={() => setSettingsOpen(false)}
-            onMore={() => {
-              Keyboard.dismiss();
-              sheets.setState({ moreOpen: true });
-            }}
+            onSelect={() => Keyboard.dismiss()}
+            onMore={onOpenMore}
           />
         )}
         {session ? (
-          <>
-            <View style={[{ flex: 1 }, settingsOpen && { display: "none" }]}>
-              <ChatScreen
-                backend={backend}
-                sessionID={session.id}
-                draftKey={`pi:${connection.id}:${session.id}`}
-                serverID={connection.id}
-                visible={foreground && !settingsOpen}
-                onOpenNavigation={() =>
-                  sheets.setState({ navigationOpen: true })
-                }
-                onSessionInfo={recordSession}
-                onSessionChanged={() => {
-                  void refreshSession().catch((error_) => {
-                    if (alive.current) {
-                      setError(errorMessage(error_));
-                    }
-                  });
-                }}
-                onOpenSession={openChatSession}
-                onConnectionLost={onConnectionLost}
-              />
-            </View>
-            {settingsOpen && (
-              <SettingsScreen
-                modelCatalog={backend.core.model}
-                directory={session.location.directory}
-                sections={settingsSections}
-                visible
-                onBack={() => setSettingsOpen(false)}
-                backLabel="Chat"
-                onBackStateChange={onSettingsBackState}
-                onManageServers={onManageServers}
-                serverLabel={connection.name}
-              />
-            )}
-          </>
+          <ChatScreen
+            backend={backend}
+            sessionID={session.id}
+            draftKey={`pi:${connection.id}:${session.id}`}
+            serverID={connection.id}
+            visible={foreground && !settingsOpen}
+            onOpenNavigation={onOpenNavigation}
+            onSessionInfo={onSessionInfo}
+            onSessionChanged={onSessionChanged}
+            onOpenSession={onOpenSession}
+            onConnectionLost={onConnectionLost}
+          />
         ) : (
           <Busy />
         )}
       </SessionSurface>
-      <PiSheets
-        client={client}
-        foreground={foreground}
-        onDetails={() => afterMenu(showDetails)}
-        onDismiss={onNavigationDismissed}
-        onError={setError}
-        onHelp={() =>
-          afterNavigation(() => {
-            void Linking.openURL("https://pi.dev/docs/latest/");
-          })
-        }
-        onNew={() =>
-          afterNavigation(() => {
-            void changeSession({ type: "new" });
-          })
-        }
-        onSelect={(id) => afterNavigation(() => openSession(id))}
-        onServer={() => afterNavigation(onManageServers)}
-        onSettings={() => afterNavigation(() => setSettingsOpen(true))}
-        selectedID={session?.id}
-        serverLabel={connection.name}
-        tabs={tabs}
-      />
     </View>
   );
 };
-
-export const PiWorkspace = (props: Props) => (
-  <LiveStoreProvider key={`${props.connection.id}:${props.connection.url}`}>
-    <PiWorkspaceSession {...props} />
-  </LiveStoreProvider>
-);

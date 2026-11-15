@@ -1,34 +1,27 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 
-import { useUndoableRemoval } from "../components/snackbar";
 import { errorMessage } from "../lib/client";
-import type { Connection } from "../lib/client";
 import { locationOptions } from "../lib/queries/sessions";
 import { queryKeys } from "../lib/query-keys";
-import {
-  loadConnections,
-  saveActiveConnectionId,
-  saveConnections,
-} from "../lib/storage";
+import { routes } from "../lib/routes";
 import { useAppLifecycleStoreApi } from "../stores/app-lifecycle-store";
 import { useComposerStoreApi } from "../stores/composer-store";
 import { useConnectionStoreApi } from "../stores/connection-store";
 import { useSessionLocationStoreApi } from "../stores/session-location-store";
 import { useSheetStoreApi } from "../stores/sheet-store";
 import { attempt } from "./connection-utils";
-import type { ConfirmNavigation, ServerClient } from "./types";
+import type { ServerClient } from "./types";
 
 interface UseWorkspaceActionsDeps {
   changeDirectory: (directory: string) => void;
   client: ServerClient | null;
-  confirmNavigation: ConfirmNavigation;
   syncSelectedLocation: () => Promise<string | null>;
 }
 
 export const useWorkspaceActions = ({
   changeDirectory,
   client,
-  confirmNavigation,
   syncSelectedLocation,
 }: UseWorkspaceActionsDeps) => {
   const connectionStore = useConnectionStoreApi();
@@ -36,9 +29,8 @@ export const useWorkspaceActions = ({
   const lifecycleStore = useAppLifecycleStoreApi();
   const sheetStore = useSheetStoreApi();
   const composerStore = useComposerStoreApi();
-  const { hidden: hiddenConnections, remove: removeServer } =
-    useUndoableRemoval("servers");
   const queryClient = useQueryClient();
+  const router = useRouter();
   const getConnection = () => connectionStore.getState();
   const setError = (error: string | null) => lifecycleStore.setState({ error });
   const createSession = useMutation({
@@ -104,41 +96,6 @@ export const useWorkspaceActions = ({
     );
   };
 
-  const removeConnection = async (connection: Connection) => {
-    if (
-      getConnection().active?.id === connection.id &&
-      !(await confirmNavigation())
-    ) {
-      return;
-    }
-    removeServer(connection.id, {
-      commit: async () => {
-        const saved = await loadConnections();
-        const next = saved.filter((item) => item.id !== connection.id);
-        await saveConnections(next);
-        if (getConnection().active?.id === connection.id) {
-          connectionStore.setState((state) => ({ epoch: state.epoch + 1 }));
-          await saveActiveConnectionId(null);
-          connectionStore.setState({ active: null });
-          const { sessionID: removedSession } = locationStore.getState();
-          locationStore.setState({
-            directory: "",
-            pendingLocation: null,
-            sessionID: null,
-          });
-          if (removedSession) {
-            composerStore.setState((state) => ({
-              handoffs: { ...state.handoffs, [removedSession]: undefined },
-            }));
-          }
-        }
-        queryClient.removeQueries({ queryKey: [connection.id] });
-        connectionStore.setState({ connections: next });
-      },
-      message: "Server removed",
-    });
-  };
-
   const attachFile = async (
     path: string,
     contextText?: string
@@ -186,8 +143,8 @@ export const useWorkspaceActions = ({
       locationStore.setState({
         betaHome: false,
         sessionID: selected,
-        tab: "sessions",
       });
+      router.navigate(routes.sessions);
       return true;
     } catch (error_) {
       if (isCurrent()) {
@@ -198,8 +155,6 @@ export const useWorkspaceActions = ({
   };
   return {
     attachFile,
-    hiddenConnections,
     openDirectory,
-    removeConnection,
   };
 };
