@@ -4,7 +4,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { QueryKey, UseQueryResult } from "@tanstack/react-query";
-import React, { createContext, useContext, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useRef } from "react";
 import { ScrollView, View } from "react-native";
 
 import { BodyText, Busy, ErrorNotice, Row } from "../../components/ui";
@@ -94,10 +94,20 @@ export const Page = ({
   const styles = useThemedStyles(createStyles);
   const setHeaderRefresh = useContext(HeaderRefreshContext);
   const header = useContext(SectionHeaderContext);
+  // Callers pass a new `refresh` function on each render. Publishing it
+  // through the effect dependencies would set header state on every commit.
+  const refreshRef = useRef(refresh);
   useEffect(() => {
-    setHeaderRefresh?.({ loading, refresh });
+    refreshRef.current = refresh;
+  });
+  const hasRefresh = !!refresh;
+  useEffect(() => {
+    setHeaderRefresh?.({
+      loading,
+      refresh: hasRefresh ? () => refreshRef.current?.() : undefined,
+    });
     return () => setHeaderRefresh?.(null);
-  }, [setHeaderRefresh, refresh, loading]);
+  }, [setHeaderRefresh, hasRefresh, loading]);
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
