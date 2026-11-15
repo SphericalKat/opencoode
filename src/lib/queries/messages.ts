@@ -23,7 +23,11 @@ export type MessagesData = InfiniteData<MessagePage, string | undefined> & {
   liveIDs?: string[];
 };
 
-export const nextCursor = (page: MessagePage) => page.cursor.next ?? undefined;
+// The server returns a cursor on every page, so a short page is the last one.
+export const nextCursor = (page: MessagePage) =>
+  page.data.length === MESSAGE_PAGE_SIZE
+    ? (page.cursor.next ?? undefined)
+    : undefined;
 
 const isLiveAssistant = (
   message: SessionMessageInfo | undefined,
@@ -135,12 +139,10 @@ export const sessionMessagesOptions = (
     queryFn: ({ pageParam, signal }) =>
       withDeadline(signal, (deadline) =>
         core.message.list(
-          {
-            cursor: pageParam,
-            limit: MESSAGE_PAGE_SIZE,
-            order: "desc",
-            sessionID,
-          },
+          // The server rejects a cursor combined with an order.
+          pageParam
+            ? { cursor: pageParam, limit: MESSAGE_PAGE_SIZE, sessionID }
+            : { limit: MESSAGE_PAGE_SIZE, order: "desc", sessionID },
           { signal: deadline }
         )
       ),
