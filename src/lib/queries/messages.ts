@@ -77,17 +77,27 @@ const mergeHeadPage = (
   return { liveIDs: [...liveIDs], page: { ...next, data } };
 };
 
+const hasPages = (value: unknown): value is MessagesData =>
+  typeof value === "object" &&
+  value !== null &&
+  Array.isArray((value as MessagesData).pages);
+
 // Keeps live assistant messages in `pages[0]` when a head snapshot arrives.
 // Older pages never hold live messages, so they pass through unchanged.
+// TanStack also runs this over the result of `select`, which is a message
+// list and not a page set. That result passes through unchanged.
 export const mergeMessagesData = (
   previous: unknown,
   next: unknown
 ): unknown => {
-  const before = previous as MessagesData | undefined;
-  const after = next as MessagesData | undefined;
-  const head = before?.pages[0];
-  const nextHead = after?.pages[0];
-  if (!before || !after || !head || !nextHead) {
+  if (!hasPages(previous) || !hasPages(next)) {
+    return next;
+  }
+  const before = previous;
+  const after = next;
+  const [head] = before.pages;
+  const [nextHead] = after.pages;
+  if (!head || !nextHead) {
     return next;
   }
   const merged = mergeHeadPage(
