@@ -1,9 +1,14 @@
 import type { FileSystemEntry, Project } from "@opencode/client";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useMemo, useState } from "react";
 import { FlatList, Keyboard, Pressable, StyleSheet, View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { folderListOptions, vcsStatusOptions } from "../lib/queries/panels";
+import { locationOptions } from "../lib/queries/sessions";
+import { queryKeys } from "../lib/query-keys";
+import { useServerScope } from "../lib/server-scope";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { fileName } from "../lib/workspace";
@@ -281,25 +286,123 @@ const ListArea = ({
   );
 };
 
-const fetchFolders = async (
-  client: Client,
-  directory: string,
-  path: string,
-  signal: AbortSignal
-): Promise<
-  { base: string; folders: FileSystemEntry[] } | { error: string }
-> => {
-  try {
-    const result = await client.file.list(
-      { location: { directory }, path },
-      { signal }
-    );
-    const folders = result.data.filter((entry) => entry.type === "directory");
-    folders.sort((a, b) => fileName(a.path).localeCompare(fileName(b.path)));
-    return { base: result.location.directory, folders };
-  } catch (error_) {
-    return { error: errorMessage(error_) };
-  }
+const sortedFolders = (entries: FileSystemEntry[]) => {
+  const folders = entries.filter((entry) => entry.type === "directory");
+  folders.sort((a, b) => fileName(a.path).localeCompare(fileName(b.path)));
+  return folders;
+};
+
+interface BrowserHeaderProps {
+  error: string | null;
+  manual: boolean;
+  notice: string | null;
+  parent: string;
+  path: string;
+  pending: boolean;
+  recent: boolean;
+  value: string;
+  onBrowse: (next: string) => void;
+  onChangeValue: (value: string) => void;
+  onReload: () => void;
+  onSetManual: (update: (open: boolean) => boolean) => void;
+  onSetRecent: (recent: boolean) => void;
+}
+
+const BrowserHeader = ({
+  error,
+  manual,
+  notice,
+  parent,
+  path,
+  pending,
+  recent,
+  value,
+  onBrowse,
+  onChangeValue,
+  onReload,
+  onSetManual,
+  onSetRecent,
+}: BrowserHeaderProps) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.header}>
+      <BodyText
+        selectable
+        numberOfLines={1}
+        ellipsizeMode="middle"
+        accessibilityLabel={`Current folder: ${path}`}
+        style={styles.path}
+      >
+        {path}
+      </BodyText>
+      <Row style={{ flexWrap: "nowrap" }}>
+        {recent ? (
+          <BackButton
+            label="Folders"
+            accessibilityLabel="Back to folders"
+            disabled={pending}
+            onPress={() => onSetRecent(false)}
+          />
+        ) : (
+          <Button
+            title="↑ Parent"
+            size="compact"
+            alignSelf="center"
+            variant="ghost"
+            disabled={parent === path || pending}
+            onPress={() => onBrowse(parent)}
+          />
+        )}
+        <Button
+          title={manual ? "Hide path" : "Enter a path"}
+          size="compact"
+          alignSelf="center"
+          variant="ghost"
+          disabled={pending}
+          onPress={() => onSetManual((open) => !open)}
+        />
+        {!recent && (
+          <Button
+            title="Recent"
+            size="compact"
+            alignSelf="center"
+            variant="ghost"
+            disabled={pending}
+            onPress={() => onSetRecent(true)}
+          />
+        )}
+      </Row>
+      {manual && (
+        <View style={{ gap: 8 }}>
+          <Field
+            label="Directory on the server"
+            value={value}
+            editable={!pending}
+            onChangeText={onChangeValue}
+            returnKeyType="go"
+            onSubmitEditing={() => onBrowse(value)}
+          />
+          <Button
+            title="Browse this path"
+            size="compact"
+            onPress={() => onBrowse(value)}
+            disabled={!value.trim() || pending}
+          />
+        </View>
+      )}
+      <ErrorNotice error={error} onRetry={pending ? undefined : onReload} />
+      {notice && (
+        <BodyText
+          accessibilityLiveRegion="polite"
+          style={{ color: colors.success }}
+        >
+          {notice}
+        </BodyText>
+      )}
+      {recent && <BodyText muted>Recent projects</BodyText>}
+    </View>
+  );
 };
 
 const ProjectDirectoryBrowser = ({
@@ -312,31 +415,63 @@ const ProjectDirectoryBrowser = ({
   onChangeValue,
   onOpenDirectory,
 }: Props) => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
   const [path, setPath] = useState(() => normalizePath(directory));
-  const [base, setBase] = useState(directory);
-  const [folders, setFolders] = useState<FileSystemEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [browseError, setBrowseError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
   const [recent, setRecent] = useState(false);
-  const [initializing, setInitializing] = useState(false);
-  const mounted = useRef(true);
-  const action = useRef<AbortController | null>(null);
-  const listRequest = useRef<AbortController | null>(null);
+  const [pathError, setPathError] = useState<string | null>(null);
+  const listing = useQuery(folderListOptions(scope, client, directory, path));
+  const base = listing.data?.base ?? directory;
+  const folders = useMemo(
+    () => sortedFolders(listing.data?.entries ?? []),
+    [listing.data?.entries]
+  );
+  const loading = listing.isFetching;
+  const browseError =
+    pathError ?? (listing.error ? errorMessage(listing.error) : null);
+  const initializeGit = useMutation({
+    mutationFn: async () => {
+      const location = await queryClient.fetchQuery({
+        ...locationOptions(scope, client, path),
+        staleTime: 0,
+      });
+      const vcs = await queryClient.fetchQuery({
+        ...vcsStatusOptions(scope, client, location.directory),
+        staleTime: 0,
+      });
+      if (vcs.data.provider) {
+        return `This folder already belongs to a ${vcs.data.provider} repository.`;
+      }
+      const confirmed = await confirmAction(
+        "Initialize Git?",
+        `Create a Git repository in ${location.project.directory}?`,
+        { confirmLabel: "Initialize Git", destructive: false }
+      );
+      if (!confirmed) {
+        return null;
+      }
+      await client.vcs.init({
+        location: { directory: location.directory },
+        provider: "git",
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.dir.vcs(scope, location.directory),
+        }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.projects(scope) }),
+      ]);
+      return `Git initialized in ${location.project.directory}`;
+    },
+    onError: (reason) => setActionError(errorMessage(reason)),
+    onSuccess: setNotice,
+  });
+  const initializing = initializeGit.isPending;
   const parent = normalizePath(`${path}/..`);
   const pending = busy || initializing;
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      action.current?.abort();
-    };
-  }, []);
 
   const [seenLocation, setSeenLocation] = useState({
     client,
@@ -349,49 +484,23 @@ const ProjectDirectoryBrowser = ({
     seenLocation.path !== path
   ) {
     setSeenLocation({ client, directory, path });
-    setLoading(true);
-    setBrowseError(null);
+    setPathError(null);
     setActionError(null);
     setNotice(null);
   }
 
-  const loadFolders = useCallback(async () => {
-    listRequest.current?.abort();
-    const controller = new AbortController();
-    listRequest.current = controller;
-    const apply = (outcome: Awaited<ReturnType<typeof fetchFolders>>) => {
-      if (controller.signal.aborted) {
-        return;
-      }
-      if ("error" in outcome) {
-        setFolders([]);
-        setBrowseError(outcome.error);
-      } else {
-        setBase(outcome.base);
-        setFolders(outcome.folders);
-      }
-      setLoading(false);
-    };
-    apply(await fetchFolders(client, directory, path, controller.signal));
-  }, [client, directory, path]);
-
-  useEffect(() => {
-    void loadFolders();
-    return () => listRequest.current?.abort();
-  }, [loadFolders]);
-
+  const { refetch } = listing;
   const reload = () => {
-    setLoading(true);
-    setBrowseError(null);
+    setPathError(null);
     setActionError(null);
     setNotice(null);
-    void loadFolders();
+    void refetch();
   };
 
   const browse = (next: string) => {
     Keyboard.dismiss();
     if (!absolutePath(next.trim())) {
-      setBrowseError("Enter an absolute folder path on the server");
+      setPathError("Enter an absolute folder path on the server");
       return;
     }
     const normalized = normalizePath(next.trim());
@@ -405,146 +514,23 @@ const ProjectDirectoryBrowser = ({
     }
   };
 
-  const runInitializeGit = async (controller: AbortController) => {
-    const location = await client.location.get(
-      { location: { directory: path } },
-      { signal: controller.signal }
-    );
-    const vcs = await client.vcs.get(
-      { location: { directory: location.directory } },
-      { signal: controller.signal }
-    );
-    if (controller.signal.aborted) {
-      return;
-    }
-    if (vcs.data.provider) {
-      setNotice(
-        `This folder already belongs to a ${vcs.data.provider} repository.`
-      );
-      return;
-    }
-    const confirmed = await confirmAction(
-      "Initialize Git?",
-      `Create a Git repository in ${location.project.directory}?`,
-      { confirmLabel: "Initialize Git", destructive: false }
-    );
-    if (!confirmed || controller.signal.aborted) {
-      return;
-    }
-    await client.vcs.init(
-      { location: { directory: location.directory }, provider: "git" },
-      { signal: controller.signal }
-    );
-    if (!controller.signal.aborted) {
-      setNotice(`Git initialized in ${location.project.directory}`);
-    }
-  };
-
-  const initializeGit = async () => {
-    if (pending || action.current) {
-      return;
-    }
-    const controller = new AbortController();
-    action.current = controller;
-    setInitializing(true);
-    setActionError(null);
-    setNotice(null);
-    try {
-      await runInitializeGit(controller);
-    } catch (error_) {
-      if (!controller.signal.aborted) {
-        setActionError(errorMessage(error_));
-      }
-    }
-    if (mounted.current) {
-      setInitializing(false);
-    }
-    if (action.current === controller) {
-      action.current = null;
-    }
-  };
-
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <BodyText
-          selectable
-          numberOfLines={1}
-          ellipsizeMode="middle"
-          accessibilityLabel={`Current folder: ${path}`}
-          style={styles.path}
-        >
-          {path}
-        </BodyText>
-        <Row style={{ flexWrap: "nowrap" }}>
-          {recent ? (
-            <BackButton
-              label="Folders"
-              accessibilityLabel="Back to folders"
-              disabled={pending}
-              onPress={() => setRecent(false)}
-            />
-          ) : (
-            <Button
-              title="↑ Parent"
-              size="compact"
-              alignSelf="center"
-              variant="ghost"
-              disabled={parent === path || pending}
-              onPress={() => browse(parent)}
-            />
-          )}
-          <Button
-            title={manual ? "Hide path" : "Enter a path"}
-            size="compact"
-            alignSelf="center"
-            variant="ghost"
-            disabled={pending}
-            onPress={() => setManual((open) => !open)}
-          />
-          {!recent && (
-            <Button
-              title="Recent"
-              size="compact"
-              alignSelf="center"
-              variant="ghost"
-              disabled={pending}
-              onPress={() => setRecent(true)}
-            />
-          )}
-        </Row>
-        {manual && (
-          <View style={{ gap: 8 }}>
-            <Field
-              label="Directory on the server"
-              value={value}
-              editable={!pending}
-              onChangeText={onChangeValue}
-              returnKeyType="go"
-              onSubmitEditing={() => browse(value)}
-            />
-            <Button
-              title="Browse this path"
-              size="compact"
-              onPress={() => browse(value)}
-              disabled={!value.trim() || pending}
-            />
-          </View>
-        )}
-        <ErrorNotice
-          error={error || browseError || actionError}
-          onRetry={pending ? undefined : reload}
-        />
-        {notice && (
-          <BodyText
-            accessibilityLiveRegion="polite"
-            style={{ color: colors.success }}
-          >
-            {notice}
-          </BodyText>
-        )}
-        {recent && <BodyText muted>Recent projects</BodyText>}
-      </View>
+      <BrowserHeader
+        error={error || browseError || actionError}
+        manual={manual}
+        notice={notice}
+        parent={parent}
+        path={path}
+        pending={pending}
+        recent={recent}
+        value={value}
+        onBrowse={browse}
+        onChangeValue={onChangeValue}
+        onReload={reload}
+        onSetManual={setManual}
+        onSetRecent={setRecent}
+      />
       <ListArea
         base={base}
         browseError={browseError}
@@ -578,7 +564,12 @@ const ProjectDirectoryBrowser = ({
           busy={initializing}
           disabled={busy || loading || !!browseError}
           onPress={() => {
-            void initializeGit();
+            if (pending) {
+              return;
+            }
+            setActionError(null);
+            setNotice(null);
+            initializeGit.mutate();
           }}
         />
       </View>

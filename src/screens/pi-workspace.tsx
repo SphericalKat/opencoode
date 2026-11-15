@@ -1,4 +1,5 @@
 import type { SessionInfo } from "@opencode/client";
+import { useQuery } from "@tanstack/react-query";
 import React, {
   useCallback,
   useEffect,
@@ -24,6 +25,8 @@ import type { Connection } from "../lib/client";
 import { makePiChatBackend } from "../lib/pi-chat-backend";
 import { createPiClient } from "../lib/pi-client";
 import type { PiClient } from "../lib/pi-client";
+import { piSessionsOptions } from "../lib/queries/pi";
+import { useServerScope } from "../lib/server-scope";
 import {
   SheetVisibilityProvider,
   useSheetVisibility,
@@ -76,34 +79,25 @@ const PiSheets = ({
   const navigationOpen = useSheetVisibility((state) => state.navigationOpen);
   const moreOpen = useSheetVisibility((state) => state.moreOpen);
   const { setMoreOpen, setNavigationOpen } = useSheetVisibilityActions();
-  const [recent, setRecent] = useState<OpenSessionTab[]>([]);
-
+  const scope = useServerScope();
+  const sessions = useQuery(
+    piSessionsOptions(scope, client, foreground && navigationOpen)
+  );
+  const recent = useMemo<OpenSessionTab[]>(
+    () =>
+      (sessions.data ?? []).map((item) => ({
+        directory: item.cwd,
+        id: item.id,
+        title: item.name || "New session",
+      })),
+    [sessions.data]
+  );
+  const { error: sessionsError } = sessions;
   useEffect(() => {
-    if (!foreground || !navigationOpen) {
-      return;
+    if (sessionsError) {
+      onError(errorMessage(sessionsError));
     }
-    const controller = new AbortController();
-    void client
-      .sessions(controller.signal)
-      .then((value) => {
-        if (!controller.signal.aborted) {
-          setRecent(
-            value.map((item) => ({
-              directory: item.cwd,
-              id: item.id,
-              title: item.name || "New session",
-            }))
-          );
-        }
-        return null;
-      })
-      .catch((error_) => {
-        if (!controller.signal.aborted) {
-          onError(errorMessage(error_));
-        }
-      });
-    return () => controller.abort();
-  }, [client, foreground, navigationOpen, onError]);
+  }, [sessionsError, onError]);
 
   return (
     <>

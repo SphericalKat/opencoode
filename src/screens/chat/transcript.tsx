@@ -86,7 +86,7 @@ type PendingInputsProps = Pick<
   | "inbox"
   | "opencodeClient"
   | "pending"
-  | "run"
+  | "actions"
   | "sessionID"
   | "styles"
 >;
@@ -98,8 +98,7 @@ export const PendingInputs = ({
   inbox,
   opencodeClient,
   pending,
-  run,
-  sessionID,
+  actions,
   styles,
 }: PendingInputsProps) =>
   opencodeClient &&
@@ -132,13 +131,10 @@ export const PendingInputs = ({
               title={item.delivery === "steer" ? "Queue" : "Steer"}
               size="compact"
               onPress={() => {
-                void run(() =>
-                  opencodeClient.session.inbox.update({
-                    delivery: item.delivery === "steer" ? "queue" : "steer",
-                    inboxID: item.id,
-                    sessionID,
-                  })
-                );
+                void actions.updateInbox({
+                  delivery: item.delivery === "steer" ? "queue" : "steer",
+                  inboxID: item.id,
+                });
               }}
             />
             {(item.type === "user" || item.type === "synthetic") && (
@@ -157,12 +153,7 @@ export const PendingInputs = ({
               variant="ghost"
               disabled={pending}
               onPress={() => {
-                void run(() =>
-                  opencodeClient.session.inbox.cancel({
-                    inboxID: item.id,
-                    sessionID,
-                  })
-                );
+                void actions.cancelInbox(item.id);
               }}
             />
           </Row>
@@ -183,7 +174,7 @@ interface TranscriptFooterProps extends Pick<
   | "opencodeClient"
   | "pending"
   | "permissions"
-  | "run"
+  | "actions"
   | "sessionID"
   | "showError"
   | "styles"
@@ -197,12 +188,11 @@ export const TranscriptFooter = ({
   draftLoaded,
   editInbox,
   forms,
-  handleChanged,
   inbox,
   opencodeClient,
   pending,
   permissions,
-  run,
+  actions,
   session,
   sessionID,
   showError,
@@ -216,7 +206,7 @@ export const TranscriptFooter = ({
       inbox={inbox}
       opencodeClient={opencodeClient}
       pending={pending}
-      run={run}
+      actions={actions}
       sessionID={sessionID}
       styles={styles}
     />
@@ -226,7 +216,6 @@ export const TranscriptFooter = ({
         sessionID={sessionID}
         forms={forms}
         permissions={permissions}
-        onChanged={handleChanged}
         onError={showError}
         locationDirectory={session.location.directory}
       />
@@ -263,7 +252,7 @@ interface TranscriptListProps extends Pick<
   | "pending"
   | "permissions"
   | "renderMessage"
-  | "run"
+  | "actions"
   | "sessionID"
   | "setFollowing"
   | "showError"
@@ -299,7 +288,7 @@ export const TranscriptList = ({
   pending,
   permissions,
   renderMessage,
-  run,
+  actions,
   session,
   sessionID,
   setFollowing,
@@ -365,7 +354,7 @@ export const TranscriptList = ({
             opencodeClient={opencodeClient}
             pending={pending}
             permissions={permissions}
-            run={run}
+            actions={actions}
             sessionID={sessionID}
             showError={showError}
             styles={styles}

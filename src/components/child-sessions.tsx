@@ -1,9 +1,25 @@
-import type { SessionInfo } from "@opencode/client";
-import React, { useEffect, useRef, useState } from "react";
-import { AppState, View } from "react-native";
+import type { SessionActive, SessionInfo } from "@opencode/client";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { InfiniteData } from "@tanstack/react-query";
+import React, { useEffect, useMemo, useState } from "react";
+import { View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { useForeground } from "../lib/foreground";
+import {
+  activeSessionsOptions,
+  childSessionsOptions,
+  sessionDetailOptions,
+} from "../lib/queries/sessions";
+import type { SessionPage } from "../lib/queries/sessions";
+import { queryKeys } from "../lib/query-keys";
+import { useServerScope } from "../lib/server-scope";
 import { sessionStatus } from "../lib/session-status";
 import { useTheme } from "../lib/theme";
 import { confirmAction } from "./dialog";
@@ -14,19 +30,6 @@ const childListOptions = [
   { label: "Current", value: "current" },
   { label: "Archived", value: "archived" },
 ] as const;
-
-const ignore = () => null;
-
-const runWithCleanup = async (
-  task: () => Promise<void>,
-  cleanup: () => void
-) => {
-  try {
-    await task();
-  } finally {
-    cleanup();
-  }
-};
 
 const followEvents = async <T,>(
   events: AsyncIterable<T>,
@@ -84,6 +87,26 @@ const childStatusColor = (
   return colors.muted;
 };
 
+const patchItems = (
+  data: InfiniteData<SessionPage, string | undefined> | undefined,
+  id: string,
+  patch: (item: SessionInfo) => SessionInfo
+) =>
+  data && {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      data: page.data.map((item) => (item.id === id ? patch(item) : item)),
+    })),
+  };
+
+const hasItem = (
+  data: InfiniteData<SessionPage, string | undefined> | undefined,
+  id: string
+) => !!data?.pages.some((page) => page.data.some((item) => item.id === id));
+
+const NO_ACTIVE: Record<string, SessionActive> = {};
+
 export const ChildSessions = ({
   client,
   sessionID,
@@ -94,194 +117,133 @@ export const ChildSessions = ({
   onOpenSession: (id: string) => void;
 }) => {
   const { colors } = useTheme();
-  const [items, setItems] = useState<SessionInfo[]>([]);
-  const [activeIDs, setActiveIDs] = useState<Set<string>>(new Set());
-  const [cursor, setCursor] = useState<string>();
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  const foreground = useForeground();
   const [archived, setArchived] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [stoppingID, setStoppingID] = useState<string>();
-  const [error, setError] = useState<string>();
-  const [foreground, setForeground] = useState(
-    AppState.currentState !== "background" &&
-      AppState.currentState !== "inactive"
-  );
-  const knownIDs = useRef(new Set<string>());
-  const refreshRef = useRef<() => void>(ignore);
-  const moreRef = useRef<() => void>(ignore);
-  const stopRef = useRef<(id: string) => void>(ignore);
-
-  useEffect(() => {
-    const listener = AppState.addEventListener("change", (state) =>
-      setForeground(state === "active")
-    );
-    return () => listener.remove();
-  }, []);
-  const [seenScope, setSeenScope] = useState({
-    archived,
-    client,
-    foreground,
-    sessionID,
+  const [streamError, setStreamError] = useState<string>();
+  const [actionError, setActionError] = useState<string>();
+  const listOptions = childSessionsOptions(scope, client, sessionID, archived);
+  const list = useInfiniteQuery({
+    ...listOptions,
+    enabled: foreground,
+    refetchOnMount: true,
   });
-  if (
-    seenScope.archived !== archived ||
-    seenScope.client !== client ||
-    seenScope.foreground !== foreground ||
-    seenScope.sessionID !== sessionID
-  ) {
-    setSeenScope({ archived, client, foreground, sessionID });
-    if (foreground) {
-      setItems([]);
-      setActiveIDs(new Set());
-      setCursor(undefined);
-      setError(undefined);
-      setLoadingMore(false);
-      setStoppingID(undefined);
+  const activeQuery = useQuery({
+    ...activeSessionsOptions(scope, client.session),
+    enabled: foreground,
+  });
+  const items = useMemo(
+    () => [
+      ...new Map(
+        (list.data?.pages ?? [])
+          .flatMap((page) => page.data)
+          .map((item) => [item.id, item])
+      ).values(),
+    ],
+    [list.data?.pages]
+  );
+  const activeIDs = useMemo(
+    () => new Set(Object.keys(activeQuery.data ?? NO_ACTIVE)),
+    [activeQuery.data]
+  );
+  const cursor = list.hasNextPage;
+  const loading = list.isFetching && !list.isFetchingNextPage;
+  const loadingMore = list.isFetchingNextPage;
+  const error =
+    actionError ??
+    streamError ??
+    (list.error ? errorMessage(list.error) : undefined) ??
+    (activeQuery.error ? errorMessage(activeQuery.error) : undefined);
+  const { fetchNextPage, refetch: refetchList } = list;
+  const { refetch: refetchActive } = activeQuery;
+  const refresh = () => {
+    setActionError(undefined);
+    void refetchList();
+    void refetchActive();
+  };
+  const loadMore = () => {
+    if (list.hasNextPage && !list.isFetchingNextPage) {
+      void fetchNextPage();
     }
-  }
+  };
+  const stop = useMutation({
+    mutationFn: (id: string) => client.session.interrupt({ sessionID: id }),
+    onError: (reason) => setActionError(errorMessage(reason)),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.sessions.all(scope),
+      }),
+  });
+  const stoppingID = stop.isPending ? stop.variables : undefined;
+  const confirmStop = async (id: string) => {
+    if (
+      await confirmAction(
+        "Stop this child session?",
+        "This interrupts its current execution.",
+        { confirmLabel: "Stop" }
+      )
+    ) {
+      setActionError(undefined);
+      stop.mutate(id);
+    }
+  };
+
   useEffect(() => {
     if (!foreground) {
       return;
     }
     const controller = new AbortController();
-    let version = 0;
-    let nextCursor: string | undefined;
+    const listKey = queryKeys.sessions.children(scope, sessionID, archived);
+    const activeKey = queryKeys.sessions.active(scope);
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
-    let paging = false;
-    knownIDs.current.clear();
-    const refresh = async () => {
-      version += 1;
-      const request = version;
-      setLoading(true);
-      await runWithCleanup(
-        async () => {
-          try {
-            const [sessions, active] = await Promise.all([
-              client.session.list(
-                { archived, limit: 40, order: "desc", parentID: sessionID },
-                { signal: controller.signal }
-              ),
-              client.session.active({ signal: controller.signal }),
-            ]);
-            if (controller.signal.aborted || request !== version) {
-              return;
-            }
-            knownIDs.current = new Set(sessions.data.map((item) => item.id));
-            nextCursor = sessions.cursor.next ?? undefined;
-            setItems(sessions.data);
-            setActiveIDs(new Set(Object.keys(active)));
-            setCursor(nextCursor);
-            setError(undefined);
-          } catch (error_) {
-            if (!controller.signal.aborted && request === version) {
-              setError(errorMessage(error_));
-            }
-          }
-        },
-        () => {
-          if (!controller.signal.aborted && request === version) {
-            setLoading(false);
-          }
-        }
-      );
-    };
     const scheduleRefresh = () => {
       if (refreshTimer) {
         return;
       }
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined;
-        void refresh();
+        void queryClient.invalidateQueries({ queryKey: listKey });
+        void queryClient.invalidateQueries({ queryKey: activeKey });
       }, 250);
     };
-    refreshRef.current = () => {
-      void refresh();
-    };
-    moreRef.current = () => {
-      if (!nextCursor || paging) {
-        return;
+    const patch = (id: string, change: (item: SessionInfo) => SessionInfo) =>
+      queryClient.setQueryData<InfiniteData<SessionPage, string | undefined>>(
+        listKey,
+        (data) => patchItems(data, id, change)
+      );
+    const setRunning = (id: string, running: boolean) =>
+      queryClient.setQueryData<Record<string, SessionActive>>(
+        activeKey,
+        (current) => {
+          const others = Object.entries(current ?? {}).filter(
+            ([key]) => key !== id
+          );
+          return Object.fromEntries(
+            running ? [...others, [id, { type: "running" }]] : others
+          );
+        }
+      );
+    const refetchEnded = async (id: string) => {
+      try {
+        const item = await queryClient.fetchQuery({
+          ...sessionDetailOptions(scope, client.session, id),
+          staleTime: 0,
+        });
+        if (!controller.signal.aborted) {
+          patch(id, () => item);
+        }
+      } catch (error_) {
+        if (!controller.signal.aborted) {
+          setStreamError(errorMessage(error_));
+        }
       }
-      paging = true;
-      const request = version;
-      const pageCursor = nextCursor;
-      setLoadingMore(true);
-      const pending = client.session.list(
-        { archived, cursor: pageCursor, limit: 40, parentID: sessionID },
-        { signal: controller.signal }
-      );
-      void runWithCleanup(
-        async () => {
-          try {
-            const page = await pending;
-            if (controller.signal.aborted || request !== version) {
-              return;
-            }
-            for (const item of page.data) {
-              knownIDs.current.add(item.id);
-            }
-            nextCursor = page.cursor.next ?? undefined;
-            setCursor(nextCursor);
-            setItems((current) => [
-              ...current,
-              ...page.data.filter(
-                (item) => !current.some((existing) => existing.id === item.id)
-              ),
-            ]);
-          } catch (error_) {
-            if (!controller.signal.aborted) {
-              setError(errorMessage(error_));
-            }
-          }
-        },
-        () => {
-          paging = false;
-          if (!controller.signal.aborted) {
-            setLoadingMore(false);
-          }
-        }
-      );
-    };
-    stopRef.current = (id) => {
-      void (async () => {
-        if (
-          !(await confirmAction(
-            "Stop this child session?",
-            "This interrupts its current execution.",
-            { confirmLabel: "Stop" }
-          ))
-        ) {
-          return;
-        }
-        if (controller.signal.aborted) {
-          return;
-        }
-        setStoppingID(id);
-        await runWithCleanup(
-          async () => {
-            try {
-              await client.session.interrupt(
-                { sessionID: id },
-                { signal: controller.signal }
-              );
-              await refresh();
-            } catch (error_) {
-              if (!controller.signal.aborted) {
-                setError(errorMessage(error_));
-              }
-            }
-          },
-          () => {
-            if (!controller.signal.aborted) {
-              setStoppingID(undefined);
-            }
-          }
-        );
-      })();
     };
     const handleEvent = (event: ChildSessionEvent) => {
       attempts = 0;
+      setStreamError(undefined);
       if (
         event.type === "server.connected" ||
         (event.type === "session.created" && event.data.parentID === sessionID)
@@ -291,7 +253,7 @@ export const ChildSessions = ({
       }
       if (
         !("sessionID" in event.data) ||
-        !knownIDs.current.has(event.data.sessionID)
+        !hasItem(queryClient.getQueryData(listKey), event.data.sessionID)
       ) {
         return;
       }
@@ -305,7 +267,7 @@ export const ChildSessions = ({
         return;
       }
       if (event.type === "session.execution.started") {
-        setActiveIDs((current) => new Set([...current, id]));
+        setRunning(id, true);
       }
       if (
         event.type === "session.execution.succeeded" ||
@@ -319,65 +281,21 @@ export const ChildSessions = ({
           scheduleRefresh();
           return;
         }
-        setActiveIDs((current) => {
-          const next = new Set(current);
-          next.delete(id);
-          return next;
-        });
-        const pending = client.session.get(
-          { sessionID: id },
-          { signal: controller.signal }
-        );
-        void (async () => {
-          try {
-            const item = await pending;
-            if (!controller.signal.aborted && knownIDs.current.has(id)) {
-              setItems((current) =>
-                current.map((existing) =>
-                  existing.id === id ? item : existing
-                )
-              );
-            }
-          } catch (error_) {
-            if (!controller.signal.aborted) {
-              setError(errorMessage(error_));
-            }
-          }
-        })();
+        setRunning(id, false);
+        void refetchEnded(id);
       }
       if (event.type === "session.renamed") {
-        setItems((current) =>
-          current.map((item) =>
-            item.id === id ? { ...item, title: event.data.title } : item
-          )
-        );
+        patch(id, (item) => ({ ...item, title: event.data.title }));
       }
       if (event.type === "session.usage.updated") {
-        setItems((current) =>
-          current.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  cost: event.data.cost,
-                  tokens: event.data.tokens,
-                }
-              : item
-          )
-        );
+        patch(id, (item) => ({
+          ...item,
+          cost: event.data.cost,
+          tokens: event.data.tokens,
+        }));
       }
     };
-    const reportError = (error_: unknown) => {
-      if (!controller.signal.aborted) {
-        setError(errorMessage(error_));
-      }
-    };
-    const connect = async (needsRefresh: boolean) => {
-      if (needsRefresh) {
-        await refresh();
-        if (controller.signal.aborted) {
-          return;
-        }
-      }
+    const connect = async () => {
       try {
         await followEvents(
           subscribeChildSessionEvents(client, controller.signal),
@@ -388,24 +306,22 @@ export const ChildSessions = ({
         if (controller.signal.aborted) {
           return;
         }
-        setError(errorMessage(error_));
+        setStreamError(errorMessage(error_));
         const delay = retryDelay(attempts);
         attempts += 1;
         retryTimer = setTimeout(() => {
-          void connect(true).catch(reportError);
+          scheduleRefresh();
+          void connect();
         }, delay);
       }
     };
-    connect(true).catch(reportError);
+    void connect();
     return () => {
       controller.abort();
       clearTimeout(refreshTimer);
       clearTimeout(retryTimer);
-      refreshRef.current = ignore;
-      moreRef.current = ignore;
-      stopRef.current = ignore;
     };
-  }, [client, sessionID, archived, foreground]);
+  }, [archived, client, foreground, queryClient, scope, sessionID]);
 
   const running = items.filter((item) => activeIDs.has(item.id)).length;
   return (
@@ -422,10 +338,10 @@ export const ChildSessions = ({
           title="Refresh"
           size="compact"
           disabled={!foreground || loading}
-          onPress={() => refreshRef.current()}
+          onPress={refresh}
         />
       </Row>
-      <ErrorNotice error={error} onRetry={() => refreshRef.current()} />
+      <ErrorNotice error={error} onRetry={refresh} />
       <BodyText muted>
         {running} running · {items.length}
         {cursor ? "+" : ""} child sessions
@@ -478,7 +394,9 @@ export const ChildSessions = ({
                   variant="danger"
                   busy={stoppingID === item.id}
                   disabled={!!stoppingID}
-                  onPress={() => stopRef.current(item.id)}
+                  onPress={() => {
+                    void confirmStop(item.id);
+                  }}
                 />
               )}
             </Row>
@@ -490,7 +408,7 @@ export const ChildSessions = ({
           title="Load more child sessions"
           variant="ghost"
           busy={loadingMore}
-          onPress={() => moreRef.current()}
+          onPress={loadMore}
         />
       )}
     </View>

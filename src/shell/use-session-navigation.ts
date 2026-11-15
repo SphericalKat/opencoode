@@ -1,9 +1,12 @@
 import type { SessionInfo } from "@opencode/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import { BackHandler } from "react-native";
 
 import type { SessionPane } from "../components/beta-navigation";
 import { errorMessage } from "../lib/client";
+import { sessionDetailOptions } from "../lib/queries/sessions";
+import { queryKeys } from "../lib/query-keys";
 import { useSheetVisibilityActions } from "../lib/sheet-visibility";
 import { attempt } from "./connection-utils";
 import type { ConfirmNavigation, ServerClient, Tab } from "./types";
@@ -26,7 +29,6 @@ export const useSessionNavigation = (
     creatingSessionRef,
     directoryRef,
     epochRef,
-    locationSyncRef,
     messageSelected,
     openingSessionRef,
     openTabs,
@@ -45,7 +47,6 @@ export const useSessionNavigation = (
     setOpenTabs,
     setPendingLocation,
     setProjectsOpen,
-    setRevision,
     setSessionID,
     setTab,
     settingsCanGoBackRef,
@@ -55,6 +56,35 @@ export const useSessionNavigation = (
   } = model;
   const { setNavigationOpen } = useSheetVisibilityActions();
   const { client, confirmNavigation, recordSessionInfo } = deps;
+  const queryClient = useQueryClient();
+  const scope = active?.id;
+  const fetchSession = useCallback(
+    (id: string) => {
+      if (!client || !scope) {
+        throw new Error("There is no active connection");
+      }
+      return queryClient.fetchQuery({
+        ...sessionDetailOptions(scope, client.session, id),
+        staleTime: 0,
+      });
+    },
+    [client, queryClient, scope]
+  );
+  const createSession = useMutation({
+    mutationFn: (directory: string) => {
+      if (!client) {
+        throw new Error("There is no active connection");
+      }
+      return client.session.create({ location: { directory } });
+    },
+    onSuccess: () => {
+      if (scope) {
+        return queryClient.invalidateQueries({
+          queryKey: queryKeys.sessions.all(scope),
+        });
+      }
+    },
+  });
   const showBetaHome = useCallback(() => {
     selectionRef.current += 1;
     openingSessionRef.current = null;
@@ -165,21 +195,14 @@ export const useSessionNavigation = (
     }
     const request = epochRef.current;
     const navigation = selectionRef.current;
-    const key = `${request}:${navigation}:${id}`;
-    if (locationSyncRef.current?.key === key) {
-      return locationSyncRef.current.promise;
-    }
     const current = () =>
       activeRef.current === active &&
       request === epochRef.current &&
       navigation === selectionRef.current &&
       selectedSessionRef.current === id;
-    const promise = (async () => {
+    return (async () => {
       try {
-        const selected = await client.session.get(
-          { sessionID: id },
-          { signal: AbortSignal.timeout(15_000) }
-        );
+        const selected = await fetchSession(id);
         if (!current()) {
           return null;
         }
@@ -210,13 +233,6 @@ export const useSessionNavigation = (
         return null;
       }
     })();
-    locationSyncRef.current = { key, promise };
-    void promise.finally(() => {
-      if (locationSyncRef.current?.promise === promise) {
-        locationSyncRef.current = null;
-      }
-    });
-    return promise;
   }, [
     active,
     client,
@@ -225,7 +241,6 @@ export const useSessionNavigation = (
     activeRef,
     setPendingLocation,
     setNewDirectory,
-    locationSyncRef,
     selectedSessionRef,
     selectionRef,
     directoryRef,
@@ -233,6 +248,7 @@ export const useSessionNavigation = (
     setAttachmentPath,
     setDirectory,
     setAttachmentContext,
+    fetchSession,
   ]);
 
   const openSession = useCallback(
@@ -265,12 +281,7 @@ export const useSessionNavigation = (
             closeNavigation();
             return true;
           }
-          const selected = id
-            ? await client.session.get(
-                { sessionID: id },
-                { signal: AbortSignal.timeout(15_000) }
-              )
-            : null;
+          const selected = id ? await fetchSession(id) : null;
           if (!current() || !(await confirmNavigation()) || !current()) {
             return false;
           }
@@ -310,6 +321,7 @@ export const useSessionNavigation = (
       client,
       confirmNavigation,
       syncSelectedLocation,
+      fetchSession,
       recordSessionInfo,
       setError,
       activeRef,
@@ -351,9 +363,7 @@ export const useSessionNavigation = (
         if (!(await confirmNavigation()) || !current()) {
           return;
         }
-        const created = await client.session.create({
-          location: { directory: target },
-        });
+        const created = await createSession.mutateAsync(target);
         if (!current()) {
           return;
         }
@@ -368,7 +378,6 @@ export const useSessionNavigation = (
         recordSessionInfo(created);
         setTab("sessions");
         setBetaHome(false);
-        setRevision((value) => value + 1);
       },
       (error_) => {
         if (current()) {

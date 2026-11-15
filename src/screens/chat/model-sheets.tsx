@@ -281,13 +281,13 @@ const ModelSearchField = ({
 
 type ModelsEmptyProps = Pick<
   ChatController,
-  "enabledModels" | "onOpenNavigation" | "setCatalogRevision" | "setPanel"
+  "enabledModels" | "onOpenNavigation" | "retryCatalog" | "setPanel"
 >;
 
 const ModelsEmpty = ({
   enabledModels,
   onOpenNavigation,
-  setCatalogRevision,
+  retryCatalog,
   setPanel,
 }: ModelsEmptyProps) => {
   const hasEnabled = enabledModels.length > 0;
@@ -302,7 +302,7 @@ const ModelsEmpty = ({
           <Button
             title="Refresh models"
             variant="ghost"
-            onPress={() => setCatalogRevision((value) => value + 1)}
+            onPress={retryCatalog}
           />
           {onOpenNavigation && (
             <Button
@@ -334,7 +334,7 @@ type ModelPickerProps = Pick<
   | "onOpenSettings"
   | "pending"
   | "serverID"
-  | "setCatalogRevision"
+  | "retryCatalog"
   | "setModelSearch"
   | "setPanel"
 >;
@@ -357,7 +357,7 @@ export const ModelPicker = ({
   onOpenSettings,
   pending,
   serverID,
-  setCatalogRevision,
+  retryCatalog,
   setModelSearch,
   setPanel,
 }: ModelPickerProps) => {
@@ -421,7 +421,7 @@ export const ModelPicker = ({
         error={error || catalogError || modelPreferences.error}
         onRetry={() => {
           modelPreferences.reload();
-          setCatalogRevision((value) => value + 1);
+          retryCatalog();
         }}
       />
       <View>
@@ -442,7 +442,7 @@ export const ModelPicker = ({
             <ModelsEmpty
               enabledModels={enabledModels}
               onOpenNavigation={onOpenNavigation}
-              setCatalogRevision={setCatalogRevision}
+              retryCatalog={retryCatalog}
               setPanel={setPanel}
             />
           }

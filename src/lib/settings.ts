@@ -30,27 +30,6 @@ interface ConfigFileClient {
   experimental: { file: Pick<Client["experimental"]["file"], "write"> };
 }
 
-export const withSettingsRequest = async <T>(
-  action: (signal: AbortSignal) => Promise<T>,
-  parentSignal?: AbortSignal
-): Promise<T> => {
-  const signal = parentSignal ?? AbortSignal.timeout(15_000);
-  try {
-    signal.throwIfAborted();
-    const result = await action(signal);
-    signal.throwIfAborted();
-    return result;
-  } catch (error) {
-    if (signal.aborted) {
-      throw new Error(
-        "The request timed out. Check your connection, then refresh before you retry.",
-        { cause: error }
-      );
-    }
-    throw error;
-  }
-};
-
 export const saveConfigFile = async (
   client: ConfigFileClient,
   directory: string,

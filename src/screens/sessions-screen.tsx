@@ -1,17 +1,23 @@
 import type { Project, SessionInfo } from "@opencode/client";
+import {
+  useIsMutating,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { FlatList, Keyboard, Platform, View } from "react-native";
 
 import { useMenuAnchor } from "../components/anchored-menu";
 import type { Rect } from "../components/anchored-menu";
 import { confirmAction, promptText } from "../components/dialog";
 import { useUndoableRemoval } from "../components/snackbar";
-import { settle, withCleanup } from "../lib/async";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { queryKeys } from "../lib/query-keys";
+import { useServerScope } from "../lib/server-scope";
 import { sessionLabel } from "../lib/session-title";
 import { useNativePresentation } from "../lib/sheets";
 import { useThemedStyles } from "../lib/theme";
@@ -30,7 +36,6 @@ import {
 import { ProjectsDropdown } from "./sessions/projects-dropdown";
 import type { ProjectActions } from "./sessions/projects-dropdown";
 import { scopeKeyChanged } from "./sessions/scope";
-import type { Scope } from "./sessions/scope";
 import { SessionMenu } from "./sessions/session-menu";
 import type { SessionActions } from "./sessions/session-menu";
 import { SessionRow } from "./sessions/session-row";
@@ -41,11 +46,12 @@ import { useProjects } from "./sessions/use-projects";
 import type { ProjectScope } from "./sessions/use-projects";
 import { useSessionList } from "./sessions/use-session-list";
 
+const SESSIONS_MUTATION_KEY = ["sessions-screen"] as const;
+
 interface Props {
   client: Client;
   directory: string;
   onOpenSession: (id: string) => void;
-  revision?: number;
   projectScope?: ProjectScope;
   onChooseDirectory?: () => void;
   onNewSession: (directory: string) => void;
@@ -55,7 +61,6 @@ export const SessionsScreen = ({
   client,
   directory,
   onOpenSession,
-  revision,
   projectScope,
   onChooseDirectory,
   onNewSession,
@@ -79,38 +84,31 @@ export const SessionsScreen = ({
   const [width, setWidth] = useState(360);
   const [search, setSearch] = useState("");
   const [archived, setArchived] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [creating, setCreating] = useState(false);
   const [menu, setMenu] = useState<{
     anchor: Rect;
     session: SessionInfo;
   } | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [renamingID, setRenamingID] = useState<string>();
-  const [renameSaving, setRenameSaving] = useState(false);
   const afterMenuClosed = useRef<(() => void) | null>(null);
   const { hidden, remove } = useUndoableRemoval<string>("sessions");
   const mounted = useMounted();
-  const scope = useRef<Scope>({
-    client,
-    directory: creationDirectory,
-    listDirectory,
-  });
-  const operationPending = useRef(false);
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
   const compactHeader = width < 340;
   const {
     active,
+    hasMore,
     listError,
     listUnavailable,
     loadMore,
     loading,
-    nextCursor,
     refresh,
     sessions,
     statusError,
     streamError,
-  } = useSessionList({ archived, client, listDirectory, revision, search });
+  } = useSessionList({ archived, client, listDirectory, search });
 
   const [scopeKey, setScopeKey] = useState({
     client,
@@ -124,67 +122,173 @@ export const SessionsScreen = ({
     setRenamingID(undefined);
   }
 
-  useEffect(() => {
-    scope.current = { client, directory: creationDirectory, listDirectory };
-  }, [client, creationDirectory, listDirectory]);
-
   const openConversation = (id: string) => {
     Keyboard.dismiss();
     onOpenSession(id);
   };
 
-  const run = async (operation: () => Promise<void>) => {
-    if (operationPending.current) {
-      return;
-    }
-    operationPending.current = true;
-    const owner = scope.current;
-    setBusy(true);
-    setError(undefined);
-    await settle(operation, (failure) => {
-      if (!mounted.current || owner !== scope.current) {
-        return;
-      }
-      setError(errorMessage(failure));
-    });
-    operationPending.current = false;
+  const invalidateSessions = (sessionID?: string) =>
+    Promise.all([
+      sessionID
+        ? queryClient.invalidateQueries({
+            queryKey: queryKeys.session.detail(scope, sessionID),
+          })
+        : undefined,
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.sessions.all(scope),
+      }),
+    ]);
+  const showFailure = (failure: unknown) => {
     if (mounted.current) {
-      setBusy(false);
+      setError(errorMessage(failure));
     }
   };
+  const mutationOptions = {
+    mutationKey: SESSIONS_MUTATION_KEY,
+    onError: showFailure,
+    scope: { id: `sessions:${scope}` },
+  };
 
-  const createSession = (title: string, targetDirectory: string) =>
-    run(async () => {
-      const owner = scope.current;
-      setCreating(true);
-      await withCleanup(
-        async () => {
-          const created = await client.session.create({
-            location: { directory: targetDirectory },
-            title,
-          });
-          if (
-            scope.current.client !== owner.client ||
-            scope.current.directory !== owner.directory ||
-            !mounted.current
-          ) {
-            return;
-          }
-          if (archived) {
-            setArchived(false);
-          }
-          openConversation(created.id);
-          if (!archived) {
-            await refresh();
-          }
-        },
-        () => {
-          if (mounted.current) {
-            setCreating(false);
-          }
-        }
+  const createMutation = useMutation({
+    ...mutationOptions,
+    mutationFn: (input: { directory: string; title: string }) =>
+      client.session.create({
+        location: { directory: input.directory },
+        title: input.title,
+      }),
+    onSuccess: async (created) => {
+      if (!mounted.current) {
+        return;
+      }
+      if (archived) {
+        setArchived(false);
+      }
+      openConversation(created.id);
+      await invalidateSessions();
+    },
+  });
+  const exportMutation = useMutation({
+    ...mutationOptions,
+    mutationFn: async (session: SessionInfo) => {
+      const transcript = await client.experimental.session.export({
+        sanitize: true,
+        sessionID: session.id,
+      });
+      const text = JSON.stringify(transcript, null, 2);
+      const filename = `opencode-${session.id.replaceAll(/[^a-zA-Z0-9_-]/gu, "")}.json`;
+      if (Platform.OS === "web") {
+        const url = URL.createObjectURL(
+          new Blob([text], { type: "application/json" })
+        );
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return;
+      }
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error("File sharing is unavailable on this device");
+      }
+      const file = new File(Paths.cache, filename);
+      await file.write(text);
+      await withNativePresentation(() =>
+        Sharing.shareAsync(file.uri, {
+          UTI: "public.json",
+          mimeType: "application/json",
+        })
       );
-    });
+    },
+  });
+  const importMutation = useMutation({
+    ...mutationOptions,
+    mutationFn: async (targetDirectory: string) => {
+      const picked = await withNativePresentation(() =>
+        DocumentPicker.getDocumentAsync({
+          copyToCacheDirectory: true,
+          type: ["application/json", "text/plain"],
+        })
+      );
+      if (picked.canceled) {
+        return null;
+      }
+      const [asset] = picked.assets;
+      if (asset.size && asset.size > 20 * 1024 * 1024) {
+        throw new Error("Choose a transcript smaller than 20 MB");
+      }
+      const text =
+        Platform.OS === "web"
+          ? await (asset.file
+              ? asset.file.text()
+              : fetch(asset.uri).then((response) => response.text()))
+          : await new File(asset.uri).text();
+      const transcript = JSON.parse(text);
+      if (!isTranscript(transcript)) {
+        throw new Error("Choose a JSON transcript exported by OpenCode");
+      }
+      if (
+        !(await confirmAction(
+          "Import session?",
+          `Import this transcript into ${targetDirectory}? The server validates its contents.`,
+          { confirmLabel: "Import", destructive: false }
+        ))
+      ) {
+        return null;
+      }
+      return client.experimental.session.import({
+        info: transcript.info,
+        location: { directory: targetDirectory },
+        messages: transcript.messages,
+      });
+    },
+    onSuccess: async (imported) => {
+      if (!imported) {
+        return;
+      }
+      await invalidateSessions();
+      if (mounted.current) {
+        openConversation(imported.id);
+      }
+    },
+  });
+  const updateMutation = useMutation({
+    ...mutationOptions,
+    mutationFn: (input: {
+      archived?: boolean;
+      sessionID: string;
+      title?: string;
+    }) => client.session.update(input),
+    onSuccess: (_result, input) => invalidateSessions(input.sessionID),
+  });
+  const viewMutation = useMutation({
+    ...mutationOptions,
+    mutationFn: async (input: { idle: number; sessionID: string }[]) => {
+      await Promise.allSettled(input.map((item) => client.session.view(item)));
+    },
+    onSuccess: (_result, input) =>
+      Promise.all(input.map((item) => invalidateSessions(item.sessionID))),
+  });
+  const removeMutation = useMutation({
+    ...mutationOptions,
+    mutationFn: (sessionID: string) => client.session.remove({ sessionID }),
+    onSuccess: (_result, sessionID) => {
+      queryClient.removeQueries({
+        queryKey: queryKeys.session.all(scope, sessionID),
+      });
+      return invalidateSessions();
+    },
+  });
+  const busy = useIsMutating({ mutationKey: SESSIONS_MUTATION_KEY }) > 0;
+  const creating = createMutation.isPending;
+  const renameSaving = updateMutation.isPending && !!renamingID;
+
+  const createSession = (title: string, targetDirectory: string) => {
+    if (busy) {
+      return;
+    }
+    setError(undefined);
+    createMutation.mutate({ directory: targetDirectory, title });
+  };
 
   const startSession = () => {
     Keyboard.dismiss();
@@ -206,164 +310,47 @@ export const SessionsScreen = ({
     action?.();
   };
 
-  const exportSession = (session: SessionInfo) =>
-    run(async () => {
-      const owner = scope.current;
-      const transcript = await client.experimental.session.export({
-        sanitize: true,
-        sessionID: session.id,
-      });
-      if (scope.current !== owner || !mounted.current) {
-        return;
-      }
-      const text = JSON.stringify(transcript, null, 2);
-      const filename = `opencode-${session.id.replaceAll(/[^a-zA-Z0-9_-]/gu, "")}.json`;
-      if (Platform.OS === "web") {
-        const url = URL.createObjectURL(
-          new Blob([text], { type: "application/json" })
-        );
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = filename;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } else {
-        if (!(await Sharing.isAvailableAsync())) {
-          throw new Error("File sharing is unavailable on this device");
-        }
-        const file = new File(Paths.cache, filename);
-        await file.write(text);
-        await withNativePresentation(() =>
-          Sharing.shareAsync(file.uri, {
-            UTI: "public.json",
-            mimeType: "application/json",
-          })
-        );
-      }
-    });
+  const runMutation = <T,>(
+    mutation: { mutate: (value: T) => void },
+    value: T
+  ) => {
+    if (busy) {
+      return;
+    }
+    setError(undefined);
+    mutation.mutate(value);
+  };
 
-  const importSession = (targetDirectory: string) =>
-    run(async () => {
-      const owner = scope.current;
-      const picked = await withNativePresentation(() =>
-        DocumentPicker.getDocumentAsync({
-          copyToCacheDirectory: true,
-          type: ["application/json", "text/plain"],
-        })
-      );
-      if (picked.canceled || !mounted.current || scope.current !== owner) {
-        return;
-      }
-      const [asset] = picked.assets;
-      if (asset.size && asset.size > 20 * 1024 * 1024) {
-        throw new Error("Choose a transcript smaller than 20 MB");
-      }
-      const text =
-        Platform.OS === "web"
-          ? await (asset.file
-              ? asset.file.text()
-              : fetch(asset.uri).then((response) => response.text()))
-          : await new File(asset.uri).text();
-      if (!mounted.current || scope.current !== owner) {
-        return;
-      }
-      const transcript = JSON.parse(text);
-      if (!isTranscript(transcript)) {
-        throw new Error("Choose a JSON transcript exported by OpenCode");
-      }
-      if (
-        !(await confirmAction(
-          "Import session?",
-          `Import this transcript into ${targetDirectory}? The server validates its contents.`,
-          { confirmLabel: "Import", destructive: false }
-        ))
-      ) {
-        return;
-      }
-      if (
-        scope.current.client !== owner.client ||
-        scope.current.directory !== owner.directory ||
-        !mounted.current
-      ) {
-        return;
-      }
-      const imported = await client.experimental.session.import({
-        info: transcript.info,
-        location: { directory: targetDirectory },
-        messages: transcript.messages,
-      });
-      if (
-        scope.current.client !== owner.client ||
-        scope.current.directory !== owner.directory ||
-        !mounted.current
-      ) {
-        return;
-      }
-      await refresh();
-      openConversation(imported.id);
-    });
-
-  const renameSession = async (session: SessionInfo, value: string) => {
+  const renameSession = (session: SessionInfo, value: string) => {
     const nextTitle = value.trim();
     if (!nextTitle || nextTitle === sessionLabel(session)) {
       setRenamingID(undefined);
       return;
     }
-    setRenameSaving(true);
     setError(undefined);
-    await settle(
-      async () => {
-        await client.session.update({
-          sessionID: session.id,
-          title: nextTitle,
-        });
-        await refresh(undefined, true);
-      },
-      (failure) => {
-        if (mounted.current) {
-          setError(errorMessage(failure));
-        }
-      },
-      () => {
-        if (mounted.current) {
-          setRenameSaving(false);
-          setRenamingID(undefined);
-        }
-      }
+    updateMutation.mutate(
+      { sessionID: session.id, title: nextTitle },
+      { onSettled: () => setRenamingID(undefined) }
     );
   };
 
   const sessionActions: SessionActions = {
-    archive: (session) => {
-      void run(async () => {
-        await client.session.update({
-          archived: !session.time.archived,
-          sessionID: session.id,
-        });
-        await refresh();
-      });
-    },
-    exportSession: (session) => {
-      void exportSession(session);
-    },
+    archive: (session) =>
+      runMutation(updateMutation, {
+        archived: !session.time.archived,
+        sessionID: session.id,
+      }),
+    exportSession: (session) => runMutation(exportMutation, session),
     markRead: (session) => {
-      void run(async () => {
-        if (!session.time.idle) {
-          return;
-        }
-        await client.session.view({
-          idle: session.time.idle,
-          sessionID: session.id,
-        });
-        await refresh(undefined, true);
-      });
+      if (session.time.idle) {
+        runMutation(viewMutation, [
+          { idle: session.time.idle, sessionID: session.id },
+        ]);
+      }
     },
     remove: (session) =>
       remove(session.id, {
-        commit: async () => {
-          await client.session.remove({ sessionID: session.id });
-          await refresh(undefined, true);
-        },
+        commit: () => removeMutation.mutateAsync(session.id),
         message: "Session deleted",
       }),
     rename: (session) => setRenamingID(session.id),
@@ -393,26 +380,18 @@ export const SessionsScreen = ({
     setProjectDirectory(next);
   };
 
-  const clearNotifications = (project: Project) => {
-    void run(async () => {
-      await Promise.allSettled(
-        sessions
-          .filter((item) => item.projectID === project.id && isUnread(item))
-          .map((item) =>
-            client.session.view({
-              idle: item.time.idle ?? 0,
-              sessionID: item.id,
-            })
-          )
-      );
-      await refresh(undefined, true);
-    });
-  };
+  const clearNotifications = (project: Project) =>
+    runMutation(
+      viewMutation,
+      sessions
+        .filter((item) => item.projectID === project.id && isUnread(item))
+        .map((item) => ({ idle: item.time.idle ?? 0, sessionID: item.id }))
+    );
 
   const projectActions: ProjectActions = {
     clearNotifications,
     importSession: (target) => {
-      void importSession(target);
+      runMutation(importMutation, target);
     },
     newNamedSession: (target) => {
       void (async () => {
@@ -421,7 +400,7 @@ export const SessionsScreen = ({
           field: { label: "Title", returnKeyType: "done" },
         });
         if (created) {
-          await createSession(created, target);
+          createSession(created, target);
         }
       })();
     },
@@ -436,7 +415,7 @@ export const SessionsScreen = ({
   );
 
   const visibleSessions = sessions.filter((item) => !hidden.has(item.id));
-  const showFooter = sessions.length > 0 && loading && !!nextCursor;
+  const showFooter = sessions.length > 0 && loading && hasMore;
 
   return (
     <View
@@ -504,9 +483,7 @@ export const SessionsScreen = ({
             onCancelRename={() => setRenamingID(undefined)}
             onMenu={openMenu}
             onOpen={openConversation}
-            onRename={(session, value) => {
-              void renameSession(session, value);
-            }}
+            onRename={renameSession}
             renameSaving={renameSaving && renamingID === item.id}
             renaming={renamingID === item.id}
             search={search}

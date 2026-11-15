@@ -1,10 +1,11 @@
 import type { SessionInfo } from "@opencode/client";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 
 import { makeOpenCodeChatBackend } from "../lib/chat-backend";
 import { createClient } from "../lib/client";
+import { sessionDetailOptions } from "../lib/queries/sessions";
 import { sessionLabel } from "../lib/session-title";
-import { noop } from "./constants";
 import type { MobileState } from "./use-app-state";
 
 export const useClientBindings = (model: MobileState) => {
@@ -57,22 +58,18 @@ export const useClientBindings = (model: MobileState) => {
     [setOpenTabs, selectedSessionRef]
   );
 
+  const { data: detail } = useQuery(
+    sessionDetailOptions(
+      active?.id ?? "",
+      sessionID ? (client?.session ?? null) : null,
+      sessionID ?? ""
+    )
+  );
   useEffect(() => {
-    if (!client || !sessionID) {
-      return;
+    if (detail) {
+      recordSessionInfo(detail);
     }
-    const controller = new AbortController();
-    void client.session
-      .get({ sessionID }, { signal: controller.signal })
-      .then((session) => {
-        if (!controller.signal.aborted) {
-          recordSessionInfo(session);
-        }
-        return null;
-      })
-      .catch(noop);
-    return () => controller.abort();
-  }, [client, sessionID, recordSessionInfo]);
+  }, [detail, recordSessionInfo]);
   return {
     chatBackend,
     client,

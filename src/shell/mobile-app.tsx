@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ConnectionFlow } from "../components/connection-flow";
 import { OpenCodeLogo } from "../components/open-code-logo";
 import { Busy, BodyText } from "../components/ui";
+import { ServerScopeProvider } from "../lib/server-scope";
 import { useSheetVisibilityActions } from "../lib/sheet-visibility";
 import { useSheetCoordinator } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
@@ -63,7 +64,6 @@ export const MobileApp = () => {
     projectError,
     projects,
     projectsOpen,
-    revision,
     serverSheetRequestRef,
     serversOpen,
     sessionID,
@@ -78,7 +78,6 @@ export const MobileApp = () => {
     setPairingLink,
     setProjectError,
     setProjectsOpen,
-    setRevision,
     setServersOpen,
     setSessionPanelRequest,
     setSettingsBackState,
@@ -207,7 +206,6 @@ export const MobileApp = () => {
     showServerSheetRef.current();
   };
   const closeNavigation = () => setNavigationOpen(false);
-  const bumpRevision = () => setRevision((value) => value + 1);
 
   if (booting) {
     return (
@@ -222,195 +220,192 @@ export const MobileApp = () => {
   }
 
   return (
-    <SafeAreaView
-      style={[styles.safe, framed && { backgroundColor: colors.frame }]}
-      edges={["top", "left", "right", "bottom"]}
-    >
-      {active?.backend === "pi" && (
-        <PiWorkspace
-          key={`${active.id}:${connectionRevision}`}
-          connection={active}
-          foreground={foreground && !connecting}
-          onManageServers={openServers}
-          onConnectionLost={onPiConnectionLost}
-        />
-      )}
-      {!active && <Onboarding>{serverForm}</Onboarding>}
-      {client && active && (
-        <ConnectionProbe
-          key={connectionRevision}
-          active={active}
-          activeRef={activeRef}
-          client={client}
-          enabled={foreground && !connecting}
-          epoch={epochRef}
-          onFailure={onProbeFailure}
-          onHealthy={onProbeHealthy}
-        />
-      )}
-      {client && active && (
-        <ShellFrame
-          betaHome={betaHome}
-          creatingSession={creatingSession}
-          currentOpenTab={currentOpenTab}
-          directory={directory}
-          error={error}
-          onMore={() => {
-            Keyboard.dismiss();
-            setMoreOpen(true);
-          }}
-          onOpenNavigation={openNavigation}
-          onProject={() => {
-            void openProjects();
-          }}
-          onRetryLocation={() => {
-            void syncSelectedLocation();
-          }}
-          onSelectPane={openBetaPane}
-          pendingLocation={pendingLocation}
-          selectedPane={selectedPane}
-          sessionID={sessionID}
-          tab={tab}
-        >
-          <SessionsTab
+    <ServerScopeProvider scope={active?.id ?? null}>
+      <SafeAreaView
+        style={[styles.safe, framed && { backgroundColor: colors.frame }]}
+        edges={["top", "left", "right", "bottom"]}
+      >
+        {active?.backend === "pi" && (
+          <PiWorkspace
+            key={`${active.id}:${connectionRevision}`}
+            connection={active}
+            foreground={foreground && !connecting}
+            onManageServers={openServers}
+            onConnectionLost={onPiConnectionLost}
+          />
+        )}
+        {!active && <Onboarding>{serverForm}</Onboarding>}
+        {client && active && (
+          <ConnectionProbe
+            key={connectionRevision}
             active={active}
-            attachmentContext={attachmentContext}
-            attachmentPath={attachmentPath}
-            betaHome={betaHome}
-            betaHomeProject={betaHomeProject}
-            chatBackend={chatBackend}
             client={client}
-            connectionRevision={connectionRevision}
+            enabled={foreground && !connecting}
+            onFailure={onProbeFailure}
+            onHealthy={onProbeHealthy}
+          />
+        )}
+        {client && active && (
+          <ShellFrame
+            betaHome={betaHome}
+            creatingSession={creatingSession}
+            currentOpenTab={currentOpenTab}
             directory={directory}
-            onAttachmentConsumed={() => {
-              setAttachmentPath(undefined);
-              setAttachmentContext(undefined);
+            error={error}
+            onMore={() => {
+              Keyboard.dismiss();
+              setMoreOpen(true);
             }}
-            onChooseDirectory={() => {
+            onOpenNavigation={openNavigation}
+            onProject={() => {
               void openProjects();
             }}
-            onNewSession={(target) => {
-              void createBetaSession(target);
-            }}
-            onOpenNavigation={openNavigation}
-            onOpenSession={(id) => {
-              void openSession(id);
-              bumpRevision();
-            }}
-            onOpenSessionFromList={openSession}
-            onOpenSettings={openSettingsSection}
-            onSelectionChange={setMessageSelected}
-            onSessionChanged={() => {
-              bumpRevision();
+            onRetryLocation={() => {
               void syncSelectedLocation();
             }}
-            onSessionInfo={recordSessionInfo}
-            projectLabel={projectLabel}
-            revision={revision}
-            sessionID={sessionID}
-            sessionPanelRequest={sessionPanelRequest}
-            tab={tab}
-          />
-          <WorkspaceTab
-            active={active}
-            client={client}
-            connectionRevision={connectionRevision}
-            directory={directory}
-            mounted={!!visited.workspace}
-            onAttachFile={attachFile}
-            onDirectoryChange={changeDirectory}
-            onSectionChange={openBetaPane}
-            section={workspaceSection}
+            onSelectPane={openBetaPane}
+            pendingLocation={pendingLocation}
+            selectedPane={selectedPane}
             sessionID={sessionID}
             tab={tab}
-          />
-          <SettingsTab
-            active={active}
-            backLabel={returnLabel}
-            client={client}
-            connectionRevision={connectionRevision}
-            directory={directory}
-            mounted={!!visited.settings}
-            onBack={returnToSessions}
-            onBackStateChange={setSettingsBackState}
-            onManageServers={openServers}
-            onOpenNavigation={openNavigation}
-            sectionRequest={settingsRequest}
-            tab={tab}
-          />
-        </ShellFrame>
-      )}
-      <BetaSheets
-        active={active}
-        currentTabID={currentOpenTab?.id}
-        onCloseMore={() => setMoreOpen(false)}
-        onCloseNavigation={closeNavigation}
-        onCloseTab={(id) => {
-          void closeBetaTab(id);
-        }}
-        onDetails={() => requestSessionPanel("actions")}
-        onDismissMore={() => {
-          const action = pendingBetaActionRef.current;
-          pendingBetaActionRef.current = null;
-          action?.();
-        }}
-        onDismissNavigation={onNavigationDismissed}
-        onHelp={() =>
-          afterBetaNavigation(() => {
-            void Linking.openURL("https://opencode.ai/v2/docs/");
-          })
-        }
-        onHome={() => afterBetaNavigation(showBetaHome)}
-        onNew={() =>
-          afterBetaNavigation(() => {
-            void createBetaSession();
-          })
-        }
-        onSelect={(id) => {
-          void openSession(id);
-        }}
-        onServer={() => afterBetaNavigation(openServers)}
-        onSettings={() =>
-          afterBetaNavigation(() => {
-            void changeTab("settings");
-          })
-        }
-        onUsage={() => requestSessionPanel("stats")}
-        onView={(pane) => afterBetaMenu(() => openBetaPane(pane))}
-        openTabs={openTabs}
-        selectedPane={selectedPane}
-      />
-      <ServersSheet
-        active={active}
-        open={serversOpen}
-        unavailableID={unavailableID}
-        onClose={() => {
-          serverSheetRequestRef.current += 1;
-          setServersOpen(false);
-        }}
-        onDismiss={resumeSheets}
-      >
-        {serverForm}
-      </ServersSheet>
-      <ProjectsSheet
-        active={active}
-        busy={projectBusy}
-        client={client}
-        connectionRevision={connectionRevision}
-        directory={directory}
-        error={projectError}
-        onChangeValue={(value) => {
-          setNewDirectory(value);
-          setProjectError(null);
-        }}
-        onClose={() => setProjectsOpen(false)}
-        onOpenDirectory={(value) => {
-          void openDirectory(value);
-        }}
-        open={projectsOpen}
-        projects={projects}
-        value={newDirectory}
-      />
-    </SafeAreaView>
+          >
+            <SessionsTab
+              active={active}
+              attachmentContext={attachmentContext}
+              attachmentPath={attachmentPath}
+              betaHome={betaHome}
+              betaHomeProject={betaHomeProject}
+              chatBackend={chatBackend}
+              client={client}
+              connectionRevision={connectionRevision}
+              directory={directory}
+              onAttachmentConsumed={() => {
+                setAttachmentPath(undefined);
+                setAttachmentContext(undefined);
+              }}
+              onChooseDirectory={() => {
+                void openProjects();
+              }}
+              onNewSession={(target) => {
+                void createBetaSession(target);
+              }}
+              onOpenNavigation={openNavigation}
+              onOpenSession={(id) => {
+                void openSession(id);
+              }}
+              onOpenSessionFromList={openSession}
+              onOpenSettings={openSettingsSection}
+              onSelectionChange={setMessageSelected}
+              onSessionChanged={() => {
+                void syncSelectedLocation();
+              }}
+              onSessionInfo={recordSessionInfo}
+              projectLabel={projectLabel}
+              sessionID={sessionID}
+              sessionPanelRequest={sessionPanelRequest}
+              tab={tab}
+            />
+            <WorkspaceTab
+              active={active}
+              client={client}
+              connectionRevision={connectionRevision}
+              directory={directory}
+              mounted={!!visited.workspace}
+              onAttachFile={attachFile}
+              onDirectoryChange={changeDirectory}
+              onSectionChange={openBetaPane}
+              section={workspaceSection}
+              sessionID={sessionID}
+              tab={tab}
+            />
+            <SettingsTab
+              active={active}
+              backLabel={returnLabel}
+              client={client}
+              connectionRevision={connectionRevision}
+              directory={directory}
+              mounted={!!visited.settings}
+              onBack={returnToSessions}
+              onBackStateChange={setSettingsBackState}
+              onManageServers={openServers}
+              onOpenNavigation={openNavigation}
+              sectionRequest={settingsRequest}
+              tab={tab}
+            />
+          </ShellFrame>
+        )}
+        <BetaSheets
+          active={active}
+          currentTabID={currentOpenTab?.id}
+          onCloseMore={() => setMoreOpen(false)}
+          onCloseNavigation={closeNavigation}
+          onCloseTab={(id) => {
+            void closeBetaTab(id);
+          }}
+          onDetails={() => requestSessionPanel("actions")}
+          onDismissMore={() => {
+            const action = pendingBetaActionRef.current;
+            pendingBetaActionRef.current = null;
+            action?.();
+          }}
+          onDismissNavigation={onNavigationDismissed}
+          onHelp={() =>
+            afterBetaNavigation(() => {
+              void Linking.openURL("https://opencode.ai/v2/docs/");
+            })
+          }
+          onHome={() => afterBetaNavigation(showBetaHome)}
+          onNew={() =>
+            afterBetaNavigation(() => {
+              void createBetaSession();
+            })
+          }
+          onSelect={(id) => {
+            void openSession(id);
+          }}
+          onServer={() => afterBetaNavigation(openServers)}
+          onSettings={() =>
+            afterBetaNavigation(() => {
+              void changeTab("settings");
+            })
+          }
+          onUsage={() => requestSessionPanel("stats")}
+          onView={(pane) => afterBetaMenu(() => openBetaPane(pane))}
+          openTabs={openTabs}
+          selectedPane={selectedPane}
+        />
+        <ServersSheet
+          active={active}
+          open={serversOpen}
+          unavailableID={unavailableID}
+          onClose={() => {
+            serverSheetRequestRef.current += 1;
+            setServersOpen(false);
+          }}
+          onDismiss={resumeSheets}
+        >
+          {serverForm}
+        </ServersSheet>
+        <ProjectsSheet
+          active={active}
+          busy={projectBusy}
+          client={client}
+          connectionRevision={connectionRevision}
+          directory={directory}
+          error={projectError}
+          onChangeValue={(value) => {
+            setNewDirectory(value);
+            setProjectError(null);
+          }}
+          onClose={() => setProjectsOpen(false)}
+          onOpenDirectory={(value) => {
+            void openDirectory(value);
+          }}
+          open={projectsOpen}
+          projects={projects}
+          value={newDirectory}
+        />
+      </SafeAreaView>
+    </ServerScopeProvider>
   );
 };

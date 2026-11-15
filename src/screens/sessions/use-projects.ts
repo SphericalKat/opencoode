@@ -1,25 +1,15 @@
-import type { Project } from "@opencode/client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
-import { errorMessage } from "../../lib/client";
 import type { Client } from "../../lib/client";
-import { useMounted } from "./use-mounted";
+import { errorMessage } from "../../lib/client";
+import { projectsOptions } from "../../lib/queries/sessions";
+import { useServerScope } from "../../lib/server-scope";
 
 export interface ProjectScope {
   directory: string;
   revision: number;
 }
-
-const settleProjects = async (
-  client: Client,
-  signal: AbortSignal | undefined
-): Promise<{ items: Project[] } | { error: unknown }> => {
-  try {
-    return { items: await client.project.list(undefined, { signal }) };
-  } catch (error_) {
-    return { error: error_ };
-  }
-};
 
 interface ProjectsOptions {
   client: Client;
@@ -27,16 +17,12 @@ interface ProjectsOptions {
 }
 
 export const useProjects = ({ client, projectScope }: ProjectsOptions) => {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const scope = useServerScope();
+  const query = useQuery(projectsOptions(scope, client));
   const [projectDirectory, setProjectDirectory] = useState<string | undefined>(
     projectScope?.directory
   );
   const [projectsOpen, setProjectsOpen] = useState(false);
-  const [projectsLoading, setProjectsLoading] = useState(true);
-  const [projectsError, setProjectsError] = useState<string>();
-  const mounted = useMounted();
-  const latestClient = useRef(client);
-
   const [synced, setSynced] = useState({ client, projectScope });
   const clientChanged = synced.client !== client;
   const scopeChanged = synced.projectScope !== projectScope;
@@ -44,62 +30,22 @@ export const useProjects = ({ client, projectScope }: ProjectsOptions) => {
     setSynced({ client, projectScope });
     if (clientChanged) {
       setProjectDirectory(undefined);
-      setProjects([]);
       setProjectsOpen(false);
-      setProjectsLoading(true);
-      setProjectsError(undefined);
     }
     if (scopeChanged && projectScope) {
       setProjectDirectory(projectScope.directory);
     }
   }
-
-  useEffect(() => {
-    latestClient.current = client;
-  }, [client]);
-
-  const applyProjects = useCallback(
-    (
-      result: Awaited<ReturnType<typeof settleProjects>>,
-      signal: AbortSignal | undefined
-    ) => {
-      if (
-        signal?.aborted ||
-        !mounted.current ||
-        latestClient.current !== client
-      ) {
-        return;
-      }
-      if ("items" in result) {
-        setProjects(result.items);
-      } else {
-        setProjectsError(errorMessage(result.error));
-      }
-      setProjectsLoading(false);
-    },
-    [client, mounted]
-  );
-
-  const loadProjects = async (signal?: AbortSignal) => {
-    setProjectsLoading(true);
-    setProjectsError(undefined);
-    applyProjects(await settleProjects(client, signal), signal);
+  const { refetch } = query;
+  const loadProjects = () => {
+    void refetch();
   };
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void settleProjects(client, controller.signal).then((result) =>
-      applyProjects(result, controller.signal)
-    );
-    return () => controller.abort();
-  }, [client, applyProjects]);
-
   return {
     loadProjects,
     projectDirectory,
-    projects,
-    projectsError,
-    projectsLoading,
+    projects: query.data ?? [],
+    projectsError: query.error ? errorMessage(query.error) : undefined,
+    projectsLoading: query.isFetching,
     projectsOpen,
     setProjectDirectory,
     setProjectsOpen,

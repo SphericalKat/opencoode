@@ -117,7 +117,12 @@ const AGENT_MENU_GUTTER = 6;
 
 type AgentChipProps = Pick<
   ChatController,
-  "agents" | "capabilities" | "opencodeClient" | "pending" | "run" | "sessionID"
+  | "agents"
+  | "capabilities"
+  | "opencodeClient"
+  | "pending"
+  | "actions"
+  | "sessionID"
 > & {
   session: SessionInfo;
 };
@@ -127,9 +132,8 @@ export const AgentChip = ({
   capabilities,
   opencodeClient,
   pending,
-  run,
+  actions,
   session,
-  sessionID,
 }: AgentChipProps) => {
   const primary = agents.filter(
     (agent) => !agent.hidden && agent.mode !== "subagent"
@@ -160,9 +164,7 @@ export const AgentChip = ({
         }))}
         onSelect={(id) => {
           if (id !== currentID) {
-            void run(() =>
-              opencodeClient.session.switchAgent({ agent: id, sessionID })
-            );
+            void actions.switchAgent(id);
           }
         }}
       />
@@ -510,7 +512,7 @@ interface ComposerToolbarProps
       | "currentModel"
       | "opencodeClient"
       | "providerLabel"
-      | "run"
+      | "actions"
       | "selectedVariant"
       | "sessionID"
     >,
@@ -531,7 +533,7 @@ export const ComposerToolbar = (props: ComposerToolbarProps) => {
           capabilities={props.capabilities}
           opencodeClient={props.opencodeClient}
           pending={chipsDisabled}
-          run={props.run}
+          actions={props.actions}
           session={props.session}
           sessionID={props.sessionID}
         />
@@ -589,7 +591,7 @@ interface ComposerBodyProps extends Pick<
   | "providerLabel"
   | "selectedVariant"
   | "restoredSkillIDs"
-  | "run"
+  | "actions"
   | "selectedAgentIDs"
   | "selectedSkills"
   | "send"
@@ -634,7 +636,7 @@ export const ComposerBody = ({
   providerLabel,
   selectedVariant,
   restoredSkillIDs,
-  run,
+  actions,
   selectedAgentIDs,
   selectedSkills,
   send,
@@ -712,7 +714,7 @@ export const ComposerBody = ({
         pending={pending}
         providerLabel={providerLabel}
         selectedVariant={selectedVariant}
-        run={run}
+        actions={actions}
         send={send}
         session={session}
         sessionID={sessionID}
@@ -753,7 +755,7 @@ interface ComposerProps extends Pick<
   | "providerLabel"
   | "selectedVariant"
   | "restoredSkillIDs"
-  | "run"
+  | "actions"
   | "selectedAgentIDs"
   | "selectedSkills"
   | "send"
@@ -802,7 +804,7 @@ export const Composer = ({
   providerLabel,
   selectedVariant,
   restoredSkillIDs,
-  run,
+  actions,
   selectedAgentIDs,
   selectedSkills,
   send,
@@ -876,7 +878,7 @@ export const Composer = ({
               providerLabel={providerLabel}
               selectedVariant={selectedVariant}
               restoredSkillIDs={restoredSkillIDs}
-              run={run}
+              actions={actions}
               selectedAgentIDs={selectedAgentIDs}
               selectedSkills={selectedSkills}
               send={send}

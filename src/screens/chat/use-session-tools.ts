@@ -3,22 +3,32 @@ import type {
   SessionInfo,
   SessionMessageInfo,
 } from "@opencode/client";
+import { useQuery } from "@tanstack/react-query";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { useState } from "react";
+import { useEffect } from "react";
 import { Platform, Share } from "react-native";
 
-import { settle } from "../../lib/async";
+import {
+  sessionContextOptions,
+  sessionDiffOptions,
+} from "../../lib/queries/panels";
+import { useServerScope } from "../../lib/server-scope";
 import type { useNativePresentation } from "../../lib/sheets";
 import type { OpenCodeClient, Capabilities } from "./session-sync";
-import type { Alive, SetPanel } from "./types";
-import type { RunAction } from "./use-run-action";
+import type { Alive, Panel, SetPanel } from "./types";
+import { useChatMutation } from "./use-chat-mutation";
+import type { ChatMutationContext } from "./use-chat-mutation";
+
+const NO_DIFFS: FileDiffInfo[] = [];
+const NO_CONTEXT: SessionMessageInfo[] = [];
 
 interface UseSessionToolsOptions {
   alive: Alive;
   capabilities: Capabilities;
+  context: ChatMutationContext;
   opencodeClient: OpenCodeClient;
-  run: RunAction;
+  panel: Panel;
   session: SessionInfo | null;
   sessionID: string;
   setPanel: SetPanel;
@@ -27,50 +37,47 @@ interface UseSessionToolsOptions {
 }
 
 export const useSessionTools = ({
-  alive,
   capabilities,
+  context: mutationContext,
   opencodeClient,
-  run,
+  panel,
   session,
   sessionID,
   setPanel,
   showError,
   withNativePresentation,
 }: UseSessionToolsOptions) => {
-  const [diffs, setDiffs] = useState<FileDiffInfo[]>([]);
-  const [context, setContext] = useState<SessionMessageInfo[]>([]);
-  const [panelLoading, setPanelLoading] = useState(false);
-  const inspect = async (target: "diff" | "context") => {
-    if (!opencodeClient || !capabilities[target]) {
-      return;
+  const scope = useServerScope();
+  const canInspect = (target: "diff" | "context") =>
+    !!opencodeClient && capabilities[target];
+  const diff = useQuery({
+    ...sessionDiffOptions(scope, opencodeClient, sessionID),
+    enabled: panel === "diff" && canInspect("diff"),
+  });
+  const context = useQuery({
+    ...sessionContextOptions(scope, opencodeClient, sessionID),
+    enabled: panel === "context" && canInspect("context"),
+  });
+  const { error: diffError, errorUpdatedAt: diffErrorAt } = diff;
+  const { error: contextError, errorUpdatedAt: contextErrorAt } = context;
+  useEffect(() => {
+    if (diffError && diffErrorAt) {
+      showError(diffError);
     }
-    setPanel(target);
-    setPanelLoading(true);
-    await settle(
-      async () => {
-        if (target === "diff") {
-          const value = await opencodeClient.session.diff({ sessionID });
-          if (alive.current) {
-            setDiffs(value);
-          }
-        } else {
-          const value = await opencodeClient.session.context({ sessionID });
-          if (alive.current) {
-            setContext(value);
-          }
-        }
-      },
-      showError,
-      () => {
-        if (alive.current) {
-          setPanelLoading(false);
-        }
-      }
-    );
+  }, [diffError, diffErrorAt, showError]);
+  useEffect(() => {
+    if (contextError && contextErrorAt) {
+      showError(contextError);
+    }
+  }, [contextError, contextErrorAt, showError]);
+  const inspect = (target: "diff" | "context") => {
+    if (canInspect(target)) {
+      setPanel(target);
+    }
   };
-
-  const exportSession = () =>
-    run(async () => {
+  const exporting = useChatMutation(mutationContext, {
+    invalidate: () => [],
+    mutationFn: async () => {
       if (!opencodeClient || !capabilities.export) {
         return;
       }
@@ -105,7 +112,19 @@ export const useSessionTools = ({
               })
             ));
       }
-    });
-
-  return { context, diffs, exportSession, inspect, panelLoading };
+    },
+  });
+  let panelLoading = false;
+  if (panel === "diff") {
+    panelLoading = diff.isFetching;
+  } else if (panel === "context") {
+    panelLoading = context.isFetching;
+  }
+  return {
+    context: context.data ?? NO_CONTEXT,
+    diffs: diff.data ?? NO_DIFFS,
+    exportSession: () => exporting.run(),
+    inspect,
+    panelLoading,
+  };
 };

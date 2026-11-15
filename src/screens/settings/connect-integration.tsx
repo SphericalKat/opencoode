@@ -4,7 +4,8 @@ import type {
   IntegrationInfo,
   IntegrationMethod,
 } from "@opencode/client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Linking } from "react-native";
 
 import { SheetGroup, SheetRow } from "../../components/list-sheet";
@@ -21,15 +22,261 @@ import {
 } from "../../components/ui";
 import { errorMessage } from "../../lib/client";
 import type { Client } from "../../lib/client";
+import { useForeground } from "../../lib/foreground";
 import { initialFormValues, prepareFormAnswer } from "../../lib/forms";
 import type { FormValues } from "../../lib/forms";
+import { integrationAttemptOptions } from "../../lib/queries/settings";
+import { queryKeys } from "../../lib/query-keys";
+import { useServerScope } from "../../lib/server-scope";
 import { externalURL } from "../../lib/settings";
 import { useThemedStyles } from "../../lib/theme";
+import { useSettingsBusy, useSettingsMutation } from "./shared";
 import { createStyles } from "./styles";
+
+interface ConnectInput {
+  answer: ReturnType<typeof prepareFormAnswer>["answer"];
+  integrationID: string;
+  label: string | undefined;
+  location: { directory: string };
+  method: Exclude<IntegrationMethod, { type: "env" }>;
+}
 
 type Attempt =
   | { kind: "oauth"; data: IntegrationAttempt }
   | { kind: "command"; data: IntegrationCommandAttempt };
+const methodLabel = (item: IntegrationMethod) => {
+  if (item.type === "env") {
+    return `Server environment: ${item.names.join(", ")}`;
+  }
+  return item.label || (item.type === "key" ? "API key" : item.type);
+};
+
+interface ConnectHandlers {
+  key: string;
+  onClose: () => void;
+  onKeyUsed: () => void;
+  open: (url: string) => Promise<void>;
+  setAttempt: (attempt: Attempt) => void;
+}
+
+const connectIntegration = async (
+  client: Client,
+  input: ConnectInput,
+  handlers: ConnectHandlers
+) => {
+  const { method: chosen, ...request } = input;
+  if (chosen.type === "key") {
+    if (!handlers.key.trim()) {
+      throw new Error("Enter an API key");
+    }
+    await client.integration.connect.key({
+      ...request,
+      key: handlers.key.trim(),
+    });
+    handlers.onKeyUsed();
+    handlers.onClose();
+  } else if (chosen.type === "external") {
+    await client.integration.connect.external({
+      ...request,
+      methodID: chosen.id,
+    });
+    handlers.onClose();
+  } else if (chosen.type === "oauth") {
+    const result = await client.integration.oauth.connect({
+      ...request,
+      methodID: chosen.id,
+    });
+    handlers.setAttempt({ data: result.data, kind: "oauth" });
+    await handlers.open(result.data.url);
+  } else {
+    const result = await client.integration.command.connect({
+      ...request,
+      methodID: chosen.id,
+    });
+    handlers.setAttempt({ data: result.data, kind: "command" });
+  }
+};
+
+interface AttemptPanelProps {
+  attempt: Attempt;
+  busy: boolean;
+  code: string;
+  status: string;
+  onCancel: () => void;
+  onCheck: () => void;
+  onCodeChange: (code: string) => void;
+  onOpen: (url: string) => void;
+  onSubmitCode: () => void;
+}
+
+const AttemptPanel = ({
+  attempt,
+  busy,
+  code,
+  status,
+  onCancel,
+  onCheck,
+  onCodeChange,
+  onOpen,
+  onSubmitCode,
+}: AttemptPanelProps) => {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <>
+      <BodyText style={styles.name}>
+        {status === "pending" ? "Complete the sign-in" : status}
+      </BodyText>
+      {attempt.kind === "oauth" && (
+        <>
+          <BodyText>{attempt.data.instructions}</BodyText>
+          <Button
+            title="Open sign-in page"
+            onPress={() => onOpen(attempt.data.url)}
+          />
+          {attempt.data.mode === "code" && (
+            <>
+              <Field
+                label="Authorization code"
+                value={code}
+                onChangeText={onCodeChange}
+              />
+              <Button
+                title="Submit code"
+                variant="primary"
+                busy={busy}
+                disabled={!code.trim()}
+                onPress={onSubmitCode}
+              />
+            </>
+          )}
+        </>
+      )}
+      {attempt.kind === "command" && (
+        <BodyText muted>
+          Complete any browser or terminal steps on the server. This page checks
+          the result automatically.
+        </BodyText>
+      )}
+      <Button title="Check status" size="compact" onPress={onCheck} />
+      <Button
+        title="Cancel sign-in"
+        variant="danger"
+        busy={busy}
+        onPress={onCancel}
+      />
+    </>
+  );
+};
+
+interface MethodFieldsProps {
+  busy: boolean;
+  fieldErrors: Record<string, string>;
+  keyValue: string;
+  label: string;
+  method: Exclude<IntegrationMethod, { type: "env" }>;
+  values: FormValues;
+  onContinue: () => void;
+  onKeyChange: (value: string) => void;
+  onLabelChange: (value: string) => void;
+  onValuesChange: (values: FormValues) => void;
+}
+
+const MethodFields = ({
+  busy,
+  fieldErrors,
+  keyValue,
+  label,
+  method,
+  values,
+  onContinue,
+  onKeyChange,
+  onLabelChange,
+  onValuesChange,
+}: MethodFieldsProps) => (
+  <>
+    <Field
+      label="Account name (optional)"
+      value={label}
+      onChangeText={onLabelChange}
+    />
+    {method.type === "key" && (
+      <Field
+        label="API key"
+        secureTextEntry
+        value={keyValue}
+        onChangeText={onKeyChange}
+      />
+    )}
+    {"form" in method && (
+      <DynamicFields
+        fields={method.form ?? []}
+        values={values}
+        onChange={onValuesChange}
+        errors={fieldErrors}
+      />
+    )}
+    {method.type === "command" && (
+      <Card>
+        <BodyText muted>
+          This starts the sign-in command on your server.
+        </BodyText>
+        <BodyText style={{ fontFamily: mono }}>
+          {method.command.join(" ")}
+        </BodyText>
+      </Card>
+    )}
+    <Button
+      title="Continue"
+      variant="primary"
+      busy={busy}
+      onPress={onContinue}
+    />
+  </>
+);
+
+const useAttemptStatus = ({
+  attempt,
+  client,
+  directory,
+  integrationID,
+  onClose,
+}: {
+  attempt: Attempt | undefined;
+  client: Client;
+  directory: string;
+  integrationID: string;
+  onClose: () => void;
+}) => {
+  const scope = useServerScope();
+  const foreground = useForeground();
+  const attemptStatus = useQuery(
+    integrationAttemptOptions(
+      scope,
+      client,
+      {
+        attemptID: attempt?.data.attemptID ?? "",
+        directory,
+        integrationID,
+        kind: attempt?.kind ?? "oauth",
+      },
+      !!attempt && foreground
+    )
+  );
+  const status = attempt ? (attemptStatus.data?.status ?? "pending") : "";
+  const failureMessage =
+    attemptStatus.data?.status === "failed" ? attemptStatus.data.message : null;
+  const statusError = attemptStatus.error
+    ? errorMessage(attemptStatus.error)
+    : null;
+  const { refetch: checkStatus } = attemptStatus;
+  useEffect(() => {
+    if (status === "complete") {
+      onClose();
+    }
+  }, [status, onClose]);
+  return { checkStatus, failureMessage, status, statusError };
+};
+
 export const ConnectIntegration = ({
   client,
   directory,
@@ -41,7 +288,6 @@ export const ConnectIntegration = ({
   integration: IntegrationInfo;
   onClose: () => void;
 }) => {
-  const styles = useThemedStyles(createStyles);
   const [method, setMethod] = useState<IntegrationMethod>();
   const [values, setValues] = useState<FormValues>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -49,63 +295,12 @@ export const ConnectIntegration = ({
   const [key, setKey] = useState("");
   const [code, setCode] = useState("");
   const [attempt, setAttempt] = useState<Attempt>();
-  const [status, setStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const active = useRef(true);
-  const statusRequest = useRef(false);
-  useEffect(
-    () => () => {
-      active.current = false;
-    },
-    []
+  const scope = useServerScope();
+  const busy = useSettingsBusy();
+  const { checkStatus, failureMessage, status, statusError } = useAttemptStatus(
+    { attempt, client, directory, integrationID: integration.id, onClose }
   );
-  const check = useCallback(async () => {
-    if (!attempt || statusRequest.current) {
-      return;
-    }
-    statusRequest.current = true;
-    try {
-      const input = {
-        attemptID: attempt.data.attemptID,
-        integrationID: integration.id,
-        location: { directory },
-      };
-      const result =
-        attempt.kind === "oauth"
-          ? await client.integration.oauth.status(input)
-          : await client.integration.command.status(input);
-      if (active.current) {
-        setStatus(result.data.status);
-        if (result.data.status === "failed") {
-          setError(result.data.message);
-        }
-        if (result.data.status === "complete") {
-          onClose();
-        }
-      }
-    } catch (error_) {
-      if (active.current) {
-        setError(errorMessage(error_));
-      }
-    }
-    statusRequest.current = false;
-  }, [attempt, client, directory, integration.id, onClose]);
-  useEffect(() => {
-    if (!attempt || ["complete", "expired", "failed"].includes(status)) {
-      return;
-    }
-    const first = setTimeout(() => {
-      void check();
-    }, 0);
-    const timer = setInterval(() => {
-      void check();
-    }, 3000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(timer);
-    };
-  }, [attempt, status, check]);
   const open = async (url: string) => {
     try {
       await Linking.openURL(externalURL(url));
@@ -113,21 +308,52 @@ export const ConnectIntegration = ({
       setError(errorMessage(error_));
     }
   };
-  const run = async (action: () => Promise<void>) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-    } catch (error_) {
-      if (active.current) {
-        setError(errorMessage(error_));
-      }
-    }
-    if (active.current) {
-      setBusy(false);
-    }
-  };
-  const start = async () => {
+  const connectKeys = () => [
+    queryKeys.credentials(scope),
+    queryKeys.dir.settings(scope, directory, "integrations"),
+    queryKeys.dir.catalog(scope, directory),
+  ];
+  const connect = useSettingsMutation({
+    invalidate: connectKeys,
+    mutationFn: (input: ConnectInput) =>
+      connectIntegration(client, input, {
+        key,
+        onClose,
+        onKeyUsed: () => setKey(""),
+        open,
+        setAttempt,
+      }),
+    onError: setError,
+  });
+  const completeCode = useSettingsMutation({
+    invalidate: connectKeys,
+    mutationFn: async (current: Attempt) => {
+      await client.integration.oauth.complete({
+        attemptID: current.data.attemptID,
+        code: code.trim(),
+        integrationID: integration.id,
+        location: { directory },
+      });
+      await checkStatus();
+    },
+    onError: setError,
+  });
+  const cancelAttempt = useSettingsMutation({
+    invalidate: () => [],
+    mutationFn: async (current: Attempt) => {
+      const input = {
+        attemptID: current.data.attemptID,
+        integrationID: integration.id,
+        location: { directory },
+      };
+      await (current.kind === "oauth"
+        ? client.integration.oauth.cancel(input)
+        : client.integration.command.cancel(input));
+      setAttempt(undefined);
+    },
+    onError: setError,
+  });
+  const start = () => {
     if (!method || method.type === "env") {
       return;
     }
@@ -145,41 +371,12 @@ export const ConnectIntegration = ({
       label: label.trim() || undefined,
       location: { directory },
     };
-    await run(async () => {
-      if (method.type === "key") {
-        if (!key.trim()) {
-          throw new Error("Enter an API key");
-        }
-        await client.integration.connect.key({ ...input, key: key.trim() });
-        setKey("");
-        onClose();
-      } else if (method.type === "external") {
-        await client.integration.connect.external({
-          ...input,
-          methodID: method.id,
-        });
-        onClose();
-      } else if (method.type === "oauth") {
-        const result = await client.integration.oauth.connect({
-          ...input,
-          methodID: method.id,
-        });
-        setAttempt({ data: result.data, kind: "oauth" });
-        setStatus("pending");
-        await open(result.data.url);
-      } else {
-        const result = await client.integration.command.connect({
-          ...input,
-          methodID: method.id,
-        });
-        setAttempt({ data: result.data, kind: "command" });
-        setStatus("pending");
-      }
-    });
+    setError(null);
+    connect.mutate({ ...input, method });
   };
   return (
     <Sheet visible title={`Connect ${integration.name}`} onClose={onClose}>
-      <ErrorNotice error={error} />
+      <ErrorNotice error={error ?? failureMessage ?? statusError} />
       {!attempt && (
         <>
           <BodyText muted>
@@ -190,12 +387,7 @@ export const ConnectIntegration = ({
             {integration.methods.map((item, index) => (
               <SheetRow
                 key={index}
-                label={
-                  item.type === "env"
-                    ? `Server environment: ${item.names.join(", ")}`
-                    : item.label ||
-                      (item.type === "key" ? "API key" : item.type)
-                }
+                label={methodLabel(item)}
                 checked={method === item}
                 accessibilityRole="radio"
                 onPress={() => {
@@ -216,47 +408,18 @@ export const ConnectIntegration = ({
             </BodyText>
           )}
           {method && method.type !== "env" && (
-            <>
-              <Field
-                label="Account name (optional)"
-                value={label}
-                onChangeText={setLabel}
-              />
-              {method.type === "key" && (
-                <Field
-                  label="API key"
-                  secureTextEntry
-                  value={key}
-                  onChangeText={setKey}
-                />
-              )}
-              {"form" in method && (
-                <DynamicFields
-                  fields={method.form ?? []}
-                  values={values}
-                  onChange={setValues}
-                  errors={fieldErrors}
-                />
-              )}
-              {method.type === "command" && (
-                <Card>
-                  <BodyText muted>
-                    This starts the sign-in command on your server.
-                  </BodyText>
-                  <BodyText style={{ fontFamily: mono }}>
-                    {method.command.join(" ")}
-                  </BodyText>
-                </Card>
-              )}
-              <Button
-                title="Continue"
-                variant="primary"
-                busy={busy}
-                onPress={() => {
-                  void start();
-                }}
-              />
-            </>
+            <MethodFields
+              busy={busy}
+              fieldErrors={fieldErrors}
+              keyValue={key}
+              label={label}
+              method={method}
+              values={values}
+              onContinue={start}
+              onKeyChange={setKey}
+              onLabelChange={setLabel}
+              onValuesChange={setValues}
+            />
           )}
           {!integration.methods.length && (
             <Empty title="No connection methods" />
@@ -264,80 +427,27 @@ export const ConnectIntegration = ({
         </>
       )}
       {attempt && (
-        <>
-          <BodyText style={styles.name}>
-            {status === "pending" ? "Complete the sign-in" : status}
-          </BodyText>
-          {attempt.kind === "oauth" && (
-            <>
-              <BodyText>{attempt.data.instructions}</BodyText>
-              <Button
-                title="Open sign-in page"
-                onPress={() => {
-                  void open(attempt.data.url);
-                }}
-              />
-              {attempt.data.mode === "code" && (
-                <>
-                  <Field
-                    label="Authorization code"
-                    value={code}
-                    onChangeText={setCode}
-                  />
-                  <Button
-                    title="Submit code"
-                    variant="primary"
-                    busy={busy}
-                    disabled={!code.trim()}
-                    onPress={() => {
-                      void run(async () => {
-                        await client.integration.oauth.complete({
-                          attemptID: attempt.data.attemptID,
-                          code: code.trim(),
-                          integrationID: integration.id,
-                          location: { directory },
-                        });
-                        await check();
-                      });
-                    }}
-                  />
-                </>
-              )}
-            </>
-          )}
-          {attempt.kind === "command" && (
-            <BodyText muted>
-              Complete any browser or terminal steps on the server. This page
-              checks the result automatically.
-            </BodyText>
-          )}
-          <Button
-            title="Check status"
-            size="compact"
-            onPress={() => {
-              void check();
-            }}
-          />
-          <Button
-            title="Cancel sign-in"
-            variant="danger"
-            busy={busy}
-            onPress={() => {
-              void run(async () => {
-                const input = {
-                  attemptID: attempt.data.attemptID,
-                  integrationID: integration.id,
-                  location: { directory },
-                };
-                await (attempt.kind === "oauth"
-                  ? client.integration.oauth.cancel(input)
-                  : client.integration.command.cancel(input));
-                setAttempt(undefined);
-                setStatus("");
-              });
-            }}
-          />
-        </>
+        <AttemptPanel
+          attempt={attempt}
+          busy={busy}
+          code={code}
+          status={status}
+          onCancel={() => {
+            setError(null);
+            cancelAttempt.mutate(attempt);
+          }}
+          onCheck={() => {
+            void checkStatus();
+          }}
+          onCodeChange={setCode}
+          onOpen={(url) => {
+            void open(url);
+          }}
+          onSubmitCode={() => {
+            setError(null);
+            completeCode.mutate(attempt);
+          }}
+        />
       )}
     </Sheet>
   );

@@ -1,4 +1,5 @@
 import type { PermissionSavedInfo } from "@opencode/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { SheetGroup } from "../../components/list-sheet";
@@ -12,9 +13,16 @@ import {
   Sheet,
 } from "../../components/ui";
 import type { Client } from "../../lib/client";
-import { withSettingsRequest } from "../../lib/settings";
+import { savedPermissionsOptions } from "../../lib/queries/settings";
+import { queryKeys } from "../../lib/query-keys";
+import { useServerScope } from "../../lib/server-scope";
 import { MonoRow } from "./configuration";
-import { Page, runBusy, useResource } from "./shared";
+import {
+  Page,
+  resourceOf,
+  useSettingsBusy,
+  useSettingsMutation,
+} from "./shared";
 
 export const Permissions = ({
   client,
@@ -23,36 +31,47 @@ export const Permissions = ({
   client: Client;
   directory: string;
 }) => {
-  const { data, error, loading, refresh } = useResource(
-    client,
-    directory,
-    async (signal) => {
-      const location = await client.location.get(
-        { location: { directory } },
-        { signal }
-      );
-      return client.permission.saved.list(
-        { projectID: location.project.id },
-        { signal }
-      );
-    }
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  const { data, error, loading, refresh } = resourceOf(
+    useQuery(savedPermissionsOptions(queryClient, scope, client, directory))
   );
   const { hidden, remove: removeApproval } = useUndoableRemoval("approvals");
   const visible = data?.filter((item) => !hidden.has(item.id));
   const [selected, setSelected] = useState<PermissionSavedInfo>();
   const [action, setAction] = useState("");
   const [resource, setResource] = useState("");
-  const [busy, setBusy] = useState(false);
+  const busy = useSettingsBusy();
   const [errorAction, setErrorAction] = useState<string | null>(null);
-  const run = async (task: (signal: AbortSignal) => Promise<void>) => {
-    setErrorAction(null);
-    await runBusy(setBusy, setErrorAction, async () => {
-      await withSettingsRequest(async (signal) => {
-        await task(signal);
-        await refresh(signal);
-      });
-    });
-  };
+  const approvalKeys = () => [
+    queryKeys.dir.settings(scope, directory, "permissions"),
+  ];
+  const saveApproval = useSettingsMutation({
+    invalidate: approvalKeys,
+    mutationFn: async (_input, signal) => {
+      if (!selected) {
+        return;
+      }
+      await client.permission.saved.update(
+        {
+          action: action.trim(),
+          id: selected.id,
+          resource: resource.trim(),
+        },
+        { signal }
+      );
+      signal.throwIfAborted();
+      setSelected(undefined);
+    },
+    onError: setErrorAction,
+  });
+  const revokeApproval = useSettingsMutation({
+    invalidate: approvalKeys,
+    mutationFn: async (id: string, signal) => {
+      await client.permission.saved.remove({ id }, { signal });
+    },
+    onError: setErrorAction,
+  });
   return (
     <Page error={error} loading={loading} refresh={refresh}>
       <BodyText muted>
@@ -112,21 +131,8 @@ export const Permissions = ({
           busy={busy}
           disabled={!action.trim() || !resource.trim()}
           onPress={() => {
-            void run(async (signal) => {
-              if (!selected) {
-                return;
-              }
-              await client.permission.saved.update(
-                {
-                  action: action.trim(),
-                  id: selected.id,
-                  resource: resource.trim(),
-                },
-                { signal }
-              );
-              signal.throwIfAborted();
-              setSelected(undefined);
-            });
+            setErrorAction(null);
+            saveApproval.mutate();
           }}
         />
         <Button
@@ -140,11 +146,7 @@ export const Permissions = ({
             const { id } = selected;
             setSelected(undefined);
             removeApproval(id, {
-              commit: () =>
-                withSettingsRequest(async (signal) => {
-                  await client.permission.saved.remove({ id }, { signal });
-                  await refresh(signal);
-                }),
+              commit: () => revokeApproval.mutateAsync(id),
               message: "Approval revoked",
             });
           }}

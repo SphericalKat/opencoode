@@ -1,4 +1,5 @@
 import type { CredentialEntry, IntegrationInfo } from "@opencode/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { SheetGroup, SheetRow } from "../../components/list-sheet";
@@ -11,10 +12,16 @@ import {
   BodyText,
   Sheet,
 } from "../../components/ui";
+import { errorMessage } from "../../lib/client";
 import type { Client } from "../../lib/client";
-import { withSettingsRequest } from "../../lib/settings";
+import {
+  credentialsOptions,
+  integrationsOptions,
+} from "../../lib/queries/settings";
+import { queryKeys } from "../../lib/query-keys";
+import { useServerScope } from "../../lib/server-scope";
 import { ConnectIntegration } from "./connect-integration";
-import { Page, runBusy, useResource } from "./shared";
+import { Page, useSettingsBusy, useSettingsMutation } from "./shared";
 
 const integrationDescription = (item: IntegrationInfo) => {
   const count = item.connections.length;
@@ -27,6 +34,31 @@ const integrationDescription = (item: IntegrationInfo) => {
   return [summary, ...problems].join(" · ");
 };
 
+const useAccountsData = (client: Client, directory: string) => {
+  const scope = useServerScope();
+  const integrationList = useQuery(
+    integrationsOptions(scope, client, directory)
+  );
+  const credentialList = useQuery(credentialsOptions(scope, client));
+  const data =
+    integrationList.data && credentialList.data
+      ? {
+          credentials: credentialList.data,
+          integrations: integrationList.data,
+        }
+      : undefined;
+  const failure = integrationList.error ?? credentialList.error;
+  const error = failure ? errorMessage(failure) : null;
+  const loading = integrationList.isFetching || credentialList.isFetching;
+  const { refetch: refetchIntegrations } = integrationList;
+  const { refetch: refetchCredentials } = credentialList;
+  const refresh = () => {
+    void refetchIntegrations();
+    void refetchCredentials();
+  };
+  return { data, error, loading, refresh };
+};
+
 export const Accounts = ({
   client,
   directory,
@@ -34,17 +66,9 @@ export const Accounts = ({
   client: Client;
   directory: string;
 }) => {
-  const { data, error, loading, refresh } = useResource(
-    client,
-    directory,
-    async (signal) => {
-      const [integrations, credentials] = await Promise.all([
-        client.integration.list({ location: { directory } }, { signal }),
-        client.credential.list({ signal }),
-      ]);
-      return { credentials, integrations: integrations.data };
-    }
-  );
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  const { data, error, loading, refresh } = useAccountsData(client, directory);
   const { hidden, remove: removeAccount } = useUndoableRemoval("accounts");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<IntegrationInfo>();
@@ -61,16 +85,49 @@ export const Accounts = ({
   const [credential, setCredential] = useState<CredentialEntry>();
   const [label, setLabel] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const run = async (action: (signal: AbortSignal) => Promise<unknown>) => {
-    setActionError(null);
-    await runBusy(setBusy, setActionError, async () => {
-      await withSettingsRequest(async (signal) => {
-        await action(signal);
-        await refresh(signal);
-      });
-    });
-  };
+  const busy = useSettingsBusy();
+  const accountKeys = () => [
+    queryKeys.credentials(scope),
+    queryKeys.dir.settings(scope, directory, "integrations"),
+    queryKeys.dir.catalog(scope, directory),
+  ];
+  const saveName = useSettingsMutation({
+    invalidate: accountKeys,
+    mutationFn: async (_input, signal) => {
+      if (!credential) {
+        return;
+      }
+      await client.credential.update(
+        { credentialID: credential.id, label: label.trim() },
+        { signal }
+      );
+      signal.throwIfAborted();
+      setCredential(undefined);
+    },
+    onError: setActionError,
+  });
+  const activateAccount = useSettingsMutation({
+    invalidate: accountKeys,
+    mutationFn: async (_input, signal) => {
+      if (!credential) {
+        return;
+      }
+      await client.credential.activate(
+        { credentialID: credential.id },
+        { signal }
+      );
+      signal.throwIfAborted();
+      setCredential(undefined);
+    },
+    onError: setActionError,
+  });
+  const removeCredential = useSettingsMutation({
+    invalidate: accountKeys,
+    mutationFn: async (credentialID: string, signal) => {
+      await client.credential.remove({ credentialID }, { signal });
+    },
+    onError: setActionError,
+  });
   const search = query.trim().toLowerCase();
   const integrations =
     data?.integrations.filter((item) =>
@@ -180,17 +237,8 @@ export const Accounts = ({
           title="Save name"
           busy={busy}
           onPress={() => {
-            void run(async (signal) => {
-              if (!credential) {
-                return;
-              }
-              await client.credential.update(
-                { credentialID: credential.id, label: label.trim() },
-                { signal }
-              );
-              signal.throwIfAborted();
-              setCredential(undefined);
-            });
+            setActionError(null);
+            saveName.mutate();
           }}
         />
         {!credential?.active && (
@@ -199,17 +247,8 @@ export const Accounts = ({
             variant="primary"
             busy={busy}
             onPress={() => {
-              void run(async (signal) => {
-                if (!credential) {
-                  return;
-                }
-                await client.credential.activate(
-                  { credentialID: credential.id },
-                  { signal }
-                );
-                signal.throwIfAborted();
-                setCredential(undefined);
-              });
+              setActionError(null);
+              activateAccount.mutate();
             }}
           />
         )}
@@ -224,11 +263,7 @@ export const Accounts = ({
             const credentialID = credential.id;
             setCredential(undefined);
             removeAccount(credentialID, {
-              commit: () =>
-                withSettingsRequest(async (signal) => {
-                  await client.credential.remove({ credentialID }, { signal });
-                  await refresh(signal);
-                }),
+              commit: () => removeCredential.mutateAsync(credentialID),
               message: "Account removed",
             });
           }}
@@ -242,7 +277,9 @@ export const Accounts = ({
           integration={selected}
           onClose={() => {
             setSelected(undefined);
-            void refresh();
+            for (const queryKey of accountKeys()) {
+              void queryClient.invalidateQueries({ queryKey });
+            }
           }}
         />
       )}

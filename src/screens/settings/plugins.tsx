@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -5,8 +6,16 @@ import { confirmAction } from "../../components/dialog";
 import { SheetGroup, SheetRow } from "../../components/list-sheet";
 import { BodyText, ErrorNotice } from "../../components/ui";
 import type { Client } from "../../lib/client";
+import { pluginsOptions } from "../../lib/queries/settings";
+import { queryKeys } from "../../lib/query-keys";
+import { useServerScope } from "../../lib/server-scope";
 import { useTheme } from "../../lib/theme";
-import { Page, runBusy, useResource } from "./shared";
+import {
+  Page,
+  resourceOf,
+  useSettingsBusy,
+  useSettingsMutation,
+} from "./shared";
 
 type PluginInfo = Awaited<ReturnType<Client["plugin"]["list"]>>["data"][number];
 
@@ -113,27 +122,44 @@ export const Plugins = ({
   client: Client;
   directory: string;
 }) => {
-  const { data, error, loading, refresh } = useResource(
-    client,
-    directory,
-    async (signal) => {
-      const response = await client.plugin.list(
-        { location: { directory } },
-        { signal }
-      );
-      return response.data;
-    }
+  const scope = useServerScope();
+  const { data, error, loading, refresh } = resourceOf(
+    useQuery(pluginsOptions(scope, client, directory))
   );
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const run = async (action: () => Promise<void>) => {
-    setErrorAction(null);
-    await runBusy(setBusy, setErrorAction, async () => {
-      await action();
-      await refresh();
-    });
-  };
+  const busy = useSettingsBusy();
+  const pluginKeys = () => [
+    queryKeys.dir.settings(scope, directory, "plugins"),
+  ];
+  const updatePlugin = useSettingsMutation({
+    invalidate: pluginKeys,
+    mutationFn: async (target: string) => {
+      if (
+        await confirmAction(
+          "Update plugin?",
+          "This installs the latest package version on your server.",
+          { confirmLabel: "Update", destructive: false }
+        )
+      ) {
+        await client.plugin.update({
+          location: { directory },
+          targets: [target],
+        });
+      }
+    },
+    onError: setErrorAction,
+  });
+  const checkPlugins = useSettingsMutation({
+    invalidate: pluginKeys,
+    mutationFn: async () => {
+      const result = await client.plugin.check({ location: { directory } });
+      setNotice(
+        `${result.data.filter((item) => item.source.type === "package" && item.source.outdated).length} package updates available.`
+      );
+    },
+    onError: setErrorAction,
+  });
   return (
     <Page error={error} loading={loading} refresh={refresh}>
       <BodyText muted>
@@ -148,20 +174,8 @@ export const Plugins = ({
               busy={busy}
               item={item}
               onUpdate={(target) => {
-                void run(async () => {
-                  if (
-                    await confirmAction(
-                      "Update plugin?",
-                      "This installs the latest package version on your server.",
-                      { confirmLabel: "Update", destructive: false }
-                    )
-                  ) {
-                    await client.plugin.update({
-                      location: { directory },
-                      targets: [target],
-                    });
-                  }
-                });
+                setErrorAction(null);
+                updatePlugin.mutate(target);
               }}
             />
           ))}
@@ -174,14 +188,8 @@ export const Plugins = ({
           trailing="chevron"
           disabled={busy}
           onPress={() => {
-            void run(async () => {
-              const result = await client.plugin.check({
-                location: { directory },
-              });
-              setNotice(
-                `${result.data.filter((item) => item.source.type === "package" && item.source.outdated).length} package updates available.`
-              );
-            });
+            setErrorAction(null);
+            checkPlugins.mutate();
           }}
         />
       </SheetGroup>

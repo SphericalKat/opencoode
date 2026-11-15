@@ -1,6 +1,16 @@
 import { errorMessage } from "../../lib/client";
 import type { Client } from "../../lib/client";
-import { REQUEST_TIMEOUT_MS, rejectOnAbort } from "./refresh";
+import { REQUEST_TIMEOUT_MS } from "../../lib/request";
+
+const rejectOnAbort = (signal: AbortSignal, createError: () => Error) => {
+  const { promise, reject } = Promise.withResolvers<never>();
+  const onAbort = () => reject(createError());
+  signal.addEventListener("abort", onAbort, { once: true });
+  return {
+    dispose: () => signal.removeEventListener("abort", onAbort),
+    promise,
+  };
+};
 
 const LIVE_RETRY_BASE_MS = 1000;
 const LIVE_RETRY_MAX_MS = 15_000;
@@ -43,7 +53,7 @@ const raceIterator = <T>(
 
 const createRefreshScheduler = (
   signal: AbortSignal,
-  refresh: (signal: AbortSignal) => Promise<void>
+  refresh: () => Promise<unknown>
 ) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return {
@@ -55,7 +65,7 @@ const createRefreshScheduler = (
       timer = setTimeout(() => {
         timer = undefined;
         if (!signal.aborted) {
-          void refresh(signal);
+          void refresh();
         }
       }, REFRESH_DEBOUNCE_MS);
     },
@@ -83,7 +93,7 @@ const createRetryWait = () => {
 interface LiveSession {
   attempts: { count: number };
   client: Client;
-  refresh: (signal: AbortSignal) => Promise<void>;
+  refresh: () => Promise<unknown>;
   retry: ReturnType<typeof createRetryWait>;
   scheduler: ReturnType<typeof createRefreshScheduler>;
   setStreamError: (message: string | undefined) => void;
@@ -168,7 +178,7 @@ const keepLive = async (live: LiveSession): Promise<void> => {
     live.attempts.count += 1;
     await live.retry.wait(retryDelay);
     if (!signal.aborted) {
-      await live.refresh(signal);
+      await live.refresh();
     }
   }
   await keepLive(live);
@@ -176,7 +186,7 @@ const keepLive = async (live: LiveSession): Promise<void> => {
 
 interface LiveUpdatesOptions {
   client: Client;
-  refresh: (signal: AbortSignal) => Promise<void>;
+  refresh: () => Promise<unknown>;
   setStreamError: (message: string | undefined) => void;
 }
 
@@ -195,7 +205,7 @@ export const startLiveUpdates = ({
     setStreamError,
     signal: controller.signal,
   };
-  void refresh(controller.signal);
+  void refresh();
   keepLive(live).catch((error_) => {
     if (!controller.signal.aborted) {
       setStreamError(errorMessage(error_));

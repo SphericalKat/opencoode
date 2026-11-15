@@ -1,13 +1,8 @@
 import type {
-  FormInfo,
   OpenCodeEvent,
-  PermissionRequest,
-  SessionInboxInfo,
   SessionInfo,
-  SessionMessageInfo,
   SessionStatus,
 } from "@opencode/client";
-import React from "react";
 
 import { settle } from "../../lib/async";
 import { isAssistantProgress } from "../../lib/chat";
@@ -20,179 +15,14 @@ export type CoreClient = ChatBackend["core"];
 export type OpenCodeClient = ChatBackend["opencodeClient"];
 export type Capabilities = ChatBackend["capabilities"];
 export type StreamBatch<T> = ReturnType<typeof createStreamBatch<T>>;
-export type SyncErrors = Partial<Record<SyncScope, string>>;
 
 export const PAGE_SIZE = 80;
-
-export const mergeForms = (
-  previous: FormInfo[],
-  own: PromiseSettledResult<FormInfo[] | undefined>,
-  global: PromiseSettledResult<{ data: FormInfo[] } | undefined>,
-  sessionID: string
-) => [
-  ...(own.status === "fulfilled" && own.value
-    ? own.value
-    : previous.filter((form) => form.sessionID === sessionID)),
-  ...(global.status === "fulfilled" && global.value
-    ? global.value.data.filter((form) => form.sessionID === "global")
-    : previous.filter((form) => form.sessionID === "global")),
-];
 
 export const nextCursor = (page: {
   cursor: { next?: string | null };
   data: unknown[];
 }) =>
   page.data.length === PAGE_SIZE ? (page.cursor.next ?? undefined) : undefined;
-
-export const fetchErrorOf = (
-  results: readonly PromiseSettledResult<unknown>[]
-) => {
-  const failed = results.find((result) => result.status === "rejected");
-  return failed?.status === "rejected" ? errorMessage(failed.reason) : null;
-};
-
-export const withoutScopeError = (errors: SyncErrors, scope: SyncScope) =>
-  Object.fromEntries(
-    Object.entries(errors).filter(([key]) => key !== scope)
-  ) as SyncErrors;
-
-export const fetchSessionSnapshot = (
-  client: CoreClient,
-  opencodeClient: OpenCodeClient,
-  capabilities: Capabilities,
-  sessionID: string,
-  opts: { signal?: AbortSignal }
-) => {
-  const sessionRequest = client.session.get({ sessionID }, opts);
-  return Promise.allSettled([
-    sessionRequest,
-    client.message.list({ limit: PAGE_SIZE, order: "desc", sessionID }, opts),
-    opencodeClient && capabilities.inbox
-      ? opencodeClient.session.inbox.list({ sessionID }, opts)
-      : undefined,
-    opencodeClient && capabilities.forms
-      ? opencodeClient.session.form.list({ sessionID }, opts)
-      : undefined,
-    opencodeClient && capabilities.permissions
-      ? opencodeClient.permission.list({ sessionID }, opts)
-      : undefined,
-    client.session.active(opts),
-    opencodeClient && capabilities.forms
-      ? sessionRequest.then((info) =>
-          opencodeClient.form.list(
-            { location: { directory: info.location.directory } },
-            opts
-          )
-        )
-      : undefined,
-  ] as const);
-};
-
-export interface ScopeDeps {
-  applyMessageSnapshot: (snapshot: SessionMessageInfo[]) => void;
-  capabilities: Capabilities;
-  client: CoreClient;
-  current: () => boolean;
-  opencodeClient: OpenCodeClient;
-  scheduleRefresh: () => void;
-  sessionDirectory: { current: string | undefined };
-  sessionID: string;
-  setForms: React.Dispatch<React.SetStateAction<FormInfo[]>>;
-  setInbox: (inbox: SessionInboxInfo[]) => void;
-  setPermissions: (permissions: PermissionRequest[]) => void;
-  setSession: (session: SessionInfo) => void;
-  signal: AbortSignal;
-}
-
-export const loadMetadataScope = async (deps: ScopeDeps) => {
-  const info = await deps.client.session.get(
-    { sessionID: deps.sessionID },
-    { signal: deps.signal }
-  );
-  if (!deps.current()) {
-    return false;
-  }
-  deps.sessionDirectory.current = info.location.directory;
-  deps.setSession(info);
-  return true;
-};
-
-export const loadHistoryScope = async (deps: ScopeDeps) => {
-  const page = await deps.client.message.list(
-    { limit: PAGE_SIZE, order: "desc", sessionID: deps.sessionID },
-    { signal: deps.signal }
-  );
-  if (!deps.current()) {
-    return false;
-  }
-  deps.applyMessageSnapshot(page.data);
-  return true;
-};
-
-export const loadInboxScope = async (deps: ScopeDeps) => {
-  if (!deps.opencodeClient || !deps.capabilities.inbox) {
-    return false;
-  }
-  const inboxItems = await deps.opencodeClient.session.inbox.list(
-    { sessionID: deps.sessionID },
-    { signal: deps.signal }
-  );
-  if (!deps.current()) {
-    return false;
-  }
-  deps.setInbox(inboxItems);
-  return true;
-};
-
-export const loadRequestsScope = async (deps: ScopeDeps) => {
-  const { capabilities, opencodeClient, sessionID } = deps;
-  if (!opencodeClient) {
-    return false;
-  }
-  const directory = deps.sessionDirectory.current;
-  if (!directory) {
-    deps.scheduleRefresh();
-    return false;
-  }
-  const options = { signal: deps.signal };
-  const [own, permissionResult, global] = await Promise.allSettled([
-    capabilities.forms
-      ? opencodeClient.session.form.list({ sessionID }, options)
-      : undefined,
-    capabilities.permissions
-      ? opencodeClient.permission.list({ sessionID }, options)
-      : undefined,
-    capabilities.forms
-      ? opencodeClient.form.list({ location: { directory } }, options)
-      : undefined,
-  ] as const);
-  if (!deps.current()) {
-    return false;
-  }
-  if (permissionResult.status === "fulfilled" && permissionResult.value) {
-    deps.setPermissions(permissionResult.value);
-  }
-  if (capabilities.forms) {
-    deps.setForms((previous) => mergeForms(previous, own, global, sessionID));
-  }
-  const failure = [own, permissionResult, global].find(
-    (result) => result.status === "rejected"
-  );
-  if (failure?.status === "rejected") {
-    throw failure.reason;
-  }
-  return true;
-};
-
-export const SCOPE_LOADERS: Record<
-  SyncScope,
-  (deps: ScopeDeps) => Promise<boolean>
-> = {
-  history: loadHistoryScope,
-  inbox: loadInboxScope,
-  metadata: loadMetadataScope,
-  requests: loadRequestsScope,
-};
 
 export const CATALOG_EVENT =
   /^(?:model|provider|agent|command|skill|credential|config)\./u;
@@ -235,8 +65,12 @@ export const SCOPE_ROUTES = new Map<string, SyncScope[]>([
   ["session.compaction.failed", ["history"]],
 ]);
 
+export type StatusUpdate =
+  | SessionStatus
+  | null
+  | ((current: SessionStatus | null) => SessionStatus | null);
+
 export interface LiveContext {
-  activityRevision: { current: number };
   applyEvents: (events: OpenCodeEvent[]) => void;
   backend: ChatBackend;
   client: CoreClient;
@@ -247,18 +81,18 @@ export interface LiveContext {
     retryResolve?: () => void;
     retryTimer?: ReturnType<typeof setTimeout>;
   };
-  refresh: (signal?: AbortSignal) => Promise<void>;
+  refresh: () => Promise<unknown>;
+  refreshCatalog: () => void;
   reportConnectionFailure: (reason: unknown) => void;
   resetHistory: () => void;
   scheduleRefresh: () => void;
   scheduleScope: (scope: SyncScope) => void;
-  sessionDirectory: { current: string | undefined };
+  sessionDirectory: () => string | undefined;
   sessionID: string;
   setActive: (active: boolean) => void;
-  setCatalogRevision: React.Dispatch<React.SetStateAction<number>>;
-  setFetchError: (message: string | null) => void;
-  setSession: React.Dispatch<React.SetStateAction<SessionInfo | null>>;
-  setSessionStatus: React.Dispatch<React.SetStateAction<SessionStatus | null>>;
+  setSession: (update: (session: SessionInfo) => SessionInfo) => void;
+  setSessionStatus: (update: StatusUpdate) => void;
+  setStreamFailure: (message: string | null) => void;
   setStreamStatus: (status: string) => void;
   signal: AbortSignal;
   snapshots: StreamBatch<ChatBackendSnapshot>;
@@ -267,20 +101,16 @@ export interface LiveContext {
 
 export const routeSessionEvent = (event: OpenCodeEvent, ctx: LiveContext) => {
   if (event.type === "session.execution.started") {
-    ctx.activityRevision.current += 1;
     ctx.setActive(true);
     ctx.setSessionStatus({ type: "busy" });
     return;
   }
   if (event.type === "session.usage.updated") {
     const { cost, tokens } = event.data;
-    ctx.setSession((previous) =>
-      previous ? { ...previous, cost, tokens } : previous
-    );
+    ctx.setSession((previous) => ({ ...previous, cost, tokens }));
     return;
   }
   if (EXECUTION_ENDED.has(event.type)) {
-    ctx.activityRevision.current += 1;
     ctx.setActive(false);
     ctx.setSessionStatus({ type: "idle" });
     ctx.scheduleRefresh();
@@ -305,7 +135,6 @@ export const handleSessionStatusEvent = (
   ctx: LiveContext
 ) => {
   if (event.type === "session.status") {
-    ctx.activityRevision.current += 1;
     ctx.setSessionStatus(event.data.status);
     ctx.setActive(event.data.status.type !== "idle");
     if (event.data.status.type === "idle") {
@@ -314,7 +143,6 @@ export const handleSessionStatusEvent = (
     return true;
   }
   if (event.type === "session.retry.scheduled") {
-    ctx.activityRevision.current += 1;
     ctx.setSessionStatus({
       attempt: event.data.attempt,
       message: event.data.error.message,
@@ -366,7 +194,7 @@ export const scheduleFormScope = (event: OpenCodeEvent, ctx: LiveContext) => {
   const formSession = eventFormSession(event);
   const sameDirectory =
     !event.location?.directory ||
-    event.location.directory === ctx.sessionDirectory.current;
+    event.location.directory === ctx.sessionDirectory();
   if (
     formSession === ctx.sessionID ||
     (formSession === "global" && sameDirectory)
@@ -388,7 +216,7 @@ export const handleLiveEvent = (event: OpenCodeEvent, ctx: LiveContext) => {
   }
   const data = event.data as Record<string, unknown>;
   if (event.type === "location.shutdown" || CATALOG_EVENT.test(event.type)) {
-    ctx.setCatalogRevision((value) => value + 1);
+    ctx.refreshCatalog();
   }
   if (data.sessionID === ctx.sessionID) {
     if (handleSessionEvent(event, data, ctx)) {
@@ -457,13 +285,14 @@ export const recoverFromFailure = async (reason: unknown, ctx: LiveContext) => {
   ctx.setStreamStatus("Reconnecting");
   ctx.reportConnectionFailure(reason);
   if (ctx.live.attempts > 1) {
-    ctx.setFetchError(errorMessage(reason));
+    ctx.setStreamFailure(errorMessage(reason));
   }
   const delay = Math.min(1000 * 2 ** ctx.live.attempts, 15_000);
   ctx.live.attempts += 1;
   await waitForRetry(ctx, delay);
   if (!ctx.signal.aborted) {
-    await ctx.refresh(ctx.signal);
+    await ctx.refresh();
+    ctx.setStreamFailure(null);
   }
 };
 
@@ -479,6 +308,6 @@ export const runLiveLoop = async (ctx: LiveContext): Promise<void> => {
 };
 
 export const startLive = async (ctx: LiveContext) => {
-  await ctx.refresh(ctx.signal);
+  await ctx.refresh();
   await runLiveLoop(ctx);
 };

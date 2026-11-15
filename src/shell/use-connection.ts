@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { AppState, Linking } from "react-native";
 
@@ -69,6 +70,7 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
     showServerSheetRef,
   } = model;
   const { confirmNavigation } = deps;
+  const queryClient = useQueryClient();
   const applyConnection = useCallback(
     (applied: AppliedConnection) => {
       const { connected, preserveWorkspace } = applied;
@@ -79,6 +81,7 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
       recoveringConnectionRef.current = null;
       if (!preserveWorkspace || connected.backend === "pi") {
         setConnectionRevision((value) => value + 1);
+        void queryClient.invalidateQueries({ queryKey: [connected.id] });
       }
       if (!preserveWorkspace) {
         setOpenTabs([]);
@@ -99,6 +102,7 @@ export const useConnection = (model: MobileState, deps: UseConnectionDeps) => {
       setForm({ id: "", name: "", token: "", url: "" });
     },
     [
+      queryClient,
       setDirectory,
       setConnections,
       setActive,

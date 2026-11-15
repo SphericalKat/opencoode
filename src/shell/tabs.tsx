@@ -101,7 +101,6 @@ interface SessionsTabProps extends ChatColumnProps {
   onChooseDirectory: () => void;
   onNewSession: (directory: string) => void;
   onOpenSessionFromList: (id: string) => Promise<boolean>;
-  revision: number;
 }
 
 export const SessionsTab = ({
@@ -112,7 +111,6 @@ export const SessionsTab = ({
   onNewSession,
   onOpenNavigation,
   onOpenSessionFromList,
-  revision,
   ...chat
 }: SessionsTabProps) => {
   const styles = useThemedStyles(createStyles);
@@ -131,7 +129,6 @@ export const SessionsTab = ({
           projectScope={betaHomeProject}
           onChooseDirectory={onChooseDirectory}
           onNewSession={onNewSession}
-          revision={revision}
           onOpenSession={onOpenSessionFromList}
         />
       </View>

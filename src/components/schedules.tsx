@@ -1,11 +1,20 @@
 import type { ScheduleInfo } from "@opencode/client";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import React, { useState } from "react";
 import { View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { sessionSchedulesOptions } from "../lib/queries/panels";
+import { queryKeys } from "../lib/query-keys";
 import { prepareSchedule } from "../lib/schedules";
 import type { ScheduleDraft } from "../lib/schedules";
+import { useServerScope } from "../lib/server-scope";
 import { SelectMenu } from "./select";
 import { useUndoableRemoval } from "./snackbar";
 import { Button, Busy, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
@@ -64,16 +73,8 @@ const triggerPlaceholder = (mode: ScheduleDraft["mode"]) => {
   return "20 minutes";
 };
 
-const runWithCleanup = async (
-  task: () => Promise<void>,
-  cleanup: () => void
-) => {
-  try {
-    await task();
-  } finally {
-    cleanup();
-  }
-};
+const NO_SCHEDULES: ScheduleInfo[] = [];
+const SCHEDULE_MUTATION_KEY = ["schedules"] as const;
 
 export const Schedules = ({
   client,
@@ -83,108 +84,74 @@ export const Schedules = ({
   sessionID: string;
 }) => {
   const { hidden, remove: removeSchedule } = useUndoableRemoval("schedules");
-  const [items, setItems] = useState<ScheduleInfo[]>([]);
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  const query = useQuery(sessionSchedulesOptions(scope, client, sessionID));
+  const items = query.data ?? NO_SCHEDULES;
   const [draft, setDraft] = useState<ScheduleDraft>(emptyDraft);
   const [adding, setAdding] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [actionError, setActionError] = useState<string>();
   const [detail, setDetail] = useState<ScheduleInfo>();
-  const request = useRef(0);
-  const scope = useRef({ client, sessionID });
   const [seenScope, setSeenScope] = useState({ client, sessionID });
   if (seenScope.client !== client || seenScope.sessionID !== sessionID) {
     setSeenScope({ client, sessionID });
-    setItems([]);
     setDetail(undefined);
     setAdding(false);
     setDraft(emptyDraft);
-    setLoading(true);
-    setError(undefined);
+    setActionError(undefined);
   }
-  useEffect(() => {
-    scope.current = { client, sessionID };
-  }, [client, sessionID]);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      request.current += 1;
-    };
-  }, []);
-
-  const load = useCallback(async () => {
-    request.current += 1;
-    const id = request.current;
-    await runWithCleanup(
-      async () => {
-        try {
-          const schedules = await client.experimental.schedule.list({
-            sessionID,
-          });
-          if (mounted.current && request.current === id) {
-            setItems(schedules);
-          }
-        } catch (error_) {
-          if (mounted.current && request.current === id) {
-            setError(errorMessage(error_));
-          }
-        }
-      },
-      () => {
-        if (mounted.current && request.current === id) {
-          setLoading(false);
-        }
-      }
-    );
-  }, [client, sessionID]);
-
-  const refresh = async () => {
-    setLoading(true);
-    setError(undefined);
-    await load();
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.session.schedules(scope, sessionID),
+    });
+  const mutationOptions = {
+    mutationKey: SCHEDULE_MUTATION_KEY,
+    onError: (reason: unknown) => setActionError(errorMessage(reason)),
   };
-
-  useEffect(() => {
-    void load();
-    return () => {
-      request.current += 1;
-    };
-  }, [load]);
-
-  const run = async (action: () => Promise<void>) => {
-    if (busy) {
-      return;
-    }
-    const owner = scope.current;
-    setBusy(true);
-    setError(undefined);
-    await runWithCleanup(
-      async () => {
-        try {
-          await action();
-        } catch (error_) {
-          if (mounted.current && owner === scope.current) {
-            setError(errorMessage(error_));
-          }
-        }
-      },
-      () => {
-        if (mounted.current) {
-          setBusy(false);
-        }
-      }
-    );
-  };
-  const mutate = async (action: () => Promise<unknown>) => {
-    const owner = scope.current;
-    await action();
-    if (owner !== scope.current || !mounted.current) {
-      return;
-    }
-    setDetail(undefined);
-    await refresh();
+  const create = useMutation({
+    ...mutationOptions,
+    mutationFn: () =>
+      client.experimental.schedule.create(prepareSchedule(sessionID, draft)),
+    onSuccess: () => {
+      setAdding(false);
+      setDraft(emptyDraft);
+      return invalidate();
+    },
+  });
+  const fetchDetail = useMutation({
+    ...mutationOptions,
+    mutationFn: (scheduleID: string) =>
+      client.experimental.schedule.get({ scheduleID }),
+    onSuccess: setDetail,
+  });
+  const toggle = useMutation({
+    ...mutationOptions,
+    mutationFn: (item: ScheduleInfo) =>
+      item.status === "paused"
+        ? client.experimental.schedule.resume({ scheduleID: item.id })
+        : client.experimental.schedule.pause({ scheduleID: item.id }),
+    onSuccess: () => {
+      setDetail(undefined);
+      return invalidate();
+    },
+  });
+  const removeItem = useMutation({
+    ...mutationOptions,
+    mutationFn: (scheduleID: string) =>
+      client.experimental.schedule.delete({ scheduleID }),
+    onSuccess: () => {
+      setDetail(undefined);
+      return invalidate();
+    },
+  });
+  const busy = useIsMutating({ mutationKey: SCHEDULE_MUTATION_KEY }) > 0;
+  const loading = query.isFetching;
+  const error =
+    actionError ?? (query.error ? errorMessage(query.error) : undefined);
+  const { refetch } = query;
+  const refresh = () => {
+    setActionError(undefined);
+    void refetch();
   };
   const change = (field: keyof ScheduleDraft, value: string) =>
     setDraft((previous) => ({ ...previous, [field]: value }));
@@ -208,17 +175,10 @@ export const Schedules = ({
           title="Refresh"
           size="compact"
           disabled={busy || loading}
-          onPress={() => {
-            void refresh();
-          }}
+          onPress={refresh}
         />
       </Row>
-      <ErrorNotice
-        error={error}
-        onRetry={() => {
-          void refresh();
-        }}
-      />
+      <ErrorNotice error={error} onRetry={refresh} />
       {loading && <Busy />}
       {!loading && !error && visibleItems.length === 0 && (
         <BodyText muted>No schedules for this session</BodyText>
@@ -290,17 +250,8 @@ export const Schedules = ({
             variant="primary"
             busy={busy}
             onPress={() => {
-              void run(async () => {
-                const input = prepareSchedule(sessionID, draft);
-                const owner = scope.current;
-                await client.experimental.schedule.create(input);
-                if (owner !== scope.current || !mounted.current) {
-                  return;
-                }
-                setAdding(false);
-                setDraft(emptyDraft);
-                await refresh();
-              });
+              setActionError(undefined);
+              create.mutate();
             }}
           />
         </Card>
@@ -331,15 +282,8 @@ export const Schedules = ({
               size="compact"
               disabled={busy}
               onPress={() => {
-                void run(async () => {
-                  const owner = scope.current;
-                  const result = await client.experimental.schedule.get({
-                    scheduleID: item.id,
-                  });
-                  if (owner === scope.current && mounted.current) {
-                    setDetail(result);
-                  }
-                });
+                setActionError(undefined);
+                fetchDetail.mutate(item.id);
               }}
             />
             {item.status !== "done" && (
@@ -348,17 +292,8 @@ export const Schedules = ({
                 size="compact"
                 disabled={busy}
                 onPress={() => {
-                  void run(() =>
-                    mutate(() =>
-                      item.status === "paused"
-                        ? client.experimental.schedule.resume({
-                            scheduleID: item.id,
-                          })
-                        : client.experimental.schedule.pause({
-                            scheduleID: item.id,
-                          })
-                    )
-                  );
+                  setActionError(undefined);
+                  toggle.mutate(item);
                 }}
               />
             )}
@@ -369,12 +304,7 @@ export const Schedules = ({
               disabled={busy}
               onPress={() => {
                 removeSchedule(item.id, {
-                  commit: () =>
-                    mutate(() =>
-                      client.experimental.schedule.delete({
-                        scheduleID: item.id,
-                      })
-                    ),
+                  commit: () => removeItem.mutateAsync(item.id),
                   message: "Schedule deleted",
                 });
               }}

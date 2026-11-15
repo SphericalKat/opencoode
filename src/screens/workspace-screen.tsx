@@ -1,8 +1,5 @@
-import type {
-  FileSystemEntry,
-  LocationPublicInfo,
-  WorktreeDirectory,
-} from "@opencode/client";
+import type { FileSystemEntry, WorktreeDirectory } from "@opencode/client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useEffectEvent, useState } from "react";
@@ -36,7 +33,16 @@ import {
 import { errorMessage } from "../lib/client";
 import type { Client, Connection } from "../lib/client";
 import { copyText } from "../lib/clipboard";
+import { useDebouncedValue } from "../lib/debounce";
 import { pageInset } from "../lib/layout";
+import { locationOptions } from "../lib/queries/sessions";
+import {
+  directoryFileOptions,
+  directoryFilesOptions,
+  directoryWorktreesOptions,
+} from "../lib/queries/workspace";
+import { queryKeys } from "../lib/query-keys";
+import { useServerScope } from "../lib/server-scope";
 import { useNativePresentation } from "../lib/sheets";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
@@ -68,6 +74,9 @@ interface Props {
   section: WorkspaceSection;
   onSectionChange?: (section: WorkspaceSection) => void;
 }
+
+const SEARCH_DEBOUNCE_MS = 250;
+const NO_ENTRIES: FileSystemEntry[] = [];
 
 interface FileRequest {
   id: number;
@@ -238,13 +247,6 @@ const loadedFile = (path: string, bytes: Uint8Array): OpenFile => {
   }
 };
 
-const compareEntries = (a: FileSystemEntry, b: FileSystemEntry): number => {
-  if (a.type === b.type) {
-    return a.path.localeCompare(b.path);
-  }
-  return a.type === "directory" ? -1 : 1;
-};
-
 const emptyFilesText = (
   error: string | null,
   searching: boolean
@@ -315,62 +317,6 @@ const shareNatively = async (
     if (exported.exists) {
       await exported.delete();
     }
-  }
-};
-
-const loadEntries = async (
-  client: Props["client"],
-  {
-    directory,
-    path,
-    query,
-  }: { directory: string; path: string; query: string },
-  signal: AbortSignal
-): Promise<FileSystemEntry[]> => {
-  const findFiles = client.file.find.bind(client.file);
-  const result = query.trim()
-    ? await findFiles(
-        { limit: 200, location: { directory }, query: query.trim() },
-        { signal }
-      )
-    : await client.file.list({ location: { directory }, path }, { signal });
-  const entries = [...result.data];
-  entries.sort(compareEntries);
-  return entries;
-};
-
-const loadEntriesInto = async (
-  request: {
-    client: Props["client"];
-    directory: string;
-    path: string;
-    query: string;
-  },
-  signal: AbortSignal,
-  setters: {
-    setEntries: (entries: FileSystemEntry[]) => void;
-    setError: (error: string | null) => void;
-    setLoading: (loading: boolean) => void;
-  }
-) => {
-  const { client, directory, path, query } = request;
-  try {
-    const sorted = await loadEntries(
-      client,
-      { directory, path, query },
-      signal
-    );
-    if (!signal.aborted) {
-      setters.setEntries(sorted);
-    }
-  } catch (error_) {
-    if (!signal.aborted) {
-      setters.setEntries([]);
-      setters.setError(errorMessage(error_));
-    }
-  }
-  if (!signal.aborted) {
-    setters.setLoading(false);
   }
 };
 
@@ -624,6 +570,103 @@ const FileBody = ({
   );
 };
 
+const useDirectoryEntries = (
+  client: Client,
+  directory: string,
+  path: string,
+  query: string
+) => {
+  const scope = useServerScope();
+  const searching = query.trim().length > 0;
+  const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS);
+  const searchSettled = !searching || debouncedQuery.trim() === query.trim();
+  const files = useQuery({
+    ...directoryFilesOptions(scope, client, {
+      directory,
+      path,
+      query: searching ? debouncedQuery : "",
+    }),
+    enabled: searchSettled,
+  });
+  return {
+    entries: files.isError ? NO_ENTRIES : (files.data ?? NO_ENTRIES),
+    error: files.isError ? errorMessage(files.error) : null,
+    loading: files.isFetching || !searchSettled,
+    refresh: () => {
+      void files.refetch();
+    },
+  };
+};
+
+const useOpenFileQuery = ({
+  client,
+  directory,
+  file,
+  reloading,
+  setFile,
+}: {
+  client: Client;
+  directory: string;
+  file: OpenFile | null;
+  reloading: boolean;
+  setFile: (file: OpenFile) => void;
+}) => {
+  const scope = useServerScope();
+  const fileQuery = useQuery({
+    ...directoryFileOptions(scope, client, directory, file?.path ?? ""),
+    enabled: !!file,
+  });
+  const waiting = !!file && !file.bytes && !file.error;
+  if (file && waiting && !reloading && !fileQuery.isFetching) {
+    if (fileQuery.isError) {
+      setFile({ ...file, error: errorMessage(fileQuery.error) });
+    } else if (fileQuery.data) {
+      setFile(loadedFile(file.path, fileQuery.data));
+    }
+  }
+  return fileQuery;
+};
+
+const useSaveFile = (client: Client, directory: string) => {
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      original,
+      path,
+      text,
+    }: {
+      original: Uint8Array;
+      path: string;
+      text: string;
+    }) =>
+      saveEditableFile(
+        {
+          read: () => client.file.read({ location: { directory }, path }),
+          write: (payload) =>
+            client.experimental.file.write({
+              location: { directory },
+              path,
+              payload,
+            }),
+        },
+        original,
+        text
+      ),
+    onSuccess: (_bytes, { path }) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.dir.file(scope, directory, path),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.dir.vcs(scope, directory),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.dir.files(scope, directory),
+      });
+    },
+  });
+};
+
 const Files = ({
   client,
   directory,
@@ -637,64 +680,40 @@ const Files = ({
   const presentNative = useNativePresentation();
   const [path, setPath] = useState("");
   const [query, setQuery] = useState("");
-  const [entries, setEntries] = useState<FileSystemEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
   const [file, setFile] = useState<OpenFile | null>(null);
-  const [fileBusy, setFileBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [fileActionsOpen, setFileActionsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selection, setSelection] = useState({ end: 0, start: 0 });
   const [sharing, setSharing] = useState(false);
-  const location = { directory };
   const searching = query.trim().length > 0;
+  const {
+    entries,
+    error,
+    loading,
+    refresh: refreshEntries,
+  } = useDirectoryEntries(client, directory, path, query);
+  const [reloading, setReloading] = useState(false);
+  const fileQuery = useOpenFileQuery({
+    client,
+    directory,
+    file,
+    reloading,
+    setFile,
+  });
+  const saveFile = useSaveFile(client, directory);
+  const fileLoading = !!file && !file.bytes && !file.error;
+  const fileBusy = fileLoading || saveFile.isPending;
   useUnsavedChanges(
     `workspace-editor:${directory}`,
     "File editor",
-    !!file && (file.text !== file.initialText || (fileBusy && !!file.original))
+    !!file &&
+      (file.text !== file.initialText ||
+        (saveFile.isPending && !!file.original))
   );
 
-  const [request, setRequest] = useState({
-    client,
-    directory,
-    path,
-    query,
-    revision,
-  });
-  if (
-    request.client !== client ||
-    request.directory !== directory ||
-    request.path !== path ||
-    request.query !== query ||
-    request.revision !== revision
-  ) {
-    setRequest({ client, directory, path, query, revision });
-    setLoading(true);
-    setError(null);
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(
-      () => {
-        void loadEntriesInto(request, controller.signal, {
-          setEntries,
-          setError,
-          setLoading,
-        });
-      },
-      request.query.trim() ? 250 : 0
-    );
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [request]);
-
-  const openFile = async (nextPath: string) => {
+  const showLoading = (nextPath: string) => {
     setFile({
       bytes: null,
       initialText: "",
@@ -707,19 +726,25 @@ const Files = ({
     setFileActionsOpen(false);
     setCopied(false);
     setSelection({ end: 0, start: 0 });
-    await runWithFlag(setFileBusy, async () => {
-      try {
-        const bytes = await client.file.read({ location, path: nextPath });
-        const loaded = loadedFile(nextPath, bytes);
-        setFile((current) => (current?.path === nextPath ? loaded : current));
-      } catch (error_) {
-        setFile((current) =>
-          current?.path === nextPath
-            ? { ...current, error: errorMessage(error_) }
-            : current
-        );
+  };
+
+  const openFile = (nextPath: string) => {
+    showLoading(nextPath);
+  };
+
+  const reloadFile = async (reloadPath: string) => {
+    showLoading(reloadPath);
+    setReloading(true);
+    const result = await fileQuery.refetch();
+    setFile((current) => {
+      if (current?.path !== reloadPath) {
+        return current;
       }
+      return result.data
+        ? loadedFile(reloadPath, result.data)
+        : { ...current, error: errorMessage(result.error) };
     });
+    setReloading(false);
   };
 
   const closeFile = async () => {
@@ -743,7 +768,7 @@ const Files = ({
 
   const openRequested = useEffectEvent(async (requested: FileRequest) => {
     if (await closeFile()) {
-      await openFile(requested.path);
+      openFile(requested.path);
     }
   });
   useEffect(() => {
@@ -763,32 +788,21 @@ const Files = ({
     }
     const editing = file;
     setSaveError(null);
-    await runWithFlag(setFileBusy, async () => {
-      try {
-        const bytes = await saveEditableFile(
-          {
-            read: () => client.file.read({ location, path: editing.path }),
-            write: (payload) =>
-              client.experimental.file.write({
-                location,
-                path: editing.path,
-                payload,
-              }),
-          },
-          original,
-          editing.text
-        );
-        setFile((current) =>
-          current?.path === editing.path
-            ? { ...current, bytes, initialText: editing.text, original: bytes }
-            : current
-        );
-        setSaved(true);
-        setRevision((value) => value + 1);
-      } catch (error_) {
-        setSaveError(errorMessage(error_));
-      }
-    });
+    try {
+      const bytes = await saveFile.mutateAsync({
+        original,
+        path: editing.path,
+        text: editing.text,
+      });
+      setFile((current) =>
+        current?.path === editing.path
+          ? { ...current, bytes, initialText: editing.text, original: bytes }
+          : current
+      );
+      setSaved(true);
+    } catch (error_) {
+      setSaveError(errorMessage(error_));
+    }
   };
 
   const attach = async (contextText?: string) => {
@@ -883,13 +897,10 @@ const Files = ({
             title="Refresh"
             size="compact"
             variant="ghost"
-            onPress={() => setRevision((value) => value + 1)}
+            onPress={refreshEntries}
           />
         </Row>
-        <ErrorNotice
-          error={error}
-          onRetry={() => setRevision((value) => value + 1)}
-        />
+        <ErrorNotice error={error} onRetry={refreshEntries} />
       </View>
       {loading ? (
         <Busy />
@@ -912,7 +923,7 @@ const Files = ({
                   setPath(item.path);
                   setQuery("");
                 } else {
-                  void openFile(item.path);
+                  openFile(item.path);
                 }
               }}
             >
@@ -991,7 +1002,7 @@ const Files = ({
                 }}
                 onCopied={() => setCopied(true)}
                 onCopyError={(error_) => setSaveError(errorMessage(error_))}
-                onOpen={openFile}
+                onOpen={reloadFile}
                 onShare={() => {
                   void shareFile();
                 }}
@@ -1041,83 +1052,68 @@ const Worktrees = ({
   onDirectoryChange,
 }: Pick<Props, "client" | "directory" | "onDirectoryChange">) => {
   const styles = useThemedStyles(createStyles);
-  const [location, setLocation] = useState<LocationPublicInfo | null>(null);
-  const [trees, setTrees] = useState<WorktreeDirectory[]>([]);
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  const locationQuery = useQuery(locationOptions(scope, client, directory));
+  const location = locationQuery.data;
+  const treesQuery = useQuery(
+    directoryWorktreesOptions(scope, client, directory, location?.project.id)
+  );
   const { hidden, remove: removeTree } = useUndoableRemoval("worktrees");
-  const visibleTrees = trees.filter((tree) => !hidden.has(tree.directory));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const visibleTrees = (treesQuery.data ?? []).filter(
+    (tree) => !hidden.has(tree.directory)
+  );
   const [createVisible, setCreateVisible] = useState(false);
   const [name, setName] = useState("");
   const [branch, setBranch] = useState("");
   const [from, setFrom] = useState("");
-  const [revision, setRevision] = useState(0);
-  const [treeRequest, setTreeRequest] = useState({
-    client,
-    directory,
-    revision,
+  const invalidateWorktrees = () => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.dir.worktrees(scope, directory),
+    });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.projects(scope) });
+  };
+  const createTree = useMutation({
+    mutationFn: (projectID: string) =>
+      client.worktree.create({
+        branch: branch.trim() || undefined,
+        from: from.trim() || undefined,
+        name: name.trim() || undefined,
+        projectID,
+      }),
+    onSuccess: invalidateWorktrees,
   });
-  if (
-    treeRequest.client !== client ||
-    treeRequest.directory !== directory ||
-    treeRequest.revision !== revision
-  ) {
-    setTreeRequest({ client, directory, revision });
-    setLoading(true);
-    setError(null);
-  }
-  useEffect(() => {
-    const { client: requestClient, directory: requestDirectory } = treeRequest;
-    const controller = new AbortController();
-    void requestClient.location
-      .get(
-        { location: { directory: requestDirectory } },
-        { signal: controller.signal }
-      )
-      .then(async (result) => {
-        const list = await requestClient.worktree.list(
-          { projectID: result.project.id },
-          { signal: controller.signal }
-        );
-        if (!controller.signal.aborted) {
-          setLocation(result);
-          setTrees(list);
-        }
-        return list;
-      })
-      .catch((error_) => {
-        if (!controller.signal.aborted) {
-          setError(errorMessage(error_));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [treeRequest]);
+  const removeWorktree = useMutation({
+    mutationFn: (input: { directory: string; projectID: string }) =>
+      client.worktree.remove({ ...input, force: false }),
+    onSuccess: invalidateWorktrees,
+  });
+  const busy = createTree.isPending;
+  const loading =
+    locationQuery.isFetching ||
+    treesQuery.isFetching ||
+    (locationQuery.isSuccess && treesQuery.isPending);
+  const queryError = locationQuery.error ?? treesQuery.error;
+  const failure = queryError ?? createTree.error;
+  const error = failure ? errorMessage(failure) : null;
+  const refresh = () => {
+    createTree.reset();
+    void locationQuery.refetch();
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.dir.worktrees(scope, directory),
+    });
+  };
   const create = async () => {
     if (!location) {
       return;
     }
-    setError(null);
-    const projectID = location.project.id;
-    await runWithFlag(setBusy, async () => {
-      try {
-        const tree = await client.worktree.create({
-          branch: branch.trim() || undefined,
-          from: from.trim() || undefined,
-          name: name.trim() || undefined,
-          projectID,
-        });
-        setCreateVisible(false);
-        onDirectoryChange(tree.directory);
-      } catch (error_) {
-        setError(errorMessage(error_));
-      }
-    });
+    try {
+      const tree = await createTree.mutateAsync(location.project.id);
+      setCreateVisible(false);
+      onDirectoryChange(tree.directory);
+    } catch {
+      // The mutation state carries the error.
+    }
   };
   const remove = (tree: WorktreeDirectory) => {
     if (!location || tree.directory === location.project.directory) {
@@ -1126,12 +1122,10 @@ const Worktrees = ({
     const projectID = location.project.id;
     removeTree(tree.directory, {
       commit: async () => {
-        await client.worktree.remove({
+        await removeWorktree.mutateAsync({
           directory: tree.directory,
-          force: false,
           projectID,
         });
-        setRevision((value) => value + 1);
       },
       message: "Worktree removed",
     });
@@ -1148,16 +1142,9 @@ const Worktrees = ({
           disabled={!location}
           onPress={() => setCreateVisible(true)}
         />
-        <Button
-          title="Refresh"
-          size="compact"
-          onPress={() => setRevision((value) => value + 1)}
-        />
+        <Button title="Refresh" size="compact" onPress={refresh} />
       </Row>
-      <ErrorNotice
-        error={error}
-        onRetry={() => setRevision((value) => value + 1)}
-      />
+      <ErrorNotice error={error} onRetry={refresh} />
       {loading ? (
         <Busy />
       ) : (

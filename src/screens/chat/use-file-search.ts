@@ -1,8 +1,15 @@
 import type { FileSystemEntry, SessionInfo } from "@opencode/client";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
+import { useDebouncedValue } from "../../lib/debounce";
+import { directoryFileSearchOptions } from "../../lib/queries/panels";
+import { useServerScope } from "../../lib/server-scope";
 import type { OpenCodeClient, Capabilities } from "./session-sync";
 import type { Panel } from "./types";
+
+const SEARCH_DEBOUNCE_MS = 250;
+const NO_RESULTS: FileSystemEntry[] = [];
 
 interface UseFileSearchOptions {
   capabilities: Capabilities;
@@ -19,61 +26,29 @@ export const useFileSearch = ({
   session,
   showError,
 }: UseFileSearchOptions) => {
+  const scope = useServerScope();
   const [fileQuery, setFileQuery] = useState("");
-  const [fileResults, setFileResults] = useState<FileSystemEntry[]>([]);
-  const [fileSearchBusy, setFileSearchBusy] = useState(false);
-  const sessionLocationDirectory = session?.location.directory;
+  const debouncedQuery = useDebouncedValue(fileQuery, SEARCH_DEBOUNCE_MS);
+  const directory = session?.location.directory;
+  const search = useQuery({
+    ...directoryFileSearchOptions(
+      scope,
+      opencodeClient,
+      directory,
+      debouncedQuery
+    ),
+    enabled: panel === "mentions" && capabilities.files,
+  });
+  const { error, errorUpdatedAt } = search;
   useEffect(() => {
-    if (
-      panel !== "mentions" ||
-      !sessionLocationDirectory ||
-      !opencodeClient ||
-      !capabilities.files
-    ) {
-      return;
+    if (error && errorUpdatedAt) {
+      showError(error);
     }
-    const findFiles = opencodeClient.file.find.bind(opencodeClient.file);
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setFileSearchBusy(true);
-      void findFiles(
-        {
-          limit: 40,
-          location: { directory: sessionLocationDirectory },
-          query: fileQuery,
-          type: "file",
-        },
-        { signal: controller.signal }
-      )
-        .then((value) => {
-          if (!controller.signal.aborted) {
-            setFileResults(value.data);
-          }
-          return value;
-        })
-        .catch((error_) => {
-          if (!controller.signal.aborted) {
-            showError(error_);
-          }
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) {
-            setFileSearchBusy(false);
-          }
-        });
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [
-    panel,
-    opencodeClient,
-    capabilities.files,
-    sessionLocationDirectory,
+  }, [error, errorUpdatedAt, showError]);
+  return {
     fileQuery,
-    showError,
-  ]);
-
-  return { fileQuery, fileResults, fileSearchBusy, setFileQuery };
+    fileResults: search.data ?? NO_RESULTS,
+    fileSearchBusy: search.isFetching || debouncedQuery !== fileQuery,
+    setFileQuery,
+  };
 };

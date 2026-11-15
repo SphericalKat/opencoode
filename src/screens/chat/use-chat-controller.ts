@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
+import { errorMessage } from "../../lib/client";
 import { useModelPreferences } from "../../lib/model-preferences";
 import { useNativePresentation } from "../../lib/sheets";
 import { useTheme, useThemedStyles } from "../../lib/theme";
@@ -8,6 +9,7 @@ import type { MessageMenuContext } from "./message-menu-entries";
 import { createStyles } from "./styles";
 import type { Props } from "./types";
 import { useAttachmentHandoff } from "./use-attachment-handoff";
+import { useChatActions } from "./use-chat-actions";
 import { useChatErrors } from "./use-chat-errors";
 import { useComposerDraft } from "./use-composer-draft";
 import { useComposerMetrics } from "./use-composer-metrics";
@@ -16,16 +18,15 @@ import { useDraftEditing } from "./use-draft-editing";
 import { useFileSearch } from "./use-file-search";
 import { useForegroundTracking } from "./use-foreground-tracking";
 import { useLiveSession } from "./use-live-session";
+import { useMessageHistory } from "./use-message-history";
 import { useMessageSelection } from "./use-message-selection";
 import { useModelSelection } from "./use-model-selection";
 import { useOlderMessages } from "./use-older-messages";
 import { usePanelRequest } from "./use-panel-request";
 import { useResponseHaptics } from "./use-response-haptics";
-import { useRunAction } from "./use-run-action";
 import { useScreenReader } from "./use-screen-reader";
 import { useSendMessage } from "./use-send-message";
-import { useSessionCatalog } from "./use-session-catalog";
-import { useSessionRefresh } from "./use-session-refresh";
+import { useSessionData } from "./use-session-data";
 import { useSessionState } from "./use-session-state";
 import { useSessionTools } from "./use-session-tools";
 import { useSessionViewSync } from "./use-session-view-sync";
@@ -59,7 +60,7 @@ export const useChatController = ({
   const modelPreferences = useModelPreferences(serverID || "");
   const withNativePresentation = useNativePresentation();
   const metrics = useComposerMetrics();
-  const sync = useSessionState(backend);
+  const messageState = useSessionState(backend);
   const sheets = useSheetState();
   const { panel, setPanel, setSideQuestion } = sheets;
   const [foreground, setForeground] = useState(
@@ -69,14 +70,46 @@ export const useChatController = ({
   const errors = useChatErrors({ alive, onConnectionLost });
   const { connectionFailures, reportConnectionFailure, setError, showError } =
     errors;
-  const { requestVersionRef } = sync;
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-      requestVersionRef.current += 1;
     };
-  }, [requestVersionRef]);
+  }, []);
+  const data = useSessionData({
+    backend,
+    foreground,
+    reportConnectionFailure,
+    sessionID,
+    visible,
+  });
+  const history = useMessageHistory({
+    backend,
+    sessionID,
+    state: messageState,
+  });
+  const sync = { ...messageState, ...data };
+  const context = {
+    alive,
+    onSessionChanged,
+    sessionID,
+    setError,
+    setPanel,
+    showError,
+  };
+  const actions = useChatActions({
+    backend,
+    context,
+    onOpenSession,
+    state: messageState,
+  });
+  const { pending } = actions;
+  const fetchError =
+    data.queryError ??
+    (history.messagesError ? errorMessage(history.messagesError) : null) ??
+    messageState.streamFailure;
+  const loading = data.detailPending || history.messagesPending;
+  const { refresh } = data;
   const { screenReader, screenReaderEnabled } = useScreenReader();
   const selection = useMessageSelection({
     alive,
@@ -115,38 +148,17 @@ export const useChatController = ({
     session: sync.session,
     showError,
   });
-  const { refresh, applyMessageSnapshot, handleChanged } = useSessionRefresh({
-    alive,
-    capabilities,
-    client,
-    opencodeClient,
-    reportConnectionFailure,
-    sessionID,
-    sync,
-  });
   useForegroundTracking({ composer, draftKey, setForeground, showError });
   useLiveSession({
     alive,
-    applyMessageSnapshot,
     backend,
-    capabilities,
-    client,
     connectionFailures,
+    data,
     foreground,
-    opencodeClient,
-    refresh,
     reportConnectionFailure,
     sessionID,
     showError,
-    sync,
-    visible,
-  });
-  const { defaultModel } = useSessionCatalog({
-    capabilities,
-    client,
-    foreground,
-    opencodeClient,
-    sync,
+    state: messageState,
     visible,
   });
   useSessionViewSync({
@@ -166,17 +178,10 @@ export const useChatController = ({
     onAttachmentConsumed,
     showError,
   });
-  const { pending, run, submitting } = useRunAction({
-    alive,
-    onSessionChanged,
-    refresh,
-    setError,
-    setPanel,
-    showError,
-  });
   const modelChoice = useModelSelection({
     client,
-    defaultModel,
+    context,
+    defaultModel: data.defaultModel,
     modelPreferences,
     sessionID,
     setPanel,
@@ -184,20 +189,20 @@ export const useChatController = ({
     sync,
   });
   const messageSend = useSendMessage({
+    actions,
     alive,
     capabilities,
     client,
     commitModel: modelChoice.commitModel,
     composer,
+    context,
     draftKey,
     jumpToLatest,
     opencodeClient,
-    run,
     sessionID,
     setPanel,
     setSideQuestion,
     showError,
-    submitting,
     sync,
   });
   useResponseHaptics({
@@ -219,13 +224,19 @@ export const useChatController = ({
     showError,
     withNativePresentation,
   });
-  const older = useOlderMessages({ alive, client, sessionID, showError, sync });
+  const older = useOlderMessages({
+    alive,
+    client,
+    sessionID,
+    showError,
+    sync: messageState,
+  });
   const editing = useDraftEditing({
     alive,
     capabilities,
     composer,
+    context,
     opencodeClient,
-    run,
     sessionID,
     setPanel,
     setSelectedMessageID,
@@ -234,8 +245,9 @@ export const useChatController = ({
   const tools = useSessionTools({
     alive,
     capabilities,
+    context,
     opencodeClient,
-    run,
+    panel,
     session: sync.session,
     sessionID,
     setPanel,
@@ -296,6 +308,7 @@ export const useChatController = ({
   });
   return {
     actionMessage: selection.actionMessage,
+    actions,
     active: sync.active,
     activity: view.activity,
     activityNotice: sync.activityNotice,
@@ -330,25 +343,23 @@ export const useChatController = ({
     enabledModels: modelChoice.enabledModels,
     error: errors.error,
     exportSession: tools.exportSession,
-    fetchError: sync.fetchError,
+    fetchError,
     fileQuery: fileSearch.fileQuery,
     fileResults: fileSearch.fileResults,
     fileSearchBusy: fileSearch.fileSearchBusy,
     finishUserScroll: scroll.finishUserScroll,
     foreground,
     forms: sync.forms,
-    handleChanged,
+    handleChanged: refresh,
     hasPrompt: composer.hasPrompt,
-    historyEpochRef: sync.historyEpochRef,
     inbox: sync.inbox,
     inspect: tools.inspect,
     interrupt: messageSend.interrupt,
     jumpToLatest: scroll.jumpToLatest,
     list: scroll.list,
     listLoaded: scroll.listLoaded,
-    liveMessagesRef: sync.liveMessagesRef,
     loadOlder: older.loadOlder,
-    loading: sync.loading,
+    loading,
     loadingOlder: older.loadingOlder,
     maintainPosition: scroll.maintainPosition,
     maximumComposerHeight: metrics.maximumComposerHeight,
@@ -371,7 +382,6 @@ export const useChatController = ({
     refresh,
     renderMessage: view.renderMessage,
     restoredSkillIDs: composer.restoredSkillIDs,
-    run,
     selectedAgentIDs: composer.selectedAgentIDs,
     selectedMessageID: selection.selectedMessageID,
     selectedSkills: composer.selectedSkills,
@@ -384,7 +394,7 @@ export const useChatController = ({
     setAttachments: composer.setAttachments,
     setBackgroundDirectory: sheets.setBackgroundDirectory,
     setBackgroundShellID: sheets.setBackgroundShellID,
-    setCatalogRevision: sync.setCatalogRevision,
+    retryCatalog: sync.retryCatalog,
     setDelivery: composer.setDelivery,
     setDraft: composer.setDraft,
     setError: errors.setError,
@@ -407,7 +417,6 @@ export const useChatController = ({
     stopping: messageSend.stopping,
     streamStatus: sync.streamStatus,
     styles,
-    syncErrors: sync.syncErrors,
     textSelectionMessage: sheets.textSelectionMessage,
     transcriptLayoutChanged: scroll.transcriptLayoutChanged,
     transcriptMessages: view.transcriptMessages,

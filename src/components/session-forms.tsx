@@ -1,4 +1,5 @@
 import type { FormField, FormInfo, PermissionRequest } from "@opencode/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { Linking, View } from "react-native";
 import type { KeyboardTypeOptions } from "react-native";
@@ -11,6 +12,8 @@ import {
 } from "../lib/forms";
 import type { FormValues } from "../lib/forms";
 import { playHaptic } from "../lib/haptics";
+import { queryKeys } from "../lib/query-keys";
+import { useServerScope } from "../lib/server-scope";
 import { useTheme } from "../lib/theme";
 import { SegmentedControl } from "./segmented-control";
 import { SelectMenu } from "./select";
@@ -301,65 +304,34 @@ export const DynamicFields = ({
   );
 };
 
-const submitForm = async ({
-  client,
-  form,
-  cancel,
-  answer,
-  locationDirectory,
-  onChanged,
-  onError,
-  setBusy,
-}: {
-  client: Client;
-  form: FormInfo;
-  cancel: boolean;
-  answer: ReturnType<typeof prepareFormAnswer>["answer"];
-  locationDirectory?: string;
-  onChanged: () => void;
-  onError: (error: unknown) => void;
-  setBusy: (busy: boolean) => void;
-}) => {
-  setBusy(true);
-  try {
-    const options = locationDirectory
-      ? {
-          headers: {
-            "x-opencode-directory": encodeURIComponent(locationDirectory),
-          },
-        }
-      : undefined;
-    await (cancel
-      ? client.session.form.cancel(
-          { formID: form.id, sessionID: form.sessionID },
-          options
-        )
-      : client.session.form.reply(
-          {
-            answer,
-            formID: form.id,
-            sessionID: form.sessionID,
-          },
-          options
-        ));
-    onChanged();
-  } catch (error) {
-    onError(error);
-  } finally {
-    setBusy(false);
-  }
+const usePendingInputInvalidation = (
+  sessionID: string,
+  locationDirectory: string | undefined
+) => {
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  return () => {
+    const keys = [
+      queryKeys.session.forms(scope, sessionID),
+      queryKeys.session.permissions(scope, sessionID),
+      ...(locationDirectory
+        ? [queryKeys.dir.forms(scope, locationDirectory)]
+        : []),
+    ];
+    return Promise.all(
+      keys.map((queryKey) => queryClient.invalidateQueries({ queryKey }))
+    );
+  };
 };
 
 const PendingForm = ({
   client,
   form,
-  onChanged,
   onError,
   locationDirectory,
 }: {
   client: Client;
   form: FormInfo;
-  onChanged: () => void;
   onError: (error: unknown) => void;
   locationDirectory?: string;
 }) => {
@@ -368,23 +340,47 @@ const PendingForm = ({
     initialFormValues(form.fields)
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const run = async (cancel: boolean) => {
+  const invalidate = usePendingInputInvalidation(
+    form.sessionID,
+    locationDirectory
+  );
+  const submit = useMutation({
+    mutationFn: async (input: {
+      answer: ReturnType<typeof prepareFormAnswer>["answer"];
+      cancel: boolean;
+    }) => {
+      const options = locationDirectory
+        ? {
+            headers: {
+              "x-opencode-directory": encodeURIComponent(locationDirectory),
+            },
+          }
+        : undefined;
+      await (input.cancel
+        ? client.session.form.cancel(
+            { formID: form.id, sessionID: form.sessionID },
+            options
+          )
+        : client.session.form.reply(
+            {
+              answer: input.answer,
+              formID: form.id,
+              sessionID: form.sessionID,
+            },
+            options
+          ));
+    },
+    onError,
+    onSuccess: invalidate,
+  });
+  const busy = submit.isPending;
+  const run = (cancel: boolean) => {
     const prepared = prepareFormAnswer(form.fields, values);
     if (!cancel && Object.keys(prepared.errors).length) {
       setErrors(prepared.errors);
       return;
     }
-    await submitForm({
-      answer: prepared.answer,
-      cancel,
-      client,
-      form,
-      locationDirectory,
-      onChanged,
-      onError,
-      setBusy,
-    });
+    submit.mutate({ answer: prepared.answer, cancel });
   };
   return (
     <Card style={{ borderColor: colors.blue }}>
@@ -422,69 +418,37 @@ const PendingForm = ({
   );
 };
 
-const replyToPermission = async ({
-  client,
-  decision,
-  message,
-  permission,
-  sessionID,
-  onChanged,
-  onError,
-  setBusy,
-}: {
-  client: Client;
-  decision: "once" | "always" | "reject";
-  message: string;
-  permission: PermissionRequest;
-  sessionID: string;
-  onChanged: () => void;
-  onError: (error: unknown) => void;
-  setBusy: (busy: boolean) => void;
-}) => {
-  setBusy(true);
-  try {
-    await client.permission.reply({
-      decision,
-      message: message.trim() || undefined,
-      requestID: permission.id,
-      sessionID,
-    });
-    onChanged();
-  } catch (error) {
-    onError(error);
-  } finally {
-    setBusy(false);
-  }
-};
-
 const PendingPermission = ({
   client,
   sessionID,
   permission,
-  onChanged,
   onError,
+  locationDirectory,
 }: {
   client: Client;
   sessionID: string;
   permission: PermissionRequest;
-  onChanged: () => void;
   onError: (error: unknown) => void;
+  locationDirectory?: string;
 }) => {
   const { colors } = useTheme();
-  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const invalidate = usePendingInputInvalidation(sessionID, locationDirectory);
+  const answer = useMutation({
+    mutationFn: (decision: "once" | "always" | "reject") =>
+      client.permission.reply({
+        decision,
+        message: message.trim() || undefined,
+        requestID: permission.id,
+        sessionID,
+      }),
+    onError,
+    onSuccess: invalidate,
+  });
+  const busy = answer.isPending;
   const reply = (decision: "once" | "always" | "reject") => {
     playHaptic(decision === "reject" ? "failure" : "success");
-    return replyToPermission({
-      client,
-      decision,
-      message,
-      onChanged,
-      onError,
-      permission,
-      sessionID,
-      setBusy,
-    });
+    answer.mutate(decision);
   };
   return (
     <Card style={{ borderColor: colors.success }}>
@@ -547,7 +511,6 @@ export const SessionForms = ({
   sessionID,
   forms,
   permissions,
-  onChanged,
   onError,
   locationDirectory,
 }: {
@@ -555,7 +518,6 @@ export const SessionForms = ({
   sessionID: string;
   forms: FormInfo[];
   permissions: PermissionRequest[];
-  onChanged: () => void;
   onError: (error: unknown) => void;
   locationDirectory?: string;
 }) => {
@@ -572,8 +534,8 @@ export const SessionForms = ({
             client={client}
             sessionID={sessionID}
             permission={permission}
-            onChanged={onChanged}
             onError={onError}
+            locationDirectory={locationDirectory}
           />
         ))}
       {forms
@@ -585,7 +547,6 @@ export const SessionForms = ({
             key={form.id}
             client={client}
             form={form}
-            onChanged={onChanged}
             onError={onError}
             locationDirectory={locationDirectory}
           />

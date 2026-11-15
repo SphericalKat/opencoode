@@ -1,76 +1,51 @@
 import type { FormInfo } from "@opencode/client";
-import React, { useEffect, useRef, useState } from "react";
-import { AppState, View } from "react-native";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useState } from "react";
+import { View } from "react-native";
 
-import { noop } from "../lib/async";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { useForeground } from "../lib/foreground";
+import { directoryFormsOptions } from "../lib/queries/chat";
+import { queryKeys } from "../lib/query-keys";
+import { useServerScope } from "../lib/server-scope";
 import { SessionForms } from "./session-forms";
 import { Button, Busy, ErrorNotice, BodyText, Row } from "./ui";
 
-const createFormsSync = ({
+const REFRESH_DEBOUNCE_MS = 150;
+const MAX_RETRY_STEP = 4;
+const MAX_RETRY_MS = 15_000;
+const NO_FORMS: FormInfo[] = [];
+
+const createFormsStream = ({
   client,
-  controller,
   directory,
-  setError,
-  setForms,
-  setLoading,
+  invalidate,
+  setStreamError,
+  signal,
 }: {
   client: Client;
-  controller: AbortController;
   directory: string;
-  setError: (error: string | null) => void;
-  setForms: (forms: FormInfo[]) => void;
-  setLoading: (loading: boolean) => void;
+  invalidate: () => void;
+  setStreamError: (error: string | null) => void;
+  signal: AbortSignal;
 }) => {
-  let request = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let attempts = 0;
-
-  const refresh = async () => {
-    request += 1;
-    const current = request;
-    setLoading(true);
-    try {
-      const result = await client.form.list(
-        { location: { directory } },
-        { signal: controller.signal }
-      );
-      if (controller.signal.aborted || current !== request) {
-        return;
-      }
-      setForms(result.data.filter((form) => form.sessionID === "global"));
-      setError(null);
-    } catch (error_) {
-      if (!controller.signal.aborted && current === request) {
-        setError(errorMessage(error_));
-      }
-    } finally {
-      if (!controller.signal.aborted && current === request) {
-        setLoading(false);
-      }
-    }
-  };
   const scheduleRefresh = () => {
     if (refreshTimer) {
       return;
     }
     refreshTimer = setTimeout(() => {
       refreshTimer = undefined;
-      void refresh();
-    }, 150);
+      invalidate();
+    }, REFRESH_DEBOUNCE_MS);
   };
-  const connect = async (needsRefresh: boolean) => {
-    if (needsRefresh) {
-      await refresh();
-      if (controller.signal.aborted) {
-        return;
-      }
-    }
+  const connect = async () => {
     try {
       for await (const event of client.event.subscribe({
-        signal: controller.signal,
+        signal,
         types: [
           "form.created",
           "form.replied",
@@ -78,10 +53,11 @@ const createFormsSync = ({
           "location.shutdown",
         ],
       })) {
-        if (controller.signal.aborted) {
+        if (signal.aborted) {
           break;
         }
         attempts = 0;
+        setStreamError(null);
         if (
           event.type === "server.connected" ||
           !event.location ||
@@ -90,28 +66,33 @@ const createFormsSync = ({
           scheduleRefresh();
         }
       }
-      if (!controller.signal.aborted) {
+      if (!signal.aborted) {
         throw new Error("The live connection closed");
       }
     } catch (error_) {
-      if (controller.signal.aborted) {
+      if (signal.aborted) {
         return;
       }
-      setError(`Pending request updates unavailable: ${errorMessage(error_)}`);
-      const delay = Math.min(1000 * 2 ** Math.min(attempts, 4), 15_000);
+      setStreamError(
+        `Pending request updates unavailable: ${errorMessage(error_)}`
+      );
+      const delay = Math.min(
+        1000 * 2 ** Math.min(attempts, MAX_RETRY_STEP),
+        MAX_RETRY_MS
+      );
       attempts += 1;
       retryTimer = setTimeout(() => {
         retryTimer = undefined;
-        void connect(true);
+        invalidate();
+        void connect();
       }, delay);
     }
   };
-  const run = () => connect(true);
   const dispose = () => {
     clearTimeout(refreshTimer);
     clearTimeout(retryTimer);
   };
-  return { dispose, refresh, run };
+  return { connect, dispose };
 };
 
 export const GlobalForms = ({
@@ -121,62 +102,43 @@ export const GlobalForms = ({
   client: Client;
   directory: string;
 }) => {
-  const [forms, setForms] = useState<FormInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [foreground, setForeground] = useState(
-    AppState.currentState !== "background" &&
-      AppState.currentState !== "inactive"
-  );
-  const refreshRef = useRef<() => void>(noop);
-
-  useEffect(() => {
-    const listener = AppState.addEventListener("change", (state) =>
-      setForeground(state === "active")
-    );
-    return () => listener.remove();
-  }, []);
-
-  const [syncKey, setSyncKey] = useState({ client, directory, foreground });
-  if (
-    syncKey.client !== client ||
-    syncKey.directory !== directory ||
-    syncKey.foreground !== foreground
-  ) {
-    setSyncKey({ client, directory, foreground });
-    if (foreground) {
-      setForms([]);
-      setError(null);
-    }
-  }
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  const foreground = useForeground();
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const formsQuery = useQuery({
+    ...directoryFormsOptions(scope, client, true, directory),
+    enabled: foreground,
+    refetchOnMount: true,
+  });
+  const forms = formsQuery.data ?? NO_FORMS;
+  const { refetch } = formsQuery;
+  const error =
+    streamError ?? (formsQuery.error ? errorMessage(formsQuery.error) : null);
+  const loading = formsQuery.isFetching;
 
   useEffect(() => {
     if (!foreground) {
       return;
     }
     const controller = new AbortController();
-    const sync = createFormsSync({
+    const stream = createFormsStream({
       client,
-      controller,
       directory,
-      setError,
-      setForms,
-      setLoading,
+      invalidate: () => {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.dir.forms(scope, directory),
+        });
+      },
+      setStreamError,
+      signal: controller.signal,
     });
-    refreshRef.current = () => {
-      void sync.refresh();
-    };
-    sync.run().catch((error_) => {
-      if (!controller.signal.aborted) {
-        setError(errorMessage(error_));
-      }
-    });
+    void stream.connect();
     return () => {
       controller.abort();
-      sync.dispose();
-      refreshRef.current = noop;
+      stream.dispose();
     };
-  }, [client, directory, foreground]);
+  }, [client, directory, foreground, queryClient, scope]);
 
   return (
     <View style={{ gap: 12 }}>
@@ -191,10 +153,17 @@ export const GlobalForms = ({
           variant="ghost"
           alignSelf="center"
           disabled={loading || !foreground}
-          onPress={() => refreshRef.current()}
+          onPress={() => {
+            void refetch();
+          }}
         />
       </Row>
-      <ErrorNotice error={error} onRetry={() => refreshRef.current()} />
+      <ErrorNotice
+        error={error}
+        onRetry={() => {
+          void refetch();
+        }}
+      />
       {loading && <Busy />}
       {!loading && !error && !forms.length && (
         <BodyText muted style={{ paddingLeft: 12 }}>
@@ -207,8 +176,7 @@ export const GlobalForms = ({
         forms={forms}
         permissions={[]}
         locationDirectory={directory}
-        onChanged={() => refreshRef.current()}
-        onError={(cause) => setError(errorMessage(cause))}
+        onError={(cause) => setStreamError(errorMessage(cause))}
       />
     </View>
   );

@@ -1,43 +1,18 @@
 import { ClientError, isUnauthorizedError } from "@opencode/client";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
-import type { RefObject } from "react";
 
 import type { Connection } from "../lib/client";
+import { queryKeys } from "../lib/query-keys";
+import { withDeadline } from "../lib/request";
+import { useServerScope } from "../lib/server-scope";
 import type { ServerClient } from "./types";
 
 const PROBE_INTERVAL_MS = 5000;
 const PROBE_TIMEOUT_MS = 5000;
 const PROBE_RETRY_MS = 1000;
-const PROBE_FAILURES_BEFORE_RECOVERY = 2;
-
-interface ProbeHandle {
-  cancel?: () => void;
-}
-
-const checkServer = async (client: ServerClient, handle: ProbeHandle) => {
-  const controller = new AbortController();
-  const timeout = Promise.withResolvers<never>();
-  let deadline: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const pending = client.server.info({ signal: controller.signal });
-    handle.cancel = () => {
-      controller.abort();
-      timeout.reject(new Error("The connection check was canceled"));
-    };
-    deadline = setTimeout(() => {
-      timeout.reject(
-        new Error(
-          "OpenCode did not respond within five seconds. Check the server address and your network."
-        )
-      );
-      controller.abort();
-    }, PROBE_TIMEOUT_MS);
-    return await Promise.race([pending, timeout.promise]);
-  } finally {
-    clearTimeout(deadline);
-    handle.cancel = undefined;
-  }
-};
+const PROBE_TIMEOUT_MESSAGE =
+  "OpenCode did not respond within five seconds. Check the server address and your network.";
 
 const assertOpenCodeTwo = (
   result: { version?: unknown } | null | undefined
@@ -62,98 +37,52 @@ const hasUnauthorizedStatus = (error: unknown) =>
 const isProbeUnauthorized = (error: unknown) =>
   isUnauthorizedError(error) || hasUnauthorizedStatus(error);
 
-interface ProbeOptions {
-  activeRef: RefObject<Connection | null>;
+const retryProbe = (failureCount: number, error: unknown) =>
+  failureCount < 1 && !isProbeUnauthorized(error);
+
+interface ConnectionProbeProps {
+  active: Connection;
   client: ServerClient;
-  epoch: RefObject<number>;
+  enabled: boolean;
   onFailure: (owner: Connection, cause: unknown) => void;
   onHealthy: (owner: Connection) => void;
-  owner: Connection;
-  request: number;
 }
-
-const startConnectionProbe = ({
-  activeRef,
-  client,
-  epoch,
-  onFailure,
-  onHealthy,
-  owner,
-  request,
-}: ProbeOptions) => {
-  let stopped = false;
-  let failures = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const handle: ProbeHandle = {};
-  const current = () =>
-    !stopped && activeRef.current === owner && epoch.current === request;
-  const probe = async () => {
-    if (!current()) {
-      return;
-    }
-    try {
-      const result = await checkServer(client, handle);
-      if (!current()) {
-        return;
-      }
-      assertOpenCodeTwo(result);
-      failures = 0;
-      onHealthy(owner);
-      timer = setTimeout(() => {
-        void probe();
-      }, PROBE_INTERVAL_MS);
-    } catch (error_) {
-      if (!current()) {
-        return;
-      }
-      failures += 1;
-      const unauthorized = isProbeUnauthorized(error_);
-      if (unauthorized || failures >= PROBE_FAILURES_BEFORE_RECOVERY) {
-        onFailure(owner, error_);
-      }
-      timer = setTimeout(
-        () => {
-          void probe();
-        },
-        failures === 1 && !unauthorized ? PROBE_RETRY_MS : PROBE_INTERVAL_MS
-      );
-    }
-  };
-  void probe();
-  return () => {
-    stopped = true;
-    clearTimeout(timer);
-    handle.cancel?.();
-  };
-};
-
-type ConnectionProbeProps = Omit<ProbeOptions, "owner" | "request"> & {
-  active: Connection;
-  enabled: boolean;
-};
 
 export const ConnectionProbe = ({
   active,
-  activeRef,
   client,
   enabled,
-  epoch,
   onFailure,
   onHealthy,
 }: ConnectionProbeProps) => {
+  const scope = useServerScope();
+  const { dataUpdatedAt, error, errorUpdatedAt, isSuccess } = useQuery({
+    enabled,
+    queryFn: ({ signal }) =>
+      withDeadline(
+        signal,
+        async (deadline) => {
+          const info = await client.server.info({ signal: deadline });
+          assertOpenCodeTwo(info);
+          return info;
+        },
+        { message: PROBE_TIMEOUT_MESSAGE, timeoutMs: PROBE_TIMEOUT_MS }
+      ),
+    queryKey: queryKeys.server.info(scope),
+    refetchInterval: PROBE_INTERVAL_MS,
+    retry: retryProbe,
+    retryDelay: PROBE_RETRY_MS,
+    staleTime: 0,
+  });
   useEffect(() => {
-    if (!enabled) {
-      return;
+    if (isSuccess && dataUpdatedAt) {
+      onHealthy(active);
     }
-    return startConnectionProbe({
-      activeRef,
-      client,
-      epoch,
-      onFailure,
-      onHealthy,
-      owner: active,
-      request: epoch.current,
-    });
-  }, [active, activeRef, client, enabled, epoch, onFailure, onHealthy]);
+  }, [active, dataUpdatedAt, isSuccess, onHealthy]);
+  useEffect(() => {
+    if (error && errorUpdatedAt) {
+      onFailure(active, error);
+    }
+  }, [active, error, errorUpdatedAt, onFailure]);
   return null;
 };

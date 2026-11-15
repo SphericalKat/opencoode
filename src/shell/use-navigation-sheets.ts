@@ -1,6 +1,8 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Keyboard } from "react-native";
 
 import { errorMessage } from "../lib/client";
+import { projectsOptions } from "../lib/queries/sessions";
 import { useSheetVisibilityActions } from "../lib/sheet-visibility";
 import { attempt } from "./connection-utils";
 import type { ServerClient, SheetCoordinator } from "./types";
@@ -33,6 +35,7 @@ export const useNavigationSheets = (
   const { getState: getSheets, setNavigationOpen } =
     useSheetVisibilityActions();
   const { client, resumeSheets, suspendSheets } = deps;
+  const queryClient = useQueryClient();
   const showNavigationSheet = async (
     kind: "servers" | "projects",
     automatic = false
@@ -94,7 +97,10 @@ export const useNavigationSheets = (
     const isOwner = () => activeRef.current === owner;
     await attempt(
       async () => {
-        const result = await client.project.list();
+        const result = await queryClient.fetchQuery({
+          ...projectsOptions(owner?.id ?? "", client),
+          staleTime: 0,
+        });
         if (isOwner()) {
           setProjects(result);
         }

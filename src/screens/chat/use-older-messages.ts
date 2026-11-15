@@ -5,14 +5,14 @@ import { mergeMessages } from "../../lib/chat";
 import { PAGE_SIZE, nextCursor } from "./session-sync";
 import type { CoreClient } from "./session-sync";
 import type { Alive } from "./types";
-import type { SessionState } from "./use-session-state";
+import type { MessageState } from "./use-session-state";
 
 interface UseOlderMessagesOptions {
   alive: Alive;
   client: CoreClient;
   sessionID: string;
   showError: (reason: unknown) => void;
-  sync: SessionState;
+  sync: MessageState;
 }
 
 export const useOlderMessages = ({

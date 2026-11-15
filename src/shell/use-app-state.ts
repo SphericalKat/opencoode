@@ -46,7 +46,6 @@ export const useAppState = () => {
   const [projectError, setProjectError] = useState<string | null>(null);
   const [projectBusy, setProjectBusy] = useState(false);
   const [newDirectory, setNewDirectory] = useState("");
-  const [revision, setRevision] = useState(0);
   const [attachmentPath, setAttachmentPath] = useState<string>();
   const [attachmentContext, setAttachmentContext] = useState<string>();
   const [pendingLocation, setPendingLocation] = useState<{
@@ -86,10 +85,6 @@ export const useAppState = () => {
     settingsCanGoBackRef.current = canGoBack;
   }, []);
   const directoryRef = useRef(directory);
-  const locationSyncRef = useRef<{
-    key: string;
-    promise: Promise<string | null>;
-  } | null>(null);
   const activeRef = useRef<Connection | null>(null);
   useLayoutEffect(() => {
     selectedSessionRef.current = sessionID;
@@ -119,7 +114,6 @@ export const useAppState = () => {
     flowRevision,
     foreground,
     form,
-    locationSyncRef,
     messageSelected,
     navigationPresentedRef,
     newDirectory,
@@ -136,7 +130,6 @@ export const useAppState = () => {
     projectsOpen,
     recoverConnectionRef,
     recoveringConnectionRef,
-    revision,
     selectedSessionRef,
     selectionRef,
     serverSheetRequestRef,
@@ -168,7 +161,6 @@ export const useAppState = () => {
     setProjectError,
     setProjects,
     setProjectsOpen,
-    setRevision,
     setServersOpen,
     setSessionID,
     setSessionPanelRequest,

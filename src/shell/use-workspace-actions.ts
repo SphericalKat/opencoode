@@ -1,6 +1,10 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
 import { useUndoableRemoval } from "../components/snackbar";
 import { errorMessage } from "../lib/client";
 import type { Connection } from "../lib/client";
+import { locationOptions } from "../lib/queries/sessions";
+import { queryKeys } from "../lib/query-keys";
 import {
   loadConnections,
   saveActiveConnectionId,
@@ -41,7 +45,6 @@ export const useWorkspaceActions = (
     setPendingLocation,
     setProjectBusy,
     setProjectError,
-    setRevision,
     setSessionID,
     setTab,
   } = model;
@@ -49,6 +52,22 @@ export const useWorkspaceActions = (
     deps;
   const { hidden: hiddenConnections, remove: removeServer } =
     useUndoableRemoval("servers");
+  const queryClient = useQueryClient();
+  const createSession = useMutation({
+    mutationFn: (target: string) => {
+      if (!client) {
+        throw new Error("There is no active connection");
+      }
+      return client.session.create({ location: { directory: target } });
+    },
+    onSuccess: () => {
+      if (active) {
+        return queryClient.invalidateQueries({
+          queryKey: queryKeys.sessions.all(active.id),
+        });
+      }
+    },
+  });
   const openDirectory = async (nextDirectory = newDirectory) => {
     if (!client) {
       return;
@@ -70,10 +89,13 @@ export const useWorkspaceActions = (
     setProjectError(null);
     await attempt(
       async () => {
-        const location = await client.location.get(
-          { location: { directory: target } },
-          { signal: AbortSignal.timeout(15_000) }
-        );
+        if (!owner) {
+          return;
+        }
+        const location = await queryClient.fetchQuery({
+          ...locationOptions(owner.id, client, target),
+          staleTime: 0,
+        });
         if (!isCurrent()) {
           return;
         }
@@ -116,6 +138,7 @@ export const useWorkspaceActions = (
           setAttachmentContext(undefined);
           setPendingLocation(null);
         }
+        queryClient.removeQueries({ queryKey: [connection.id] });
         setConnections(next);
       },
       message: "Server removed",
@@ -153,9 +176,7 @@ export const useWorkspaceActions = (
       }
       let selected = sessionID;
       if (!selected) {
-        const created = await client.session.create({
-          location: { directory },
-        });
+        const created = await createSession.mutateAsync(directory);
         selected = created.id;
       }
       if (
@@ -170,7 +191,6 @@ export const useWorkspaceActions = (
       setBetaHome(false);
       setAttachmentContext(contextText);
       setAttachmentPath(path);
-      setRevision((value) => value + 1);
       setTab("sessions");
       return true;
     } catch (error_) {

@@ -1,44 +1,17 @@
 import type { InstructionEntryInfo } from "@opencode/client";
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useState } from "react";
 import { View } from "react-native";
 
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
+import { sessionInstructionsOptions } from "../lib/queries/panels";
+import { queryKeys } from "../lib/query-keys";
+import { useServerScope } from "../lib/server-scope";
 import { useUndoableRemoval } from "./snackbar";
 import { Button, Busy, Card, ErrorNotice, Field, BodyText, Row } from "./ui";
 
-const fetchInstructions = async (
-  client: Client,
-  sessionID: string,
-  isCurrent: () => boolean,
-  apply: {
-    done: () => void;
-    entries: (entries: InstructionEntryInfo[]) => void;
-    error: (message: string) => void;
-  }
-) => {
-  try {
-    const result = await client.experimental.session.instructions.entry.list({
-      sessionID,
-    });
-    if (isCurrent()) {
-      apply.entries(result);
-    }
-  } catch (error_) {
-    if (isCurrent()) {
-      apply.error(errorMessage(error_));
-    }
-  }
-  if (isCurrent()) {
-    apply.done();
-  }
-};
+const NO_ENTRIES: InstructionEntryInfo[] = [];
 
 export const Instructions = ({
   client,
@@ -47,93 +20,57 @@ export const Instructions = ({
   client: Client;
   sessionID: string;
 }) => {
-  const [entries, setEntries] = useState<InstructionEntryInfo[]>([]);
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  const query = useQuery(sessionInstructionsOptions(scope, client, sessionID));
+  const entries = query.data ?? NO_ENTRIES;
   const [key, setKey] = useState("");
   const [value, setValue] = useState("");
   const [json, setJson] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const sequence = useRef(0);
-  const mounted = useRef(true);
+  const [actionError, setActionError] = useState<string>();
   const { hidden, remove: removeEntry } = useUndoableRemoval("instructions");
-  const scope = useRef({ client, sessionID });
-  useLayoutEffect(() => {
-    if (
-      scope.current.client !== client ||
-      scope.current.sessionID !== sessionID
-    ) {
-      scope.current = { client, sessionID };
-    }
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.session.instructions(scope, sessionID),
+    });
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!key.trim()) {
+        throw new Error("Enter an instruction name");
+      }
+      const parsed = json ? JSON.parse(value) : value;
+      await client.experimental.session.instructions.entry.put({
+        key: key.trim(),
+        sessionID,
+        value: parsed,
+      });
+    },
+    onError: (reason) => setActionError(errorMessage(reason)),
+    onSuccess: () => {
+      setKey("");
+      setValue("");
+      setJson(false);
+      return invalidate();
+    },
   });
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      sequence.current += 1;
-    };
-  }, []);
-
-  const load = useCallback(async () => {
-    sequence.current += 1;
-    const request = sequence.current;
-    await fetchInstructions(
-      client,
-      sessionID,
-      () => mounted.current && request === sequence.current,
-      { done: () => setLoading(false), entries: setEntries, error: setError }
-    );
-  }, [client, sessionID]);
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(undefined);
-    await load();
-  }, [load]);
-  const [renderedScope, setRenderedScope] = useState({ client, sessionID });
-  if (
-    renderedScope.client !== client ||
-    renderedScope.sessionID !== sessionID
-  ) {
-    setRenderedScope({ client, sessionID });
-    setEntries([]);
-    setKey("");
-    setValue("");
-    setJson(false);
-    setLoading(true);
-    setError(undefined);
-  }
-  useEffect(() => {
-    void load();
-    return () => {
-      sequence.current += 1;
-    };
-  }, [load]);
-
-  const visibleEntries = entries.filter((entry) => !hidden.has(entry.key));
-  const run = async (operation: () => Promise<void>) => {
-    if (busy) {
-      return;
-    }
-    const owner = scope.current;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await operation();
-      if (owner === scope.current && mounted.current) {
-        setKey("");
-        setValue("");
-        setJson(false);
-        await refresh();
-      }
-    } catch (error_) {
-      if (owner === scope.current && mounted.current) {
-        setError(errorMessage(error_));
-      }
-    }
-    if (mounted.current) {
-      setBusy(false);
-    }
+  const removeInstruction = useMutation({
+    mutationFn: (entryKey: string) =>
+      client.experimental.session.instructions.entry.remove({
+        key: entryKey,
+        sessionID,
+      }),
+    onSuccess: invalidate,
+  });
+  const busy = save.isPending;
+  const loading = query.isFetching;
+  const error =
+    actionError ?? (query.error ? errorMessage(query.error) : undefined);
+  const { refetch } = query;
+  const refresh = () => {
+    setActionError(undefined);
+    void refetch();
   };
+  const visibleEntries = entries.filter((entry) => !hidden.has(entry.key));
 
   return (
     <View style={{ gap: 14 }}>
@@ -148,16 +85,9 @@ export const Instructions = ({
         title="Refresh instructions"
         size="compact"
         disabled={busy || loading}
-        onPress={() => {
-          void refresh();
-        }}
+        onPress={refresh}
       />
-      <ErrorNotice
-        error={error}
-        onRetry={() => {
-          void refresh();
-        }}
-      />
+      <ErrorNotice error={error} onRetry={refresh} />
       {loading && <Busy />}
       {!loading && !error && visibleEntries.length === 0 && (
         <BodyText muted>No saved instruction entries</BodyText>
@@ -192,14 +122,7 @@ export const Instructions = ({
               disabled={busy}
               onPress={() => {
                 removeEntry(entry.key, {
-                  commit: async () => {
-                    await client.experimental.session.instructions.entry.remove(
-                      { key: entry.key, sessionID }
-                    );
-                    if (mounted.current) {
-                      await load();
-                    }
-                  },
+                  commit: () => removeInstruction.mutateAsync(entry.key),
                   message: "Instruction deleted",
                 });
               }}
@@ -236,17 +159,8 @@ export const Instructions = ({
           busy={busy}
           disabled={!key.trim() || (!json && !value.trim())}
           onPress={() => {
-            void run(async () => {
-              if (!key.trim()) {
-                throw new Error("Enter an instruction name");
-              }
-              const parsed = json ? JSON.parse(value) : value;
-              await client.experimental.session.instructions.entry.put({
-                key: key.trim(),
-                sessionID,
-                value: parsed,
-              });
-            });
+            setActionError(undefined);
+            save.mutate();
           }}
         />
       </Card>

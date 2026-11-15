@@ -1,18 +1,15 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import {
+  useIsMutating,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { QueryKey, UseQueryResult } from "@tanstack/react-query";
+import React, { createContext, useContext, useEffect } from "react";
 import { ScrollView, View } from "react-native";
 
 import { BodyText, Busy, ErrorNotice, Row } from "../../components/ui";
 import { errorMessage } from "../../lib/client";
-import { withSettingsRequest } from "../../lib/settings";
+import { withDeadline } from "../../lib/request";
 import { useThemedStyles } from "../../lib/theme";
 import { createStyles } from "./styles";
 
@@ -44,93 +41,47 @@ export const SectionPageHeader = ({
   );
 };
 
-export const runBusy = async (
-  setBusy: (busy: boolean) => void,
-  setError: (message: string) => void,
-  task: () => Promise<void>
-) => {
-  setBusy(true);
-  try {
-    await task();
-  } catch (error_) {
-    setError(errorMessage(error_));
-  } finally {
-    setBusy(false);
-  }
-};
+export const resourceOf = <T,>(query: UseQueryResult<T, Error>) => ({
+  data: query.data,
+  error: query.error ? errorMessage(query.error) : null,
+  loading: query.isFetching,
+  refresh: () => {
+    void query.refetch();
+  },
+});
 
-export const useResource = <T,>(
-  source: object,
-  directory: string,
-  load: (signal: AbortSignal) => Promise<T>
-) => {
-  const scope = useMemo(() => ({ directory, source }), [source, directory]);
-  const [stored, setStored] = useState<{ scope: object; value: T }>();
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [resourceScope, setResourceScope] = useState(scope);
-  const active = useRef(true);
-  const latest = useRef({ load, scope });
-  useLayoutEffect(() => {
-    latest.current = { load, scope };
-  });
-  const sequence = useRef(0);
-  if (resourceScope !== scope) {
-    setResourceScope(scope);
-    setLoading(true);
-    setError(null);
-  }
-  const run = useCallback(async (owner: object, signal?: AbortSignal) => {
-    const { load: read } = latest.current;
-    sequence.current += 1;
-    const { current } = sequence;
-    const isCurrent = () =>
-      active.current &&
-      current === sequence.current &&
-      latest.current.scope === owner;
-    try {
-      const result = await withSettingsRequest(read, signal);
-      if (isCurrent()) {
-        setStored({ scope: owner, value: result });
-      }
-    } catch (error_) {
-      if (isCurrent()) {
-        setError(errorMessage(error_));
-      }
-    }
-    if (isCurrent()) {
-      setLoading(false);
-    }
-  }, []);
-  const refresh = useCallback(
-    (signal?: AbortSignal) => {
-      const owner = latest.current.scope;
-      setResourceScope(owner);
-      setLoading(true);
-      setError(null);
-      return run(owner, signal);
+const SETTINGS_MUTATION_KEY = ["settings"] as const;
+
+export const useSettingsBusy = () =>
+  useIsMutating({ mutationKey: SETTINGS_MUTATION_KEY }) > 0;
+
+interface SettingsMutationOptions<V> {
+  invalidate: (variables: V) => QueryKey[];
+  mutationFn: (variables: V, signal: AbortSignal) => Promise<void>;
+  onError: (message: string) => void;
+}
+
+// A settings write that runs under a 15 second deadline. The keys it lists
+// refetch before the mutation settles, so `isPending` covers the refresh.
+export const useSettingsMutation = <V = void,>({
+  invalidate,
+  mutationFn,
+  onError,
+}: SettingsMutationOptions<V>) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: V) =>
+      withDeadline(undefined, (signal) => mutationFn(variables, signal)),
+    mutationKey: SETTINGS_MUTATION_KEY,
+    onError: (reason) => onError(errorMessage(reason)),
+    onSuccess: async (_result, variables) => {
+      await Promise.all(
+        invalidate(variables).map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey })
+        )
+      );
     },
-    [run]
-  );
-  useEffect(() => {
-    const controller = new AbortController();
-    active.current = true;
-    void run(
-      scope,
-      AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)])
-    );
-    return () => {
-      active.current = false;
-      sequence.current += 1;
-      controller.abort();
-    };
-  }, [scope, run]);
-  return {
-    data: stored?.scope === scope ? stored.value : undefined,
-    error: resourceScope === scope ? error : null,
-    loading: resourceScope !== scope || loading,
-    refresh,
-  };
+  });
 };
 
 export const Page = ({
