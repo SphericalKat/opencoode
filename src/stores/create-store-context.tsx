@@ -37,5 +37,11 @@ export const createStoreContext = <State, Actions extends object>(
     return useMemo(() => createActions(store), [store]);
   };
 
-  return { Provider, useActions, useApi, useSelector };
+  // Builds a store with its actions outside React.
+  const create = () => {
+    const store = createStore<State>()(initializer);
+    return { actions: createActions(store), store };
+  };
+
+  return { create, Provider, useActions, useApi, useSelector };
 };

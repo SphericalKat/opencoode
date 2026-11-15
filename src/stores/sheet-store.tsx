@@ -43,8 +43,8 @@ const createActions = (store: StoreApi<SheetState>) => ({
   },
   beginProjectsLoad: () =>
     store.setState({ projectBusy: true, projectError: null }),
-  // Drops the automatic Servers request that is still current. Returns true
-  // when it dropped one.
+  // Drops the automatic Servers request that is still current and closes the
+  // Servers sheet it opened. Returns true when it dropped one.
   cancelAutomaticServerRequest: () => {
     const {
       automaticServerRequest,
@@ -65,6 +65,7 @@ const createActions = (store: StoreApi<SheetState>) => ({
           ? null
           : pendingNavigationSheet,
       serverSheetRequest: serverSheetRequest + 1,
+      serversOpen: false,
     });
     return true;
   },
@@ -77,6 +78,7 @@ const createActions = (store: StoreApi<SheetState>) => ({
   // Closes the Servers sheet and makes its pending requests stale.
   closeServers: () =>
     store.setState((state) => ({
+      automaticServerRequest: null,
       serverSheetRequest: state.serverSheetRequest + 1,
       serversOpen: false,
     })),
@@ -98,7 +100,8 @@ const createActions = (store: StoreApi<SheetState>) => ({
   hideMore: () => store.setState({ moreOpen: false }),
   hideNavigation: () => store.setState({ navigationOpen: false }),
   hideProjects: () => store.setState({ projectsOpen: false }),
-  hideServers: () => store.setState({ serversOpen: false }),
+  hideServers: () =>
+    store.setState({ automaticServerRequest: null, serversOpen: false }),
   // Cancels the pending Servers request and drops its automatic flag.
   invalidateServerRequest: () =>
     store.setState((state) => ({
@@ -131,8 +134,9 @@ const createActions = (store: StoreApi<SheetState>) => ({
   showMore: () => store.setState({ moreOpen: true }),
   showNavigation: () => store.setState({ navigationOpen: true }),
   showProjects: () => store.setState({ projectsOpen: true }),
-  showServers: () =>
-    store.setState({ automaticServerRequest: null, serversOpen: true }),
+  // Keeps `automaticServerRequest`, so a recovered connection can close the
+  // sheet that recovery opened.
+  showServers: () => store.setState({ serversOpen: true }),
   // Returns the queued action and clears it.
   takePendingAction: () => {
     const { pendingAction } = store.getState();
@@ -142,6 +146,7 @@ const createActions = (store: StoreApi<SheetState>) => ({
 });
 
 export const {
+  create: createSheetStore,
   Provider: SheetStoreProvider,
   useActions: useSheetActions,
   useApi: useSheetStoreApi,
