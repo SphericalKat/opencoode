@@ -1,5 +1,7 @@
 import { isFileNotFoundError } from "@opencode/client";
-import { useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePreventRemove } from "expo-router";
+import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
 import { confirmAction } from "../../components/dialog";
@@ -16,12 +18,17 @@ import {
   touchTarget,
   usePressFeedback,
 } from "../../components/ui";
+import { errorMessage } from "../../lib/client";
 import type { Client } from "../../lib/client";
-import { saveConfigFile, withSettingsRequest } from "../../lib/settings";
+import { configurationOptions } from "../../lib/queries/settings";
+import { queryKeys } from "../../lib/query-keys";
+import { withDeadline } from "../../lib/request";
+import { useServerScope } from "../../lib/server-scope";
+import { saveConfigFile } from "../../lib/settings";
 import { useTheme, useThemedStyles } from "../../lib/theme";
 import type { ThemeColors } from "../../lib/theme";
 import { useUnsavedChanges } from "../../lib/unsaved";
-import { Page, runBusy, useResource } from "./shared";
+import { Page, resourceOf } from "./shared";
 
 type ConfigAction =
   | { kind: "reload" }
@@ -29,6 +36,13 @@ type ConfigAction =
   | { kind: "edit"; path: string }
   | { kind: "shell"; path: string | null }
   | { kind: "save" };
+
+interface ConfigRun {
+  action: ConfigAction;
+  // Runs after every query for the directory refetches.
+  done?: () => void;
+  task: (signal: AbortSignal) => Promise<void>;
+}
 
 const sameConfigAction = (
   current: ConfigAction | null,
@@ -267,71 +281,79 @@ export const Configuration = ({
   directory: string;
 }) => {
   const { colors } = useTheme();
-  const { data, error, loading, refresh } = useResource(
-    client,
-    directory,
-    async (signal) => {
-      const [entries, shells] = await Promise.all([
-        client.config.get({ location: { directory } }, { signal }),
-        client.config.shells({ signal }),
-      ]);
-      return { entries, shells };
-    }
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
+  const { data, error, loading, refresh } = resourceOf(
+    useQuery(configurationOptions(scope, client, directory))
   );
   const [editing, setEditing] = useState<{
     path: string;
     original: string | null;
   }>();
   const [text, setText] = useState("");
+  const dirty = Boolean(editing && text !== editing.original);
   useUnsavedChanges(
     `configuration:${directory}`,
     "Configuration editor",
-    Boolean(editing && text !== editing.original)
+    dirty
   );
+  usePreventRemove(dirty, async ({ repeat }) => {
+    const ok = await confirmAction(
+      "Leave this view?",
+      "Configuration editor contains unsaved changes. Continue?",
+      { confirmLabel: "Leave" }
+    );
+    if (ok) {
+      setEditing(undefined);
+      repeat();
+    }
+  });
   const [viewing, setViewing] = useState<{
     info: unknown;
     path?: string | null;
   }>();
   const [notice, setNotice] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
-  const [activeAction, setActiveAction] = useState<ConfigAction | null>(null);
-  const busy = activeAction !== null;
-  const busyLock = useRef(false);
-  const run = async (
-    action: ConfigAction,
-    task: (signal: AbortSignal) => Promise<void>
-  ) => {
-    if (busyLock.current) {
+  const configWrite = useMutation({
+    mutationFn: ({ task }: ConfigRun) => withDeadline(undefined, task),
+    onError: (reason) => setErrorAction(errorMessage(reason)),
+    onSuccess: async (_result, { done }) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.dir.all(scope, directory),
+      });
+      done?.();
+    },
+    scope: { id: `configuration:${scope}:${directory}` },
+  });
+  const activeAction = configWrite.isPending
+    ? configWrite.variables.action
+    : null;
+  const busy = configWrite.isPending;
+  const startConfigTask = (next: ConfigRun) => {
+    if (busy) {
       return;
     }
-    busyLock.current = true;
     setErrorAction(null);
     setNotice(null);
-    await runBusy(
-      (next) => {
-        setActiveAction(next ? action : null);
-      },
-      setErrorAction,
-      async () => {
-        await withSettingsRequest(task);
-      }
-    );
-    busyLock.current = false;
+    configWrite.mutate(next);
   };
   const editSource = (editPath: string) => {
     if (!editPath) {
       return;
     }
-    void run({ kind: "edit", path: editPath }, async (signal) => {
-      const source = new TextDecoder().decode(
-        await client.file.read(
-          { location: { directory }, path: editPath },
-          { signal }
-        )
-      );
-      signal.throwIfAborted();
-      setEditing({ original: source, path: editPath });
-      setText(source);
+    startConfigTask({
+      action: { kind: "edit", path: editPath },
+      task: async (signal) => {
+        const source = new TextDecoder().decode(
+          await client.file.read(
+            { location: { directory }, path: editPath },
+            { signal }
+          )
+        );
+        signal.throwIfAborted();
+        setEditing({ original: source, path: editPath });
+        setText(source);
+      },
     });
   };
   const entries = data?.entries ?? [];
@@ -356,11 +378,12 @@ export const Configuration = ({
           status={rowStatus(activeAction, { kind: "reload" })}
           title="Reload server configuration"
           onPress={() => {
-            void run({ kind: "reload" }, async (signal) => {
-              await client.location.reload({ signal });
-              await refresh(signal);
-              signal.throwIfAborted();
-              setNotice("I reloaded the server configuration.");
+            startConfigTask({
+              action: { kind: "reload" },
+              done: () => setNotice("I reloaded the server configuration."),
+              task: async (signal) => {
+                await client.location.reload({ signal });
+              },
             });
           }}
         />
@@ -368,28 +391,31 @@ export const Configuration = ({
           status={rowStatus(activeAction, { kind: "open-project" })}
           title="Open project configuration"
           onPress={() => {
-            void run({ kind: "open-project" }, async (signal) => {
-              const path = `${directory.replace(/[\\/]+$/u, "")}/opencode.jsonc`;
-              try {
-                const source = new TextDecoder().decode(
-                  await client.file.read(
-                    { location: { directory }, path },
-                    { signal }
-                  )
-                );
-                signal.throwIfAborted();
-                setEditing({ original: source, path });
-                setText(source);
-              } catch (error_) {
-                if (!isFileNotFoundError(error_)) {
-                  throw error_;
+            startConfigTask({
+              action: { kind: "open-project" },
+              task: async (signal) => {
+                const path = `${directory.replace(/[\\/]+$/u, "")}/opencode.jsonc`;
+                try {
+                  const source = new TextDecoder().decode(
+                    await client.file.read(
+                      { location: { directory }, path },
+                      { signal }
+                    )
+                  );
+                  signal.throwIfAborted();
+                  setEditing({ original: source, path });
+                  setText(source);
+                } catch (error_) {
+                  if (!isFileNotFoundError(error_)) {
+                    throw error_;
+                  }
+                  signal.throwIfAborted();
+                  setEditing({ original: null, path });
+                  setText(
+                    '{\n  "$schema": "https://opencode.ai/config.json"\n}\n'
+                  );
                 }
-                signal.throwIfAborted();
-                setEditing({ original: null, path });
-                setText(
-                  '{\n  "$schema": "https://opencode.ai/config.json"\n}\n'
-                );
-              }
+              },
             });
           }}
         />
@@ -443,25 +469,27 @@ export const Configuration = ({
         busy={busy}
         shells={data?.shells}
         onSelectDefault={() => {
-          void run({ kind: "shell", path: null }, async (signal) => {
-            await client.experimental.config.update(
-              { shell: null },
-              { signal }
-            );
-            await refresh(signal);
-            signal.throwIfAborted();
-            setNotice("I set the shell to the system default.");
+          startConfigTask({
+            action: { kind: "shell", path: null },
+            done: () => setNotice("I set the shell to the system default."),
+            task: async (signal) => {
+              await client.experimental.config.update(
+                { shell: null },
+                { signal }
+              );
+            },
           });
         }}
         onSelectShell={(shellPath, shellName) => {
-          void run({ kind: "shell", path: shellPath }, async (signal) => {
-            await client.experimental.config.update(
-              { shell: shellPath },
-              { signal }
-            );
-            await refresh(signal);
-            signal.throwIfAborted();
-            setNotice(`I selected ${shellName}.`);
+          startConfigTask({
+            action: { kind: "shell", path: shellPath },
+            done: () => setNotice(`I selected ${shellName}.`),
+            task: async (signal) => {
+              await client.experimental.config.update(
+                { shell: shellPath },
+                { signal }
+              );
+            },
           });
         }}
       />
@@ -507,21 +535,24 @@ export const Configuration = ({
           if (!current) {
             return;
           }
-          void run({ kind: "save" }, async (signal) => {
-            await saveConfigFile(
-              client,
-              directory,
-              current.path,
-              current.original,
-              text,
-              signal
-            );
-            setEditing({ ...current, original: text });
-            await client.location.reload({ signal });
-            await refresh(signal);
-            signal.throwIfAborted();
-            setEditing(undefined);
-            setNotice("I saved and reloaded the configuration.");
+          startConfigTask({
+            action: { kind: "save" },
+            done: () => {
+              setEditing(undefined);
+              setNotice("I saved and reloaded the configuration.");
+            },
+            task: async (signal) => {
+              await saveConfigFile(
+                client,
+                directory,
+                current.path,
+                current.original,
+                text,
+                signal
+              );
+              setEditing({ ...current, original: text });
+              await client.location.reload({ signal });
+            },
           });
         }}
         text={text}

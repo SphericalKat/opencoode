@@ -15,7 +15,7 @@ type SelectionBarFields = Pick<
   | "editMessage"
   | "menuContext"
   | "onOpenSession"
-  | "run"
+  | "actions"
   | "sessionID"
   | "setSelectedMessageID"
   | "styles"
@@ -27,13 +27,10 @@ interface RenderSelectionHeaderProps extends SelectionBarFields {
 
 export const renderSelectionHeader = ({
   actionMessage,
-  client,
   copySelected,
   editMessage,
   menuContext,
-  onOpenSession,
-  run,
-  sessionID,
+  actions,
   setSelectedMessageID,
   styles,
 }: RenderSelectionHeaderProps) => {
@@ -77,13 +74,7 @@ export const renderSelectionHeader = ({
           size="compact"
           variant="ghost"
           onPress={() => {
-            void run(async () => {
-              const next = await client.session.fork({
-                before: actionMessage.id,
-                sessionID,
-              });
-              onOpenSession(next.id);
-            });
+            void actions.fork(actionMessage.id);
           }}
         />
       )}

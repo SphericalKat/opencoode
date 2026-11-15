@@ -178,7 +178,7 @@ interface ManageSessionProps extends Pick<
   | "onOpenSession"
   | "opencodeClient"
   | "pending"
-  | "run"
+  | "actions"
   | "sessionID"
   | "setPanel"
 > {
@@ -188,12 +188,11 @@ interface ManageSessionProps extends Pick<
 export const ManageSession = ({
   active,
   capabilities,
-  client,
   delivery,
   onOpenSession,
   opencodeClient,
   pending,
-  run,
+  actions,
   session,
   sessionID,
   setPanel,
@@ -210,7 +209,7 @@ export const ManageSession = ({
       },
     });
     if (next !== null) {
-      await run(() => client.session.update({ sessionID, title: next }), true);
+      await actions.rename(next);
     }
   };
   const moveSession = async () => {
@@ -229,10 +228,7 @@ export const ManageSession = ({
       },
     });
     if (directory !== null) {
-      await run(
-        () => opencodeClient.session.move({ delivery, directory, sessionID }),
-        true
-      );
+      await actions.move({ delivery, directory });
     }
   };
   const deleteSession = () => {
@@ -242,9 +238,7 @@ export const ManageSession = ({
     setPanel(null);
     onOpenSession("");
     removal.remove(sessionID, {
-      commit: async () => {
-        await opencodeClient.session.remove({ sessionID });
-      },
+      commit: () => actions.remove(),
       message: "Session deleted",
       onUndo: () => onOpenSession(sessionID),
     });
@@ -275,10 +269,7 @@ export const ManageSession = ({
           label="Fork session"
           disabled={pending}
           onPress={() => {
-            void run(async () => {
-              const next = await client.session.fork({ sessionID });
-              onOpenSession(next.id);
-            }, true);
+            void actions.forkSession();
           }}
         />
       )}
@@ -287,10 +278,7 @@ export const ManageSession = ({
           label="Compact context"
           disabled={pending}
           onPress={() => {
-            void run(
-              () => client.session.compact({ delivery: "queue", sessionID }),
-              true
-            );
+            void actions.compact();
           }}
         />
       )}
@@ -299,10 +287,7 @@ export const ManageSession = ({
           label="Background blocking tools"
           disabled={pending}
           onPress={() => {
-            void run(
-              () => opencodeClient.session.background({ sessionID }),
-              true
-            );
+            void actions.background();
           }}
         />
       )}
@@ -323,14 +308,7 @@ export const ManageSession = ({
           }
           disabled={pending}
           onPress={() => {
-            void run(
-              () =>
-                opencodeClient.session.update({
-                  archived: !session.time.archived,
-                  sessionID,
-                }),
-              true
-            );
+            void actions.archive(!session.time.archived);
           }}
         />
       )}
@@ -361,7 +339,7 @@ interface ActionsSheetProps extends Pick<
   | "opencodeClient"
   | "panel"
   | "pending"
-  | "run"
+  | "actions"
   | "sessionID"
   | "setBackgroundDirectory"
   | "setBackgroundShellID"
@@ -385,7 +363,7 @@ export const ActionsSheet = ({
   opencodeClient,
   panel,
   pending,
-  run,
+  actions,
   session,
   sessionID,
   setBackgroundDirectory,
@@ -436,7 +414,7 @@ export const ActionsSheet = ({
       onOpenSession={onOpenSession}
       opencodeClient={opencodeClient}
       pending={pending}
-      run={run}
+      actions={actions}
       sessionID={sessionID}
       setPanel={setPanel}
       session={session}

@@ -1,4 +1,5 @@
 import type { ModelInfo } from "@opencode/client";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -13,9 +14,15 @@ import {
   BodyText,
   Sheet,
 } from "../../components/ui";
+import { errorMessageOrNull } from "../../lib/client";
 import type { Client } from "../../lib/client";
+import {
+  catalogAllModelsOptions,
+  catalogProviderListOptions,
+} from "../../lib/queries/settings";
+import { useServerScope } from "../../lib/server-scope";
 import type { ModelCatalog } from "./sections";
-import { Page, useResource } from "./shared";
+import { Page } from "./shared";
 
 const modelKey = (item: ModelInfo) => `${item.providerID}/${item.id}`;
 
@@ -179,20 +186,25 @@ export const Models = ({
   client?: Client;
   directory: string;
 }) => {
-  const { data, error, loading, refresh } = useResource(
-    client ?? catalog,
-    directory,
-    async (signal) => {
-      const [models, providers] = await Promise.all([
-        catalog.list(
-          { location: { directory }, types: ["chat", "image", "decision"] },
-          { signal }
-        ),
-        client?.provider.list({ location: { directory } }, { signal }),
-      ]);
-      return { models: models.data, providers: providers?.data };
-    }
+  const scope = useServerScope();
+  const modelList = useQuery(
+    catalogAllModelsOptions(scope, catalog, directory)
   );
+  const providerList = useQuery(
+    catalogProviderListOptions(scope, client, directory)
+  );
+  const data = modelList.data
+    ? { models: modelList.data, providers: providerList.data }
+    : undefined;
+  const failure = modelList.error ?? providerList.error;
+  const error = errorMessageOrNull(failure);
+  const loading = modelList.isFetching || providerList.isFetching;
+  const { refetch: refetchModels } = modelList;
+  const { refetch: refetchProviders } = providerList;
+  const refresh = () => {
+    void refetchModels();
+    void refetchProviders();
+  };
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ModelInfo>();
   const [limit, setLimit] = useState(40);

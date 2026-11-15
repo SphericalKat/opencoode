@@ -7,6 +7,7 @@ import type {
   SessionMessageInfo,
   ToolContent,
 } from "@opencode/client";
+import type { QueryClient } from "@tanstack/react-query";
 import { File } from "expo-file-system";
 
 import type {
@@ -26,6 +27,9 @@ import type {
 import type { Connection } from "./client";
 import { createPiClient } from "./pi-client";
 import type { PiClient } from "./pi-client";
+import { piSnapshotOptions } from "./queries/pi";
+import { queryKeys } from "./query-keys";
+import type { Scope } from "./query-keys";
 
 const imageLimit = 3_000_000;
 const bodyLimit = 5_000_000;
@@ -542,12 +546,11 @@ const isResetBatch = (batch: PiEventBatch, value: PiSnapshot): boolean =>
 
 export const makePiChatBackend = (
   connection: Connection,
+  queryClient: QueryClient,
+  scope: Scope,
   pi: PiClient = createPiClient(connection)
 ): ChatBackend => {
-  let snapshot: PiSnapshot | undefined;
-  let received = 0;
-  let version = 0;
-  const requests = new Map<AbortSignal | undefined, Promise<PiSnapshot>>();
+  const snapshotKey = queryKeys.pi.snapshot(scope);
   const messageCache: MessageCache = new WeakMap();
   const normalized = (value: PiSnapshot) => normalize(value, messageCache);
 
@@ -555,40 +558,26 @@ export const makePiChatBackend = (
     signal?: AbortSignal,
     fresh = false
   ): Promise<PiSnapshot> => {
-    if (signal?.aborted) {
-      throw (
-        signal.reason ??
-        new DOMException("The request was aborted", "AbortError")
-      );
-    }
-    if (!fresh && snapshot && Date.now() - received < 250) {
-      return snapshot;
-    }
-    const pending = requests.get(signal);
-    if (pending) {
-      return pending;
-    }
-    const startVersion = version;
-    const request = pi.snapshot(signal).then((value) => {
-      if (
-        version === startVersion ||
-        !snapshot ||
-        (snapshot.instanceID === value.instanceID &&
-          value.cursor >= snapshot.cursor)
-      ) {
-        snapshot = value;
-        received = Date.now();
-        version += 1;
-      }
-      return snapshot ?? value;
-    });
-    requests.set(signal, request);
-    try {
+    signal?.throwIfAborted();
+    const request = queryClient.fetchQuery(
+      piSnapshotOptions(
+        queryClient,
+        scope,
+        (querySignal) => pi.snapshot(querySignal),
+        fresh
+      )
+    );
+    if (!signal) {
       return await request;
+    }
+    // The query is shared, so a caller's signal only stops this caller.
+    const { promise: aborted, reject } = Promise.withResolvers<never>();
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    try {
+      return await Promise.race([request, aborted]);
     } finally {
-      if (requests.get(signal) === request) {
-        requests.delete(signal);
-      }
+      signal.removeEventListener("abort", onAbort);
     }
   };
 
@@ -620,7 +609,14 @@ export const makePiChatBackend = (
       );
     }
     await pi.command(bound, signal);
-    received = 0;
+    await Promise.all([
+      queryClient.invalidateQueries({ exact: true, queryKey: snapshotKey }),
+      value.type === "new" || value.type === "switch"
+        ? queryClient.invalidateQueries({
+            queryKey: queryKeys.pi.sessions(scope),
+          })
+        : undefined,
+    ]);
   };
 
   const core: ChatCore = {
@@ -749,7 +745,8 @@ export const makePiChatBackend = (
 
   return {
     get activityNotice() {
-      return snapshot ? activityNotice(snapshot) : undefined;
+      const stored = queryClient.getQueryData<PiSnapshot>(snapshotKey);
+      return stored ? activityNotice(stored) : undefined;
     },
     canForkMessage: (message) => message.type === "user",
     capabilities: {
@@ -812,19 +809,18 @@ export const makePiChatBackend = (
           if (isResetBatch(batch, value)) {
             return;
           }
+          const stored = queryClient.getQueryData<PiSnapshot>(snapshotKey);
           if (
-            snapshot?.instanceID === batch.instanceID &&
-            snapshot.cursor > value.cursor
+            stored?.instanceID === batch.instanceID &&
+            stored.cursor > value.cursor
           ) {
-            value = snapshot;
+            value = stored;
           }
           if (value.cursor > batch.cursor) {
             continue;
           }
           value = applyBatch(value, batch);
-          snapshot = value;
-          received = Date.now();
-          version += 1;
+          queryClient.setQueryData(snapshotKey, value);
           if (batch.events.length) {
             yield normalized(value);
           }

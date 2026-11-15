@@ -1,13 +1,12 @@
-import type {
-  McpResource,
-  McpResourceCatalog,
-  McpResourceTemplate,
-} from "@opencode/client";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import type { McpResource, McpResourceTemplate } from "@opencode/client";
+import { useQuery } from "@tanstack/react-query";
+import React, { useState } from "react";
 import { Text, View } from "react-native";
 
-import { errorMessage } from "../lib/client";
+import { errorMessageOrNull } from "../lib/client";
 import type { Client } from "../lib/client";
+import { mcpResourcesOptions } from "../lib/queries/panels";
+import { useServerScope } from "../lib/server-scope";
 import { useTheme } from "../lib/theme";
 import {
   Button,
@@ -128,72 +127,28 @@ const TemplateCard = ({
   );
 };
 
-const fetchCatalog = async (
-  client: Client,
-  directory: string,
-  signal: AbortSignal
-): Promise<{ catalog: McpResourceCatalog } | { error: string }> => {
-  try {
-    const result = await client.mcp.resource.catalog(
-      { location: { directory } },
-      { signal }
-    );
-    return { catalog: result.data };
-  } catch (error_) {
-    return { error: errorMessage(error_) };
-  }
-};
-
 export const McpResources = ({ client, location, onAttachContext }: Props) => {
-  const [catalog, setCatalog] = useState<McpResourceCatalog>();
+  const scope = useServerScope();
+  const { directory } = location;
+  const resources = useQuery(mcpResourcesOptions(scope, client, directory));
+  const catalog = resources.data;
+  const loading = resources.isFetching;
+  const error = errorMessageOrNull(resources.error);
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(15);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const request = useRef<AbortController | undefined>(undefined);
-  const { directory } = location;
-
-  const load = useCallback(async () => {
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    const apply = (outcome: Awaited<ReturnType<typeof fetchCatalog>>) => {
-      if (controller.signal.aborted) {
-        return;
-      }
-      if ("catalog" in outcome) {
-        setCatalog(outcome.catalog);
-      } else {
-        setError(outcome.error);
-      }
-      setLoading(false);
-    };
-    apply(await fetchCatalog(client, directory, controller.signal));
-  }, [client, directory]);
-
-  const refresh = () => {
-    setLoading(true);
-    setError(null);
-    return load();
-  };
+  const { refetch } = resources;
+  const refresh = () => refetch();
 
   const [seenScope, setSeenScope] = useState({ client, directory });
   if (seenScope.client !== client || seenScope.directory !== directory) {
     setSeenScope({ client, directory });
-    setCatalog(undefined);
     setQuery("");
-    setLoading(true);
-    setError(null);
   }
   const [seenQuery, setSeenQuery] = useState(query);
   if (seenQuery !== query) {
     setSeenQuery(query);
     setLimit(15);
   }
-  useEffect(() => {
-    void load();
-    return () => request.current?.abort();
-  }, [load]);
 
   const search = query.trim().toLowerCase();
   const matches = [

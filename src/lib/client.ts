@@ -345,6 +345,9 @@ export const connect = (
     connectWithSignal(connection, fetchOverride, alternatives, signal)
   );
 
+export const errorMessageOrNull = (error: unknown): string | null =>
+  error ? errorMessage(error) : null;
+
 export const errorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message;

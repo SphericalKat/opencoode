@@ -1,4 +1,5 @@
 import type { ToolFileContent } from "@opencode/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
@@ -7,6 +8,8 @@ import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
 import { errorMessage } from "../lib/client";
 import type { Client } from "../lib/client";
 import { objectKey } from "../lib/object-key";
+import { fileReadOptions, readAttachment } from "../lib/queries/artifact";
+import { useServerScope } from "../lib/server-scope";
 import { useNativePresentation } from "../lib/sheets";
 import { useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
@@ -256,6 +259,8 @@ const runArtifactAction = async (request: ArtifactAction) => {
 const Artifact = ({ content, client, directory, thumbnail }: Props) => {
   const styles = useThemedStyles(createStyles);
   const presentNative = useNativePresentation();
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
   const target = source(content.uri);
   const mime = content.mime.split(";")[0].trim().toLowerCase();
   const image = isImageArtifact(content);
@@ -285,9 +290,10 @@ const Artifact = ({ content, client, directory, thumbnail }: Props) => {
           "This server does not provide remote file downloads. Open this file in the terminal."
         );
       }
-      return client.file.read(
-        { location: directory ? { directory } : undefined, path: target.path },
-        { signal }
+      return readAttachment(
+        queryClient,
+        fileReadOptions(scope, client, directory, target.path),
+        signal
       );
     }
     const response = await fetch(target.url, { credentials: "omit", signal });

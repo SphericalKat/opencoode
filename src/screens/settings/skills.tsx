@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Text } from "react-native";
 
@@ -10,9 +11,37 @@ import {
   Sheet,
   mono,
 } from "../../components/ui";
+import { errorMessageOrNull } from "../../lib/client";
 import type { Client } from "../../lib/client";
+import {
+  catalogCommandListOptions,
+  catalogSkillListOptions,
+} from "../../lib/queries/settings";
+import { useServerScope } from "../../lib/server-scope";
 import { useTheme } from "../../lib/theme";
-import { Page, useResource } from "./shared";
+import { Page } from "./shared";
+
+const useSkillsData = (client: Client, directory: string) => {
+  const scope = useServerScope();
+  const skillList = useQuery(catalogSkillListOptions(scope, client, directory));
+  const commandList = useQuery(
+    catalogCommandListOptions(scope, client, directory)
+  );
+  const data =
+    skillList.data && commandList.data
+      ? { commands: commandList.data, skills: skillList.data }
+      : undefined;
+  const failure = skillList.error ?? commandList.error;
+  const error = errorMessageOrNull(failure);
+  const loading = skillList.isFetching || commandList.isFetching;
+  const { refetch: refetchSkills } = skillList;
+  const { refetch: refetchCommands } = commandList;
+  const refresh = () => {
+    void refetchSkills();
+    void refetchCommands();
+  };
+  return { data, error, loading, refresh };
+};
 
 export const Skills = ({
   client,
@@ -22,17 +51,7 @@ export const Skills = ({
   directory: string;
 }) => {
   const { colors } = useTheme();
-  const { data, error, loading, refresh } = useResource(
-    client,
-    directory,
-    async (signal) => {
-      const [skills, commands] = await Promise.all([
-        client.skill.list({ location: { directory } }, { signal }),
-        client.command.list({ location: { directory } }, { signal }),
-      ]);
-      return { commands: commands.data, skills: skills.data };
-    }
-  );
+  const { data, error, loading, refresh } = useSkillsData(client, directory);
   const [query, setQuery] = useState("");
   const [selected, setSelected] =
     useState<NonNullable<typeof data>["skills"][number]>();

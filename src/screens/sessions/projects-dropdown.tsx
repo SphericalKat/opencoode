@@ -156,7 +156,7 @@ interface ProjectsDropdownProps {
   onToggleArchived: () => void;
   projectDirectory: string | undefined;
   projects: Project[];
-  projectsError: string | undefined;
+  projectsError: string | null;
   projectsLoading: boolean;
   unreadProjectIDs: ReadonlySet<string>;
   visible: boolean;

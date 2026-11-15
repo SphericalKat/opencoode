@@ -17,11 +17,6 @@ import { ProjectAvatar } from "./project-avatar";
 import { ShellIcon } from "./shell-icon";
 import { BodyText, Sheet } from "./ui";
 
-export interface OpenSessionTab {
-  id: string;
-  title: string;
-  directory: string;
-}
 export type SessionPane =
   | "Session"
   | "Changes"
@@ -150,7 +145,14 @@ const createStyles = (colors: ThemeColors) =>
     tabText: { fontSize: 14, lineHeight: 19 },
   });
 
-const EMPTY_TABS: OpenSessionTab[] = [];
+// An open session tab with the title shown for it.
+export interface SessionTabItem {
+  directory: string;
+  id: string;
+  title: string;
+}
+
+const EMPTY_TABS: SessionTabItem[] = [];
 
 export const SessionSurface = ({
   framed,
@@ -189,7 +191,7 @@ export const BetaTabStrip = ({
   busy,
   onOpen,
 }: {
-  current?: OpenSessionTab;
+  current?: SessionTabItem;
   busy?: boolean;
   onOpen: () => void;
 }) => {
@@ -325,13 +327,13 @@ export const BetaTabsSheet = ({
   onHelp,
 }: {
   visible: boolean;
-  tabs: OpenSessionTab[];
+  tabs: SessionTabItem[];
   selectedID?: string;
   onClose: () => void;
   onDismiss: () => void;
   serverLabel: string;
   onServer: () => void;
-  recent?: OpenSessionTab[];
+  recent?: SessionTabItem[];
   onSelect: (id: string) => void;
   onCloseTab?: (id: string) => void;
   onNew: () => void;

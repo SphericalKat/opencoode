@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 
@@ -25,11 +26,15 @@ const SideQuestionBody = ({
     text: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const request = useRef<AbortController | null>(null);
   const mounted = useRef(false);
   const epoch = useRef(0);
+  const generate = useMutation({
+    mutationFn: ({ prompt, signal }: { prompt: string; signal: AbortSignal }) =>
+      client.session.generate({ prompt, sessionID }, { signal }),
+  });
+  const { isPending: busy, reset: resetGenerate } = generate;
   const consume = useEffectEvent(() => {
     onQuestionConsumed?.();
   });
@@ -46,7 +51,7 @@ const SideQuestionBody = ({
     epoch.current += 1;
     request.current?.abort();
     request.current = null;
-    setBusy(false);
+    resetGenerate();
   };
 
   const onAppStateChange = useEffectEvent((state: string) => {
@@ -75,7 +80,7 @@ const SideQuestionBody = ({
     }
   }, [initialQuestion]);
 
-  const ask = async () => {
+  const ask = () => {
     const prompt = question.trim();
     if (!prompt || request.current) {
       return;
@@ -84,40 +89,32 @@ const SideQuestionBody = ({
     epoch.current += 1;
     const { current } = epoch;
     request.current = controller;
-    setBusy(true);
     setError(null);
     setCopied(false);
-    const finish = () => {
-      if (mounted.current && current === epoch.current) {
-        request.current = null;
-        setBusy(false);
-      }
-    };
-    let result: Awaited<ReturnType<Client["session"]["generate"]>>;
-    try {
-      result = await client.session.generate(
-        { prompt, sessionID },
-        { signal: controller.signal }
-      );
-    } catch (error_) {
-      if (
-        mounted.current &&
-        current === epoch.current &&
-        !controller.signal.aborted
-      ) {
-        setError(errorMessage(error_));
-      }
-      finish();
-      return;
-    }
-    if (
+    const isCurrent = () =>
       mounted.current &&
       current === epoch.current &&
-      !controller.signal.aborted
-    ) {
-      setAnswer({ question: prompt, text: result.text });
-    }
-    finish();
+      !controller.signal.aborted;
+    generate.mutate(
+      { prompt, signal: controller.signal },
+      {
+        onError: (error_) => {
+          if (isCurrent()) {
+            setError(errorMessage(error_));
+          }
+        },
+        onSettled: () => {
+          if (mounted.current && current === epoch.current) {
+            request.current = null;
+          }
+        },
+        onSuccess: (result) => {
+          if (isCurrent()) {
+            setAnswer({ question: prompt, text: result.text });
+          }
+        },
+      }
+    );
   };
 
   const copy = async () => {
@@ -156,9 +153,7 @@ const SideQuestionBody = ({
           variant="primary"
           disabled={!question.trim()}
           busy={busy}
-          onPress={() => {
-            ask();
-          }}
+          onPress={ask}
         />
         {busy && <Button title="Cancel request" onPress={cancel} />}
       </Row>

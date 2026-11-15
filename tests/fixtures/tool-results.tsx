@@ -14,6 +14,7 @@ import { makeOpenCodeChatBackend } from "../../src/lib/chat-backend";
 import { createClient } from "../../src/lib/client";
 import { makePiChatBackend } from "../../src/lib/pi-chat-backend";
 import { createPiClient } from "../../src/lib/pi-client";
+import { createQueryClient } from "../../src/lib/query-client";
 import { SheetCoordinatorProvider } from "../../src/lib/sheets";
 import { ThemeProvider } from "../../src/lib/theme";
 
@@ -21,6 +22,7 @@ import { ThemeProvider } from "../../src/lib/theme";
 Object.assign(globalThis, {
   createClient,
   createPiClient,
+  createQueryClient,
   makeOpenCodeChatBackend,
   makePiChatBackend,
   projectLiveEvent,

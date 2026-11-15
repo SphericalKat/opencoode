@@ -1,4 +1,5 @@
 import type { Pty } from "@opencode/client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, {
   useCallback,
   useEffect,
@@ -18,9 +19,16 @@ import {
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client, Connection } from "../lib/client";
 import { withAlpha } from "../lib/color";
+import {
+  persistentPtySupportOptions,
+  ptyListOptions,
+} from "../lib/queries/panels";
+import type { Shell } from "../lib/queries/panels";
+import { queryKeys } from "../lib/query-keys";
+import { useServerScope } from "../lib/server-scope";
 import { useSheetCoordinator } from "../lib/sheets";
 import {
   bufferEdit,
@@ -32,6 +40,7 @@ import {
 import type { TerminalEvent } from "../lib/terminal";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import { useForeground } from "../stores/app-lifecycle-store";
 import { EdgeFade, useScrollEdges } from "./edge-fade";
 import { IconButton } from "./icon-button";
 import { useSnackbarInset, useUndoableRemoval } from "./snackbar";
@@ -956,120 +965,6 @@ const TerminalSession = ({
   );
 };
 
-type ClientEvent =
-  ReturnType<Client["event"]["subscribe"]> extends AsyncIterable<infer E>
-    ? E
-    : never;
-interface InventorySync {
-  abortRequest: () => void;
-  client: Client;
-  desktop: boolean;
-  directory: string;
-  onError: (message: string) => void;
-  refresh: () => Promise<void>;
-  sessionID?: string;
-}
-
-const REFRESH_DEBOUNCE_MS = 250;
-const MAX_INVENTORY_RETRY_MS = 15_000;
-const MAX_INVENTORY_BACKOFF_STEP = 4;
-
-const shouldRefreshInventory = (
-  event: ClientEvent,
-  { desktop, directory, sessionID }: InventorySync
-): boolean => {
-  if (event.type === "server.connected") {
-    return true;
-  }
-  if (
-    desktop &&
-    (event.type === "persistent-pty.added" ||
-      event.type === "persistent-pty.removed") &&
-    event.data.sessionID === sessionID
-  ) {
-    return true;
-  }
-  return (
-    (event.type === "pty.created" ||
-      event.type === "pty.updated" ||
-      event.type === "pty.deleted" ||
-      event.type === "pty.exited") &&
-    (!event.location || event.location.directory === directory)
-  );
-};
-
-const consumeInventoryEvents = async (
-  client: Client,
-  signal: AbortSignal,
-  onEvent: (event: ClientEvent) => void
-): Promise<void> => {
-  for await (const event of client.event.subscribe({ signal })) {
-    if (signal.aborted) {
-      return;
-    }
-    onEvent(event);
-  }
-};
-
-const startInventorySync = (options: InventorySync): (() => void) => {
-  const controller = new AbortController();
-  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-  let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  let attempts = 0;
-  const reportError = (error_: unknown) => {
-    if (!controller.signal.aborted) {
-      options.onError(errorMessage(error_));
-    }
-  };
-  const scheduleRefresh = () => {
-    if (refreshTimer) {
-      return;
-    }
-    refreshTimer = setTimeout(() => {
-      refreshTimer = undefined;
-      void options.refresh();
-    }, REFRESH_DEBOUNCE_MS);
-  };
-  const cycle = async (refreshFirst: boolean): Promise<void> => {
-    if (refreshFirst) {
-      await options.refresh();
-    }
-    if (controller.signal.aborted) {
-      return;
-    }
-    await consumeInventoryEvents(options.client, controller.signal, (event) => {
-      attempts = 0;
-      if (shouldRefreshInventory(event, options)) {
-        scheduleRefresh();
-      }
-    }).catch(() => null);
-    if (controller.signal.aborted) {
-      return;
-    }
-    const delay = Math.min(
-      1000 * 2 ** Math.min(attempts, MAX_INVENTORY_BACKOFF_STEP),
-      MAX_INVENTORY_RETRY_MS
-    );
-    attempts += 1;
-    retryTimer = setTimeout(() => {
-      retryTimer = undefined;
-      cycle(true).catch(reportError);
-    }, delay);
-  };
-  cycle(true).catch(reportError);
-  return () => {
-    controller.abort();
-    options.abortRequest();
-    clearTimeout(refreshTimer);
-    clearTimeout(retryTimer);
-  };
-};
-
-interface Shell {
-  kind: Mode;
-  pty: Pty;
-}
-
 const shellKey = (shell: Shell): string => `${shell.kind}:${shell.pty.id}`;
 const shellName = (shell: Shell): string =>
   shell.pty.title || shell.pty.command || "Terminal";
@@ -1197,6 +1092,8 @@ const ShellStrip = ({
   );
 };
 
+const NO_SHELLS: Shell[] = [];
+
 const TerminalList = ({
   client,
   connection,
@@ -1206,102 +1103,41 @@ const TerminalList = ({
 }: Props & { desktop: boolean }) => {
   const styles = useThemedStyles(createStyles);
   const { hidden, remove } = useUndoableRemoval<string>("terminals");
+  const scope = useServerScope();
+  const queryClient = useQueryClient();
   const { suspended } = useSheetCoordinator();
-  const [shells, setShells] = useState<Shell[]>([]);
+  const foreground = useForeground();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [autoFocusKey, setAutoFocusKey] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
   const seeded = useRef(false);
-  const createRef = useRef<() => Promise<void>>(() => Promise.resolve());
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [foreground, setForeground] = useState(
-    AppState.currentState !== "background" &&
-      AppState.currentState !== "inactive"
+  const list = useQuery(
+    ptyListOptions(scope, client, directory, desktop, sessionID)
   );
-  const request = useRef<AbortController | null>(null);
-  const mounted = useRef(true);
+  const { refetch } = list;
+  const { queryKey: listKey } = ptyListOptions(
+    scope,
+    client,
+    directory,
+    desktop,
+    sessionID
+  );
+  const shells = list.data ?? NO_SHELLS;
+  const loaded = list.isSuccess;
 
-  const refresh = useCallback(async () => {
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    setError(null);
-    try {
-      const [desktopShells, workspaceShells] = await Promise.all([
-        desktop && sessionID
-          ? client.experimental.persistentPty.list(
-              { sessionID },
-              { signal: controller.signal }
-            )
-          : [],
-        client.pty.list(
-          { location: { directory } },
-          { signal: controller.signal }
-        ),
-      ]);
-      if (controller.signal.aborted) {
-        return;
-      }
-      const next = [
-        ...desktopShells.map((pty): Shell => ({ kind: "desktop", pty })),
-        ...workspaceShells.data.map((pty): Shell => ({
-          kind: "workspace",
-          pty,
-        })),
-      ];
-      setShells(next);
-      setLoaded(true);
-      if (!seeded.current) {
-        seeded.current = true;
-        if (next.length === 0) {
-          void createRef.current();
-        }
-      }
-    } catch (error_) {
-      if (!controller.signal.aborted) {
-        setError(errorMessage(error_));
-      }
-    }
-  }, [client, desktop, directory, sessionID]);
+  const invalidateShells = () =>
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.dir.pty(scope, directory),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.dir.shells(scope, directory),
+      }),
+    ]);
 
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      request.current?.abort();
-    };
-  }, []);
-
-  useEffect(() => {
-    const listener = AppState.addEventListener("change", (state) =>
-      setForeground(state === "active")
-    );
-    return () => listener.remove();
-  }, []);
-
-  useEffect(() => {
-    if (!foreground || suspended) {
-      return;
-    }
-    return startInventorySync({
-      abortRequest: () => request.current?.abort(),
-      client,
-      desktop,
-      directory,
-      onError: setError,
-      refresh,
-      sessionID,
-    });
-  }, [client, desktop, directory, sessionID, foreground, refresh, suspended]);
-
-  const create = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      let created: Shell;
+  const createShell = useMutation({
+    mutationFn: async (): Promise<Shell> => {
       if (desktop && sessionID) {
-        created = {
+        return {
           kind: "desktop",
           pty: await client.experimental.persistentPty.create({
             args: [],
@@ -1311,51 +1147,68 @@ const TerminalList = ({
             title: "Terminal",
           }),
         };
-      } else {
-        const response = await client.pty.create({
-          cwd: directory,
-          location: { directory },
-        });
-        created = { kind: "workspace", pty: response.data };
       }
-      if (!mounted.current) {
-        return;
-      }
+      const response = await client.pty.create({
+        cwd: directory,
+        location: { directory },
+      });
+      return { kind: "workspace", pty: response.data };
+    },
+    onSuccess: (created) => {
       const key = shellKey(created);
-      request.current?.abort();
-      setShells((current) =>
+      queryClient.setQueryData<Shell[]>(listKey, (current = []) =>
         current.some((item) => shellKey(item) === key)
           ? current.map((item) => (shellKey(item) === key ? created : item))
           : [...current, created]
       );
-      setSelectedKey(key);
-      setAutoFocusKey(key);
-    } catch (error_) {
-      if (mounted.current) {
-        setError(errorMessage(error_));
-      }
-    }
-    if (mounted.current) {
-      setBusy(false);
-    }
-  }, [client, desktop, directory, sessionID]);
+    },
+    onSettled: invalidateShells,
+  });
+  const removeShell = useMutation({
+    mutationFn: (shell: Shell) =>
+      shell.kind === "desktop"
+        ? client.experimental.persistentPty.remove({ ptyID: shell.pty.id })
+        : client.pty.remove({
+            location: { directory },
+            ptyID: shell.pty.id,
+          }),
+    onSettled: invalidateShells,
+  });
+  const busy = createShell.isPending;
+  const { mutate: mutateCreate, reset: resetCreate } = createShell;
+  const failure = createShell.error ?? list.error;
+  const error = errorMessageOrNull(failure);
 
-  useLayoutEffect(() => {
-    createRef.current = create;
-  }, [create]);
+  const create = useCallback(() => {
+    mutateCreate(undefined, {
+      onSuccess: (created) => {
+        const key = shellKey(created);
+        setSelectedKey(key);
+        setAutoFocusKey(key);
+      },
+    });
+  }, [mutateCreate]);
+
+  useEffect(() => {
+    if (!loaded || seeded.current) {
+      return;
+    }
+    seeded.current = true;
+    if (shells.length === 0) {
+      create();
+    }
+  }, [create, loaded, shells.length]);
+
+  useEffect(() => {
+    if (foreground && !suspended) {
+      void refetch({ cancelRefetch: false });
+    }
+  }, [foreground, refetch, suspended]);
 
   const closeShell = (shell: Shell) => {
     remove(shellKey(shell), {
       commit: async () => {
-        await (shell.kind === "desktop"
-          ? client.experimental.persistentPty.remove({ ptyID: shell.pty.id })
-          : client.pty.remove({
-              location: { directory },
-              ptyID: shell.pty.id,
-            }));
-        if (mounted.current) {
-          await refresh();
-        }
+        await removeShell.mutateAsync(shell);
       },
       message: "Shell closed",
       onUndo: () => setSelectedKey(shellKey(shell)),
@@ -1383,7 +1236,7 @@ const TerminalList = ({
           mode={selected.kind}
           onAutoFocus={() => setAutoFocusKey(null)}
           onExit={() => {
-            void refresh();
+            void refetch();
           }}
         />
       );
@@ -1416,9 +1269,7 @@ const TerminalList = ({
         shells={visible}
         selectedKey={selectedShellKey}
         onClose={closeShell}
-        onCreate={() => {
-          void create();
-        }}
+        onCreate={create}
         onSelect={setSelectedKey}
       />
       {error && (
@@ -1426,7 +1277,8 @@ const TerminalList = ({
           <ErrorNotice
             error={error}
             onRetry={() => {
-              void refresh();
+              resetCreate();
+              void refetch();
             }}
           />
         </View>
@@ -1440,41 +1292,14 @@ const TerminalList = ({
 const Terminals = (props: Props) => {
   const styles = useThemedStyles(createStyles);
   const { suspended } = useSheetCoordinator();
-  const [persistent, setPersistent] = useState<boolean | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const retryCheck = useRef<AbortController | null>(null);
-
-  const checkServer = useCallback(
-    (signal: AbortSignal) => {
-      void props.client.server
-        .info({ signal })
-        .then((info) => {
-          if (signal.aborted) {
-            return null;
-          }
-          setPersistent(info.capabilities?.persistentPty === true);
-          return null;
-        })
-        .catch((error_) => {
-          if (!signal.aborted) {
-            setError(errorMessage(error_));
-          }
-        });
-    },
-    [props.client]
-  );
-
-  useEffect(() => {
-    if (suspended) {
-      return;
-    }
-    const controller = new AbortController();
-    checkServer(controller.signal);
-    return () => {
-      controller.abort();
-      retryCheck.current?.abort();
-    };
-  }, [checkServer, suspended]);
+  const scope = useServerScope();
+  const support = useQuery({
+    ...persistentPtySupportOptions(scope, props.client),
+    enabled: !suspended,
+  });
+  const persistent = support.data ?? null;
+  const error = errorMessageOrNull(support.error);
+  const { refetch } = support;
 
   return (
     <View style={styles.panel}>
@@ -1484,10 +1309,7 @@ const Terminals = (props: Props) => {
           <ErrorNotice
             error={error}
             onRetry={() => {
-              setError(null);
-              retryCheck.current?.abort();
-              retryCheck.current = new AbortController();
-              checkServer(retryCheck.current.signal);
+              void refetch();
             }}
           />
         </View>

@@ -1,10 +1,16 @@
 import type { FileDiffInfo, VcsInfo } from "@opencode/client";
-import { useEffect, useState } from "react";
+import { queryOptions, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { errorMessage } from "../../lib/client";
 import type { Client } from "../../lib/client";
 import { diffRows, parsePatch } from "../../lib/diff";
 import type { DiffGap, DiffLine } from "../../lib/diff";
+import { vcsStatusOptions } from "../../lib/queries/panels";
+import { queryKeys } from "../../lib/query-keys";
+import type { Scope } from "../../lib/query-keys";
+import { withDeadline } from "../../lib/request";
+import { useServerScope } from "../../lib/server-scope";
 import type { SyntaxSegment } from "../../lib/syntax";
 
 export type ChangesMode = "git" | "branch" | "turn" | "committed";
@@ -28,51 +34,57 @@ export type ChangesState =
   | { status: "ready"; diffs: FileDiffInfo[] }
   | { status: "error"; message: string };
 
-interface Request {
-  client: Client;
+const NO_DIFFS: FileDiffInfo[] = [];
+
+export const diffsOf = (state: ChangesState): FileDiffInfo[] =>
+  state.status === "ready" ? state.diffs : NO_DIFFS;
+
+interface DiffRequest {
+  base: string;
   directory: string;
   mode: ChangesMode;
-  base: string;
   sessionID: string | undefined;
-  revision: number;
 }
 
-const sameSource = (a: Request, b: Request) =>
-  a.client === b.client &&
-  a.directory === b.directory &&
-  a.mode === b.mode &&
-  a.base === b.base &&
-  a.sessionID === b.sessionID;
-
-const loadDiffs = async (
-  request: Request,
-  signal: AbortSignal
-): Promise<FileDiffInfo[]> => {
-  const { client, directory, mode, base, sessionID } = request;
-  if (mode === "turn") {
-    return await client.session.diff(
-      { sessionID: sessionID ?? "" },
-      { signal }
-    );
-  }
-  const location = { directory };
-  if (mode === "committed") {
-    const result = await client.vcs.diff(
-      { base: base || undefined, location, mode: "committed" },
-      { signal }
-    );
-    return result.data;
-  }
-  const result = await client.vcs.diff(
-    {
-      location,
-      mode: mode === "git" ? "working" : "branch",
-      untracked: "files",
-    },
-    { signal }
-  );
-  return result.data;
-};
+const diffOptions = (
+  scope: Scope,
+  client: Client,
+  { base, directory, mode, sessionID }: DiffRequest
+) =>
+  queryOptions({
+    queryFn: ({ signal }) =>
+      withDeadline(signal, async (deadline): Promise<FileDiffInfo[]> => {
+        if (mode === "turn") {
+          return await client.session.diff(
+            { sessionID: sessionID ?? "" },
+            { signal: deadline }
+          );
+        }
+        const location = { directory };
+        if (mode === "committed") {
+          const result = await client.vcs.diff(
+            { base: base || undefined, location, mode: "committed" },
+            { signal: deadline }
+          );
+          return result.data;
+        }
+        const result = await client.vcs.diff(
+          {
+            location,
+            mode: mode === "git" ? "working" : "branch",
+            untracked: "files",
+          },
+          { signal: deadline }
+        );
+        return result.data;
+      }),
+    queryKey:
+      mode === "turn"
+        ? queryKeys.session.diff(scope, sessionID ?? "")
+        : queryKeys.dir.vcsDiff(scope, directory, { base, mode }),
+    refetchOnMount: true,
+    staleTime: 0,
+  });
 
 const offeredModes = (
   info: VcsInfo | null,
@@ -99,65 +111,37 @@ export const useChanges = ({
   directory: string;
   sessionID?: string;
 }) => {
-  const [info, setInfo] = useState<VcsInfo | null>(null);
+  const scope = useServerScope();
   const [chosen, setChosen] = useState<ChangesMode>("git");
   const [base, setBase] = useState("");
-  const [revision, setRevision] = useState(0);
-  const [state, setState] = useState<ChangesState>({ status: "loading" });
-  const [refreshing, setRefreshing] = useState(false);
-  const modes = offeredModes(info, sessionID);
+  const vcs = useQuery(vcsStatusOptions(scope, client, directory));
+  const modes = offeredModes(vcs.data?.data ?? null, sessionID);
   const mode = modes.includes(chosen) ? chosen : modes[0];
-  const wanted: Request = {
-    base: mode === "committed" ? base : "",
-    client,
-    directory,
-    mode,
-    revision,
-    sessionID: mode === "turn" ? sessionID : undefined,
-  };
-  const [request, setRequest] = useState(wanted);
-  if (!(sameSource(request, wanted) && request.revision === revision)) {
-    setRequest(wanted);
-    if (sameSource(request, wanted) && state.status === "ready") {
-      setRefreshing(true);
-    } else {
-      setRefreshing(false);
-      setState({ status: "loading" });
-    }
+  const diffs = useQuery(
+    diffOptions(scope, client, {
+      base: mode === "committed" ? base : "",
+      directory,
+      mode,
+      sessionID: mode === "turn" ? sessionID : undefined,
+    })
+  );
+  let state: ChangesState = { status: "loading" };
+  if (diffs.isError) {
+    state = { message: errorMessage(diffs.error), status: "error" };
+  } else if (diffs.data) {
+    state = { diffs: diffs.data, status: "ready" };
   }
-  useEffect(() => {
-    const controller = new AbortController();
-    const { signal } = controller;
-    const run = async () => {
-      const [diffs, vcs] = await Promise.allSettled([
-        loadDiffs(request, signal),
-        request.client.vcs.get(
-          { location: { directory: request.directory } },
-          { signal }
-        ),
-      ]);
-      if (signal.aborted) {
-        return;
-      }
-      if (vcs.status === "fulfilled") {
-        setInfo(vcs.value.data);
-      }
-      setState(
-        diffs.status === "fulfilled"
-          ? { diffs: diffs.value, status: "ready" }
-          : { message: errorMessage(diffs.reason), status: "error" }
-      );
-      setRefreshing(false);
-    };
-    void run();
-    return () => controller.abort();
-  }, [request]);
+  const { refetch: refetchDiffs } = diffs;
+  const { refetch: refetchVcs } = vcs;
   return {
     base,
     mode,
     modes,
-    refresh: () => setRevision((value) => value + 1),
-    refreshing,
+    refresh: () => {
+      void refetchDiffs();
+      void refetchVcs();
+    },
+    refreshing: diffs.isFetching && !!diffs.data,
     setBase,
     setMode: setChosen,
     state,

@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -15,10 +16,20 @@ import {
   Row,
   Sheet,
 } from "../../components/ui";
+import { errorMessageOrNull } from "../../lib/client";
 import type { Client } from "../../lib/client";
-import { externalURL, withSettingsRequest } from "../../lib/settings";
+import { mcpResourcesOptions } from "../../lib/queries/panels";
+import { mcpServersOptions } from "../../lib/queries/settings";
+import { queryKeys } from "../../lib/query-keys";
+import { useServerScope } from "../../lib/server-scope";
+import { externalURL } from "../../lib/settings";
 import { useTheme } from "../../lib/theme";
-import { Page, runBusy, useResource } from "./shared";
+import {
+  Page,
+  resourceOf,
+  useSettingsBusy,
+  useSettingsMutation,
+} from "./shared";
 
 const serverKindOptions = [
   { label: "Remote", value: "remote" },
@@ -121,16 +132,9 @@ export const Mcp = ({
   client: Client;
   directory: string;
 }) => {
-  const { data, error, loading, refresh } = useResource(
-    client,
-    directory,
-    async (signal) => {
-      const response = await client.mcp.list(
-        { location: { directory } },
-        { signal }
-      );
-      return response.data;
-    }
+  const scope = useServerScope();
+  const { data, error, loading, refresh } = resourceOf(
+    useQuery(mcpServersOptions(scope, client, directory))
   );
   const { hidden, remove: removeServer } = useUndoableRemoval("mcp");
   const visible = data?.filter((item) => !hidden.has(item.name));
@@ -139,24 +143,89 @@ export const Mcp = ({
   const [kind, setKind] = useState<"remote" | "local">("remote");
   const [url, setUrl] = useState("");
   const [command, setCommand] = useState("");
-  const [resources, setResources] = useState<unknown>();
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const resources = useQuery({
+    ...mcpResourcesOptions(scope, client, directory),
+    enabled: resourcesOpen,
+  });
   const [selected, setSelected] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const settingsBusy = useSettingsBusy();
+  const busy = settingsBusy || resources.isFetching;
   const selectedItem = visible?.find((item) => item.name === selected);
-  const run = async (action: (signal: AbortSignal) => Promise<void>) => {
-    setErrorAction(null);
-    await runBusy(setBusy, setErrorAction, async () => {
-      await withSettingsRequest(async (signal) => {
-        await action(signal);
-        await refresh(signal);
-      });
-    });
-  };
+  const mcpKeys = () => [
+    queryKeys.dir.settings(scope, directory, "mcp"),
+    queryKeys.dir.catalog(scope, directory),
+  ];
+  const toggle = useSettingsMutation({
+    invalidate: mcpKeys,
+    mutationFn: async (item: McpServer, signal) => {
+      const input = { location: { directory }, server: item.name };
+      await (item.status.status === "connected"
+        ? client.experimental.mcp.disconnect(input, { signal })
+        : client.experimental.mcp.connect(input, { signal }));
+      signal.throwIfAborted();
+      setSelected(null);
+    },
+    onError: setErrorAction,
+  });
+  const removeMcp = useSettingsMutation({
+    invalidate: mcpKeys,
+    mutationFn: async (serverName: string, signal) => {
+      await client.experimental.mcp.remove(
+        { location: { directory }, server: serverName },
+        { signal }
+      );
+    },
+    onError: setErrorAction,
+  });
+  const addServer = useSettingsMutation({
+    invalidate: mcpKeys,
+    mutationFn: async (_input, signal) => {
+      const server = name.trim();
+      if (kind === "remote") {
+        await client.experimental.mcp.add(
+          {
+            config: { type: "remote", url: externalURL(url.trim()) },
+            location: { directory },
+            server,
+          },
+          { signal }
+        );
+      } else {
+        const args: unknown = JSON.parse(command);
+        if (
+          !Array.isArray(args) ||
+          !args.length ||
+          !args.every((arg) => typeof arg === "string" && arg.length)
+        ) {
+          throw new Error("Enter a JSON array of command arguments");
+        }
+        await client.experimental.mcp.add(
+          {
+            config: { command: args, type: "local" },
+            location: { directory },
+            server,
+          },
+          { signal }
+        );
+      }
+      signal.throwIfAborted();
+      setAdding(false);
+      setName("");
+      setUrl("");
+      setCommand("");
+    },
+    onError: setErrorAction,
+  });
   return (
     <Page error={error} loading={loading} refresh={refresh}>
       <GlobalForms client={client} directory={directory} />
-      <ErrorNotice error={selected ? null : errorAction} />
+      <ErrorNotice
+        error={
+          selected ? null : (errorAction ?? errorMessageOrNull(resources.error))
+        }
+      />
       {visible && visible.length > 0 && (
         <SheetGroup title="MCP servers">
           {visible.map((item) => (
@@ -184,14 +253,9 @@ export const Mcp = ({
           trailing="chevron"
           disabled={busy}
           onPress={() => {
-            void run(async (signal) => {
-              const result = await client.mcp.resource.catalog(
-                { location: { directory } },
-                { signal }
-              );
-              signal.throwIfAborted();
-              setResources(result.data);
-            });
+            setErrorAction(null);
+            setResourcesOpen(true);
+            void resources.refetch();
           }}
         />
       </SheetGroup>
@@ -211,36 +275,23 @@ export const Mcp = ({
         item={selectedItem}
         onClose={() => setSelected(null)}
         onToggle={(item) => {
-          void run(async (signal) => {
-            const input = { location: { directory }, server: item.name };
-            await (item.status.status === "connected"
-              ? client.experimental.mcp.disconnect(input, { signal })
-              : client.experimental.mcp.connect(input, { signal }));
-            signal.throwIfAborted();
-            setSelected(null);
-          });
+          setErrorAction(null);
+          toggle.mutate(item);
         }}
         onRemove={(item) => {
           setSelected(null);
           removeServer(item.name, {
-            commit: () =>
-              withSettingsRequest(async (signal) => {
-                await client.experimental.mcp.remove(
-                  { location: { directory }, server: item.name },
-                  { signal }
-                );
-                await refresh(signal);
-              }),
+            commit: () => removeMcp.mutateAsync(item.name),
             message: "MCP server removed",
           });
         }}
       />
       <Sheet
-        visible={resources !== undefined}
+        visible={resourcesOpen && resources.data !== undefined}
         title="MCP resources"
-        onClose={() => setResources(undefined)}
+        onClose={() => setResourcesOpen(false)}
       >
-        <JsonView value={resources} />
+        <JsonView value={resources.data} />
       </Sheet>
       <Sheet
         visible={adding}
@@ -296,41 +347,8 @@ export const Mcp = ({
           busy={busy}
           disabled={!name.trim()}
           onPress={() => {
-            void run(async (signal) => {
-              const server = name.trim();
-              if (kind === "remote") {
-                await client.experimental.mcp.add(
-                  {
-                    config: { type: "remote", url: externalURL(url.trim()) },
-                    location: { directory },
-                    server,
-                  },
-                  { signal }
-                );
-              } else {
-                const args: unknown = JSON.parse(command);
-                if (
-                  !Array.isArray(args) ||
-                  !args.length ||
-                  !args.every((arg) => typeof arg === "string" && arg.length)
-                ) {
-                  throw new Error("Enter a JSON array of command arguments");
-                }
-                await client.experimental.mcp.add(
-                  {
-                    config: { command: args, type: "local" },
-                    location: { directory },
-                    server,
-                  },
-                  { signal }
-                );
-              }
-              signal.throwIfAborted();
-              setAdding(false);
-              setName("");
-              setUrl("");
-              setCommand("");
-            });
+            setErrorAction(null);
+            addServer.mutate();
           }}
         />
       </Sheet>
