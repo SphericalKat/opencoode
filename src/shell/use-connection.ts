@@ -1,14 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { AppState, Linking } from "react-native";
+import { AppState } from "react-native";
 
 import {
   clearPairingRetry,
   connect,
   connectionErrorMessage,
   errorMessage,
-  normalizeConnection,
 } from "../lib/client";
 import type { Connection } from "../lib/client";
 import { routes } from "../lib/routes";
@@ -214,7 +213,6 @@ export const useSelectServer = ({ confirmNavigation }: UseConnectionDeps) => {
 export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
   const connectionApi = useConnectionStoreApi();
   const lifecycleApi = useAppLifecycleStoreApi();
-  const sheetApi = useSheetStoreApi();
   const active = useConnectionStore((state) => state.active);
   const directory = useSessionLocationStore((state) => state.directory);
   const sessionID = useSessionLocationStore((state) => state.sessionID);
@@ -222,11 +220,6 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
   const setError = useCallback(
     (error: string | null) => lifecycleApi.setState({ error }),
     [lifecycleApi]
-  );
-  const setConnectionError = useCallback(
-    (connectionError: string | null) =>
-      connectionApi.setState({ connectionError }),
-    [connectionApi]
   );
   const selectServerRef = useRef(selectServer);
   useLayoutEffect(() => {
@@ -283,42 +276,4 @@ export const useConnection = ({ confirmNavigation }: UseConnectionDeps) => {
       connectionApi.setState((state) => ({ epoch: state.epoch + 1 }));
     };
   }, [connectionApi, setError]);
-
-  useEffect(() => {
-    const acceptLink = (url: string | null | undefined) => {
-      if (!url) {
-        return;
-      }
-      try {
-        const parsed = new URL(url);
-        if (
-          parsed.protocol !== "opencoode:" &&
-          !/\/auth\/connect\/[^/]+\/?$/u.test(parsed.pathname)
-        ) {
-          return;
-        }
-        const server =
-          parsed.protocol === "opencoode:"
-            ? parsed.searchParams.get("url")
-            : url;
-        if (!server) {
-          return;
-        }
-        normalizeConnection({ name: "", url: server });
-        setConnectionError(null);
-        connectionApi.setState({
-          form: { ...emptyConnectionForm(), url: server },
-          pairingLink: server,
-        });
-        sheetApi.getState().showServerSheet();
-      } catch {
-        setError("The connection link is invalid");
-      }
-    };
-    Linking.getInitialURL().then(acceptLink).catch(noop);
-    const subscription = Linking.addEventListener("url", (event) =>
-      acceptLink(event.url)
-    );
-    return () => subscription.remove();
-  }, [connectionApi, sheetApi, setConnectionError, setError]);
 };

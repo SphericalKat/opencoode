@@ -14,7 +14,6 @@ export const useOpenServers = () => {
     connectionApi.setState({
       connectionError: null,
       form: emptyConnectionForm(),
-      pairingLink: null,
     });
     // Use the latest coordinator because queued tab actions retain stale navigation state.
     sheetApi.getState().showServerSheet();

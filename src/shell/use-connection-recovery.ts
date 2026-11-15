@@ -46,10 +46,7 @@ export const useConnectionRecovery = ({
         unavailableID: connection.id,
       });
       if (!sheetApi.getState().serversOpen) {
-        connectionApi.setState({
-          form: emptyConnectionForm(),
-          pairingLink: null,
-        });
+        connectionApi.setState({ form: emptyConnectionForm() });
         void showNavigationSheet("servers", true);
       }
     };

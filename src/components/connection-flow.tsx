@@ -49,8 +49,6 @@ interface Props {
   unavailableID?: string;
   connecting: boolean;
   error: string | null;
-  pairingLink?: string | null;
-  onPairingLinkConsumed: () => void;
   onChangeForm: (form: ConnectionForm) => void;
   onClearError: () => void;
   onConnect: (
@@ -412,21 +410,6 @@ const useServersGuard = (
   }
 };
 
-const usePairingLinkText = (
-  pairingLink: string | null | undefined,
-  setPairingText: (text: string) => void,
-  setStep: (next: Step) => void
-) => {
-  const [handled, setHandled] = useState<string | null | undefined>();
-  if (handled !== pairingLink) {
-    setHandled(pairingLink);
-    if (pairingLink) {
-      setPairingText(pairingLink);
-      setStep("pair");
-    }
-  }
-};
-
 export const ConnectionFlow = ({
   form,
   connections,
@@ -434,8 +417,6 @@ export const ConnectionFlow = ({
   unavailableID,
   connecting,
   error,
-  pairingLink,
-  onPairingLinkConsumed,
   onChangeForm,
   onClearError,
   onConnect,
@@ -653,25 +634,12 @@ export const ConnectionFlow = ({
       }
     );
   };
-  const acceptPairingRef = useRef(acceptPairing);
-  const pairingConsumedRef = useRef(onPairingLinkConsumed);
 
   useEffect(() => {
     connectRef.current = onConnect;
-    acceptPairingRef.current = acceptPairing;
-    pairingConsumedRef.current = onPairingLinkConsumed;
   });
 
   useServersGuard(step, connections.length, unavailableID, setStep);
-  usePairingLinkText(pairingLink, setPairingText, setStep);
-
-  useEffect(() => {
-    if (!pairingLink) {
-      return;
-    }
-    acceptPairingRef.current(pairingLink);
-    pairingConsumedRef.current();
-  }, [pairingLink]);
 
   useEffect(() => {
     if (!submission) {

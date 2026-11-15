@@ -20,7 +20,6 @@ export const ServerForm = () => {
   const connectionError = useConnectionStore((state) => state.connectionError);
   const connections = useConnectionStore((state) => state.connections);
   const form = useConnectionStore((state) => state.form);
-  const pairingLink = useConnectionStore((state) => state.pairingLink);
   const unavailableID = useConnectionStore((state) => state.unavailableID);
   const error = useAppLifecycleStore((state) => state.error);
   return (
@@ -33,10 +32,6 @@ export const ServerForm = () => {
       unavailableID={unavailableID ?? undefined}
       connecting={connecting}
       error={flowError(connectionError, active, error)}
-      pairingLink={pairingLink}
-      onPairingLinkConsumed={() =>
-        connectionApi.setState({ pairingLink: null })
-      }
       onChangeForm={(next) => connectionApi.setState({ form: next })}
       onClearError={() => connectionApi.setState({ connectionError: null })}
       onConnect={(connection, alternatives) =>

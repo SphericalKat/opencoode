@@ -31,7 +31,6 @@ export interface ConnectionState {
   epoch: number;
   form: ConnectionForm;
   // Pairing link from a deep link. Step 6 removes it with the deep-link flow.
-  pairingLink: string | null;
   recovering: RecoveryState | null;
   // Registered by the recovery hook so callers always reach the latest one.
   recoverConnection: (connection: Connection, cause: unknown) => unknown;
@@ -50,7 +49,6 @@ export const {
   connections: [],
   epoch: 0,
   form: emptyConnectionForm(),
-  pairingLink: null,
   recovering: null,
   recoverConnection: () => null,
   unavailableID: null,
