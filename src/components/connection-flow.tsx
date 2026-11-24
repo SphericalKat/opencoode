@@ -418,6 +418,7 @@ const PrivacyNote = ({
       title="Privacy Policy"
       variant="ghost"
       size="small"
+      alignSelf="center"
       onPress={onOpenPrivacy}
     />
   </View>
