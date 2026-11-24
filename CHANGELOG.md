@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.8.0](https://github.com/SphericalKat/opencoode/compare/v1.7.0...v1.8.0) (2026-11-24)
+
+
+### Features
+
+* **privacy:** add privacy policy site and in-app links ([4e6fc89](https://github.com/SphericalKat/opencoode/commit/4e6fc89c6853f9da1e1d05f68368b4d2968a3183))
+* **privacy:** display privacy policy links in app ([350c10c](https://github.com/SphericalKat/opencoode/commit/350c10cd008ded9e9146bf6257ea3911c4688d32))
+* **settings:** add About section with privacy policy and app info ([024a26e](https://github.com/SphericalKat/opencoode/commit/024a26e8d52c87bac15d9c5c22b292b90a811e4c))
+
+
+### Bug Fixes
+
+* **connection:** close the Servers sheet when recovery succeeds ([1d0f91c](https://github.com/SphericalKat/opencoode/commit/1d0f91c1a44fe0c1377de790eeb28fbd9c05cc53))
+* **deps:** update dependency react-native-gesture-handler to ~3.5.0 ([85c5bb6](https://github.com/SphericalKat/opencoode/commit/85c5bb611ab85729580e2e061901454085ab1229))
+* **deps:** update dependency react-native-gesture-handler to ~3.5.0 ([e769780](https://github.com/SphericalKat/opencoode/commit/e769780e50be0bd13342704fcdf45fb951ad9623))
+* **privacy:** center privacy policy button on connection screen ([076b708](https://github.com/SphericalKat/opencoode/commit/076b70891265ce848602605309394f3517983c69))
+* **privacy:** resolve review findings and fix Pages deploy ([73bcb02](https://github.com/SphericalKat/opencoode/commit/73bcb0261697f5186e2c5a50355ae1915a770aca))
+* **settings:** forget the old section when the server changes ([2f7a961](https://github.com/SphericalKat/opencoode/commit/2f7a961a36427210aecda06152f099778868231d))
+* **settings:** return settings to its first screen on server change ([de046a6](https://github.com/SphericalKat/opencoode/commit/de046a64120de0fdcda5ecdc29212bea6aa1b864))
+
 ## [1.7.0](https://github.com/SphericalKat/opencoode/compare/v1.6.0...v1.7.0) (2026-11-14)
 
 
