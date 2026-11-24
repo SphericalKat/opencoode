@@ -135,13 +135,23 @@ test("integration links permit browser URLs and block executable schemes", () =>
   assert.throws(() => externalURL("file:///etc/passwd"), /unsupported link/u);
 });
 
-test("settings without a server connection keep only Look and feel and Models", () => {
-  const all: Section[] = ["Look and feel", "Config", "Models", "Accounts"];
+test("settings without a server connection keep only Look and feel, About, and Models", () => {
+  const all: Section[] = [
+    "Look and feel",
+    "Config",
+    "About",
+    "Models",
+    "Accounts",
+  ];
   assert.deepEqual(filterSections(all, false, true), [
     "Look and feel",
+    "About",
     "Models",
   ]);
-  assert.deepEqual(filterSections(all, false, false), ["Look and feel"]);
+  assert.deepEqual(filterSections(all, false, false), [
+    "Look and feel",
+    "About",
+  ]);
   assert.deepEqual(filterSections(all, true, false), all);
 });
 

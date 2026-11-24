@@ -1,6 +1,7 @@
 import type { Client } from "../../lib/client";
 
 export type Section =
+  | "About"
   | "Accounts"
   | "Models"
   | "MCP"
@@ -12,9 +13,10 @@ export type Section =
   | "Look and feel";
 export type ModelCatalog = Pick<Client["model"], "list">;
 export const sectionDescriptions: Record<Section, string> = {
+  About: "Version, repository, and privacy policy",
   Accounts: "Provider connections and credentials",
   Advanced: "Usage, web search, and generation",
-  "Look and feel": "Theme, colors, haptic feedback, and privacy",
+  "Look and feel": "Theme, colors, and haptic feedback",
   Config: "Server configuration and shell",
   MCP: "Tool servers and pending requests",
   Models: "Available models and capabilities",
@@ -23,7 +25,7 @@ export const sectionDescriptions: Record<Section, string> = {
   Skills: "Skills in this workspace",
 };
 export const sectionGroups: { title: string; items: Section[] }[] = [
-  { items: ["Look and feel", "Config"], title: "General" },
+  { items: ["Look and feel", "Config", "About"], title: "General" },
   { items: ["Accounts", "Models", "MCP"], title: "Connections" },
   { items: ["Skills", "Plugins", "Permissions"], title: "Agent" },
   { items: ["Advanced"], title: "Advanced" },
@@ -44,6 +46,7 @@ export const filterSections = (
     (value) =>
       hasClient ||
       value === "Look and feel" ||
+      value === "About" ||
       (value === "Models" && hasModelCatalog)
   );
 

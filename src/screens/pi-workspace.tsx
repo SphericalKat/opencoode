@@ -40,7 +40,7 @@ interface Props {
   onConnectionLost: (error: unknown) => void;
   foreground: boolean;
 }
-const settingsSections: Section[] = ["Look and feel", "Models"];
+const settingsSections: Section[] = ["Look and feel", "Models", "About"];
 
 interface PiSheetsProps {
   client: PiClient;
