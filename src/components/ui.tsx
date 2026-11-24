@@ -78,7 +78,7 @@ import type { ShellIconName } from "./shell-icon";
 import { elevation } from "./surface";
 
 export { darkColors as colors } from "../lib/theme";
-export { touchTarget, usePressFeedback };
+export { touchTarget, usePressFeedback } from "./press-feedback";
 export const sans = "Inter";
 export const mono = "IBMPlexMono";
 export const monoMedium = "IBMPlexMono-Medium";
