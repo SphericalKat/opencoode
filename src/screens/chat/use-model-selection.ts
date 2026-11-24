@@ -1,15 +1,18 @@
 import type { ModelInfo } from "@opencode/client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 
 import type { useModelPreferences } from "../../lib/model-preferences";
+import { queryKeys } from "../../lib/query-keys";
+import { useServerScope } from "../../lib/server-scope";
 import { groupModels } from "./model-groups";
 import { composerModelLabel } from "./model-label";
-import type { CoreClient } from "./session-sync";
-import type { SetPanel } from "./types";
-import type { SessionState } from "./use-session-state";
+import type { CoreClient, SetPanel, SessionState } from "./types";
+import { useChatMutation } from "./use-chat-mutation";
+import type { ChatMutationContext } from "./use-chat-mutation";
 
 interface UseModelSelectionOptions {
   client: CoreClient;
+  context: ChatMutationContext;
   defaultModel: ModelInfo | null;
   modelPreferences: ReturnType<typeof useModelPreferences>;
   sessionID: string;
@@ -26,11 +29,27 @@ interface StagedModel {
 
 const stagedModels = new Map<string, StagedModel>();
 
+const stagedListeners = new Set<() => void>();
+
+const subscribeStaged = (listener: () => void) => {
+  stagedListeners.add(listener);
+  return () => {
+    stagedListeners.delete(listener);
+  };
+};
+
+const notifyStaged = () => {
+  for (const listener of stagedListeners) {
+    listener();
+  }
+};
+
 const modelKey = (model: StagedModel) =>
   `${model.providerID}/${model.id}/${model.variant ?? ""}`;
 
 export const useModelSelection = ({
   client,
+  context,
   defaultModel,
   modelPreferences,
   sessionID,
@@ -39,9 +58,16 @@ export const useModelSelection = ({
   sync,
 }: UseModelSelectionOptions) => {
   const { session, models, providers } = sync;
-  const [, setRevision] = useState(0);
+  const scope = useServerScope();
+  const pick = useSyncExternalStore(subscribeStaged, () =>
+    stagedModels.get(sessionID)
+  );
+  const switchModel = useChatMutation(context, {
+    invalidate: () => [queryKeys.session.detail(scope, sessionID)],
+    mutationFn: (model: StagedModel) =>
+      client.session.switchModel({ model, sessionID }),
+  });
   const sessionModelKey = session?.model ? modelKey(session.model) : undefined;
-  const pick = stagedModels.get(sessionID);
   const staged = pick && modelKey(pick) !== sessionModelKey ? pick : undefined;
   const selected = staged ?? session?.model;
   const [modelSearch, setModelSearch] = useState("");
@@ -95,7 +121,7 @@ export const useModelSelection = ({
       providerID: model.providerID,
       ...(variant === undefined ? {} : { variant }),
     });
-    setRevision((value) => value + 1);
+    notifyStaged();
     if (closePanel) {
       setPanel(null);
     }
@@ -105,16 +131,22 @@ export const useModelSelection = ({
       showError(error);
     }
   };
-  const commitModel = async () => {
+  // Returns false when the switch failed or was dropped, so the caller must
+  // not send the message.
+  const commitModel = async (): Promise<boolean> => {
     const stagedPick = stagedModels.get(sessionID);
     if (!stagedPick) {
-      return;
+      return true;
     }
     if (modelKey(stagedPick) !== sessionModelKey) {
-      await client.session.switchModel({ model: stagedPick, sessionID });
+      const switched = await switchModel.run(stagedPick);
+      if (!switched) {
+        return false;
+      }
     }
     stagedModels.delete(sessionID);
-    setRevision((value) => value + 1);
+    notifyStaged();
+    return true;
   };
   return {
     chooseModel,

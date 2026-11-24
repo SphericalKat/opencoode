@@ -1,12 +1,9 @@
 import type {
   GenerateImageResult,
   ModelInfo,
-  UsageLimitsInfo,
   UsageLimitsMeter,
-  WebSearchProvider,
-  WebSearchResult,
 } from "@opencode/client";
-import { ClientError } from "@opencode/client";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, {
@@ -18,9 +15,17 @@ import React, {
 } from "react";
 import { Image, Linking, Platform, ScrollView, Text, View } from "react-native";
 
-import { errorMessage } from "../lib/client";
+import { errorMessage, errorMessageOrNull } from "../lib/client";
 import type { Client } from "../lib/client";
 import { copyText } from "../lib/clipboard";
+import {
+  GENERATE_UNSUPPORTED,
+  generateModelsOptions,
+  isUnsupportedContent,
+  usageLimitsOptions,
+  webSearchProvidersOptions,
+} from "../lib/queries/advanced";
+import { useServerScope } from "../lib/server-scope";
 import { externalURL } from "../lib/settings";
 import { useNativePresentation } from "../lib/sheets";
 import { useTheme } from "../lib/theme";
@@ -185,38 +190,6 @@ const Meter = ({
   );
 };
 
-const fetchUsageInfo = async (
-  client: Client,
-  directory: string,
-  isActive: () => boolean,
-  apply: {
-    done: () => void;
-    error: (message: string) => void;
-    info: (info: UsageLimitsInfo | null) => void;
-  }
-) => {
-  try {
-    const result = await client.experimental.usage.limits({
-      location: { directory },
-    });
-    if (isActive()) {
-      apply.info(result.data);
-    }
-  } catch (error_) {
-    if (isActive()) {
-      apply.error(
-        error_ instanceof ClientError &&
-          error_.reason === "UnsupportedContentType"
-          ? "Usage limits require OpenCode 2.2.1 or later. Update your server to use this view."
-          : errorMessage(error_)
-      );
-    }
-  }
-  if (isActive()) {
-    apply.done();
-  }
-};
-
 const Usage = ({
   client,
   directory,
@@ -225,24 +198,15 @@ const Usage = ({
   directory: string;
 }) => {
   useTheme();
-  const [info, setInfo] = useState<UsageLimitsInfo | null>();
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const active = useRef(true);
-  const fetchUsage = () =>
-    fetchUsageInfo(client, directory, () => active.current, {
-      done: () => setLoading(false),
-      error: setError,
-      info: setInfo,
-    });
+  const scope = useServerScope();
+  const usage = useQuery(usageLimitsOptions(scope, client, directory));
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const { data: info, isFetching: loading, refetch } = usage;
+  const error = errorMessageOrNull(usage.error) ?? linkError;
   const load = async () => {
-    setLoading(true);
-    setError(null);
-    await fetchUsage();
+    setLinkError(null);
+    await refetch();
   };
-  const loadOnMount = useEffectEvent(() => {
-    void fetchUsage();
-  });
   const setHeaderRefresh = useContext(HeaderRefreshContext);
   const refreshUsage = useEffectEvent(() => {
     void load();
@@ -251,13 +215,6 @@ const Usage = ({
     setHeaderRefresh?.({ loading, refresh: refreshUsage });
     return () => setHeaderRefresh?.(null);
   }, [setHeaderRefresh, loading]);
-  useEffect(() => {
-    active.current = true;
-    loadOnMount();
-    return () => {
-      active.current = false;
-    };
-  }, []);
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
@@ -269,7 +226,7 @@ const Usage = ({
           void load();
         }}
       />
-      {loading && !info && <Busy />}
+      {usage.isPending && <Busy />}
       {info && (
         <>
           <BodyText muted>{info.workspace.name || info.workspace.id}</BodyText>
@@ -277,7 +234,7 @@ const Usage = ({
             title="Open usage dashboard"
             onPress={() => {
               void openLink(info.workspace.usageURL).catch((error_) =>
-                setError(errorMessage(error_))
+                setLinkError(errorMessage(error_))
               );
             }}
           />
@@ -329,57 +286,48 @@ const WebSearch = ({
   directory: string;
 }) => {
   const { colors } = useTheme();
-  const [providers, setProviders] = useState<WebSearchProvider[]>([]);
+  const scope = useServerScope();
+  const providerList = useQuery(
+    webSearchProvidersOptions(scope, client, directory)
+  );
+  const providers = providerList.data ?? [];
   const [provider, setProvider] = useState<string>();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<WebSearchResult[]>();
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const active = useRef(true);
   const request = useRef<AbortController | undefined>(undefined);
-  useEffect(() => {
-    active.current = true;
-    void client.websearch
-      .providers({ location: { directory } })
-      .then((result) => {
-        if (active.current) {
-          setProviders(result.data);
-        }
-        return null;
-      })
-      .catch((error_) => {
-        if (active.current) {
-          setError(errorMessage(error_));
-        }
-      });
-    return () => {
-      active.current = false;
-      request.current?.abort();
-    };
-  }, [client, directory]);
-  const search = async () => {
+  const searchWeb = useMutation({
+    mutationFn: async (input: {
+      providerID: string | undefined;
+      query: string;
+      signal: AbortSignal;
+    }) => {
+      const result = await client.websearch.query(
+        {
+          location: { directory },
+          providerID: input.providerID,
+          query: input.query,
+        },
+        { signal: input.signal }
+      );
+      return result.data.results;
+    },
+  });
+  const { isPending: busy, data: results } = searchWeb;
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const error =
+    errorMessageOrNull(searchWeb.error) ??
+    errorMessageOrNull(providerList.error) ??
+    linkError;
+  useEffect(() => () => request.current?.abort(), []);
+  const search = () => {
     const abort = new AbortController();
     request.current?.abort();
     request.current = abort;
-    setBusy(true);
-    setError(null);
-    setResults(undefined);
-    try {
-      const result = await client.websearch.query(
-        { location: { directory }, providerID: provider, query: query.trim() },
-        { signal: abort.signal }
-      );
-      if (active.current && !abort.signal.aborted) {
-        setResults(result.data.results);
-      }
-    } catch (error_) {
-      if (active.current && !abort.signal.aborted) {
-        setError(errorMessage(error_));
-      }
-    }
-    if (active.current && !abort.signal.aborted) {
-      setBusy(false);
-    }
+    setLinkError(null);
+    searchWeb.mutate({
+      providerID: provider,
+      query: query.trim(),
+      signal: abort.signal,
+    });
   };
   return (
     <ScrollView
@@ -400,7 +348,7 @@ const WebSearch = ({
         returnKeyType="search"
         onSubmitEditing={() => {
           if (query.trim() && !busy) {
-            void search();
+            search();
           }
         }}
       />
@@ -424,9 +372,7 @@ const WebSearch = ({
         variant="primary"
         busy={busy}
         disabled={!query.trim()}
-        onPress={() => {
-          void search();
-        }}
+        onPress={search}
       />
       <ErrorNotice error={error} />
       {results?.map((result, index) => (
@@ -453,7 +399,7 @@ const WebSearch = ({
             size="compact"
             onPress={() => {
               void openLink(result.url).catch((error_) =>
-                setError(errorMessage(error_))
+                setLinkError(errorMessage(error_))
               );
             }}
           />
@@ -469,6 +415,89 @@ const WebSearch = ({
   );
 };
 
+interface GenerateInput {
+  aspect: string;
+  kind: "text" | "image";
+  model: ModelInfo | undefined;
+  prompt: string;
+}
+
+type GenerateOutput =
+  | { images: GenerateImageResult; kind: "image" }
+  | { kind: "text"; text: string };
+
+const useGeneration = (client: Client) => {
+  const request = useRef<AbortController | undefined>(undefined);
+  const generation = useMutation({
+    mutationFn: async (
+      input: GenerateInput & { signal: AbortSignal }
+    ): Promise<GenerateOutput> => {
+      const ref = input.model
+        ? { id: input.model.id, providerID: input.model.providerID }
+        : undefined;
+      if (input.kind === "image" && ref) {
+        if (
+          !/^\d+:\d+$/u.test(input.aspect) ||
+          input.aspect.split(":").some((part) => Number(part) <= 0)
+        ) {
+          throw new Error("Enter an aspect ratio such as 1:1 or 16:9");
+        }
+        const images = await client.experimental.generate.image(
+          {
+            aspect: input.aspect as `${number}:${number}`,
+            model: ref,
+            n: 1,
+            prompt: input.prompt,
+          },
+          { signal: input.signal }
+        );
+        return { images, kind: "image" };
+      }
+      const result = await client.experimental.generate.text(
+        { model: ref, prompt: input.prompt },
+        { signal: input.signal }
+      );
+      return { kind: "text", text: result.text };
+    },
+  });
+  useEffect(() => () => request.current?.abort(), []);
+  const { data, error, isPending, mutate, reset } = generation;
+  const start = (input: GenerateInput) => {
+    const abort = new AbortController();
+    request.current?.abort();
+    request.current = abort;
+    mutate({ ...input, signal: abort.signal });
+  };
+  const stop = () => {
+    request.current?.abort();
+    reset();
+  };
+  let message: string | null = null;
+  if (error) {
+    message = isUnsupportedContent(error)
+      ? GENERATE_UNSUPPORTED
+      : errorMessage(error);
+  }
+  return {
+    busy: isPending,
+    clear: reset,
+    error: message,
+    images: data?.kind === "image" ? data.images : undefined,
+    start,
+    stop,
+    text: data?.kind === "text" ? data.text : "",
+  };
+};
+
+const useGenerateModels = (client: Client, directory: string) => {
+  const scope = useServerScope();
+  const list = useQuery(generateModelsOptions(scope, client, directory));
+  return {
+    error: errorMessageOrNull(list.error),
+    models: list.data ?? [],
+  };
+};
+
 const Generate = ({
   client,
   directory,
@@ -479,38 +508,34 @@ const Generate = ({
   const { colors } = useTheme();
   const withNativePresentation = useNativePresentation();
   const [kind, setKind] = useState<"text" | "image">("text");
-  const [models, setModels] = useState<ModelInfo[]>([]);
+  const { models, error: modelError } = useGenerateModels(client, directory);
   const [model, setModel] = useState<ModelInfo>();
   const [query, setQuery] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [text, setText] = useState("");
-  const [images, setImages] = useState<GenerateImageResult>();
   const [aspect, setAspect] = useState("1:1");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
-  const active = useRef(true);
-  const request = useRef<AbortController | undefined>(undefined);
-  useEffect(() => {
-    active.current = true;
-    void client.model
-      .list({ location: { directory }, types: ["chat", "image"] })
-      .then((result) => {
-        if (active.current) {
-          setModels(result.data.filter((item) => item.enabled));
-        }
-        return null;
-      })
-      .catch((error_) => {
-        if (active.current) {
-          setError(errorMessage(error_));
-        }
-      });
-    return () => {
-      active.current = false;
-      request.current?.abort();
-    };
-  }, [client, directory]);
+  const {
+    busy,
+    clear: clearGeneration,
+    error: generationError,
+    images,
+    start,
+    stop,
+    text,
+  } = useGeneration(client);
+  const [modelErrorShown, setModelErrorShown] = useState(true);
+  const error =
+    generationError ?? localError ?? (modelErrorShown ? modelError : null);
+  const resetErrors = () => {
+    setLocalError(null);
+    setModelErrorShown(false);
+  };
+  const showError = (message: string) => {
+    clearGeneration();
+    setModelErrorShown(false);
+    setLocalError(message);
+  };
   const available = models.filter((item) =>
     kind === "image"
       ? item.type === "image"
@@ -521,69 +546,21 @@ const Generate = ({
       .toLowerCase()
       .includes(query.toLowerCase())
   );
-  const runGeneration = async (abort: AbortController) => {
-    const ref = model
-      ? { id: model.id, providerID: model.providerID }
-      : undefined;
-    if (kind === "image" && ref) {
-      if (
-        !/^\d+:\d+$/u.test(aspect) ||
-        aspect.split(":").some((part) => Number(part) <= 0)
-      ) {
-        throw new Error("Enter an aspect ratio such as 1:1 or 16:9");
-      }
-      const result = await client.experimental.generate.image(
-        { aspect: aspect as `${number}:${number}`, model: ref, n: 1, prompt },
-        { signal: abort.signal }
-      );
-      if (active.current && !abort.signal.aborted) {
-        setImages(result);
-      }
-    } else {
-      const result = await client.experimental.generate.text(
-        { model: ref, prompt },
-        { signal: abort.signal }
-      );
-      if (active.current && !abort.signal.aborted) {
-        setText(result.text);
-      }
-    }
-  };
-  const generate = async () => {
+  const generate = () => {
     if (kind === "image" && !model) {
-      setError("Select an image model");
+      showError("Select an image model");
       return;
     }
-    const abort = new AbortController();
-    request.current?.abort();
-    request.current = abort;
-    setBusy(true);
-    setError(null);
-    setText("");
-    setImages(undefined);
-    try {
-      await runGeneration(abort);
-    } catch (error_) {
-      if (active.current && !abort.signal.aborted) {
-        setError(
-          error_ instanceof ClientError &&
-            error_.reason === "UnsupportedContentType"
-            ? "Standalone generation requires OpenCode 2.2.1 or later. Update your server to use this feature."
-            : errorMessage(error_)
-        );
-      }
-    }
-    if (active.current && !abort.signal.aborted) {
-      setBusy(false);
-    }
+    resetErrors();
+    start({ aspect, kind, model, prompt });
   };
   const shareImage = async (image: GenerateImageResult["images"][number]) => {
     setSharing(true);
-    setError(null);
+    resetErrors();
     try {
       await saveImage(image, withNativePresentation);
     } catch (error_) {
-      setError(errorMessage(error_));
+      showError(errorMessage(error_));
     }
     setSharing(false);
   };
@@ -665,17 +642,14 @@ const Generate = ({
         variant="primary"
         busy={busy}
         disabled={!prompt.trim() || (kind === "image" && !model)}
-        onPress={() => {
-          void generate();
-        }}
+        onPress={generate}
       />
       {busy && (
         <Button
           title="Stop waiting"
           size="compact"
           onPress={() => {
-            request.current?.abort();
-            setBusy(false);
+            stop();
           }}
         />
       )}
@@ -698,7 +672,7 @@ const Generate = ({
             size="compact"
             onPress={() => {
               void copyText(text).catch((error_) =>
-                setError(errorMessage(error_))
+                showError(errorMessage(error_))
               );
             }}
           />

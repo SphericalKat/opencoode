@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
+import { settle } from "../../lib/async";
+import { errorMessageOrNull } from "../../lib/client";
 import { useModelPreferences } from "../../lib/model-preferences";
 import { useNativePresentation } from "../../lib/sheets";
 import { useTheme, useThemedStyles } from "../../lib/theme";
+import { useLiveStore } from "../../stores/live-store";
 import type { MessageMenuContext } from "./message-menu-entries";
 import { createStyles } from "./styles";
-import type { Props } from "./types";
+import type { Props, SessionState } from "./types";
 import { useAttachmentHandoff } from "./use-attachment-handoff";
+import { useChatActions } from "./use-chat-actions";
 import { useChatErrors } from "./use-chat-errors";
 import { useComposerDraft } from "./use-composer-draft";
 import { useComposerMetrics } from "./use-composer-metrics";
@@ -15,18 +19,14 @@ import { useDeviceAttachments } from "./use-device-attachments";
 import { useDraftEditing } from "./use-draft-editing";
 import { useFileSearch } from "./use-file-search";
 import { useForegroundTracking } from "./use-foreground-tracking";
-import { useLiveSession } from "./use-live-session";
+import { useMessageHistory } from "./use-message-history";
 import { useMessageSelection } from "./use-message-selection";
 import { useModelSelection } from "./use-model-selection";
-import { useOlderMessages } from "./use-older-messages";
 import { usePanelRequest } from "./use-panel-request";
 import { useResponseHaptics } from "./use-response-haptics";
-import { useRunAction } from "./use-run-action";
 import { useScreenReader } from "./use-screen-reader";
 import { useSendMessage } from "./use-send-message";
-import { useSessionCatalog } from "./use-session-catalog";
-import { useSessionRefresh } from "./use-session-refresh";
-import { useSessionState } from "./use-session-state";
+import { useSessionData } from "./use-session-data";
 import { useSessionTools } from "./use-session-tools";
 import { useSessionViewSync } from "./use-session-view-sync";
 import { useSheetState } from "./use-sheet-state";
@@ -39,17 +39,12 @@ export const useChatController = ({
   sessionID,
   onSessionChanged,
   onOpenSession,
-  attachmentPath,
-  attachmentContext,
-  onAttachmentConsumed,
   draftKey = sessionID,
   visible = true,
   onOpenNavigation,
   onOpenSettings,
   serverID,
-  onSelectionChange,
   onSessionInfo,
-  sessionPanelRequest,
 }: Props) => {
   const client = backend.core;
   const { opencodeClient } = backend;
@@ -59,7 +54,6 @@ export const useChatController = ({
   const modelPreferences = useModelPreferences(serverID || "");
   const withNativePresentation = useNativePresentation();
   const metrics = useComposerMetrics();
-  const sync = useSessionState(backend);
   const sheets = useSheetState();
   const { panel, setPanel, setSideQuestion } = sheets;
   const [foreground, setForeground] = useState(
@@ -67,22 +61,62 @@ export const useChatController = ({
   );
   const alive = useRef(true);
   const errors = useChatErrors({ alive, onConnectionLost });
-  const { connectionFailures, reportConnectionFailure, setError, showError } =
-    errors;
-  const { requestVersionRef } = sync;
+  const { reportConnectionFailure, setError, showError } = errors;
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-      requestVersionRef.current += 1;
     };
-  }, [requestVersionRef]);
+  }, []);
+  const data = useSessionData({
+    backend,
+    foreground,
+    reportConnectionFailure,
+    sessionID,
+    visible,
+  });
+  const history = useMessageHistory({
+    backend,
+    live: foreground && visible,
+    revertMessageID: data.session?.revert?.messageID,
+    sessionID,
+  });
+  const streamStatus = useLiveStore((state) => state.status);
+  const streamFailure = useLiveStore((state) => state.failure);
+  const notice = useLiveStore((state) => state.notices[sessionID]);
+  const sync: SessionState = {
+    ...data,
+    activityNotice: notice?.activityNotice ?? backend.activityNotice,
+    backendWaiting: notice?.waiting,
+    messages: history.messages,
+    streamStatus,
+  };
+  const context = {
+    alive,
+    onSessionChanged,
+    sessionID,
+    setError,
+    setPanel,
+    showError,
+  };
+  const actions = useChatActions({
+    backend,
+    context,
+    onOpenSession,
+  });
+  const { pending } = actions;
+  const fetchError =
+    data.queryError ??
+    errorMessageOrNull(history.messagesError) ??
+    streamFailure;
+  const loading = data.detailPending || history.messagesPending;
+  const { refresh } = data;
   const { screenReader, screenReaderEnabled } = useScreenReader();
   const selection = useMessageSelection({
     alive,
     messages: sync.messages,
-    onSelectionChange,
     panel,
+    sessionID,
     setPanel,
     showError,
     visible,
@@ -91,7 +125,6 @@ export const useChatController = ({
   usePanelRequest({
     capabilities,
     sessionID,
-    sessionPanelRequest,
     setPanel,
     visible,
   });
@@ -115,40 +148,7 @@ export const useChatController = ({
     session: sync.session,
     showError,
   });
-  const { refresh, applyMessageSnapshot, handleChanged } = useSessionRefresh({
-    alive,
-    capabilities,
-    client,
-    opencodeClient,
-    reportConnectionFailure,
-    sessionID,
-    sync,
-  });
   useForegroundTracking({ composer, draftKey, setForeground, showError });
-  useLiveSession({
-    alive,
-    applyMessageSnapshot,
-    backend,
-    capabilities,
-    client,
-    connectionFailures,
-    foreground,
-    opencodeClient,
-    refresh,
-    reportConnectionFailure,
-    sessionID,
-    showError,
-    sync,
-    visible,
-  });
-  const { defaultModel } = useSessionCatalog({
-    capabilities,
-    client,
-    foreground,
-    opencodeClient,
-    sync,
-    visible,
-  });
   useSessionViewSync({
     foreground,
     onSessionChanged,
@@ -159,24 +159,11 @@ export const useChatController = ({
     showError,
     visible,
   });
-  useAttachmentHandoff({
-    attachmentContext,
-    attachmentPath,
-    composer,
-    onAttachmentConsumed,
-    showError,
-  });
-  const { pending, run, submitting } = useRunAction({
-    alive,
-    onSessionChanged,
-    refresh,
-    setError,
-    setPanel,
-    showError,
-  });
+  useAttachmentHandoff({ composer, sessionID, showError });
   const modelChoice = useModelSelection({
     client,
-    defaultModel,
+    context,
+    defaultModel: data.defaultModel,
     modelPreferences,
     sessionID,
     setPanel,
@@ -184,20 +171,20 @@ export const useChatController = ({
     sync,
   });
   const messageSend = useSendMessage({
+    actions,
     alive,
     capabilities,
     client,
     commitModel: modelChoice.commitModel,
     composer,
+    context,
     draftKey,
     jumpToLatest,
     opencodeClient,
-    run,
     sessionID,
     setPanel,
     setSideQuestion,
     showError,
-    submitting,
     sync,
   });
   useResponseHaptics({
@@ -219,13 +206,21 @@ export const useChatController = ({
     showError,
     withNativePresentation,
   });
-  const older = useOlderMessages({ alive, client, sessionID, showError, sync });
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = history;
+  const loadOlder = async () => {
+    if (!hasNextPage || isFetchingNextPage) {
+      return;
+    }
+    await settle(async () => {
+      await fetchNextPage({ throwOnError: true });
+    }, showError);
+  };
   const editing = useDraftEditing({
     alive,
     capabilities,
     composer,
+    context,
     opencodeClient,
-    run,
     sessionID,
     setPanel,
     setSelectedMessageID,
@@ -234,8 +229,9 @@ export const useChatController = ({
   const tools = useSessionTools({
     alive,
     capabilities,
+    context,
     opencodeClient,
-    run,
+    panel,
     session: sync.session,
     sessionID,
     setPanel,
@@ -296,6 +292,7 @@ export const useChatController = ({
   });
   return {
     actionMessage: selection.actionMessage,
+    actions,
     active: sync.active,
     activity: view.activity,
     activityNotice: sync.activityNotice,
@@ -319,7 +316,6 @@ export const useChatController = ({
     context: tools.context,
     copySelected: selection.copySelected,
     currentModel: modelChoice.currentModel,
-    cursor: sync.cursor,
     delivery: composer.delivery,
     diffs: tools.diffs,
     disclosures: scroll.disclosures,
@@ -330,26 +326,25 @@ export const useChatController = ({
     enabledModels: modelChoice.enabledModels,
     error: errors.error,
     exportSession: tools.exportSession,
-    fetchError: sync.fetchError,
+    fetchError,
     fileQuery: fileSearch.fileQuery,
     fileResults: fileSearch.fileResults,
     fileSearchBusy: fileSearch.fileSearchBusy,
     finishUserScroll: scroll.finishUserScroll,
     foreground,
     forms: sync.forms,
-    handleChanged,
+    handleChanged: refresh,
     hasPrompt: composer.hasPrompt,
-    historyEpochRef: sync.historyEpochRef,
     inbox: sync.inbox,
     inspect: tools.inspect,
     interrupt: messageSend.interrupt,
     jumpToLatest: scroll.jumpToLatest,
     list: scroll.list,
     listLoaded: scroll.listLoaded,
-    liveMessagesRef: sync.liveMessagesRef,
-    loadOlder: older.loadOlder,
-    loading: sync.loading,
-    loadingOlder: older.loadingOlder,
+    hasNextPage,
+    isFetchingNextPage,
+    loadOlder,
+    loading,
     maintainPosition: scroll.maintainPosition,
     maximumComposerHeight: metrics.maximumComposerHeight,
     menuContext,
@@ -371,7 +366,6 @@ export const useChatController = ({
     refresh,
     renderMessage: view.renderMessage,
     restoredSkillIDs: composer.restoredSkillIDs,
-    run,
     selectedAgentIDs: composer.selectedAgentIDs,
     selectedMessageID: selection.selectedMessageID,
     selectedSkills: composer.selectedSkills,
@@ -384,7 +378,7 @@ export const useChatController = ({
     setAttachments: composer.setAttachments,
     setBackgroundDirectory: sheets.setBackgroundDirectory,
     setBackgroundShellID: sheets.setBackgroundShellID,
-    setCatalogRevision: sync.setCatalogRevision,
+    retryCatalog: sync.retryCatalog,
     setDelivery: composer.setDelivery,
     setDraft: composer.setDraft,
     setError: errors.setError,
@@ -407,7 +401,6 @@ export const useChatController = ({
     stopping: messageSend.stopping,
     streamStatus: sync.streamStatus,
     styles,
-    syncErrors: sync.syncErrors,
     textSelectionMessage: sheets.textSelectionMessage,
     transcriptLayoutChanged: scroll.transcriptLayoutChanged,
     transcriptMessages: view.transcriptMessages,

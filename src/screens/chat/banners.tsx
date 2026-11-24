@@ -11,10 +11,9 @@ type ErrorBannersProps = Pick<
   | "error"
   | "fetchError"
   | "refresh"
-  | "setCatalogRevision"
+  | "retryCatalog"
   | "setError"
   | "styles"
-  | "syncErrors"
 >;
 
 export const ErrorBanners = ({
@@ -22,10 +21,9 @@ export const ErrorBanners = ({
   error,
   fetchError,
   refresh,
-  setCatalogRevision,
+  retryCatalog,
   setError,
   styles,
-  syncErrors,
 }: ErrorBannersProps) => (
   <>
     {error && (
@@ -39,12 +37,12 @@ export const ErrorBanners = ({
         />
       </View>
     )}
-    {(fetchError || catalogError || Object.values(syncErrors)[0]) && (
+    {(fetchError || catalogError) && (
       <View style={styles.errorBanner}>
         <ErrorNotice
-          error={fetchError || catalogError || Object.values(syncErrors)[0]}
+          error={fetchError || catalogError}
           onRetry={() => {
-            setCatalogRevision((value) => value + 1);
+            retryCatalog();
             void refresh();
           }}
         />
@@ -55,25 +53,16 @@ export const ErrorBanners = ({
 
 interface RevertBannerProps extends Pick<
   ChatController,
-  | "historyEpochRef"
-  | "liveMessagesRef"
-  | "opencodeClient"
-  | "pending"
-  | "run"
-  | "sessionID"
-  | "styles"
+  "opencodeClient" | "pending" | "actions" | "sessionID" | "styles"
 > {
   session: SessionInfo;
 }
 
 export const RevertBanner = ({
-  historyEpochRef,
-  liveMessagesRef,
   opencodeClient,
   pending,
-  run,
+  actions,
   session,
-  sessionID,
   styles,
 }: RevertBannerProps) =>
   opencodeClient &&
@@ -88,7 +77,7 @@ export const RevertBanner = ({
           title="Restore"
           size="compact"
           onPress={() => {
-            void run(() => opencodeClient.session.revert.clear({ sessionID }));
+            void actions.clearRevert();
           }}
         />
         <Button
@@ -97,7 +86,7 @@ export const RevertBanner = ({
           variant="danger"
           disabled={pending}
           onPress={() => {
-            void run(async () => {
+            void (async () => {
               if (
                 await confirmAction(
                   "Commit this revert?",
@@ -105,11 +94,9 @@ export const RevertBanner = ({
                   { confirmLabel: "Commit revert" }
                 )
               ) {
-                await opencodeClient.session.revert.commit({ sessionID });
-                historyEpochRef.current += 1;
-                liveMessagesRef.current.clear();
+                await actions.commitRevert();
               }
-            });
+            })();
           }}
         />
       </Row>

@@ -21,6 +21,7 @@ import { parsePairingPayload } from "../lib/pairing";
 import { openExternalUrl, PRIVACY_POLICY_URL } from "../lib/privacy";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
+import type { ConnectionForm } from "../stores/connection-store";
 import { BackButton } from "./back-button";
 import { MotionContent } from "./motion";
 import { OpenCodeLogo } from "./open-code-logo";
@@ -41,13 +42,6 @@ import {
 
 type InputInstance = React.ComponentRef<typeof TextInput>;
 
-export interface ConnectionForm {
-  id: string;
-  name: string;
-  url: string;
-  token: string;
-  username?: string;
-}
 type Step = "servers" | "home" | "pair" | "password" | "scan";
 interface Props {
   form: ConnectionForm;
@@ -56,8 +50,6 @@ interface Props {
   unavailableID?: string;
   connecting: boolean;
   error: string | null;
-  pairingLink?: string | null;
-  onPairingLinkConsumed: () => void;
   onChangeForm: (form: ConnectionForm) => void;
   onClearError: () => void;
   onConnect: (
@@ -435,21 +427,6 @@ const useServersGuard = (
   }
 };
 
-const usePairingLinkText = (
-  pairingLink: string | null | undefined,
-  setPairingText: (text: string) => void,
-  setStep: (next: Step) => void
-) => {
-  const [handled, setHandled] = useState<string | null | undefined>();
-  if (handled !== pairingLink) {
-    setHandled(pairingLink);
-    if (pairingLink) {
-      setPairingText(pairingLink);
-      setStep("pair");
-    }
-  }
-};
-
 export const ConnectionFlow = ({
   form,
   connections,
@@ -457,8 +434,6 @@ export const ConnectionFlow = ({
   unavailableID,
   connecting,
   error,
-  pairingLink,
-  onPairingLinkConsumed,
   onChangeForm,
   onClearError,
   onConnect,
@@ -676,25 +651,12 @@ export const ConnectionFlow = ({
       }
     );
   };
-  const acceptPairingRef = useRef(acceptPairing);
-  const pairingConsumedRef = useRef(onPairingLinkConsumed);
 
   useEffect(() => {
     connectRef.current = onConnect;
-    acceptPairingRef.current = acceptPairing;
-    pairingConsumedRef.current = onPairingLinkConsumed;
   });
 
   useServersGuard(step, connections.length, unavailableID, setStep);
-  usePairingLinkText(pairingLink, setPairingText, setStep);
-
-  useEffect(() => {
-    if (!pairingLink) {
-      return;
-    }
-    acceptPairingRef.current(pairingLink);
-    pairingConsumedRef.current();
-  }, [pairingLink]);
 
   useEffect(() => {
     if (!submission) {

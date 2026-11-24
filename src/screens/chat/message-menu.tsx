@@ -25,7 +25,7 @@ type MessageMenuProps = Pick<
   | "messages"
   | "onOpenSession"
   | "opencodeClient"
-  | "run"
+  | "actions"
   | "sessionID"
   | "setBackgroundDirectory"
   | "setBackgroundShellID"
@@ -39,17 +39,13 @@ const REVERT_MESSAGE =
   "The server will stage a revert of later messages and file changes. You can restore the staged changes.";
 
 export const MessageMenu = ({
-  client,
   closeMessageMenu,
   editMessage,
   menuContext,
   messageMenuTarget,
   messages,
-  onOpenSession,
-  opencodeClient,
-  run,
+  actions: chatActions,
   session,
-  sessionID,
   setBackgroundDirectory,
   setBackgroundShellID,
   setPanel,
@@ -115,33 +111,23 @@ export const MessageMenu = ({
       fork: {
         label: "Fork from here",
         onSelect: () => {
-          void run(async () => {
-            const next = await client.session.fork({
-              before: message.id,
-              sessionID,
-            });
-            onOpenSession(next.id);
-          });
+          void chatActions.fork(message.id);
         },
       },
       revert: {
         destructive: true,
         label: newestUser?.id === message.id ? "Undo" : "Revert to here",
         onSelect: () => {
-          void run(async () => {
+          void (async () => {
             const confirmed = await confirmAction(
               "Undo from this message?",
               REVERT_MESSAGE,
               { confirmLabel: "Revert", destructive: true }
             );
             if (confirmed) {
-              await opencodeClient?.session.revert.stage({
-                files: true,
-                messageID: message.id,
-                sessionID,
-              });
+              await chatActions.stageRevert(message.id);
             }
-          });
+          })();
         },
       },
       select: {

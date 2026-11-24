@@ -3,14 +3,15 @@ import { useEffect, useState } from "react";
 import { BackHandler, Platform } from "react-native";
 
 import { copyText } from "../../lib/clipboard";
+import { useChatUiActions } from "../../stores/chat-ui-store";
 import { messageText } from "./message-rows";
 import type { Panel, Alive, SetPanel } from "./types";
 
 interface UseMessageSelectionOptions {
   alive: Alive;
   messages: SessionMessageInfo[];
-  onSelectionChange: ((selected: boolean) => void) | undefined;
   panel: Panel;
+  sessionID: string;
   setPanel: SetPanel;
   showError: (reason: unknown) => void;
   visible: boolean;
@@ -19,12 +20,13 @@ interface UseMessageSelectionOptions {
 export const useMessageSelection = ({
   alive,
   messages,
-  onSelectionChange,
   panel,
+  sessionID,
   setPanel,
   showError,
   visible,
 }: UseMessageSelectionOptions) => {
+  const { clearSelection, setSelection } = useChatUiActions();
   const [selectedMessageID, setSelectedMessageID] = useState<string | null>(
     null
   );
@@ -63,9 +65,9 @@ export const useMessageSelection = ({
     setPanel((current) => (current === "selectText" ? null : current));
   }
   useEffect(() => {
-    onSelectionChange?.(visible && !!selectedMessageID);
-    return () => onSelectionChange?.(false);
-  }, [visible, selectedMessageID, onSelectionChange]);
+    setSelection(sessionID, visible && !!selectedMessageID);
+    return () => clearSelection(sessionID);
+  }, [visible, selectedMessageID, sessionID, setSelection, clearSelection]);
   const actionMessage = selectedMessageID
     ? messages.find((message) => message.id === selectedMessageID)
     : undefined;

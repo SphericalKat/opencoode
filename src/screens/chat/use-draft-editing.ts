@@ -2,17 +2,24 @@ import type { SessionInboxInfo, SessionMessageInfo } from "@opencode/client";
 import React from "react";
 
 import { confirmAction } from "../../components/dialog";
-import type { OpenCodeClient, Capabilities } from "./session-sync";
-import type { Alive, SetPanel } from "./types";
+import { queryKeys } from "../../lib/query-keys";
+import { useServerScope } from "../../lib/server-scope";
+import type {
+  Alive,
+  Capabilities,
+  OpenCodeClient,
+  SetPanel,
+  SessionState,
+} from "./types";
+import { useChatMutation } from "./use-chat-mutation";
+import type { ChatMutationContext } from "./use-chat-mutation";
 import type { ComposerDraft } from "./use-composer-draft";
-import type { RunAction } from "./use-run-action";
-import type { SessionState } from "./use-session-state";
 
 interface UseDraftEditingOptions {
   alive: Alive;
   capabilities: Capabilities;
+  context: ChatMutationContext;
   opencodeClient: OpenCodeClient;
-  run: RunAction;
   sessionID: string;
   setPanel: SetPanel;
   setSelectedMessageID: React.Dispatch<React.SetStateAction<string | null>>;
@@ -23,8 +30,8 @@ interface UseDraftEditingOptions {
 export const useDraftEditing = ({
   alive,
   capabilities,
+  context,
   opencodeClient,
-  run,
   sessionID,
   setPanel,
   setSelectedMessageID,
@@ -46,8 +53,10 @@ export const useDraftEditing = ({
     draftLoaded,
     setDelivery,
   } = composer;
-  const editInbox = (item: SessionInboxInfo) =>
-    run(async () => {
+  const scope = useServerScope();
+  const inboxEdit = useChatMutation(context, {
+    invalidate: () => [queryKeys.session.inbox(scope, sessionID)],
+    mutationFn: async (item: SessionInboxInfo) => {
       if (!opencodeClient || !capabilities.inbox || !draftLoaded) {
         return;
       }
@@ -108,7 +117,9 @@ export const useDraftEditing = ({
         setRestoredSkillIDs([]);
         setSelectedAgentIDs([]);
       }
-    });
+    },
+  });
+  const editInbox = (item: SessionInboxInfo) => inboxEdit.run(item);
 
   const fillComposer = (
     message: Extract<SessionMessageInfo, { type: "user" }>
@@ -138,10 +149,14 @@ export const useDraftEditing = ({
     setPanel(null);
   };
 
-  const editMessage = (
-    message: Extract<SessionMessageInfo, { type: "user" }>
-  ) =>
-    run(async () => {
+  const messageEdit = useChatMutation(context, {
+    invalidate: () => [
+      queryKeys.session.detail(scope, sessionID),
+      queryKeys.session.messages(scope, sessionID),
+    ],
+    mutationFn: async (
+      message: Extract<SessionMessageInfo, { type: "user" }>
+    ) => {
       if (!draftLoaded) {
         return;
       }
@@ -170,7 +185,11 @@ export const useDraftEditing = ({
         return;
       }
       fillComposer(message);
-    });
+    },
+  });
+  const editMessage = (
+    message: Extract<SessionMessageInfo, { type: "user" }>
+  ) => messageEdit.run(message);
 
   return { editInbox, editMessage };
 };

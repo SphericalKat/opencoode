@@ -43,7 +43,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     contentSizeChanged,
     copySelected,
     currentModel,
-    cursor,
+    hasNextPage,
     delivery,
     disclosures,
     draft,
@@ -57,15 +57,13 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     forms,
     handleChanged,
     hasPrompt,
-    historyEpochRef,
     inbox,
     interrupt,
     jumpToLatest,
     list,
     listLoaded,
-    liveMessagesRef,
     loadOlder,
-    loadingOlder,
+    isFetchingNextPage,
     maintainPosition,
     maximumComposerHeight,
     menuContext,
@@ -80,14 +78,14 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     refresh,
     renderMessage,
     restoredSkillIDs,
-    run,
+    actions,
     selectedAgentIDs,
     selectedSkills,
     send,
     sending,
     sessionID,
     setAttachments,
-    setCatalogRevision,
+    retryCatalog,
     setDraft,
     setError,
     setFollowing,
@@ -103,7 +101,6 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
     stopping,
     streamStatus,
     styles,
-    syncErrors,
     transcriptLayoutChanged,
     transcriptMessages,
     updateComposerHeight,
@@ -119,7 +116,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
       editMessage={editMessage}
       menuContext={menuContext}
       onOpenSession={onOpenSession}
-      run={run}
+      actions={actions}
       sessionID={sessionID}
       setSelectedMessageID={setSelectedMessageID}
       styles={styles}
@@ -133,17 +130,14 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         error={error}
         fetchError={fetchError}
         refresh={refresh}
-        setCatalogRevision={setCatalogRevision}
+        retryCatalog={retryCatalog}
         setError={setError}
         styles={styles}
-        syncErrors={syncErrors}
       />
       <RevertBanner
-        historyEpochRef={historyEpochRef}
-        liveMessagesRef={liveMessagesRef}
         opencodeClient={opencodeClient}
         pending={pending}
-        run={run}
+        actions={actions}
         sessionID={sessionID}
         styles={styles}
         session={session}
@@ -153,7 +147,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         beginUserScroll={beginUserScroll}
         capabilities={capabilities}
         contentSizeChanged={contentSizeChanged}
-        cursor={cursor}
+        hasNextPage={hasNextPage}
         disclosures={disclosures}
         draftLoaded={draftLoaded}
         editInbox={editInbox}
@@ -165,13 +159,13 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         list={list}
         listLoaded={listLoaded}
         loadOlder={loadOlder}
-        loadingOlder={loadingOlder}
+        isFetchingNextPage={isFetchingNextPage}
         maintainPosition={maintainPosition}
         opencodeClient={opencodeClient}
         pending={pending}
         permissions={permissions}
         renderMessage={renderMessage}
-        run={run}
+        actions={actions}
         sessionID={sessionID}
         setFollowing={setFollowing}
         showError={showError}
@@ -207,7 +201,7 @@ const renderConversation = (chat: ChatController, session: SessionInfo) => {
         providerLabel={providerLabel}
         selectedVariant={selectedVariant}
         restoredSkillIDs={restoredSkillIDs}
-        run={run}
+        actions={actions}
         selectedAgentIDs={selectedAgentIDs}
         selectedSkills={selectedSkills}
         send={send}
@@ -256,13 +250,13 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
     opencodeClient,
     panel,
     pending,
-    run,
+    actions,
     selectedVariant,
     serverID,
     sessionID,
     setBackgroundDirectory,
     setBackgroundShellID,
-    setCatalogRevision,
+    retryCatalog,
     setModelSearch,
     setPanel,
     setSideQuestion,
@@ -283,7 +277,7 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         opencodeClient={opencodeClient}
         panel={panel}
         pending={pending}
-        run={run}
+        actions={actions}
         sessionID={sessionID}
         setBackgroundDirectory={setBackgroundDirectory}
         setBackgroundShellID={setBackgroundShellID}
@@ -315,7 +309,7 @@ const renderSessionSheets = (chat: ChatController, session: SessionInfo) => {
         panel={panel}
         pending={pending}
         serverID={serverID}
-        setCatalogRevision={setCatalogRevision}
+        retryCatalog={retryCatalog}
         setModelSearch={setModelSearch}
         setPanel={setPanel}
       />
@@ -341,7 +335,7 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
     onOpenSession,
     opencodeClient,
     panel,
-    run,
+    actions,
     sessionID,
     setAttachments,
     setBackgroundDirectory,
@@ -368,7 +362,7 @@ const renderMessageSheets = (chat: ChatController, session: SessionInfo) => {
         messages={messages}
         onOpenSession={onOpenSession}
         opencodeClient={opencodeClient}
-        run={run}
+        actions={actions}
         session={session}
         sessionID={sessionID}
         setBackgroundDirectory={setBackgroundDirectory}
