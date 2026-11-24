@@ -18,7 +18,7 @@ import { errorMessage, normalizeConnection } from "../lib/client";
 import type { Connection } from "../lib/client";
 import { playHaptic } from "../lib/haptics";
 import { parsePairingPayload } from "../lib/pairing";
-import { openPrivacyPolicy } from "../lib/privacy";
+import { openExternalUrl, PRIVACY_POLICY_URL } from "../lib/privacy";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import type { ConnectionForm } from "../stores/connection-store";
@@ -753,9 +753,7 @@ export const ConnectionFlow = ({
 
   const handleOpenPrivacy = () => {
     clearError();
-    void openPrivacyPolicy().catch((error_) =>
-      setLocalError(errorMessage(error_))
-    );
+    openExternalUrl(PRIVACY_POLICY_URL, setLocalError);
   };
 
   const renderServerRow = (connection: Connection) => (

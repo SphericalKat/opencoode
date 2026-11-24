@@ -8,6 +8,8 @@ import { BackButton } from "./back-button";
 import { IconButton } from "./icon-button";
 import { BodyText } from "./ui";
 
+export { BackButton } from "./back-button";
+
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     header: {
@@ -22,8 +24,6 @@ const createStyles = (colors: ThemeColors) =>
     action: { marginEnd: -16 },
     title: { flex: 1, fontSize: 18, fontWeight: "600", lineHeight: 24 },
   });
-
-export { BackButton };
 
 export const HeaderMenuButton = ({ onPress }: { onPress: () => void }) => {
   const { colors } = useTheme();
