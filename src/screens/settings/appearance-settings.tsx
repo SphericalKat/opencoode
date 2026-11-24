@@ -3,12 +3,14 @@ import { useState } from "react";
 import { SheetGroup } from "../../components/list-sheet";
 import { SelectMenu } from "../../components/select";
 import { Switch } from "../../components/switch";
+import { Button } from "../../components/ui";
 import { errorMessage } from "../../lib/client";
 import {
   playHaptic,
   setHapticsEnabled,
   useHapticsEnabled,
 } from "../../lib/haptics";
+import { openPrivacyPolicy } from "../../lib/privacy";
 import { paletteOptions, useTheme } from "../../lib/theme";
 import type { Appearance } from "../../lib/theme";
 import { SettingsRow } from "./settings-list";
@@ -96,6 +98,24 @@ export const AppearanceSettings = () => {
           description="Feel responses stream in, and feel taps, selections and results."
         >
           <HapticsSwitch onError={setError} />
+        </SettingsRow>
+      </SheetGroup>
+      <SheetGroup variant="grouped">
+        <SettingsRow
+          title="Privacy Policy"
+          description="Read how Opencoode handles permissions and local data."
+        >
+          <Button
+            title="Open"
+            size="compact"
+            accessibilityLabel="Open Privacy Policy"
+            onPress={() => {
+              setError(null);
+              void openPrivacyPolicy().catch((error_) =>
+                setError(errorMessage(error_))
+              );
+            }}
+          />
         </SettingsRow>
       </SheetGroup>
     </Page>

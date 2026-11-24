@@ -18,6 +18,7 @@ import { errorMessage, normalizeConnection } from "../lib/client";
 import type { Connection } from "../lib/client";
 import { playHaptic } from "../lib/haptics";
 import { parsePairingPayload } from "../lib/pairing";
+import { openPrivacyPolicy } from "../lib/privacy";
 import { useTheme, useThemedStyles } from "../lib/theme";
 import type { ThemeColors } from "../lib/theme";
 import { BackButton } from "./back-button";
@@ -182,6 +183,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 16,
       textAlign: "center",
     },
+    privacySection: { alignItems: "center", gap: 4 },
     saved: { gap: 4 },
     savedItem: { borderBottomWidth: 1, borderColor: colors.border },
     server: {
@@ -399,12 +401,26 @@ const ServerStatus = ({
   return <ShellIcon name="chevron" color={colors.faint} size={16} />;
 };
 
-const PrivacyNote = ({ styles }: { styles: Styles }) => (
-  <BodyText style={styles.privacy}>
-    {Platform.OS === "web"
-      ? "Connections stay in this tab. Your server must allow this browser origin with --cors."
-      : "Your server credentials stay in secure storage on this device."}
-  </BodyText>
+const PrivacyNote = ({
+  onOpenPrivacy,
+  styles,
+}: {
+  onOpenPrivacy: () => void;
+  styles: Styles;
+}) => (
+  <View style={styles.privacySection}>
+    <BodyText style={styles.privacy}>
+      {Platform.OS === "web"
+        ? "Connections stay in this tab. Your server must allow this browser origin with --cors."
+        : "Your server credentials stay in secure storage on this device."}
+    </BodyText>
+    <Button
+      title="Privacy Policy"
+      variant="ghost"
+      size="small"
+      onPress={onOpenPrivacy}
+    />
+  </View>
 );
 
 const useServersGuard = (
@@ -772,6 +788,13 @@ export const ConnectionFlow = ({
     />
   );
 
+  const handleOpenPrivacy = () => {
+    clearError();
+    void openPrivacyPolicy().catch((error_) =>
+      setLocalError(errorMessage(error_))
+    );
+  };
+
   const renderServerRow = (connection: Connection) => (
     <View key={connection.id} style={styles.savedItem}>
       <Pressable
@@ -1129,7 +1152,9 @@ export const ConnectionFlow = ({
         />
       )}
       {renderStep()}
-      {step !== "scan" && step !== "servers" && <PrivacyNote styles={styles} />}
+      {step !== "scan" && (
+        <PrivacyNote onOpenPrivacy={handleOpenPrivacy} styles={styles} />
+      )}
     </MotionContent>
   );
 };

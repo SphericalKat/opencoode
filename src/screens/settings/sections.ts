@@ -14,7 +14,7 @@ export type ModelCatalog = Pick<Client["model"], "list">;
 export const sectionDescriptions: Record<Section, string> = {
   Accounts: "Provider connections and credentials",
   Advanced: "Usage, web search, and generation",
-  "Look and feel": "Theme, colors, and haptic feedback",
+  "Look and feel": "Theme, colors, haptic feedback, and privacy",
   Config: "Server configuration and shell",
   MCP: "Tool servers and pending requests",
   Models: "Available models and capabilities",
