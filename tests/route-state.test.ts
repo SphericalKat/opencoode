@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  rememberSettingsSection,
   settingsTabHref,
   tabFromPathname,
   workspaceSectionFromParam,
@@ -46,4 +47,30 @@ test("settings opens at its index after a server or directory change", () => {
   const remembered = { key: "a:/repo", section: "Models" };
   assert.equal(settingsTabHref(remembered, "b:/repo"), "/(opencode)/settings");
   assert.equal(settingsTabHref(remembered, "a:/other"), "/(opencode)/settings");
+});
+
+test("a section is remembered while settings is the open tab", () => {
+  assert.deepEqual(
+    rememberSettingsSection(undefined, "a:/repo", "Models", true),
+    {
+      key: "a:/repo",
+      section: "Models",
+    }
+  );
+  const remembered = { key: "a:/repo", section: "Models" };
+  assert.equal(
+    rememberSettingsSection(remembered, "a:/repo", undefined, false),
+    remembered
+  );
+});
+
+test("a server or directory change discards the remembered section", () => {
+  const remembered = { key: "a:/repo", section: "Models" };
+  assert.deepEqual(
+    rememberSettingsSection(remembered, "b:/repo", "Models", true),
+    {
+      key: "b:/repo",
+      section: undefined,
+    }
+  );
 });

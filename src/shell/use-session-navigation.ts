@@ -28,6 +28,7 @@ import {
 import { useSheetActions } from "../stores/sheet-store";
 import { attempt } from "./connection-utils";
 import {
+  rememberSettingsSection,
   settingsTabHref,
   tabFromPathname,
   workspaceSectionFromParam,
@@ -72,12 +73,12 @@ export const useSessionNavigation = ({
   const settingsKey = `${active?.id}:${locationDirectory}`;
   useLayoutEffect(() => {
     tabRef.current = currentTab;
-    if (currentTab === "settings") {
-      settingsSectionRef.current = {
-        key: settingsKey,
-        section: settingsSection,
-      };
-    }
+    settingsSectionRef.current = rememberSettingsSection(
+      settingsSectionRef.current,
+      settingsKey,
+      settingsSection,
+      currentTab === "settings"
+    );
     if (currentTab === "workspace") {
       locationActions.setWorkspaceSection(currentSection);
     }

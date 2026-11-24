@@ -41,3 +41,17 @@ export const settingsTabHref = (
       : undefined;
   return known ? settingsSectionPath(known) : routes.settings;
 };
+
+// Settings can still be the open tab in the render where the key changes. That
+// render carries the section of the old server, so it must not be recorded.
+export const rememberSettingsSection = (
+  previous: RememberedSettingsSection | undefined,
+  key: string,
+  section: string | undefined,
+  settingsOpen: boolean
+): RememberedSettingsSection | undefined => {
+  if (previous && previous.key !== key) {
+    return { key, section: undefined };
+  }
+  return settingsOpen ? { key, section } : previous;
+};
