@@ -1,23 +1,23 @@
 import { useState } from "react";
-import { Linking } from "react-native";
 
 import appConfig from "../../../app.json";
 import { SheetGroup } from "../../components/list-sheet";
 import { BodyText, Button } from "../../components/ui";
-import { errorMessage } from "../../lib/client";
-import { openPrivacyPolicy } from "../../lib/privacy";
+import {
+  ISSUES_URL,
+  openExternalUrl,
+  PRIVACY_POLICY_URL,
+  REPOSITORY_URL,
+} from "../../lib/privacy";
 import { SettingsRow } from "./settings-list";
 import { Page } from "./shared";
-
-const REPOSITORY_URL = "https://github.com/SphericalKat/opencoode";
-const ISSUES_URL = "https://github.com/SphericalKat/opencoode/issues";
 
 export const About = () => {
   const [error, setError] = useState<string | null>(null);
 
   const openUrl = (url: string) => {
     setError(null);
-    void Linking.openURL(url).catch((error_) => setError(errorMessage(error_)));
+    openExternalUrl(url, setError);
   };
 
   return (
@@ -42,12 +42,7 @@ export const About = () => {
             title="Open"
             size="compact"
             accessibilityLabel="Open Privacy Policy"
-            onPress={() => {
-              setError(null);
-              void openPrivacyPolicy().catch((error_) =>
-                setError(errorMessage(error_))
-              );
-            }}
+            onPress={() => openUrl(PRIVACY_POLICY_URL)}
           />
         </SettingsRow>
         <SettingsRow
