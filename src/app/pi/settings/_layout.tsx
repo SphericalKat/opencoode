@@ -9,7 +9,7 @@ import {
 } from "../../../screens/settings-layout";
 import type { Section } from "../../../screens/settings/sections";
 
-const sections: Section[] = ["Look and feel", "Models"];
+const sections: Section[] = ["Look and feel", "Models", "About"];
 
 const sectionPath = (section: Section) => piSettingsSectionPath(section);
 

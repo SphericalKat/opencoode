@@ -2,6 +2,7 @@ import { View } from "react-native";
 
 import { AdvancedSettings } from "../../components/advanced-settings";
 import type { Client } from "../../lib/client";
+import { About } from "./about";
 import { Accounts } from "./accounts";
 import { AppearanceSettings } from "./appearance-settings";
 import { Configuration } from "./configuration";
@@ -27,6 +28,13 @@ export const SettingsSection = ({
     return (
       <View key={`${directory}:${section}`} style={{ flex: 1 }}>
         <AppearanceSettings />
+      </View>
+    );
+  }
+  if (section === "About") {
+    return (
+      <View key={`${directory}:${section}`} style={{ flex: 1 }}>
+        <About />
       </View>
     );
   }
