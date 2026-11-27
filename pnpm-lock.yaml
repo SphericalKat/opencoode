@@ -189,8 +189,8 @@ importers:
         specifier: ^5.2.14
         version: 5.2.14(a90373a3bf570a3348ef9c467645e244)
       '@opencode/client':
-        specifier: 2.2.7
-        version: 2.2.7(effect@4.1.0)
+        specifier: 2.4.2
+        version: 2.4.2(effect@4.1.0)
       '@pchmn/expo-material3-theme':
         specifier: ^1.4.0
         version: 1.4.0(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1))(react@19.3.1)
@@ -1210,8 +1210,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@opencode/client@2.2.7':
-    resolution: {integrity: sha512-L1nqJqEBEHyg+OwJaMYA5jX8OA4nZ1Jxehp8xTw5u4kzKEgqLes2re7yWzXJSZmybZ5Kv4rX24gJjYHeegwf7g==}
+  '@opencode/client@2.4.2':
+    resolution: {integrity: sha512-Wnb/wMl3HzPHu7WR4DYc4TkziFDdB6xUpNoLGGz7SMUIbBWPYhV2wPRenR7UEeMdlHlKgaYcxixTH80H+5YP2g==}
     peerDependencies:
       effect: 4.1.0
       solid-js: '>=1.9.0'
@@ -1221,11 +1221,11 @@ packages:
       solid-js:
         optional: true
 
-  '@opencode/protocol@2.2.7':
-    resolution: {integrity: sha512-J86R/rNrFC0KRJd4G5i2yT5FG7FB4M9Yh418NS3PcTHoWP1jwWKLV85L5JvGYPwb7sKtahyxPeN88Q/Mw+pZvQ==}
+  '@opencode/protocol@2.4.2':
+    resolution: {integrity: sha512-w87Ym2Xd449fngSXNNbWE5d5mWl5sxeK8I/yp0TVb0rpQM1+jriwKh6g2Akxrp1Xzdwrz84gfms+ZEtM30R00g==}
 
-  '@opencode/schema@2.2.7':
-    resolution: {integrity: sha512-A+aUfvpcPm8mN0ptFl2GUHwDFjyrCuLdig3jjQCRoOghF+un1+vVKek1IwIph935vMNqAwRDnwtvZDtHFiGokA==}
+  '@opencode/schema@2.4.2':
+    resolution: {integrity: sha512-/qAbNPjIO4uOvaBB9UcxUZUGXtdp8OeR65gUi8HrVrxSJMxocMg7Yky7U2iiZzGiE9mE4NsQQK9F8cN/2vjkoA==}
 
   '@oxc-project/types@0.154.0':
     resolution: {integrity: sha512-KYOUGQFlLWR+s4QMV2Q9ko38TZm7EdO87Qm7rvZLqk/webse/cDjtyxKhg/47l0byCbs/k46LT8qc4PKjAikzA==}
@@ -5001,19 +5001,19 @@ snapshots:
   '@noxcturnal/noxcturnal-win32-x64-msvc@0.1.14':
     optional: true
 
-  '@opencode/client@2.2.7(effect@4.1.0)':
+  '@opencode/client@2.4.2(effect@4.1.0)':
     dependencies:
-      '@opencode/protocol': 2.2.7
-      '@opencode/schema': 2.2.7
+      '@opencode/protocol': 2.4.2
+      '@opencode/schema': 2.4.2
     optionalDependencies:
       effect: 4.1.0
 
-  '@opencode/protocol@2.2.7':
+  '@opencode/protocol@2.4.2':
     dependencies:
-      '@opencode/schema': 2.2.7
+      '@opencode/schema': 2.4.2
       effect: 4.1.0
 
-  '@opencode/schema@2.2.7':
+  '@opencode/schema@2.4.2':
     dependencies:
       '@standard-schema/spec': 1.1.0
       effect: 4.1.0
